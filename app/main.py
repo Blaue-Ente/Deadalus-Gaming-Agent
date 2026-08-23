@@ -118,6 +118,7 @@ async def capabilities() -> dict:
             "native-tools", "image-gen", "preferences", "learned-skills",
             "agent-reach", "playtest", "mirofish-sidecar", "mcp",
             "browser-session", "subagents",
+            "offline-kit", "llm-wardrobe", "addons", "capsule",
         ],
         "mesh_endpoint": "/api/iyveris",
         "studio": "/",

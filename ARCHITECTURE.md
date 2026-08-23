@@ -25,7 +25,10 @@ routing, Postgres, and the current admin UI — not the agent's identity.
 | Memory | `memory.py`, `knowledge.py` | Chroma collections under `data/daedalus/` |
 | Agent loop | `agent.py`, `native_tools.py`, `tools.py`, `workers.py`, `subagents.py` | Native tools by default; NEED_* fallback; tool-using sub-agents |
 | Shell | `shell_center.py` | Jail + secret stripping; Studio command center |
-| Local LLM | `local_llm.py` + `llm_config.py` | Ollama, LM Studio, llama.cpp, vLLM |
+| Local LLM | `local_llm.py` + `llm_wardrobe.py` + `machine_profile.py` | Probe backends; hardware-aware catalog; persist active model |
+| Offline | `offline.py` | Blocks network native tools; wardrobe forces local |
+| Addons | `addons.py` | Curated MCP shelf → `mcp.json` |
+| Capsule | `capsule.py` | Zip a playground project for USB / file send |
 | Preferences | `preferences.py` | Owner speech → durable memory |
 | Learned skills | `learned_skills.py` | Failure/success → SKILL.md |
 | DoD | `job_contract.py` | Coding work is not complete without evidence |
