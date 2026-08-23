@@ -55,5 +55,13 @@ async def startup() -> dict[str, Any]:
         log.warning("standalone boot: orphan recovery %s", extra)
         out["orphans"] = 0
 
+    try:
+        from .evolution import enabled, start_gardener
+        out["evolution"] = enabled()
+        start_gardener()
+    except Exception as extra:
+        log.warning("standalone boot: evolution gardener %s", extra)
+        out["evolution"] = False
+
     log.info("standalone boot: %s", out)
     return out

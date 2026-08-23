@@ -190,6 +190,12 @@ def resolve_local_config(provider: str | None = None) -> dict[str, Any] | None:
             or (probed.get("models") or [None])[0]
             or _DEFAULTS.get(p, _DEFAULTS["ollama"])["default_model"]
         )
+        try:
+            from .llm_wardrobe import active_model
+            if not os.environ.get("DAEDALUS_MODEL") and active_model():
+                model = active_model()
+        except Exception:
+            pass
         return {
             "provider": p if p != "local" else "ollama",
             "model": model,
@@ -216,6 +222,12 @@ def resolve_local_config(provider: str | None = None) -> dict[str, Any] | None:
         or (healthy.get("models") or [None])[0]
         or _DEFAULTS[p]["default_model"]
     )
+    try:
+        from .llm_wardrobe import active_model
+        if not os.environ.get("DAEDALUS_MODEL") and active_model():
+            model = active_model()
+    except Exception:
+        pass
     return {
         "provider": p,
         "model": model,
@@ -231,8 +243,20 @@ def resolve_local_config(provider: str | None = None) -> dict[str, Any] | None:
 
 
 def local_requested() -> bool:
+    try:
+        from .llm_wardrobe import load
+        data = load()
+        backend = str(data.get("backend") or "auto").lower()
+        if backend == "cloud":
+            return False
+        if data.get("offline") or data.get("active") or backend in LOCAL_PROVIDERS:
+            return True
+    except Exception:
+        pass
     flag = (os.environ.get("DAEDALUS_LOCAL_LLM") or "").strip().lower()
     if flag in ("1", "true", "yes", "on"):
+        return True
+    if (os.environ.get("DAEDALUS_OFFLINE") or "").strip().lower() in ("1", "true", "yes", "on"):
         return True
     provider = normalize_provider(os.environ.get("DAEDALUS_PROVIDER") or "")
     return provider in LOCAL_PROVIDERS

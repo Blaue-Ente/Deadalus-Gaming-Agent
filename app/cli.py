@@ -65,6 +65,23 @@ def main(argv: list[str] | None = None) -> None:
             print(f"  [{flag}] {row.get('provider')} {row.get('base_url')} models={ids}")
             if row.get("error") and not row.get("ok"):
                 print(f"         {row['error']}")
+        try:
+            from daedalus.llm_wardrobe import status as wardrobe_status
+            w = wardrobe_status()
+            p = w.get("profile") or {}
+            print(
+                f"machine class={p.get('class')} ram={p.get('ram_gb')}G "
+                f"cpu={p.get('cpu_cores')} disk={p.get('disk_free_gb')}G "
+                f"gpu={(p.get('gpu') or {}).get('name') or 'none'}"
+            )
+            print(f"  {p.get('note') or ''}")
+            print("recommended:")
+            for row in w.get("recommended") or []:
+                print(f"  - {row.get('role')}: {row.get('ollama')}  ({row.get('label')})")
+            if w.get("wardrobe", {}).get("active"):
+                print(f"wardrobe active={w['wardrobe']['active']} backend={w['wardrobe'].get('backend')}")
+        except Exception as exc:
+            print(f"wardrobe: {exc}")
         return
     if args.cmd == "ping":
         os.environ.setdefault("DAEDALUS_STANDALONE", "1")

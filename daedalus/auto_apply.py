@@ -30,6 +30,8 @@ AUTO_APPLY_ALLOWED_SKILLS = {    # само LOW risk skills
     "update_docs",
     "edit_assets",
 }
+# edit_modules / edit_core / write_routes stay owner-only — evolution gardener
+# must never gain a path to silent-apply harness patches.
 
 # ---------------------------------------------------------------------------
 # Settings helpers

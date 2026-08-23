@@ -119,6 +119,40 @@ async def autopilot_status(slug: str) -> dict:
     return {"ok": True, "job": job.snapshot(), "events": job.events[-80:]}
 
 
+@router.get("/projects/{slug}/capsule")
+async def download_capsule(slug: str):
+    from fastapi.responses import Response
+    from daedalus.capsule import capsule_bytes, capsule_meta
+    meta = capsule_meta(slug)
+    if not meta.get("ok"):
+        raise HTTPException(status_code=404, detail="project not found")
+    data = capsule_bytes(slug)
+    return Response(
+        content=data,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{slug}.zip"'},
+    )
+
+
+@router.get("/projects/{slug}/capsule.json")
+async def capsule_info(slug: str) -> dict:
+    from daedalus.capsule import capsule_meta
+    meta = capsule_meta(slug)
+    if not meta.get("ok"):
+        raise HTTPException(status_code=404, detail="project not found")
+    return meta
+
+
+@router.post("/projects/{slug}/publish-local")
+async def publish_local(slug: str) -> dict:
+    from daedalus.playground_agent_guards import publish_with_repair
+    try:
+        result = await publish_with_repair(slug, icon="🎮")
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)[:300]) from exc
+    return {"ok": True, "published": result, "url": f"/apps/{slug}/"}
+
+
 @router.get("/projects/{slug}/autopilot/stream")
 async def autopilot_stream(slug: str, offset: int = 0) -> StreamingResponse:
     from daedalus import autopilot_jobs as aj

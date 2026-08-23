@@ -356,6 +356,11 @@ def get(job_id: str) -> Optional["AutopilotJob"]:
     return _restore(payload)
 
 
+def any_running() -> bool:
+    """True when an in-memory autopilot job is still in flight."""
+    return any(getattr(jb, "status", "") == "running" for jb in _AP_JOBS.values())
+
+
 def get_active(slug: str) -> Optional["AutopilotJob"]:
     live = [jb for jb in _AP_JOBS.values() if jb.slug == slug]
     if live:
