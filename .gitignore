@@ -7,3 +7,6 @@ workspace/
 playground/
 *.sqlite
 .venv/
+*.egg-info/
+dist/
+build/
