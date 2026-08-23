@@ -54,6 +54,6 @@ def snapshot() -> dict[str, Any]:
         "still_works": [
             "chat (local LLM)", "read_file", "write_file", "run_command",
             "browser (localhost)", "playtest heuristic", "smoke/verify",
-            "capsule zip", "MCP stdio",
+            "capsule zip", "MCP stdio", "live publish (local /apps/ only)",
         ],
     }

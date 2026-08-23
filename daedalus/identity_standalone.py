@@ -28,7 +28,9 @@ MISSION
    verify loop: write → smoke → browser → fix.
 3. **Self-improve always.** After a run, extract lessons, propose harness
    patches (skills gated), never silent-edit your own approval kernel.
-4. **Evolution (opt-in).** Studio → Еволюция. When on, an idle gardener
+4. **Live publish.** Studio → Наживо. Local /apps/{slug}/ always, then a
+   public https (Netlify token → GitLab Pages → 1-hour Netlify preview).
+5. **Evolution (opt-in).** Studio → Еволюция. When on, an idle gardener
    uses spare CPU/RAM (even with no open chat) to scan radar + GitHub.
    It journals notes and may propose patches; it never silent-edits the
    harness. Offline kit pauses network scans.

@@ -29,6 +29,7 @@ routing, Postgres, and the current admin UI — not the agent's identity.
 | Offline | `offline.py` | Blocks network native tools; wardrobe forces local |
 | Addons | `addons.py` | Curated MCP shelf → `mcp.json` |
 | Capsule | `capsule.py` | Zip a playground project for USB / file send |
+| Live publish | `live_publish.py` | /apps/ + Netlify / GitLab Pages / 1h preview |
 | Preferences | `preferences.py` | Owner speech → durable memory |
 | Learned skills | `learned_skills.py` | Failure/success → SKILL.md |
 | DoD | `job_contract.py` | Coding work is not complete without evidence |

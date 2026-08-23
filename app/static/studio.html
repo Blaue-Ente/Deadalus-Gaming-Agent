@@ -130,7 +130,7 @@
     </header>
     <aside>
       <h2>Проект</h2>
-      <p class="hint">Кажи „направи змия“ — Дедал строи в избрания проект. Или създай нов.</p>
+      <p class="hint">Кажи „направи змия“ — Дедал строи в избрания проект. Наживо дава линк в интернет.</p>
       <input id="pname" placeholder="Име на игра / приложение" />
       <div class="row">
         <select id="pkind">
@@ -146,6 +146,7 @@
       <div class="row">
         <button id="pcapsule">Капсула .zip</button>
         <button id="ppub">Към /apps/</button>
+        <button class="gold" id="plive">Наживо</button>
       </div>
       <div id="plist"></div>
       <h2>Предпочитания</h2>
@@ -555,6 +556,29 @@
         const data = await (await fetch("/api/v1/playground/projects/" + slug + "/publish-local", { method: "POST" })).json();
         add("bot", data.ok ? ("Публикувано: " + (data.url || "/apps/" + slug + "/")) : (data.detail || JSON.stringify(data)));
       } catch (e) { add("bot", "publish: " + e); }
+    };
+    $("plive").onclick = async () => {
+      if (!slug) { add("bot", "Избери проект за Наживо."); return; }
+      const last = add("bot", "Качвам наживо…");
+      try {
+        const data = await (await fetch("/api/v1/playground/projects/" + slug + "/live", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ backend: "auto" }),
+        })).json();
+        const bits = [];
+        if (data.local_url) bits.push("тук: " + data.local_url);
+        if (data.url) bits.push("интернет: " + data.url);
+        if (data.backend) bits.push(data.backend);
+        if (data.expires) bits.push("изтича: " + data.expires);
+        last.textContent = (data.note || "готово") + (bits.length ? "\n" + bits.join("\n") : "");
+        if (data.url) {
+          const a = document.createElement("span");
+          a.className = "meta";
+          a.textContent = data.url;
+          last.appendChild(a);
+        }
+      } catch (e) { last.textContent = "наживо: " + e; }
     };
     $("ptest").onclick = async () => {
       if (!slug) { add("bot", "Първо избери проект вляво за playtest."); return; }

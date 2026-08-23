@@ -72,6 +72,15 @@ CATALOG: list[dict[str, Any]] = [
         "offline_ok": True,
         "docs": "https://github.com/nikmcfly/MiroFish-Offline",
     },
+    {
+        "id": "netlify",
+        "kind": "mcp",
+        "label": "Netlify MCP",
+        "blurb": "Официален MCP за dashboard. Studio → Наживо вече качва native (токен или anonymous).",
+        "offline_ok": False,
+        "command": "npx",
+        "args_template": ["-y", "@netlify/mcp"],
+    },
 ]
 
 
