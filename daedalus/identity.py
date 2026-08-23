@@ -2179,11 +2179,17 @@ def _standalone_mode() -> bool:
 def build_persona(intent: str | None = None, budget: str | None = None) -> str:
     """Return the appropriate persona variant based on Navigator briefing.
 
-    Standalone / extracted harness prepends the game-first independent identity.
-    Tool-contract docs from DAEDALUS_PERSONA stay attached so NEED_* still works.
+    Standalone uses a compact tool contract so local/small models fit in context.
+    Set DAEDALUS_FULL_PERSONA=1 to append the full ADN/Iyveris persona.
+    Hosted next to ADN always gets the full persona.
     """
     if _standalone_mode():
-        from .identity_standalone import DAEDALUS_STANDALONE_PREAMBLE
-        return DAEDALUS_STANDALONE_PREAMBLE + "\n" + DAEDALUS_PERSONA
+        import os
+        from .identity_standalone import DAEDALUS_STANDALONE_PREAMBLE, DAEDALUS_TOOL_CONTRACT
+        text = DAEDALUS_STANDALONE_PREAMBLE + "\n" + DAEDALUS_TOOL_CONTRACT
+        full = os.environ.get("DAEDALUS_FULL_PERSONA", "").strip().lower()
+        if full in ("1", "true", "yes", "on"):
+            return text + "\n" + DAEDALUS_PERSONA
+        return text
     return DAEDALUS_PERSONA
 

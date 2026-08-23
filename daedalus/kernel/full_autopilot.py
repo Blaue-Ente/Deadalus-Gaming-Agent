@@ -235,13 +235,36 @@ async def run_full_autopilot(
         elif not bresult.get("skipped"):
             await backend.emit("log", {"line": "✓ Browser verify OK", "level": "info"})
 
+    # ── PLAYTEST (MatrAIx-style personas, visual kinds) ──────────────────
+    playtest_block = ""
+    if kind in VISUAL_KINDS:
+        await backend.emit("phase", {"n": 4, "label": "Playtest"})
+        try:
+            from daedalus.playtest import format_for_prompt, run_playtest
+
+            async def _play_llm(system: str, user: str) -> str:
+                return await backend.llm(AgentRole.REVIEWER, user, system=system)
+
+            report = await run_playtest(
+                state.slug, kind=kind, n=3, llm_fn=_play_llm,
+            )
+            playtest_block = format_for_prompt(report)
+            await backend.emit("log", {"line": report.get("summary") or "playtest", "level": "info"})
+            if not report.get("ship_ready"):
+                for b in (report.get("blockers") or [])[:4]:
+                    state.errors.append(str(b)[:200])
+        except Exception as exc:
+            log.debug("playtest skipped: %s", exc)
+            await backend.emit("log", {"line": f"playtest skipped: {exc}", "level": "dim"})
+
     # ── REVIEW ───────────────────────────────────────────────────────────
     await backend.emit("phase", {"n": 5, "label": "Review"})
     state.set_agent_status(AgentRole.REVIEWER, "running")
     review = await backend.llm(
         AgentRole.REVIEWER,
         f"Review build for {state.slug} ({kind}). test_ok={state.test_ok} browser_ok={browser_ok}. "
-        f"Files: {[c.path for c in state.changes]}. Reply APPROVED or list blockers.",
+        f"Files: {[c.path for c in state.changes]}. Reply APPROVED or list blockers."
+        + (f"\n\n{playtest_block}" if playtest_block else ""),
         system="Code reviewer. APPROVED only if shippable.",
     )
     state.review_ok = "APPROVED" in review.upper() and state.test_ok and browser_ok

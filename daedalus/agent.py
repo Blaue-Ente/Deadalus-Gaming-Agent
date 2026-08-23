@@ -1921,6 +1921,11 @@ class Daedalus:
             logs_grep = logs_m.group(2).strip() if logs_m and logs_m.group(2) else None
             # NEED_WORKER: <NEED_WORKER: slot | task>  — multiple allowed, run in parallel
             worker_calls = parse_worker_markers(raw)
+            try:
+                from .subagents import parse_subagent_markers
+                subagent_calls = parse_subagent_markers(raw)
+            except Exception:
+                subagent_calls = []
             # NEED_STAGE / NEED_BUNDLE_START / NEED_BUNDLE_COMMIT  (staged bundle system)
             try:
                 from .bundle import (
@@ -1946,7 +1951,7 @@ class Daedalus:
                 or pg_push_m or pg_read_m
                 or drp_law_q or drp_cases_q or drp_search_q
                 or data_prop_m or progress_m or check_perm_m
-                or blocked_m or worker_calls or project_plan_m
+                or blocked_m or worker_calls or subagent_calls or project_plan_m
                 or journal_m or task_state_m
                 or playbook_m or plan_lock_m
                 or batch_block or verify_block
@@ -3910,6 +3915,27 @@ class Daedalus:
                     log.warning("NEED_WORKER parallel call failed: %s", exc)
                     tool_results_text_parts.append(f"━━━ WORKER RESULTS — FAILED ━━━\n{exc}")
 
+            if subagent_calls:
+                try:
+                    from .subagents import format_subagent_results, run_subagents_parallel
+                    sub_results = await run_subagents_parallel(
+                        subagent_calls,
+                        memory=self.memory,
+                        session_id=session_id or "",
+                        read_file_fn=_read_file_tool,
+                    )
+                    tool_results_text_parts.append(
+                        "━━━ SUBAGENT RESULTS ━━━\n" + format_subagent_results(sub_results)
+                    )
+                    tool_calls_used.append({
+                        "tool": "subagent",
+                        "count": len(subagent_calls),
+                        "ok": all(r.get("ok") for r in sub_results),
+                    })
+                except Exception as exc:
+                    log.warning("NEED_SUBAGENT failed: %s", exc)
+                    tool_results_text_parts.append(f"━━━ SUBAGENT RESULTS — FAILED ━━━\n{exc}")
+
             tool_block = "\n\n".join(tool_results_text_parts)
 
             # ── Repeated-failure breaker (improvements.ErrorTracker) ──────────
@@ -4062,7 +4088,9 @@ class Daedalus:
                     "  <NEED_WORKER: fast | task description>   — cheap/fast model (Haiku/Groq)\n"
                     "  <NEED_WORKER: balanced | task>           — same model as master\n"
                     "  <NEED_WORKER: deep | task>               — powerful model (Opus)\n"
-                    "Multiple NEED_WORKER markers in one response run in parallel. "
+                    "Multiple NEED_WORKER markers in one response run in parallel.\n"
+                    "For a bounded file task WITH tools, emit:\n"
+                    "  <NEED_SUBAGENT: slug | task>  — isolated agent, writes jailed to slug.\n"
                     "Workers are stateless — pass full context in the task description. "
                     "Wait for their results in the next tool iteration before synthesizing.\n\n"
                     "DATA CURATION REMINDER: For inserting trading_concepts / signal_criteria / "

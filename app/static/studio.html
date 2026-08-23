@@ -166,6 +166,7 @@
         <button class="on" data-pane="shell">Shell</button>
         <button data-pane="flight">Полет</button>
         <button data-pane="llm">LLM</button>
+        <button data-pane="world">Свят</button>
       </div>
       <div class="pane on" id="pane-shell">
         <h2>Команден център</h2>
@@ -181,6 +182,15 @@
       <div class="pane" id="pane-llm">
         <h2>Модел</h2>
         <pre id="llmbox">Зареждане…</pre>
+      </div>
+      <div class="pane" id="pane-world">
+        <h2>Канали</h2>
+        <p class="hint">Jina Reader (Reach) · MiroFish sidecar (AGPL, отделен процес) · MCP · playtest.</p>
+        <div class="row">
+          <button id="cxrefresh">Опресни</button>
+          <button class="gold" id="ptest">Playtest</button>
+        </div>
+        <pre id="worldbox">Зареждане…</pre>
       </div>
     </section>
   </div>
@@ -369,10 +379,50 @@
       if (ev.key === "Enter") { ev.preventDefault(); $("shrun").click(); }
     });
 
+    async function refreshConnectors() {
+      try {
+        const data = await (await fetch("/api/v1/daedalus/connectors")).json();
+        const lines = [];
+        const ch = (data.reach && data.reach.channels) || {};
+        lines.push("REACH");
+        Object.keys(ch).forEach((k) => {
+          lines.push("  " + (ch[k].ready ? "UP  " : "DOWN") + " " + k + "  " + (ch[k].backend || "—"));
+        });
+        const mf = data.mirofish || {};
+        lines.push("");
+        lines.push("MIROFISH " + (mf.ok ? "UP" : "DOWN") + "  " + (mf.api || ""));
+        if (!mf.ok) lines.push("  sidecar: nikmcfly/MiroFish-Offline (AGPL)");
+        const mcp = (data.mcp && data.mcp.servers) || {};
+        lines.push("");
+        lines.push("MCP  " + (Object.keys(mcp).length ? Object.keys(mcp).join(", ") : "(none)"));
+        $("worldbox").textContent = lines.join("\n");
+      } catch (e) {
+        $("worldbox").textContent = "connectors: " + e;
+      }
+    }
+    $("cxrefresh").onclick = refreshConnectors;
+    $("ptest").onclick = async () => {
+      if (!slug) { add("bot", "Първо избери проект вляво за playtest."); return; }
+      document.querySelector('[data-pane="world"]').click();
+      $("worldbox").textContent = "playtest " + slug + "…";
+      try {
+        const data = await (await fetch("/api/v1/daedalus/playtest", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ slug, n: 4, use_browser: false, with_llm: false }),
+        })).json();
+        $("worldbox").textContent = (data.summary || JSON.stringify(data, null, 2));
+        add("bot", data.summary || "playtest готов", (data.ship_ready ? "ship?" : "blockers"));
+      } catch (e) {
+        $("worldbox").textContent = "playtest: " + e;
+      }
+    };
+
     add("bot", "Здравей. Аз съм Дедал. Кажи ми какво да построя, какво да запомня, или просто си говорим.");
     refreshHealth();
     refreshProjects();
     refreshPrefs();
+    refreshConnectors();
   </script>
 </body>
 </html>

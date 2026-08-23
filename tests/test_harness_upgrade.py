@@ -101,6 +101,8 @@ def test_openai_tool_message_roundtrip():
     assert "run_command" in names
     assert "generate_image" in names
     assert "remember" in names
+    assert "web_read" in names
+    assert "spawn_subagent" in names
     oa = to_openai_messages("sys", [
         {"role": "user", "content": "hi"},
         {"role": "assistant", "content": [
@@ -123,6 +125,7 @@ def test_studio_and_harness_http(harness_tmp):
     assert home.status_code == 200
     assert "Дедал" in home.text
     assert "daedalus-mark.png" in home.text
+    assert "Свят" in home.text
 
     logo = client.get("/static/daedalus-mark.png")
     assert logo.status_code == 200
@@ -149,3 +152,4 @@ def test_studio_and_harness_http(harness_tmp):
     caps = client.get("/capabilities")
     assert "local-llm" in caps.json()["capabilities"]
     assert "shell-center" in caps.json()["capabilities"]
+    assert "playtest" in caps.json()["capabilities"]

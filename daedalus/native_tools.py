@@ -19,6 +19,8 @@ PERM_MAP: dict[str, str | None] = {
     "list_dir": None,
     "web_search": "web_search",
     "web_fetch": "web_search",
+    "web_read": "web_search",
+    "reach_status": None,
     "postgres_query": "postgres_query",
     "code_search": None,
     "list_endpoints": None,
@@ -27,6 +29,11 @@ PERM_MAP: dict[str, str | None] = {
     "write_file": None,
     "generate_image": None,
     "remember": None,
+    "browser": None,
+    "mcp_call": None,
+    "spawn_subagent": None,
+    "playtest": None,
+    "mirofish": None,
 }
 
 NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
@@ -165,6 +172,110 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
         "input_schema": {
             "type": "object",
             "properties": {"filter": {"type": "string", "default": "*"}},
+        },
+    },
+    {
+        "name": "web_read",
+        "description": (
+            "Read a URL as clean markdown via Jina Reader (Agent Reach web channel). "
+            "Use instead of web_fetch when you need readable article text."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string"},
+                "max_chars": {"type": "integer"},
+            },
+            "required": ["url"],
+        },
+    },
+    {
+        "name": "reach_status",
+        "description": "Probe internet backends (Jina, yt-dlp, gh, agent-reach doctor).",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "browser",
+        "description": (
+            "Interactive Chromium session: goto, click, type, extract, screenshot, close. "
+            "Use for exploring a live page, not just smoke verify."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "goto | click | type | extract | screenshot | close",
+                },
+                "url": {"type": "string"},
+                "selector": {"type": "string"},
+                "text": {"type": "string"},
+                "slug": {"type": "string", "description": "Playground slug for screenshots"},
+            },
+            "required": ["action"],
+        },
+    },
+    {
+        "name": "mcp_call",
+        "description": "List or call a tool on an optional MCP server from $DAEDALUS_DATA/mcp.json.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "server": {"type": "string"},
+                "tool": {"type": "string"},
+                "arguments": {"type": "object"},
+                "list_tools": {"type": "boolean"},
+            },
+        },
+    },
+    {
+        "name": "spawn_subagent",
+        "description": (
+            "Run an isolated sub-agent that can read/write playground files and run commands. "
+            "Use for a bounded file task. Writes are jailed to slug."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "slug": {"type": "string"},
+                "task": {"type": "string"},
+                "max_rounds": {"type": "integer"},
+            },
+            "required": ["slug", "task"],
+        },
+    },
+    {
+        "name": "playtest",
+        "description": (
+            "MatrAIx-style simulated players critique a Playground game "
+            "(loop, controls, first 30s, win/lose)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "slug": {"type": "string"},
+                "kind": {"type": "string"},
+                "n": {"type": "integer"},
+                "use_browser": {"type": "boolean"},
+            },
+            "required": ["slug"],
+        },
+    },
+    {
+        "name": "mirofish",
+        "description": (
+            "Talk to an optional MiroFish-Offline sidecar (AGPL, separate process). "
+            "Ping, list projects, or submit GDD/press-release text."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {"type": "string", "description": "ping | list | submit"},
+                "text": {"type": "string"},
+                "requirement": {"type": "string"},
+                "project_name": {"type": "string"},
+            },
+            "required": ["action"],
         },
     },
 ]
@@ -332,6 +443,105 @@ async def execute_native_tool(
             if r.get("ok"):
                 return f"── web_fetch {url} ──\n{(r.get('text') or '')[:max_chars]}"
             return f"── web_fetch FAILED: {r.get('error')} ──"
+
+        if name == "web_read":
+            from .reach import looks_like_rss, read_rss, web_read, youtube_captions
+            url = str(args.get("url") or "")
+            max_chars = int(args.get("max_chars") or 8000)
+            low = url.lower()
+            if "youtube.com" in low or "youtu.be" in low:
+                yt = youtube_captions(url, max_chars=max_chars)
+                if yt.get("ok"):
+                    return f"── youtube_captions {url} ──\n{yt.get('text')}"
+            if looks_like_rss(url):
+                rss = read_rss(url)
+                if rss.get("ok"):
+                    lines = [f"── rss {url} ──"]
+                    for it in rss.get("items") or []:
+                        lines.append(f"  • {it.get('title')} — {it.get('link')}")
+                    return "\n".join(lines)
+            r = await web_read(url, max_chars=max_chars)
+            if r.get("ok"):
+                return f"── web_read [{r.get('backend')}] {r.get('jina_url') or url} ──\n{r.get('text')}"
+            return f"── web_read FAILED: {r.get('error')} ──"
+
+        if name == "reach_status":
+            from .reach import reach_status
+            st = reach_status()
+            lines = ["── reach_status ──"]
+            for ch, info in (st.get("channels") or {}).items():
+                flag = "UP" if info.get("ready") else "DOWN"
+                lines.append(f"  {flag}  {ch}  {info.get('backend') or '—'}  {info.get('note')}")
+            if st.get("doctor") and st["doctor"].get("output"):
+                lines.append((st["doctor"].get("output") or "")[:1500])
+            return "\n".join(lines)
+
+        if name == "browser":
+            from .browser_session import run_action
+            r = await run_action(
+                str(args.get("action") or "extract"),
+                url=str(args.get("url") or ""),
+                selector=str(args.get("selector") or ""),
+                text=str(args.get("text") or ""),
+                slug=str(args.get("slug") or ""),
+            )
+            if r.get("ok"):
+                text = r.get("text") or r.get("path") or r.get("title") or ""
+                return f"── browser {r.get('action')} OK {r.get('url') or ''} ──\n{text}"
+            return f"── browser FAILED: {r.get('error')} ──"
+
+        if name == "mcp_call":
+            from . import mcp_client
+            server = str(args.get("server") or "")
+            if args.get("list_tools") or not args.get("tool"):
+                if not server:
+                    return "── mcp ──\n" + json.dumps(mcp_client.status(), ensure_ascii=False, indent=2)[:3000]
+                r = await mcp_client.list_tools(server)
+            else:
+                r = await mcp_client.call_tool(
+                    server,
+                    str(args.get("tool") or ""),
+                    args.get("arguments") if isinstance(args.get("arguments"), dict) else {},
+                )
+            return f"── mcp_call ──\n{json.dumps(r, ensure_ascii=False, default=str)[:6000]}"
+
+        if name == "spawn_subagent":
+            from .subagents import run_subagent
+            r = await run_subagent(
+                str(args.get("slug") or ""),
+                str(args.get("task") or ""),
+                memory=memory,
+                session_id=session_id,
+                max_rounds=int(args.get("max_rounds") or 6),
+                read_file_fn=read_file_fn,
+            )
+            status = "OK" if r.get("ok") else "FAILED"
+            return f"── spawn_subagent {status} {r.get('slug')} ──\n{r.get('summary') or r.get('error')}"
+
+        if name == "playtest":
+            from .playtest import format_for_prompt, run_playtest
+            r = await run_playtest(
+                str(args.get("slug") or ""),
+                kind=str(args.get("kind") or "static"),
+                n=int(args.get("n") or 4),
+                use_browser=bool(args.get("use_browser")),
+            )
+            return "── playtest ──\n" + format_for_prompt(r)
+
+        if name == "mirofish":
+            from . import mirofish_client as mf
+            action = str(args.get("action") or "ping").lower()
+            if action == "list":
+                r = await mf.list_projects()
+            elif action == "submit":
+                r = await mf.submit_document(
+                    str(args.get("text") or ""),
+                    requirement=str(args.get("requirement") or ""),
+                    project_name=str(args.get("project_name") or "Daedalus GDD"),
+                )
+            else:
+                r = await mf.ping()
+            return f"── mirofish {action} ──\n{json.dumps(r, ensure_ascii=False, default=str)[:4000]}"
 
         if name == "generate_image":
             from .image_client import generate_image
