@@ -344,6 +344,22 @@ def _apply_nvidia_free_policy(cfg: dict) -> dict:
 
 def get_config() -> dict:
     """Return resolved LLM config: {provider, model, api_key, base_url, sdk, use_cache}."""
+    cfg = _resolve_llm_config()
+    try:
+        from .task_effort import applied_model
+        extra = applied_model()
+    except Exception:
+        extra = None
+    if extra and extra.get("model") and isinstance(cfg, dict):
+        cfg = dict(cfg)
+        cfg["model"] = extra["model"]
+        cfg["effort"] = extra.get("tier")
+        cfg["effort_source"] = extra.get("model_source")
+    return cfg
+
+
+def _resolve_llm_config() -> dict:
+    """Return resolved LLM config: {provider, model, api_key, base_url, sdk, use_cache}."""
     from .local_llm import (
         is_local_provider,
         local_requested,

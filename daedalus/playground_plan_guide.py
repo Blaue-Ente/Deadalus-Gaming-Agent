@@ -293,11 +293,17 @@ def _default_files_for_kind(kind: str, stage_index: int, title: str) -> list[str
     return list(pool[idx])
 
 
-def enrich_plan(plan: dict[str, Any], kind: str) -> dict[str, Any]:
+def enrich_plan(plan: dict[str, Any], kind: str, description: str = "") -> dict[str, Any]:
     """Post-process planner JSON: ensure files[] on every stage, normalize ids."""
     stages = plan.get("stages")
     if not isinstance(stages, list):
         return plan
+    try:
+        from .task_effort import classify
+        dec = classify(description or str(plan.get("title") or ""))
+        plan["effort"] = dec.get("tier")
+    except Exception:
+        dec = {}
     for i, stage in enumerate(stages):
         if not isinstance(stage, dict):
             continue
@@ -309,11 +315,43 @@ def enrich_plan(plan: dict[str, Any], kind: str) -> dict[str, Any]:
         elif len(files) > 3:
             # Planner ignored granularity — keep first 3, log via caller if needed
             stage["files"] = files[:3]
+    if dec.get("world_kit"):
+        have = " ".join(
+            " ".join(str(p) for p in (s.get("files") or []))
+            for s in stages if isinstance(s, dict)
+        )
+        if "world/bible.md" not in have:
+            stages.insert(0, {
+                "id": 0,
+                "title": "World bible + map",
+                "goal": "Campaign kit exists and the first region is named.",
+                "instructions": "Write world/bible.md, world/map.json, characters/, levels/graph.json. Do not invent the whole game loop here.",
+                "uses_visuals": False,
+                "files": ["world/bible.md", "world/map.json", "levels/graph.json"],
+                "status": "pending",
+            })
+        for i, stage in enumerate(stages):
+            if isinstance(stage, dict):
+                stage["id"] = i + 1
     return plan
 
 
 def min_stages_for_complexity(kind: str, *, is_game: bool, description: str) -> int:
     """Suggest minimum stage count when validating coarse plans."""
+    try:
+        from .task_effort import classify
+        dec = classify(description)
+        if dec.get("tier") == "epic":
+            return 12
+        if dec.get("tier") == "whisper":
+            return 0
+        if dec.get("min_stages"):
+            base = int(dec["min_stages"])
+            if is_game and kind in ("expo", "vite-react", "vite", "unity"):
+                return max(base, 8)
+            return base
+    except Exception:
+        pass
     blob = (description or "").lower()
     complex_words = ("игра", "game", "3d", "multi", "dashboard", "auth", "arena", "battle")
     if is_game or any(w in blob for w in complex_words):

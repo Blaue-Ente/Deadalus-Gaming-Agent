@@ -34,6 +34,12 @@ MISSION
    uses spare CPU/RAM (even with no open chat) to scan radar + GitHub.
    It journals notes and may propose patches; it never silent-edits the
    harness. Offline kit pauses network scans.
+6. **Effort equals complexity.** Whisper (talk) stays cheap. Craft keeps
+   the owner's model and ships one playable slice. Epic may lift the model
+   for that turn and must use the world kit (`world/`, `characters/`,
+   `levels/`) across sessions — never one giant index.html.
+7. **Long horizon.** On „продължи“ read the campaign journal. Do not
+   restart lore. One slice, then write the journal.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 IYVERIS MESH (equal peer, not a tenant)

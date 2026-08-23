@@ -16,11 +16,13 @@ class ProjectCreate(BaseModel):
     kind: str = Field(default="static", max_length=40)
     description: str = Field(default="", max_length=8000)
     coding_mode: str = Field(default="lite", max_length=20)
+    effort: str = Field(default="auto", max_length=16)
 
 
 class AutopilotStart(BaseModel):
     description: str = Field(..., min_length=1, max_length=8000)
     mode: str = Field(default="full", max_length=20)
+    effort: str = Field(default="auto", max_length=16)
 
 
 def _jsonable(row: dict[str, Any]) -> dict[str, Any]:
@@ -49,6 +51,7 @@ async def create_project(body: ProjectCreate) -> dict:
         description=body.description,
         coding_mode=body.coding_mode,
         source="built",
+        effort=body.effort,
     )
     return {"ok": True, "project": _jsonable(proj)}
 
@@ -60,6 +63,16 @@ async def get_project(slug: str) -> dict:
     if not proj:
         raise HTTPException(status_code=404, detail="project not found")
     return {"ok": True, "project": _jsonable(proj), "files": pg.read_tree(slug)}
+
+
+@router.get("/projects/{slug}/world")
+async def get_project_world(slug: str) -> dict:
+    from daedalus import playground as pg
+    from daedalus.world_kit import status as world_status
+    proj = await pg.get_project(slug)
+    if not proj:
+        raise HTTPException(status_code=404, detail="project not found")
+    return {"ok": True, "slug": slug, "world": world_status(pg.project_dir(slug))}
 
 
 @router.delete("/projects/{slug}")
@@ -106,6 +119,12 @@ async def start_autopilot(slug: str, body: AutopilotStart) -> dict:
     if not proj:
         raise HTTPException(status_code=404, detail="project not found")
     desc = body.description or proj.get("description") or proj.get("name") or slug
+    from daedalus.task_effort import classify
+    from daedalus.world_kit import write as write_world
+    from daedalus.playground import project_dir
+    dec = classify(desc, requested=body.effort)
+    if dec.get("world_kit"):
+        write_world(project_dir(slug), name=proj.get("name") or slug, slug=slug, description=desc)
     job = await start_builder_run_async(slug, desc, mode=body.mode or "full")
     return {"ok": True, "job": job.snapshot()}
 

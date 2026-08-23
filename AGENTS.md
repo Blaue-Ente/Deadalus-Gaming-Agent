@@ -8,3 +8,6 @@ Games first. Apps second. Verify is part of building.
 - Package: `daedalus.*`. Kernel: `daedalus.kernel`.
 - Playground files: `playground/projects/{slug}/`.
 - LLM: AllToken / OpenRouter / Novita / NVIDIA via `daedalus.llm_config`.
+- Effort: `daedalus.task_effort` — whisper / craft / epic. Studio segmented control.
+- Epic games: `world/`, `characters/`, `levels/` (see `daedalus/world_kit.py`).
+- Studio: `app/static/studio.html` + `studio.css` + `studio.js`.

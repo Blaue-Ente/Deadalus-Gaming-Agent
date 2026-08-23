@@ -409,6 +409,7 @@ async def create_project(
     slug: str = "",
     github_repo: str = "",
     coding_mode: str = "lite",
+    effort: str = "auto",
 ) -> dict[str, Any]:
     """Create a project row + workspace dir with scaffold files."""
     slug = slugify(slug or name)
@@ -434,6 +435,13 @@ async def create_project(
         _write_scaffold(pdir, kind, name, slug, description)
         # Re-detect after scaffold (picks up run_cmd / entry from real files)
         kind, run_cmd, entry = detect_kind(pdir)
+    if source == "built":
+        try:
+            from .world_kit import needed as world_needed, write as write_world
+            if world_needed(description, effort=effort):
+                write_world(pdir, name=name, slug=slug, description=description)
+        except Exception:
+            log.debug("world kit skipped", exc_info=True)
 
     # Always ensure assets/ scaffold exists for built/cloned projects
     if source in ("built", "cloned", "imported"):
