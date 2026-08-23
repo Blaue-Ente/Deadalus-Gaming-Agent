@@ -25,7 +25,9 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```
 
 This copies the product to `%LOCALAPPDATA%\Programs\Daedalus`, creates a venv,
-and a Start Menu shortcut **Дедал**. Studio binds **127.0.0.1:8787** only.
+tries `pip install -e ".[gui]"` (pywebview / Edge WebView2), and a Start Menu
+shortcut **Дедал**. The shortcut opens a window, not only a browser tab.
+Studio binds **127.0.0.1:8787** only.
 Put cloud keys in `%LOCALAPPDATA%\Daedalus\.env` (copied from `.env.example`
 on first install). Ollama still works as a local provider.
 

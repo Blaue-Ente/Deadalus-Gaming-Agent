@@ -143,6 +143,20 @@ $venvPy = Join-Path $venv "Scripts\python.exe"
 if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed" }
 & $venvPy -m pip install -e $InstallRoot
 if ($LASTEXITCODE -ne 0) { throw "pip install daedalus failed" }
+# Optional native window (Edge WebView2). Failure is fine — Tk / browser remain.
+Write-Host "Опитвам графичен прозорец (pywebview)…"
+$guiOk = $false
+Push-Location $InstallRoot
+try {
+    & $venvPy -m pip install -e ".[gui]"
+    if ($LASTEXITCODE -eq 0) { $guiOk = $true }
+}
+finally {
+    Pop-Location
+}
+if (-not $guiOk) {
+    Write-Host "pywebview не се инсталира — ще ползвам Tk или браузър." -ForegroundColor Yellow
+}
 
 Write-Launcher -Root $InstallRoot
 
@@ -160,7 +174,7 @@ $uninst = 'powershell.exe -ExecutionPolicy Bypass -File "' + (Join-Path $Install
 $reg = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\$AppName"
 New-Item -Path $reg -Force | Out-Null
 New-ItemProperty -Path $reg -Name "DisplayName" -Value $DisplayName -Force | Out-Null
-New-ItemProperty -Path $reg -Name "DisplayVersion" -Value "0.3.3" -Force | Out-Null
+New-ItemProperty -Path $reg -Name "DisplayVersion" -Value "0.3.4" -Force | Out-Null
 New-ItemProperty -Path $reg -Name "Publisher" -Value "Blaue-Ente" -Force | Out-Null
 New-ItemProperty -Path $reg -Name "InstallLocation" -Value $InstallRoot -Force | Out-Null
 New-ItemProperty -Path $reg -Name "UninstallString" -Value $uninst -Force | Out-Null
@@ -168,6 +182,11 @@ New-ItemProperty -Path $reg -Name "DisplayIcon" -Value (Join-Path $InstallRoot "
 
 Write-Host ""
 Write-Host "Готово. Старт: менюто → $DisplayName  или  $InstallRoot\Daedalus.cmd"
+if ($guiOk) {
+    Write-Host "Прозорец: Edge WebView2 (pywebview)"
+} else {
+    Write-Host "Прозорец: Tk панел или браузър (pywebview не е наличен)"
+}
 Write-Host "Studio: http://127.0.0.1:8787"
 Write-Host "Ключове / офлайн: $envTarget"
 Write-Host "Премахване: $InstallRoot\uninstall.ps1  (данните в $DataRoot остават)"
