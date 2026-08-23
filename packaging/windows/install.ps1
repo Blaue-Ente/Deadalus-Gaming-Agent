@@ -160,7 +160,7 @@ $uninst = 'powershell.exe -ExecutionPolicy Bypass -File "' + (Join-Path $Install
 $reg = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\$AppName"
 New-Item -Path $reg -Force | Out-Null
 New-ItemProperty -Path $reg -Name "DisplayName" -Value $DisplayName -Force | Out-Null
-New-ItemProperty -Path $reg -Name "DisplayVersion" -Value "0.3.2" -Force | Out-Null
+New-ItemProperty -Path $reg -Name "DisplayVersion" -Value "0.3.3" -Force | Out-Null
 New-ItemProperty -Path $reg -Name "Publisher" -Value "Blaue-Ente" -Force | Out-Null
 New-ItemProperty -Path $reg -Name "InstallLocation" -Value $InstallRoot -Force | Out-Null
 New-ItemProperty -Path $reg -Name "UninstallString" -Value $uninst -Force | Out-Null

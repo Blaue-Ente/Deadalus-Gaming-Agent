@@ -5,7 +5,7 @@
 
 #define MyAppName "Дедал"
 #define MyAppNameEn "Daedalus"
-#define MyAppVersion "0.3.2"
+#define MyAppVersion "0.3.3"
 #define MyAppPublisher "Blaue-Ente"
 #define MyAppURL "https://gitlab.com/Blaue-Ente/deadalus-agent-0"
 

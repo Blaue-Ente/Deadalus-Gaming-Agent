@@ -3,6 +3,19 @@
 Daedalus is a single FastAPI process on port **8787**. No Postgres required
 in standalone mode (SQLite under `DAEDALUS_DATA`). ADN is not started.
 
+## Live URL (Наживо)
+
+Studio → **Наживо** (or `POST /api/v1/playground/projects/{slug}/live`):
+
+1. Builds static (vite/expo) and serves `/apps/{slug}/` on this process.
+2. Picks the first public backend that works:
+   - `NETLIFY_AUTH_TOKEN` → durable `*.netlify.app` (seconds; needs Node/`npx`)
+   - `GITLAB_TOKEN` → public GitLab Pages project `daedalus-{slug}` (`*.gitlab.io`, CI 1–2 min)
+   - Netlify `--allow-anonymous` → instant URL, **claim within 1 hour**
+3. Offline kit → local `/apps/` only.
+
+Free custom `.com` is not included. You get a real https subdomain.
+
 ## Windows (Start Menu app)
 
 ```powershell

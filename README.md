@@ -70,6 +70,7 @@ Studio tab **Свят** shows Reach / MiroFish / MCP status and a Playtest butto
 4. **Ship**
    - **Капсула** — `GET /api/v1/playground/projects/{slug}/capsule` → zip (USB / прати файл). Static: unzip, open `index.html`.
    - **Локално /apps/** — Studio „Към /apps/“ (same Daedalus process).
+   - **Наживо** — Studio button: local `/apps/` plus a public `https` (Netlify token → GitLab Pages → 1-hour Netlify preview). Static / vite / expo-web only.
    - **Git** — `<NEED_PLAYGROUND_PUSH: slug>` (GitLab if `GITLAB_TOKEN`, else GitHub).
    - Unity stays Git + local Editor. Expo web can publish as static.
 
