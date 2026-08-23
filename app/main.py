@@ -48,7 +48,19 @@ async def lifespan(_app: FastAPI):
             await startup()
     except Exception:
         log.exception("standalone boot failed (non-fatal)")
-    yield
+    try:
+        from daedalus.evolution import start_gardener
+        start_gardener()
+    except Exception:
+        log.exception("evolution gardener failed to start (non-fatal)")
+    try:
+        yield
+    finally:
+        try:
+            from daedalus.evolution import stop_gardener
+            await stop_gardener()
+        except Exception:
+            log.debug("evolution gardener stop failed", exc_info=True)
 
 
 app = FastAPI(
@@ -119,6 +131,7 @@ async def capabilities() -> dict:
             "agent-reach", "playtest", "mirofish-sidecar", "mcp",
             "browser-session", "subagents",
             "offline-kit", "llm-wardrobe", "addons", "capsule",
+            "evolution",
         ],
         "mesh_endpoint": "/api/iyveris",
         "studio": "/",

@@ -170,6 +170,7 @@
         <button class="on" data-pane="shell">Shell</button>
         <button data-pane="flight">Полет</button>
         <button data-pane="llm">LLM</button>
+        <button data-pane="evo">Еволюция</button>
         <button data-pane="world">Свят</button>
       </div>
       <div class="pane on" id="pane-shell">
@@ -192,6 +193,19 @@
         </div>
         <div id="wardrobe"></div>
         <pre id="llmbox">Зареждане…</pre>
+      </div>
+      <div class="pane" id="pane-evo">
+        <h2>Еволюция</h2>
+        <p class="hint">Изключено по подразбиране. Когато е включено, Дедал на празен ход търси нови LLM / coding / memory неща, изучава GitHub и пише бележки. Промени по harness чакат Approve. Autopilot и натоварена машина спират цикъла.</p>
+        <div class="row">
+          <button class="gold" id="evoon">Включи</button>
+          <button id="evocycle">Един цикъл</button>
+        </div>
+        <label class="hint" style="display:block;margin:0.4rem 0">Интервал (сек, мин 300)
+          <input id="evointerval" type="number" min="300" max="86400" step="300" value="1800" />
+        </label>
+        <label class="hint"><input id="evoclone" type="checkbox" /> Плитък clone в data/ (никога в daedalus/)</label>
+        <pre id="evobox">Зареждане…</pre>
       </div>
       <div class="pane" id="pane-world">
         <h2>Канали</h2>
@@ -464,6 +478,73 @@
       await fetch("/api/v1/llm/wardrobe/cloud", { method: "POST" });
       refreshHealth();
     };
+
+    async function refreshEvolution() {
+      try {
+        const data = await (await fetch("/api/v1/daedalus/evolution")).json();
+        const on = !!data.enabled;
+        $("evoon").textContent = on ? "Еволюция ВКЛ" : "Включи";
+        if (data.interval_s) $("evointerval").value = data.interval_s;
+        $("evoclone").checked = !!data.clone_research;
+        const lines = [];
+        lines.push(on ? "режим: ВКЛЮЧЕН" : "режим: изключен");
+        lines.push("интервал: " + (data.interval_s || "?") + "s");
+        lines.push("градинар: " + (data.gardener_running ? "работи" : "спи"));
+        lines.push("LLM на празен ход: " + (data.ask_llm ? "да (локален/позволен)" : "не"));
+        if (data.offline) lines.push("офлайн кит — мрежовият радар е спрян");
+        const skip = data.skip_reason;
+        if (skip) lines.push("сега: skip (" + skip + ")");
+        const head = data.headroom || {};
+        lines.push("load " + (head.load1 ?? "?") + " / " + (head.cores ?? "?") + " cpu  RAM свободни " + (head.mem_avail_mb ?? "?") + "MB");
+        const sum = data.last_summary || {};
+        if (sum.studied) lines.push("последно репо: " + sum.studied);
+        if (data.last_cycle) lines.push("последен цикъл: " + new Date(data.last_cycle * 1000).toLocaleString("bg"));
+        lines.push("видени URL: " + (data.seen || 0) + "  цикли: " + (data.cycle_count || 0));
+        (data.journal || []).slice(-4).forEach((row) => {
+          lines.push((row.event || "log") + " " + (row.reason || row.studied || row.sources || ""));
+        });
+        $("evobox").textContent = lines.join("\n");
+      } catch (e) {
+        $("evobox").textContent = "evolution: " + e;
+      }
+    }
+    $("evoon").onclick = async () => {
+      const cur = ($("evoon").textContent || "").indexOf("ВКЛ") >= 0;
+      await fetch("/api/v1/daedalus/evolution", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          enabled: !cur,
+          interval_s: Number($("evointerval").value) || 1800,
+          clone_research: !!$("evoclone").checked,
+        }),
+      });
+      refreshEvolution();
+    };
+    $("evointerval").onchange = async () => {
+      await fetch("/api/v1/daedalus/evolution", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ interval_s: Number($("evointerval").value) || 1800 }),
+      });
+      refreshEvolution();
+    };
+    $("evoclone").onchange = async () => {
+      await fetch("/api/v1/daedalus/evolution", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ clone_research: !!$("evoclone").checked }),
+      });
+    };
+    $("evocycle").onclick = async () => {
+      $("evobox").textContent = "цикъл…";
+      await fetch("/api/v1/daedalus/evolution/cycle", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ force: true }),
+      });
+      refreshEvolution();
+    };
     $("pcapsule").onclick = () => {
       if (!slug) { add("bot", "Избери проект за капсула."); return; }
       window.location = "/api/v1/playground/projects/" + slug + "/capsule";
@@ -497,6 +578,7 @@
     refreshProjects();
     refreshPrefs();
     refreshConnectors();
+    refreshEvolution();
   </script>
 </body>
 </html>

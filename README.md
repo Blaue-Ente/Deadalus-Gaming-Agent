@@ -85,6 +85,25 @@ python -m app.cli models    # prints machine class + recommendations
 
 Toggle **Офлайн кит** so search/Jina/image-gen refuse. Chat, files, shell, localhost browser, heuristic playtest, and capsules keep working.
 
+## Evolution (opt-in idle gardener)
+
+Self-improve already exists: Daedalus **proposes** patches, you **Approve** in Command Center. That is not silent self-editing.
+
+**Еволюция** is a separate mode (Studio tab, default **off**). While the process is up — even with no open chat — a gardener uses spare CPU/RAM to:
+
+1. Scan two rotating radar sources (GitHub/web: agents, MCP, memory, local LLM).
+2. Study one new public GitHub repo via the API (README + tree + license).
+3. Write a journal + a learned-skill note under `$DAEDALUS_DATA`.
+4. Optionally shallow-clone into `data/daedalus/evolution/research/` (never into `daedalus/`). AGPL/SSPL is refused.
+
+It **skips** when offline kit is on, load is high, RAM is tight, or autopilot is running. Harness patches still wait for Approve. `edit_modules` stays off unless you turn it on; auto-apply never includes it.
+
+```bash
+# optional: force on at boot (Studio toggle still writes settings.json)
+# DAEDALUS_EVOLUTION=1
+# DAEDALUS_EVOLUTION=0   # kill switch
+```
+
 ## Quick start (PC)
 
 ```bash

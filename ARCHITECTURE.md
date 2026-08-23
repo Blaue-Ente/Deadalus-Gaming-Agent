@@ -40,6 +40,7 @@ routing, Postgres, and the current admin UI — not the agent's identity.
 | Playground | `playground*.py`, `game_*.py` | Kinds: static, vite, phaser, expo, unity |
 | Autopilot | `builder_runtime.py` + `kernel/full_autopilot.py` | ADN `admin.py` Phase 0–6 when hosted; kernel loop when standalone |
 | Self-improve | `self_improve.py` | Gated skills; may patch `Daedalus/` and ADN |
+| Evolution | `evolution.py` | Opt-in idle gardener; radar + GitHub study; proposals stay pending |
 | Kernel | `daedalus/kernel/` | Portable plan→code→test from Daedalus-Agent |
 | HTTP | `Daedalus/app/main.py` | Studio, `/admin/daedalus/*` Command Center, health, chat, playground API, `/api/iyveris` |
 | UI copy | `Daedalus/ui/` | ADN templates copied, not moved |

@@ -107,6 +107,33 @@ RADAR_SOURCES: list[dict[str, Any]] = [
         "limit": 4,
         "category": "mcp",
     },
+    {
+        "id": "github-memory",
+        "label": "GitHub: Agent Memory & RAG",
+        "type": "github",
+        "query": "LLM agent memory RAG long-term context open source",
+        "min_stars": 80,
+        "limit": 5,
+        "category": "memory",
+    },
+    {
+        "id": "github-local-llm",
+        "label": "GitHub: Local LLM inference",
+        "type": "github",
+        "query": "ollama llama.cpp local LLM inference engine open source",
+        "min_stars": 200,
+        "limit": 5,
+        "category": "local-llm",
+    },
+    {
+        "id": "github-coding-harness",
+        "label": "GitHub: Coding agent harnesses",
+        "type": "github",
+        "query": "open source coding agent SWE-bench harness tool loop",
+        "min_stars": 100,
+        "limit": 5,
+        "category": "coding-agents",
+    },
     # ── Web searches (use web_search_tool) ─────────────────────────────────
     {
         "id": "web-agents-radar",
@@ -147,42 +174,76 @@ for _src in RADAR_SOURCES:
     _src.setdefault("url", _src.get("query") or "")
 
 
+def sources_by_ids(source_ids: list[str] | None) -> list[dict[str, Any]]:
+    if not source_ids:
+        return list(RADAR_SOURCES)
+    wanted = set(source_ids)
+    picked = [src for src in RADAR_SOURCES if src["id"] in wanted]
+    return picked or list(RADAR_SOURCES)
+
+
+def rotate_source_ids(cursor: int = 0, n: int = 2) -> tuple[list[str], int]:
+    """Pick ``n`` source ids, wrapping around the catalog."""
+    ids = [src["id"] for src in RADAR_SOURCES]
+    if not ids:
+        return [], 0
+    n = max(1, min(int(n), len(ids)))
+    start = int(cursor) % len(ids)
+    picked = [ids[(start + i) % len(ids)] for i in range(n)]
+    nxt = (start + n) % len(ids)
+    return picked, nxt
+
+
+def _result_urls(result: dict[str, Any]) -> list[str]:
+    urls: list[str] = []
+    for row in result.get("results") or []:
+        if not isinstance(row, dict):
+            continue
+        url = row.get("url") or row.get("html_url") or row.get("link")
+        if url:
+            urls.append(str(url))
+    return urls[:8]
+
+
 # ---------------------------------------------------------------------------
 # Core scan function
 # ---------------------------------------------------------------------------
 
-async def run_radar_scan(daedalus_instance: Any) -> dict[str, Any]:
-    """Run a full radar scan across all sources.
+async def run_radar_scan(
+    daedalus_instance: Any,
+    source_ids: list[str] | None = None,
+    *,
+    for_self: bool = False,
+) -> dict[str, Any]:
+    """Run a radar scan across all sources, or a subset.
 
-    Args:
-        daedalus_instance: A live Daedalus instance (provides memory +
-                           web_search / github_search tools).
-
-    Returns:
-        Summary dict with per-source results and aggregate counts.
+    ``for_self=True`` records discoveries as pending self-improvement
+    (evolution gardener). The Command Center full scan stays ``for_self=False``.
     """
     from .tools import web_search_tool, github_search_tool
 
-    memory = daedalus_instance.memory
+    catalog = sources_by_ids(source_ids)
+    memory = getattr(daedalus_instance, "memory", None)
     t0 = time.time()
     source_results: list[dict[str, Any]] = []
     total_found = 0
     total_new_discoveries = 0
 
-    log.info("radar: starting scan over %d sources", len(RADAR_SOURCES))
+    log.info("radar: starting scan over %d sources (for_self=%s)", len(catalog), for_self)
 
-    for src in RADAR_SOURCES:
+    for src in catalog:
         src_id = src["id"]
         src_type = src.get("type", "web")
         try:
+            record = memory is not None
             if src_type == "github":
                 result = await github_search_tool(
                     memory=memory,
                     query=src["query"],
                     limit=src.get("limit", 5),
                     min_stars=src.get("min_stars", 0),
-                    record_discoveries=True,
-                    for_self=False,
+                    record_discoveries=record,
+                    for_self=for_self,
                 )
             else:
                 result = await web_search_tool(
@@ -190,14 +251,15 @@ async def run_radar_scan(daedalus_instance: Any) -> dict[str, Any]:
                     query=src["query"],
                     limit=src.get("limit", 5),
                     fetch_content=False,
-                    record_discoveries=True,
-                    for_self=False,
+                    record_discoveries=record,
+                    for_self=for_self,
                 )
 
             found = result.get("result_count", 0) or len(result.get("results", []))
             new_disc = result.get("discoveries_recorded", 0)
             total_found += found
             total_new_discoveries += new_disc
+            urls = _result_urls(result)
 
             source_results.append({
                 "id": src_id,
@@ -208,6 +270,7 @@ async def run_radar_scan(daedalus_instance: Any) -> dict[str, Any]:
                 "new_discoveries": new_disc,
                 "category": src.get("category", "general"),
                 "error": result.get("error"),
+                "urls": urls,
             })
             log.info("radar: %s → %d results, %d new discoveries", src_id, found, new_disc)
 
@@ -228,25 +291,28 @@ async def run_radar_scan(daedalus_instance: Any) -> dict[str, Any]:
     state["last_scan"] = int(time.time())
     state["scan_count"] = state.get("scan_count", 0) + 1
     state["last_summary"] = {
-        "sources_scanned": len(RADAR_SOURCES),
+        "sources_scanned": len(catalog),
         "total_found": total_found,
         "new_discoveries": total_new_discoveries,
         "elapsed_s": elapsed,
+        "for_self": for_self,
+        "source_ids": [s["id"] for s in catalog],
     }
     _save_state(state)
 
     log.info(
         "radar: scan complete — %d sources, %d results, %d new discoveries in %.1fs",
-        len(RADAR_SOURCES), total_found, total_new_discoveries, elapsed,
+        len(catalog), total_found, total_new_discoveries, elapsed,
     )
 
     return {
         "ok": True,
         "scan_count": state["scan_count"],
-        "sources_scanned": len(RADAR_SOURCES),
+        "sources_scanned": len(catalog),
         "total_found": total_found,
         "new_discoveries": total_new_discoveries,
         "elapsed_s": elapsed,
         "sources": source_results,
         "ts": state["last_scan"],
+        "for_self": for_self,
     }

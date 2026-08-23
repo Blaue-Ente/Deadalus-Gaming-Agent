@@ -299,3 +299,48 @@ async def addons_enable(body: AddonBody) -> dict[str, Any]:
 async def addons_disable(addon_id: str) -> dict[str, Any]:
     from daedalus.addons import disable
     return disable(addon_id)
+
+
+class EvolutionBody(BaseModel):
+    enabled: bool | None = None
+    interval_s: int | None = Field(default=None, ge=300, le=86400)
+    clone_research: bool | None = None
+    ask_llm: bool | None = None
+
+
+class EvolutionCycleBody(BaseModel):
+    force: bool = True
+
+
+@router.get("/api/v1/daedalus/evolution")
+async def evolution_status() -> dict[str, Any]:
+    from daedalus.evolution import snapshot, start_gardener
+    start_gardener()
+    return snapshot()
+
+
+@router.post("/api/v1/daedalus/evolution")
+async def evolution_set(body: EvolutionBody) -> dict[str, Any]:
+    from daedalus.evolution import set_config
+    return set_config(
+        enabled_flag=body.enabled,
+        interval=body.interval_s,
+        clone=body.clone_research,
+        ask_llm=body.ask_llm,
+    )
+
+
+@router.post("/api/v1/daedalus/evolution/cycle")
+async def evolution_cycle(body: EvolutionCycleBody = EvolutionCycleBody()) -> dict[str, Any]:
+    from daedalus.evolution import enabled, run_cycle, set_enabled
+    force = body.force
+    if force and not enabled():
+        # Owner clicked "now" — turn the mode on so the gardener keeps going.
+        set_enabled(True)
+    daedalus = None
+    try:
+        from daedalus.agent import get_daedalus
+        daedalus = get_daedalus()
+    except Exception:
+        pass
+    return await run_cycle(force=force, daedalus=daedalus)
