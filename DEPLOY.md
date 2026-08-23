@@ -3,6 +3,22 @@
 Daedalus is a single FastAPI process on port **8787**. No Postgres required
 in standalone mode (SQLite under `DAEDALUS_DATA`). ADN is not started.
 
+## Windows (Start Menu app)
+
+```powershell
+# Python 3.11+ with "Add python.exe to PATH"
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+.\packaging\windows\install.ps1 -DesktopShortcut
+```
+
+This copies the product to `%LOCALAPPDATA%\Programs\Daedalus`, creates a venv,
+and a Start Menu shortcut **Дедал**. Studio binds **127.0.0.1:8787** only.
+Put cloud keys in `%LOCALAPPDATA%\Daedalus\.env` (copied from `.env.example`
+on first install). Ollama still works as a local provider.
+
+Uninstall: Settings → Apps → Дедал, or `uninstall.ps1` (add `-RemoveData` to
+wipe memory/games). Inno Setup script: `packaging/windows/Daedalus.iss`.
+
 ## Local PC
 
 ```bash
