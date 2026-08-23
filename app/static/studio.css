@@ -106,6 +106,7 @@ header.app .brand a:hover { text-decoration: underline; }
 }
 .chip strong { color: var(--ink); font-weight: 600; }
 .chip.empty { color: var(--faint); }
+.chip:not(.empty) { cursor: pointer; }
 
 .effort {
   display: inline-flex;

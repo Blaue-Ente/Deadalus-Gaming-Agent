@@ -35,6 +35,12 @@ def test_bind_does_not_leak():
     assert applied_model() is None
 
 
+def test_slugify_bulgarian():
+    from daedalus.playground import slugify
+    assert slugify("Северна сага") == "severna-saga"
+    assert slugify("Snake") == "snake"
+
+
 def test_world_kit_writes_once(tmp_path):
     from daedalus.world_kit import needed, status, write
     assert needed("open world campaign with characters") is True

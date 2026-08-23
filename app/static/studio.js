@@ -58,7 +58,14 @@
     const p = selectedProject();
     const chip = $("projchip");
     chip.classList.toggle("empty", !p);
+    chip.title = p ? "Кликни за изчистване" : "";
     text(chip, p ? (p.name || p.slug) : "Няма избран проект");
+    chip.onclick = () => {
+      if (!state.slug) return;
+      state.slug = null;
+      localStorage.removeItem("dx.slug");
+      refreshProjects();
+    };
     const locked = !state.slug;
     ["pcapsule", "ppub", "plive", "build", "ptest"].forEach((id) => {
       const n = $(id);

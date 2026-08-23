@@ -40,6 +40,13 @@ VALID_KINDS = {"static", "fastapi", "streamlit", "vite", "vite-react", "node", "
 VALID_SOURCES = {"built", "cloned", "imported", "revived"}
 
 _SLUG_RE = re.compile(r"[^a-z0-9-]+")
+_CYR = {
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e",
+    "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k", "л": "l",
+    "м": "m", "н": "n", "о": "o", "п": "p", "р": "r", "с": "s",
+    "т": "t", "у": "u", "ф": "f", "х": "h", "ц": "ts", "ч": "ch",
+    "ш": "sh", "щ": "sht", "ъ": "a", "ь": "", "ю": "yu", "я": "ya",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -56,8 +63,13 @@ async def _pool():
 # ---------------------------------------------------------------------------
 
 def slugify(name: str) -> str:
-    """Convert a human name to a safe url/dir slug."""
+    """Convert a human name to a safe url/dir slug.
+
+    Bulgarian letters become Latin so ``Северна сага`` is ``severna-saga``,
+    not ``app-ab12cd``.
+    """
     s = (name or "").strip().lower()
+    s = "".join(_CYR.get(ch, ch) for ch in s)
     s = s.replace(" ", "-").replace("_", "-")
     s = _SLUG_RE.sub("", s)
     s = re.sub(r"-+", "-", s).strip("-")
