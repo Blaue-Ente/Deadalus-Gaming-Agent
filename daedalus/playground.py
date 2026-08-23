@@ -65,9 +65,13 @@ def slugify(name: str) -> str:
 
 
 def project_dir(slug: str) -> Path:
-    """Absolute path to a project's workspace dir (safe — no traversal)."""
+    """Absolute path to a project's workspace dir (safe — no traversal).
+
+    Reads ``DAEDALUS_PLAYGROUND`` live so tests and standalone boot cannot
+    leave a stale module-level folder behind.
+    """
     safe = slugify(slug)
-    return PROJECTS_DIR / safe
+    return playground_projects_dir() / safe
 
 
 def _safe_join(root: Path, rel: str) -> Path:
