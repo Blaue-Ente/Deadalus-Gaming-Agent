@@ -75,7 +75,7 @@ def test_desktop_reuses_running_instance(win_tmp, monkeypatch):
     opened: list[str] = []
     monkeypatch.setattr("app.desktop.instance_healthy", lambda *a, **k: True)
     monkeypatch.setattr(
-        "app.windows_gui.present_ui",
+        "app.desktop.present_ui",
         lambda url, **kw: opened.append(url) or "browser",
     )
     code = run_desktop(host="127.0.0.1", port=8787, open_browser=True, ui="browser", serve=True)
@@ -88,7 +88,7 @@ def test_desktop_passes_ui_mode(win_tmp, monkeypatch):
     seen: list[str] = []
     monkeypatch.setattr("app.desktop.instance_healthy", lambda *a, **k: True)
     monkeypatch.setattr(
-        "app.windows_gui.present_ui",
+        "app.desktop.present_ui",
         lambda url, **kw: seen.append(str(kw.get("mode"))) or "tk",
     )
     assert run_desktop(host="127.0.0.1", port=8787, ui="tk", serve=True) == 0
@@ -99,7 +99,7 @@ def test_desktop_headless_skips_ui(win_tmp, monkeypatch):
     from app.desktop import run_desktop
     called: list[str] = []
     monkeypatch.setattr("app.desktop.instance_healthy", lambda *a, **k: True)
-    monkeypatch.setattr("app.windows_gui.present_ui", lambda url, **kw: called.append(url) or "none")
+    monkeypatch.setattr("app.desktop.present_ui", lambda url, **kw: called.append(url) or "none")
     code = run_desktop(host="127.0.0.1", port=8787, open_browser=False, serve=True)
     assert code == 0
     assert called == []
