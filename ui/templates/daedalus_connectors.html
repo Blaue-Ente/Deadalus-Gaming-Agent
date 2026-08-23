@@ -1,0 +1,211 @@
+{% extends "_shell.html" %}
+{% set page = 'daedalus_connectors' %}
+{% set daedalus_tab = 'connectors' %}
+{% block title %}Connectors — Дедал{% endblock %}
+{% block eyebrow %}Дедал · GitHub · GitLab · Durability{% endblock %}
+{% block heading %}Connectors & Durability{% endblock %}
+{% block mob_title %}Connectors{% endblock %}
+
+{% block content %}
+{% include "_daedalus_nav.html" %}
+
+<div class="space-y-6 max-w-4xl">
+  <p class="text-sm text-argos-dim">
+    Настройки за <strong class="text-white">GitHub / GitLab</strong> push & clone и
+    <strong class="text-white">устойчивост</strong> на Playground проекти при redeploy.
+    Токените се задават в <strong class="text-cyan-400">Replit Secrets</strong> или Integrations — не в този UI.
+  </p>
+
+  <!-- GitHub -->
+  <section class="bg-argos-panel border border-argos-border rounded-xl p-5">
+    <div class="flex items-center justify-between gap-3 mb-4">
+      <h2 class="text-sm font-semibold text-white">🐙 GitHub</h2>
+      <button onclick="testGithub()" id="btn-test-gh"
+        class="px-3 py-1.5 rounded-lg text-xs bg-indigo-700 hover:bg-indigo-600 text-white">Тест връзка</button>
+    </div>
+    <div id="gh-card" class="text-sm font-mono text-argos-dim">Зареждане…</div>
+    <div class="mt-4 p-3 rounded-lg bg-gray-950 border border-gray-800 text-xs text-gray-400 space-y-1">
+      <p class="text-gray-300 font-medium mb-2">Как да свържеш GitHub за 1-клик push:</p>
+      <ol class="list-decimal list-inside space-y-1">
+        <li><strong class="text-amber-300">Replit Integration ≠ push</strong> — дава read/clone, не създава repos</li>
+        <li>github.com → <strong>Settings → Developer settings → Personal access tokens</strong></li>
+        <li><strong>Classic token</strong> → отметни scope <code class="text-cyan-400">repo</code> (пълен достъп)</li>
+        <li>Replit → <strong>Secrets</strong> → <code class="text-cyan-400">GITHUB_TOKEN</code> = новият PAT</li>
+        <li><strong>Redeploy</strong> на ADN</li>
+        <li>Playground → <strong>⬆ GitHub</strong> (без prompt — автоматично нов repo по slug)</li>
+      </ol>
+      <p class="mt-2 text-gray-500">Fine-grained алтернатива: Contents (Read/Write) + Administration (Read/Write) за твоите repos.</p>
+    </div>
+  </section>
+
+  <!-- GitLab -->
+  <section class="bg-argos-panel border border-argos-border rounded-xl p-5">
+    <div class="flex items-center justify-between gap-3 mb-4">
+      <h2 class="text-sm font-semibold text-white">🦊 GitLab</h2>
+      <button onclick="testGitlab()" id="btn-test-gl"
+        class="px-3 py-1.5 rounded-lg text-xs bg-orange-800 hover:bg-orange-700 text-white">Тест връзка</button>
+    </div>
+    <div id="gl-card" class="text-sm font-mono text-argos-dim">Зареждане…</div>
+    <div class="mt-4 p-3 rounded-lg bg-gray-950 border border-gray-800 text-xs text-gray-400">
+      Secrets: <code class="text-cyan-400">GITLAB_TOKEN</code> (scope api, write_repository),
+      опционално <code class="text-cyan-400">GITLAB_NAMESPACE</code>
+    </div>
+  </section>
+
+  <!-- Preferences -->
+  <section class="bg-argos-panel border border-argos-border rounded-xl p-5">
+    <h2 class="text-sm font-semibold text-white mb-4">⚙️ Предпочитания</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+      <label class="block">
+        <span class="text-argos-dim text-xs">Git provider при push</span>
+        <select id="pref-provider" onchange="savePrefs()"
+          class="mt-1 w-full px-3 py-2 rounded bg-gray-900 border border-gray-700 text-white text-sm">
+          <option value="auto">auto (GitLab → GitHub)</option>
+          <option value="github">GitHub only</option>
+          <option value="gitlab">GitLab only</option>
+        </select>
+      </label>
+      <label class="block">
+        <span class="text-argos-dim text-xs">Default branch</span>
+        <input id="pref-branch" value="main" onchange="savePrefs()"
+          class="mt-1 w-full px-3 py-2 rounded bg-gray-900 border border-gray-700 text-white text-sm">
+      </label>
+      <label class="flex items-center gap-2 text-gray-300">
+        <input type="checkbox" id="pref-backup-revive" checked onchange="savePrefs()">
+        Auto-backup след Revive
+      </label>
+      <label class="flex items-center gap-2 text-gray-300">
+        <input type="checkbox" id="pref-backup-publish" checked onchange="savePrefs()">
+        Auto-backup след Publish
+      </label>
+    </div>
+  </section>
+
+  <!-- Durability -->
+  <section class="bg-argos-panel border border-emerald-700/40 rounded-xl p-5">
+    <h2 class="text-sm font-semibold text-emerald-300 mb-2">🛡 Устойчивост на приложенията</h2>
+    <p class="text-xs text-argos-dim mb-4">Как да си сигурен, че проектите ще „живеят“ след redeploy:</p>
+    <div id="storage-card" class="text-sm font-mono text-argos-dim mb-4">…</div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4" id="dur-summary"></div>
+    <div id="dur-projects" class="space-y-2 max-h-64 overflow-auto text-xs"></div>
+    <div class="mt-4 p-3 rounded-lg bg-emerald-950/30 border border-emerald-800/40 text-xs text-emerald-200/80 space-y-1">
+      <p><strong>Публикувай в /apps/</strong> — най-надеждно (zip в object storage, auto-restore при старт)</p>
+      <p><strong>Workspace backup</strong> — за непубликувани проекти (Autopilot, Revive, ръчен backup)</p>
+      <p><strong>Push към GitHub</strong> — трети слой: кодът живее и в remote repo</p>
+    </div>
+  </section>
+
+  <div class="flex gap-3">
+    <a href="/admin/daedalus/playground"
+      class="px-4 py-2 rounded-lg text-sm bg-emerald-700 hover:bg-emerald-600 text-white">→ Playground</a>
+    <a href="/apps/" target="_blank"
+      class="px-4 py-2 rounded-lg text-sm bg-gray-800 hover:bg-gray-700 text-gray-300">↗ /apps/</a>
+  </div>
+</div>
+
+<script>
+async function api(url, opts) {
+  const r = await fetch(url, Object.assign({headers: {'Content-Type': 'application/json'}}, opts || {}));
+  return r.json();
+}
+
+function statusBadge(ok, label) {
+  const cls = ok ? 'text-emerald-400' : 'text-red-400';
+  const icon = ok ? '✅' : '❌';
+  return `<span class="${cls}">${icon} ${label}</span>`;
+}
+
+async function loadStatus() {
+  const d = await api('/admin/daedalus/connectors/status');
+  const gh = d.github || {};
+  const gl = d.gitlab || {};
+  const st = d.storage || {};
+
+  $('gh-card').innerHTML = `
+    <div class="space-y-1">
+      ${statusBadge(gh.ok, gh.configured ? 'Configured' : 'Not configured')}
+      ${gh.login ? `<div>Login: <span class="text-white">${gh.login}</span></div>` : ''}
+      ${gh.source && gh.source !== 'none' ? `<div>Source: <span class="text-indigo-300">${gh.source}</span></div>` : ''}
+      ${gh.scopes ? `<div>Scopes: <span class="text-gray-400">${gh.scopes || '(OAuth — fine-grained)'}</span></div>` : ''}
+      ${gh.can_push === false ? '<div class="text-amber-400 font-medium">⚠️ Няма push права — нужен classic PAT с scope repo (виж инструкциите по-долу)</div>' : '<div class="text-emerald-400">✅ Push OK — Playground ⬆ GitHub създава нов repo с 1 клик</div>'}
+      ${gh.error ? `<div class="text-red-400">${gh.error}</div>` : ''}
+      ${gh.hint ? `<div class="text-gray-500 text-xs mt-2">${gh.hint}</div>` : ''}
+    </div>`;
+
+  $('gl-card').innerHTML = `
+    <div class="space-y-1">
+      ${statusBadge(gl.ok, gl.configured ? 'Configured' : 'Not configured')}
+      ${gl.username ? `<div>User: <span class="text-white">${gl.username}</span></div>` : ''}
+      ${gl.host ? `<div>Host: <span class="text-gray-400">${gl.host}</span></div>` : ''}
+      ${gl.error ? `<div class="text-red-400">${gl.error}</div>` : ''}
+      ${gl.hint ? `<div class="text-gray-500 text-xs mt-2">${gl.hint}</div>` : ''}
+    </div>`;
+
+  $('storage-card').innerHTML = `
+    ${statusBadge(st.configured, st.configured ? 'Object Storage активен' : 'Object Storage липсва')}
+    <div class="text-xs text-gray-500 mt-2">${st.hint || ''}</div>`;
+
+  const prefs = d.prefs || {};
+  $('pref-provider').value = prefs.preferred_git_provider || 'auto';
+  $('pref-branch').value = prefs.default_github_branch || 'main';
+  $('pref-backup-revive').checked = prefs.auto_backup_on_revive !== false;
+  $('pref-backup-publish').checked = prefs.auto_backup_on_publish !== false;
+}
+
+async function loadDurability() {
+  const d = await api('/admin/daedalus/playground/api/durability/status');
+  if (!d.ok) return;
+  const s = d.summary || {};
+  $('dur-summary').innerHTML = `
+    <div class="p-3 rounded bg-gray-900 border border-gray-800 text-center">
+      <div class="text-2xl font-bold text-white">${s.total || 0}</div>
+      <div class="text-[10px] text-gray-500">Проекти</div>
+    </div>
+    <div class="p-3 rounded bg-gray-900 border border-emerald-800/40 text-center">
+      <div class="text-2xl font-bold text-emerald-400">${s.published || 0}</div>
+      <div class="text-[10px] text-gray-500">Публикувани (/apps)</div>
+    </div>
+    <div class="p-3 rounded bg-gray-900 border border-amber-800/40 text-center">
+      <div class="text-2xl font-bold text-amber-400">${s.empty_workspace || 0}</div>
+      <div class="text-[10px] text-gray-500">Празни workspace</div>
+    </div>`;
+  $('dur-projects').innerHTML = (d.projects || []).map(p => `
+    <div class="flex items-center justify-between p-2 rounded bg-gray-900 border border-gray-800">
+      <span class="text-gray-300 truncate">${p.name || p.slug}</span>
+      <span class="shrink-0 flex gap-2">
+        ${p.published ? '<span class="text-emerald-400">📦 pub</span>' : ''}
+        ${p.workspace_empty ? '<span class="text-red-400">⚠ празен</span>' : `<span class="text-gray-500">${p.workspace_files}f</span>`}
+      </span>
+    </div>`).join('') || '<p class="text-gray-500">Няма проекти</p>';
+}
+
+async function testGithub() {
+  const btn = $('btn-test-gh');
+  btn.disabled = true; btn.textContent = '⏳…';
+  await api('/admin/daedalus/connectors/test-github', {method:'POST'});
+  await loadStatus();
+  btn.disabled = false; btn.textContent = 'Тест връзка';
+}
+
+async function testGitlab() {
+  const btn = $('btn-test-gl');
+  btn.disabled = true; btn.textContent = '⏳…';
+  await api('/admin/daedalus/connectors/test-gitlab', {method:'POST'});
+  await loadStatus();
+  btn.disabled = false; btn.textContent = 'Тест връзка';
+}
+
+async function savePrefs() {
+  await api('/admin/daedalus/connectors/config', {method:'POST', body: JSON.stringify({
+    preferred_git_provider: $('pref-provider').value,
+    default_github_branch: $('pref-branch').value.trim() || 'main',
+    auto_backup_on_revive: $('pref-backup-revive').checked,
+    auto_backup_on_publish: $('pref-backup-publish').checked,
+  })});
+}
+
+function $(id) { return document.getElementById(id); }
+loadStatus();
+loadDurability();
+</script>
+{% endblock %}

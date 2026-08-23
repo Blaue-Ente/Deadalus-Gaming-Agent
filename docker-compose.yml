@@ -1,0 +1,23 @@
+# Standalone Daedalus — Studio on /  Command Center on /admin/daedalus
+services:
+  daedalus:
+    build: .
+    ports:
+      - "8787:8787"
+    environment:
+      DAEDALUS_STANDALONE: "1"
+      DAEDALUS_DATA: /var/lib/daedalus
+      DAEDALUS_PLAYGROUND: /var/lib/daedalus/playground
+      HOST: 0.0.0.0
+      PORT: "8787"
+      ALLTOKEN_API_KEY: ${ALLTOKEN_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      NOVITA_API_KEY: ${NOVITA_API_KEY:-}
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
+      IYVERIS_MESH_KEY: ${IYVERIS_MESH_KEY:-iyveris-mesh-dev-key}
+    volumes:
+      - daedalus-data:/var/lib/daedalus
+    restart: unless-stopped
+
+volumes:
+  daedalus-data:

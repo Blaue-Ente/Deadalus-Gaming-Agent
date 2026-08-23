@@ -1,0 +1,22 @@
+{% extends "_shell.html" %}
+{% set page = 'llm_router' %}
+{% block title %}LLM — Дедал{% endblock %}
+{% block eyebrow %}Standalone · Direct LLM{% endblock %}
+{% block heading %}LLM status{% endblock %}
+{% block mob_title %}LLM{% endblock %}
+
+{% block content %}
+<div class="bg-argos-panel border border-argos-border rounded-lg p-5 space-y-3 max-w-xl">
+  <p class="text-sm text-argos-dim">
+    Standalone Daedalus talks to the provider directly (AllToken / OpenRouter / Novita / NVIDIA).
+    ADN MeshRouter is off unless <code class="text-argos-accent">DAEDALUS_USE_MESH_ROUTER=1</code>.
+  </p>
+  <dl class="text-sm font-mono space-y-2">
+    <div class="flex justify-between gap-4"><dt class="text-argos-dim">provider</dt><dd class="text-white">{{ provider or "—" }}</dd></div>
+    <div class="flex justify-between gap-4"><dt class="text-argos-dim">model</dt><dd class="text-white">{{ model or "—" }}</dd></div>
+    <div class="flex justify-between gap-4"><dt class="text-argos-dim">source</dt><dd class="text-white">{{ source or "—" }}</dd></div>
+    <div class="flex justify-between gap-4"><dt class="text-argos-dim">key</dt><dd class="text-white">{% if has_key %}set{% else %}missing{% endif %}</dd></div>
+  </dl>
+  <p class="text-xs text-argos-dim">Set <code>ALLTOKEN_API_KEY</code> or another provider key in <code>.env</code>.</p>
+</div>
+{% endblock %}

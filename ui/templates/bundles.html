@@ -1,0 +1,251 @@
+{% extends "_shell.html" %}
+{% set page = 'bundles' %}
+{% set daedalus_tab = 'bundles' %}
+{% block eyebrow %}Daedalus · Bundles{% endblock %}
+{% block heading %}Staged Bundles{% endblock %}
+{% block mob_title %}Bundles{% endblock %}
+{% block eyebrow_mob %}Daedalus{% endblock %}
+{% block heading_mob %}Bundles{% endblock %}
+
+{% block content %}
+{% include "_daedalus_nav.html" %}
+<div class="max-w-6xl mx-auto">
+
+  <!-- Status tabs -->
+  <div class="flex gap-2 mb-6" id="tabs">
+    <button onclick="loadBundles('ready')"    id="tab-ready"   class="tab-btn tab-active px-4 py-2 rounded-lg text-sm font-medium">⏳ Готови за преглед</button>
+    <button onclick="loadBundles('staging')"  id="tab-staging" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white">🔧 В изграждане</button>
+    <button onclick="loadBundles('applied')"  id="tab-applied" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white">✅ Приложени</button>
+    <button onclick="loadBundles('rejected')" id="tab-rejected" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white">❌ Отхвърлени</button>
+    <button onclick="loadBundles(null)"       id="tab-all"     class="tab-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white">📋 Всички</button>
+  </div>
+
+  <!-- Bundle list -->
+  <div id="bundle-list" class="space-y-3"></div>
+
+  <!-- Bundle detail modal -->
+  <div id="bundle-modal" class="fixed inset-0 bg-black bg-opacity-70 z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-5xl max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between p-4 border-b border-gray-700">
+        <h2 class="text-lg font-bold text-white" id="modal-title">Bundle Detail</h2>
+        <button onclick="closeModal()" class="text-gray-400 hover:text-white text-xl">✕</button>
+      </div>
+      <div class="overflow-y-auto flex-1 p-4" id="modal-body"></div>
+      <div class="p-4 border-t border-gray-700 flex gap-3" id="modal-actions"></div>
+    </div>
+  </div>
+
+</div>
+
+<style>
+.tab-active { background: #3b82f6; color: white; }
+.tab-btn { transition: all 0.15s; }
+.diff-add { background: #14532d; color: #86efac; }
+.diff-del { background: #7f1d1d; color: #fca5a5; }
+.diff-line { font-family: monospace; font-size: 12px; padding: 1px 8px; white-space: pre-wrap; word-break: break-all; }
+</style>
+
+<script>
+let currentStatus = 'ready';
+
+async function loadBundles(status) {
+  currentStatus = status;
+  // Update tabs
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.classList.remove('tab-active');
+    b.classList.add('text-gray-400');
+    b.classList.remove('text-white');
+  });
+  const tabId = status ? `tab-${status}` : 'tab-all';
+  const activeTab = document.getElementById(tabId);
+  if (activeTab) {
+    activeTab.classList.add('tab-active');
+    activeTab.classList.remove('text-gray-400');
+  }
+
+  const url = status ? `/admin/daedalus/bundles/api?status=${status}` : '/admin/daedalus/bundles/api';
+  const res = await fetch(url);
+  const data = await res.json();
+  const list = document.getElementById('bundle-list');
+
+  if (!data.bundles || data.bundles.length === 0) {
+    list.innerHTML = `<div class="text-center py-12 text-gray-500">
+      <div class="text-4xl mb-3">📭</div>
+      <p>Няма bundles${status ? ` со статус "${status}"` : ''}</p>
+    </div>`;
+    return;
+  }
+
+  list.innerHTML = data.bundles.map(b => `
+    <div class="bg-gray-800 border border-gray-700 rounded-xl p-4 hover:border-gray-500 cursor-pointer transition-all"
+         onclick="openBundle('${b.id}')">
+      <div class="flex items-start justify-between">
+        <div class="flex-1">
+          <div class="flex items-center gap-3 mb-1">
+            <span class="status-badge ${statusClass(b.status)}">${statusLabel(b.status)}</span>
+            <span class="text-white font-semibold">${escHtml(b.title || b.id)}</span>
+          </div>
+          ${b.summary ? `<p class="text-gray-400 text-sm mb-2">${escHtml(b.summary.slice(0, 150))}${b.summary.length > 150 ? '…' : ''}</p>` : ''}
+          <div class="flex gap-4 text-xs text-gray-500">
+            <span>📁 ${b.files_count || 0} файл${(b.files_count||0) !== 1 ? 'а' : ''}</span>
+            <span>🕐 ${fmtDate(b.created_at)}</span>
+            ${b.committed_at ? `<span>📦 Готов: ${fmtDate(b.committed_at)}</span>` : ''}
+            ${b.applied_at   ? `<span>✅ Приложен: ${fmtDate(b.applied_at)}</span>` : ''}
+          </div>
+        </div>
+        ${b.status === 'ready' ? `
+        <div class="flex gap-2 ml-4" onclick="event.stopPropagation()">
+          <button onclick="applyBundle('${b.id}')" class="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white text-sm rounded-lg font-medium transition-all">
+            ✅ Приложи
+          </button>
+          <button onclick="rejectBundle('${b.id}')" class="px-3 py-1.5 bg-red-900 hover:bg-red-800 text-red-300 text-sm rounded-lg transition-all">
+            ✕ Откажи
+          </button>
+        </div>` : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+async function openBundle(id) {
+  const res = await fetch(`/admin/daedalus/bundles/api/${id}`);
+  const data = await res.json();
+  if (!data.bundle) return;
+  const b = data.bundle;
+
+  document.getElementById('modal-title').textContent = `Bundle: ${b.title || b.id}`;
+
+  const files = b.files || [];
+  const filesTabs = files.map((f, i) => `
+    <button onclick="showFile(${i})" id="ftab-${i}"
+      class="ftab px-3 py-1.5 text-xs rounded-lg ${i===0 ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white border border-gray-700'} transition-all">
+      ${actionIcon(f.action)} ${escHtml(f.file_path.split('/').pop())}
+    </button>
+  `).join('');
+
+  const filesContent = files.map((f, i) => `
+    <div id="fview-${i}" class="${i===0 ? '' : 'hidden'}">
+      <div class="mb-3">
+        <div class="flex gap-2 items-center mb-1">
+          <span class="text-xs bg-gray-700 text-gray-300 px-2 py-0.5 rounded">${f.action}</span>
+          <span class="text-gray-300 text-sm font-mono">${escHtml(f.file_path)}</span>
+        </div>
+        ${f.reason ? `<p class="text-gray-500 text-xs">${escHtml(f.reason)}</p>` : ''}
+      </div>
+      <div class="bg-gray-950 rounded-lg overflow-hidden border border-gray-700">
+        ${buildDiff(f.original_content || '', f.new_content || '', f.action)}
+      </div>
+    </div>
+  `).join('');
+
+  document.getElementById('modal-body').innerHTML = `
+    <div class="mb-4">
+      ${b.summary ? `<p class="text-gray-300 text-sm mb-3">${escHtml(b.summary)}</p>` : ''}
+      <div class="flex flex-wrap gap-2 mb-4">${filesTabs}</div>
+      ${filesContent}
+    </div>
+  `;
+
+  const actions = document.getElementById('modal-actions');
+  if (b.status === 'ready' || b.status === 'staging') {
+    actions.innerHTML = `
+      <button onclick="applyBundle('${b.id}')" class="px-5 py-2 bg-green-600 hover:bg-green-500 text-white rounded-lg font-semibold transition-all">
+        ✅ Приложи всичко (${files.length} файл${files.length !== 1 ? 'а' : ''})
+      </button>
+      <button onclick="rejectBundle('${b.id}')" class="px-4 py-2 bg-red-900 hover:bg-red-800 text-red-300 rounded-lg transition-all">
+        ✕ Откажи bundle-а
+      </button>
+      <span class="ml-auto text-xs text-gray-500 self-center">ID: ${b.id}</span>
+    `;
+  } else {
+    actions.innerHTML = `<span class="text-gray-500 text-sm">Статус: ${b.status}</span><span class="ml-auto text-xs text-gray-600">ID: ${b.id}</span>`;
+  }
+
+  document.getElementById('bundle-modal').classList.remove('hidden');
+}
+
+function showFile(i) {
+  document.querySelectorAll('.ftab').forEach((t, idx) => {
+    t.className = `ftab px-3 py-1.5 text-xs rounded-lg ${idx===i ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white border border-gray-700'} transition-all`;
+  });
+  document.querySelectorAll('[id^="fview-"]').forEach((el, idx) => {
+    el.classList.toggle('hidden', idx !== i);
+  });
+}
+
+function buildDiff(original, newContent, action) {
+  if (action === 'delete') return '<div class="diff-line diff-del p-3 text-center text-sm">Файлът ще бъде изтрит</div>';
+  if (!original) {
+    const lines = newContent.split('\n');
+    return lines.slice(0, 300).map(l =>
+      `<div class="diff-line diff-add">+ ${escHtml(l)}</div>`
+    ).join('') + (lines.length > 300 ? `<div class="diff-line text-gray-500 p-2">… още ${lines.length-300} реда</div>` : '');
+  }
+  const origLines = original.split('\n');
+  const newLines  = newContent.split('\n');
+  const result = [];
+  // Simple line diff: show removed + added
+  const maxShow = 400;
+  let shown = 0;
+  const origSet = new Set(origLines);
+  const newSet  = new Set(newLines);
+  origLines.forEach(l => {
+    if (!newSet.has(l) && shown < maxShow) { result.push(`<div class="diff-line diff-del">- ${escHtml(l)}</div>`); shown++; }
+  });
+  newLines.forEach(l => {
+    if (!origSet.has(l) && shown < maxShow) { result.push(`<div class="diff-line diff-add">+ ${escHtml(l)}</div>`); shown++; }
+  });
+  if (result.length === 0) {
+    return '<div class="diff-line p-3 text-gray-500 text-center text-sm">Няма промени в съдържанието</div>';
+  }
+  return result.join('');
+}
+
+function closeModal() {
+  document.getElementById('bundle-modal').classList.add('hidden');
+}
+
+async function applyBundle(id) {
+  if (!confirm('Прилагам всички файлове на bundle-а към проекта. Сигурен?')) return;
+  const res = await fetch(`/admin/daedalus/bundles/${id}/apply`, {method: 'POST'});
+  const data = await res.json();
+  if (data.ok) {
+    closeModal();
+    alert(`✅ Приложено: ${data.applied.length} файл${data.applied.length!==1?'а':''}\n${data.applied.join('\n')}`);
+    loadBundles(currentStatus);
+  } else {
+    alert('❌ Грешка: ' + (data.error || JSON.stringify(data.errors)));
+  }
+}
+
+async function rejectBundle(id) {
+  if (!confirm('Отхвърляш bundle-а. Промените НЕ се прилагат.')) return;
+  await fetch(`/admin/daedalus/bundles/${id}/reject`, {method: 'POST'});
+  closeModal();
+  loadBundles(currentStatus);
+}
+
+function statusClass(s) {
+  return {ready:'bg-yellow-900 text-yellow-300', staging:'bg-blue-900 text-blue-300',
+          applied:'bg-green-900 text-green-300', rejected:'bg-red-900 text-red-300',
+          partially_applied:'bg-orange-900 text-orange-300'}[s] || 'bg-gray-700 text-gray-300';
+}
+function statusLabel(s) {
+  return {ready:'⏳ Готов', staging:'🔧 В изграждане', applied:'✅ Приложен',
+          rejected:'❌ Отхвърлен', partially_applied:'⚠️ Частично'}[s] || s;
+}
+function actionIcon(a) { return {replace:'✏️', create:'➕', delete:'🗑️'}[a] || '📄'; }
+function fmtDate(d) { if (!d) return '—'; try { return new Date(d).toLocaleString('bg-BG'); } catch(e) { return d; } }
+function escHtml(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+document.getElementById('bundle-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('bundle-modal')) closeModal();
+});
+
+loadBundles('ready');
+</script>
+
+<style>
+.status-badge { padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
+</style>
+{% endblock %}

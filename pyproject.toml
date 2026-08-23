@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "daedalus"
+version = "0.2.0"
+description = "Daedalus — independent coding agent harness (games, apps, self-improvement)"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "httpx>=0.28.0",
+    "pydantic>=2.0.0",
+    "chromadb>=1.0.0",
+    "openai>=1.30.0",
+    "jinja2>=3.1.0",
+    "python-multipart>=0.0.9",
+]
+
+[project.optional-dependencies]
+adn = ["argos-data-nexus"]
+playwright = ["playwright>=1.60.0"]
+dev = ["pytest>=8.0.0"]
+
+[project.scripts]
+daedalus = "app.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["daedalus*", "app*"]

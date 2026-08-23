@@ -1,0 +1,134 @@
+{% extends "_shell.html" %}
+{% set page = 'daedalus_hub' %}
+{% set daedalus_tab = 'hub' %}
+{% block title %}Дедал — ArgosDataNexus{% endblock %}
+{% block eyebrow %}Персистентен агент-инженер{% endblock %}
+{% block heading %}Дедал{% endblock %}
+{% block mob_title %}Дедал{% endblock %}
+{% block eyebrow_mob %}Персистентен агент{% endblock %}
+{% block heading_mob %}Дедал{% endblock %}
+
+{% block content %}
+{% include "_daedalus_nav.html" %}
+
+<div class="space-y-6">
+  <p class="text-sm text-argos-dim max-w-2xl">
+    Команден център на автономния агент <strong class="text-white">Дедал</strong> —
+    разговор, строеж на приложения, одобрения и LLM конфигурация на едно място.
+  </p>
+
+  <!-- Quick access cards -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <a href="/admin/daedalus"
+      class="group block bg-argos-panel border border-argos-border hover:border-argos-accent2/50 rounded-xl p-5 transition">
+      <div class="text-2xl mb-2">💬</div>
+      <h2 class="text-sm font-semibold text-white group-hover:text-argos-accent2 transition">Дедал Chat</h2>
+      <p class="text-xs text-argos-dim mt-1.5 leading-relaxed">Разговор, търсене, памет, discoveries, outbox и фонови задачи.</p>
+    </a>
+
+    <a href="/admin/daedalus/connectors"
+      class="group block bg-argos-panel border border-argos-border hover:border-indigo-500/50 rounded-xl p-5 transition">
+      <div class="text-2xl mb-2">🔗</div>
+      <h2 class="text-sm font-semibold text-white group-hover:text-indigo-300 transition">Connectors & Durability</h2>
+      <p class="text-xs text-argos-dim mt-1.5 leading-relaxed">GitHub/GitLab настройка, тест на връзка, устойчивост на проекти при redeploy.</p>
+    </a>
+
+    <a href="/admin/daedalus/playground?revive=1"
+      class="group block bg-argos-panel border border-argos-border hover:border-indigo-500/50 rounded-xl p-5 transition">
+      <div class="text-2xl mb-2">⬇</div>
+      <h2 class="text-sm font-semibold text-white group-hover:text-indigo-300 transition">Съживи от GitHub</h2>
+      <p class="text-xs text-argos-dim mt-1.5 leading-relaxed">Import & Evolve — clone, оценка, repair, публикувай съществуващ repo.</p>
+    </a>
+
+    <a href="/admin/daedalus/game-studio?new=1"
+      class="group block bg-argos-panel border border-argos-border hover:border-purple-500/50 rounded-xl p-5 transition">
+      <div class="text-2xl mb-2">🎮</div>
+      <h2 class="text-sm font-semibold text-white group-hover:text-purple-300 transition">Game Studio</h2>
+      <p class="text-xs text-argos-dim mt-1.5 leading-relaxed">Brainstorm → GDD → Studio milestones → guided или autopilot build.</p>
+    </a>
+
+    <a href="/admin/daedalus/playground"
+      class="group block bg-argos-panel border border-argos-border hover:border-emerald-500/50 rounded-xl p-5 transition">
+      <div class="text-2xl mb-2">🎮</div>
+      <h2 class="text-sm font-semibold text-white group-hover:text-emerald-400 transition">App Builder Playground</h2>
+      <p class="text-xs text-argos-dim mt-1.5 leading-relaxed">Създай, тествай и публикувай приложения — Autopilot, планове, preview.</p>
+    </a>
+
+    <a href="/admin/daedalus/proposals"
+      class="group block bg-argos-panel border border-argos-border hover:border-argos-warn/50 rounded-xl p-5 transition">
+      <div class="text-2xl mb-2">📋</div>
+      <h2 class="text-sm font-semibold text-white group-hover:text-argos-warn transition">Code Proposals</h2>
+      <p class="text-xs text-argos-dim mt-1.5 leading-relaxed">Предложения за подобрения на кода — одобри или отхвърли промените.</p>
+      <span id="hub-prop-badge" class="hidden mt-2 inline-block px-2 py-0.5 rounded-full bg-argos-warn text-black text-[10px] font-bold">0 pending</span>
+    </a>
+
+    <a href="/admin/daedalus/skills"
+      class="group block bg-argos-panel border border-argos-border hover:border-purple-500/50 rounded-xl p-5 transition">
+      <div class="text-2xl mb-2">🔐</div>
+      <h2 class="text-sm font-semibold text-white group-hover:text-purple-300 transition">Skills & Gates</h2>
+      <p class="text-xs text-argos-dim mt-1.5 leading-relaxed">Permission gates — кои инструменти Дедал може да ползва.</p>
+    </a>
+
+    <a href="/admin/llm-router"
+      class="group block bg-argos-panel border border-argos-border hover:border-emerald-500/50 rounded-xl p-5 transition">
+      <div class="text-2xl mb-2">⚡</div>
+      <h2 class="text-sm font-semibold text-white group-hover:text-emerald-300 transition">LLM Router</h2>
+      <p class="text-xs text-argos-dim mt-1.5 leading-relaxed">Модели, routing, prompt cache, изображения и Model Registry.</p>
+    </a>
+
+    <a href="/apps/" target="_blank"
+      class="group block bg-argos-panel border border-argos-border hover:border-cyan-500/50 rounded-xl p-5 transition">
+      <div class="text-2xl mb-2">🌐</div>
+      <h2 class="text-sm font-semibold text-white group-hover:text-cyan-300 transition">Публикувани приложения ↗</h2>
+      <p class="text-xs text-argos-dim mt-1.5 leading-relaxed">Виж live preview на проекти от Playground на <code class="text-cyan-400">/apps/</code>.</p>
+    </a>
+  </div>
+
+  <!-- Live status strip -->
+  <div class="bg-argos-panel border border-argos-border rounded-xl p-4">
+    <div class="flex flex-wrap items-center gap-4 text-xs font-mono">
+      <div class="flex items-center gap-2">
+        <span class="w-2 h-2 rounded-full bg-argos-accent2 animate-pulse"></span>
+        <span class="text-argos-dim">Агент:</span>
+        <span id="hub-agent-mode" class="text-white"><span class="inline-block w-16 h-4 dx-skel rounded" aria-hidden="true"></span></span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-argos-dim">Проекти:</span>
+        <span id="hub-project-count" class="text-emerald-400"><span class="inline-block w-6 h-4 dx-skel rounded" aria-hidden="true"></span></span>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="text-argos-dim">Pending proposals:</span>
+        <span id="hub-prop-count" class="text-argos-warn"><span class="inline-block w-6 h-4 dx-skel rounded" aria-hidden="true"></span></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(async function loadHubStats() {
+  try {
+    const [modeR, projR, propR] = await Promise.all([
+      fetch('/admin/daedalus/mode').then(r => r.ok ? r.json() : null),
+      fetch('/admin/daedalus/playground/api/projects').then(r => r.ok ? r.json() : null),
+      fetch('/admin/daedalus/proposals/stats').then(r => r.ok ? r.json() : null),
+    ]);
+    if (modeR?.mode) {
+      const labels = { talk: '💬 Разговор', build: '🔨 Строеж', auto: '🔀 Авто' };
+      document.getElementById('hub-agent-mode').textContent = labels[modeR.mode] || modeR.mode;
+    }
+    if (projR?.projects) {
+      document.getElementById('hub-project-count').textContent = projR.projects.length;
+    }
+    if (propR) {
+      const pending = propR.pending ?? propR.Pending ?? 0;
+      document.getElementById('hub-prop-count').textContent = pending;
+      if (pending > 0) {
+        const badge = document.getElementById('hub-prop-badge');
+        badge.textContent = pending + ' pending';
+        badge.classList.remove('hidden');
+      }
+    }
+  } catch (_) {}
+})();
+</script>
+{% endblock %}

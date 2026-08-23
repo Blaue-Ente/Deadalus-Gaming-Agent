@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Дедал — Daedalus</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,700;1,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #14110d;
+      --bg2: #1c1812;
+      --ink: #f3ead7;
+      --muted: #9a8b72;
+      --line: rgba(201, 162, 39, 0.22);
+      --gold: #c9a227;
+      --gold2: #e4c56a;
+      --ok: #7dba6a;
+      --err: #d26a4a;
+      --panel: rgba(28, 24, 18, 0.86);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      color: var(--ink);
+      font-family: "IBM Plex Sans", system-ui, sans-serif;
+      background:
+        radial-gradient(1200px 600px at 0% 0%, rgba(201,162,39,0.08), transparent 55%),
+        radial-gradient(900px 500px at 100% 100%, rgba(90,40,10,0.35), transparent 50%),
+        var(--bg);
+    }
+    body::before {
+      content: "";
+      position: fixed; inset: 0; pointer-events: none; opacity: 0.18;
+      background-image:
+        linear-gradient(var(--line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--line) 1px, transparent 1px);
+      background-size: 48px 48px;
+      mask-image: radial-gradient(circle at 30% 20%, black, transparent 75%);
+    }
+    .shell {
+      display: grid;
+      grid-template-columns: 280px 1fr 320px;
+      grid-template-rows: 72px 1fr;
+      height: 100%;
+      gap: 0;
+    }
+    header {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: baseline;
+      gap: 1.2rem;
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+      backdrop-filter: blur(10px);
+    }
+    header h1 {
+      font-family: "Cormorant Garamond", serif;
+      font-size: 2rem;
+      font-weight: 700;
+      margin: 0;
+      letter-spacing: 0.04em;
+    }
+    header h1 span { color: var(--gold); font-style: italic; font-weight: 500; }
+    header .tag {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.7rem;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+    }
+    header .status {
+      margin-left: auto;
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.75rem;
+      color: var(--gold2);
+    }
+    aside, main, .log {
+      overflow: auto;
+      padding: 1rem 1.1rem;
+    }
+    aside { border-right: 1px solid var(--line); background: rgba(20,17,13,0.55); }
+    .log { border-left: 1px solid var(--line); background: rgba(20,17,13,0.55); }
+    h2 {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.68rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 0 0 0.8rem;
+    }
+    button, select, input, textarea {
+      font: inherit;
+      color: var(--ink);
+      background: #221c14;
+      border: 1px solid var(--line);
+      border-radius: 2px;
+    }
+    button {
+      cursor: pointer;
+      padding: 0.45rem 0.7rem;
+      background: linear-gradient(180deg, #2a2418, #1a1611);
+    }
+    button.gold { border-color: var(--gold); color: var(--gold2); }
+    button:hover { border-color: var(--gold2); }
+    input, select, textarea { width: 100%; padding: 0.5rem 0.6rem; }
+    textarea { min-height: 90px; resize: vertical; }
+    .row { display: flex; gap: 0.4rem; margin: 0.4rem 0 0.8rem; }
+    .proj {
+      padding: 0.55rem 0.4rem;
+      border-bottom: 1px solid var(--line);
+      cursor: pointer;
+    }
+    .proj.active { background: rgba(201,162,39,0.08); }
+    .proj b { display: block; }
+    .proj small { color: var(--muted); font-family: "IBM Plex Mono", monospace; }
+    .msgs { display: flex; flex-direction: column; gap: 0.8rem; min-height: 42vh; margin-bottom: 1rem; }
+    .msg { max-width: 72ch; }
+    .msg.user { margin-left: auto; color: var(--gold2); }
+    .msg.bot { white-space: pre-wrap; line-height: 1.45; }
+    .log pre {
+      font-family: "IBM Plex Mono", monospace;
+      font-size: 0.72rem;
+      white-space: pre-wrap;
+      color: var(--muted);
+      margin: 0;
+    }
+    @media (max-width: 960px) {
+      .shell { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr auto; }
+      .log, aside { max-height: 28vh; border: 0; border-top: 1px solid var(--line); }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <h1>Дедал <span>/ Daedalus</span></h1>
+      <div class="tag">Independent coding agent · games first · <a href="/admin/daedalus" style="color:var(--gold2)">Command Center</a></div>
+      <div class="status" id="status">…</div>
+    </header>
+    <aside>
+      <h2>Playground</h2>
+      <input id="pname" placeholder="Име на проект" />
+      <div class="row">
+        <select id="pkind">
+          <option value="static">static</option>
+          <option value="vite">vite</option>
+          <option value="vite-react">vite-react</option>
+          <option value="phaser" disabled>phaser → static</option>
+          <option value="fastapi">fastapi</option>
+        </select>
+        <button class="gold" id="pcreate">Нов</button>
+      </div>
+      <div id="plist"></div>
+    </aside>
+    <main>
+      <h2>Разговор</h2>
+      <div class="msgs" id="msgs"></div>
+      <textarea id="prompt" placeholder="Кажи на Дедал какво да построи или поправи…"></textarea>
+      <div class="row">
+        <button class="gold" id="send">Изпрати</button>
+        <button id="build">Autopilot върху проекта</button>
+      </div>
+    </main>
+    <section class="log">
+      <h2>Полет / verify</h2>
+      <pre id="log">Няма активен autopilot.</pre>
+    </section>
+  </div>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    let slug = null;
+    const msgs = $("msgs");
+    const logEl = $("log");
+
+    function add(role, text) {
+      const d = document.createElement("div");
+      d.className = "msg " + role;
+      d.textContent = text;
+      msgs.appendChild(d);
+      msgs.scrollTop = msgs.scrollHeight;
+    }
+
+    async function refreshHealth() {
+      try {
+        const h = await (await fetch("/health")).json();
+        const llm = await (await fetch("/api/v1/llm/status")).json();
+        $("status").textContent =
+          (h.standalone ? "standalone" : "adn-host") +
+          " · " + (llm.ok ? (llm.provider + "/" + llm.model) : "no LLM");
+      } catch (e) {
+        $("status").textContent = "offline";
+      }
+    }
+
+    async function refreshProjects() {
+      const data = await (await fetch("/api/v1/playground/projects")).json();
+      const box = $("plist");
+      box.innerHTML = "";
+      (data.projects || []).forEach((p) => {
+        const el = document.createElement("div");
+        el.className = "proj" + (p.slug === slug ? " active" : "");
+        el.innerHTML = "<b>" + (p.name || p.slug) + "</b><small>" + p.kind + " · " + p.slug + "</small>";
+        el.onclick = () => { slug = p.slug; refreshProjects(); };
+        box.appendChild(el);
+      });
+    }
+
+    $("pcreate").onclick = async () => {
+      const name = $("pname").value.trim();
+      if (!name) return;
+      const kind = $("pkind").value === "phaser" ? "static" : $("pkind").value;
+      const res = await (await fetch("/api/v1/playground/projects", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ name, kind, description: name }),
+      })).json();
+      slug = res.project.slug;
+      $("pname").value = "";
+      await refreshProjects();
+    };
+
+    $("send").onclick = async () => {
+      const message = $("prompt").value.trim();
+      if (!message) return;
+      $("prompt").value = "";
+      add("user", message);
+      add("bot", "…мисля");
+      const last = msgs.lastChild;
+      try {
+        const res = await (await fetch("/api/v1/daedalus/chat", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ message, session_id: slug || "studio" }),
+        })).json();
+        last.textContent = res.reply || res.message || JSON.stringify(res, null, 2);
+      } catch (e) {
+        last.textContent = "Грешка: " + e;
+      }
+    };
+
+    $("build").onclick = async () => {
+      if (!slug) { add("bot", "Първо създай или избери проект вляво."); return; }
+      const description = $("prompt").value.trim() || ("Build " + slug);
+      const res = await (await fetch("/api/v1/playground/projects/" + slug + "/autopilot", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ description, mode: "full" }),
+      })).json();
+      logEl.textContent = "job " + (res.job && res.job.id) + "\n";
+      const src = new EventSource("/api/v1/playground/projects/" + slug + "/autopilot/stream");
+      src.onmessage = (ev) => { logEl.textContent += ev.data + "\n"; };
+      src.addEventListener("log", (ev) => { logEl.textContent += ev.data + "\n"; });
+      src.addEventListener("phase", (ev) => { logEl.textContent += "phase " + ev.data + "\n"; });
+      src.addEventListener("done", (ev) => { logEl.textContent += "DONE " + ev.data + "\n"; src.close(); });
+      src.addEventListener("error", () => { src.close(); });
+    };
+
+    refreshHealth();
+    refreshProjects();
+  </script>
+</body>
+</html>

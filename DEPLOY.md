@@ -1,0 +1,67 @@
+# Deploy Daedalus (PC + cloud)
+
+Daedalus is a single FastAPI process on port **8787**. No Postgres required
+in standalone mode (SQLite under `DAEDALUS_DATA`). ADN is not started.
+
+## Local PC
+
+```bash
+cd Daedalus
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[playwright]"   # playwright optional, for browser verify
+python -m playwright install chromium   # if you installed the extra
+export DAEDALUS_STANDALONE=1
+export ALLTOKEN_API_KEY=...      # or OPENROUTER_API_KEY
+python -m app.cli serve --host 127.0.0.1 --port 8787
+```
+
+Studio: http://127.0.0.1:8787  
+Command Center: http://127.0.0.1:8787/admin/daedalus  
+Playground: http://127.0.0.1:8787/admin/daedalus/playground  
+API docs: http://127.0.0.1:8787/docs  
+Health: http://127.0.0.1:8787/health
+
+## Docker (PC or VPS)
+
+```bash
+export ALLTOKEN_API_KEY=...
+docker compose up --build -d
+```
+
+Data (projects, SQLite, Chroma memory) lives in the `daedalus-data` volume
+mounted at `/var/lib/daedalus`. The image sets `DAEDALUS_DATA` there even
+without compose, so a plain `docker run -v daedalus-data:/var/lib/daedalus`
+keeps memory across restarts.
+
+## Cloud notes
+
+- **One replica is enough** for the agent loop (jobs are in-process).
+- Persist the volume. Back it up; it holds Playground workspaces + SQLite.
+- Put a reverse proxy (Caddy/nginx) in front if you want HTTPS.
+- Set `IYVERIS_MESH_KEY` to a long secret before exposing `/api/iyveris`.
+- Do **not** set `DAEDALUS_STANDALONE=1` on the ADN Replit/service — that
+  process must keep using Postgres + MeshRouter.
+
+### fly.io
+
+```bash
+fly launch --copy-config --yes   # uses fly.toml; create the daedalus_data volume
+fly secrets set ALLTOKEN_API_KEY=...
+fly deploy
+```
+
+### Render
+
+Connect the standalone GitLab/GitHub repo and use `render.yaml` (Docker + disk
+at `/var/lib/daedalus`). Set `ALLTOKEN_API_KEY` in the dashboard.
+
+### GitLab Container Registry
+
+On `main`, `.gitlab-ci.yml` builds the image and, when `CI_REGISTRY` is set,
+pushes `$CI_REGISTRY_IMAGE:latest`. Deploy that image anywhere Docker runs.
+
+## Environment
+
+See `.env.example`. Minimum: one of `ALLTOKEN_API_KEY`, `OPENROUTER_API_KEY`,
+`NOVITA_API_KEY`, `NVIDIA_API_KEY`. Optional `NOVITA_API_KEY` or
+`OPENROUTER_API_KEY` for Playground sprite generation.

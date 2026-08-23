@@ -1,0 +1,1440 @@
+{% extends "_shell.html" %}
+{% set page = 'game_studio' %}
+{% set daedalus_tab = 'game_studio' %}
+{% block title %}Game Studio — Дедал{% endblock %}
+{% block eyebrow %}Дедал · Game Studio · Brainstorm → GDD → Build{% endblock %}
+{% block heading %}Game Studio{% endblock %}
+{% block mob_title %}Game Studio{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto">
+{% include "_daedalus_nav.html" %}
+
+  <p class="text-gray-400 text-sm mb-4">
+    Отделен поток за игри — brainstorm, GDD lite, Studio milestones, после guided или autopilot build.
+    <a href="/admin/daedalus/playground" class="text-indigo-400 hover:text-indigo-300">Playground</a> остава за apps и Revive.
+  </p>
+
+  <!-- LIST VIEW -->
+  <div id="gs-view-list">
+    <div class="flex flex-wrap items-center gap-2 mb-4">
+      <button onclick="showGsWizard()" class="px-4 py-2 rounded-lg text-sm font-medium bg-purple-600 hover:bg-purple-500 text-white">+ Нова игра</button>
+      <button onclick="loadGsProjects()" class="px-3 py-2 rounded-lg text-sm bg-gray-700 hover:bg-gray-600 text-gray-200">↻</button>
+    </div>
+    <div id="gs-project-list" class="space-y-3" data-dx-skeleton="cards:2"></div>
+  </div>
+
+  <!-- WIZARD VIEW -->
+  <div id="gs-view-wizard" class="hidden">
+    <div class="bg-gray-900 border border-purple-600/40 rounded-xl shadow-xl overflow-hidden">
+      <div class="flex items-center justify-between p-4 border-b border-gray-800">
+        <div>
+          <h3 class="text-white font-semibold">🎮 Нова игра</h3>
+          <p class="text-xs text-gray-500 mt-1">Brainstorm → GDD → платформа → milestones → build</p>
+        </div>
+        <button onclick="showGsList()" class="text-gray-400 hover:text-white text-sm">← Към проектите</button>
+      </div>
+      <div class="px-4 pt-3">
+        <div class="flex gap-1 text-[10px] font-mono">
+          <span id="gs-step-1" class="flex-1 text-center py-1 rounded bg-purple-900/50 text-purple-300">1 Brainstorm</span>
+          <span id="gs-step-2" class="flex-1 text-center py-1 rounded bg-gray-800 text-gray-500">2 GDD</span>
+          <span id="gs-step-3" class="flex-1 text-center py-1 rounded bg-gray-800 text-gray-500">3 Платформа</span>
+          <span id="gs-step-4" class="flex-1 text-center py-1 rounded bg-gray-800 text-gray-500">4 Milestones</span>
+          <span id="gs-step-5" class="flex-1 text-center py-1 rounded bg-gray-800 text-gray-500">5 Build</span>
+        </div>
+      </div>
+      <div class="p-4 space-y-4 max-h-[60vh] overflow-auto">
+        <div id="gs-pane-1" class="space-y-3">
+          <input id="gs-title" placeholder="Име на играта *" class="w-full px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700">
+          <select id="gs-genre" class="w-full px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700">
+            <option value="action">Action / Shooter</option>
+            <option value="puzzle">Puzzle / Casual</option>
+            <option value="rpg">RPG / Collection</option>
+            <option value="strategy">Strategy / Tactics</option>
+            <option value="platformer">Platformer / Runner</option>
+            <option value="survival">Survival / Crafting</option>
+            <option value="casual">Casual / Hyper-casual</option>
+            <option value="multiplayer">Multiplayer / PvP</option>
+            <option value="other">Друго</option>
+          </select>
+          <textarea id="gs-idea" rows="3" placeholder="Идея в 2–3 изречения — какво прави играчът? *"
+            class="w-full px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700"></textarea>
+          <input id="gs-hook" placeholder="Уникален ъгъл / hook (опционално)"
+            class="w-full px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <select id="gs-audience" class="px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700">
+              <option value="casual">Casual играчи</option>
+              <option value="kids">Деца</option>
+              <option value="core">Core геймъри</option>
+              <option value="hardcore">Hardcore</option>
+              <option value="all_ages">Всички възрасти</option>
+            </select>
+            <select id="gs-platform-hint" class="px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700">
+              <option value="web">Web браузър</option>
+              <option value="mobile">Mobile (iOS/Android)</option>
+              <option value="desktop">Desktop (Unity)</option>
+              <option value="cross_platform">Cross-platform</option>
+            </select>
+          </div>
+          <input id="gs-references" placeholder="Референции (опционално)"
+            class="w-full px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700">
+          <div id="gs-brainstorm-hints" class="hidden p-3 rounded-lg border border-purple-800/50 bg-purple-950/30 text-xs text-purple-200"></div>
+        </div>
+        <div id="gs-pane-2" class="hidden space-y-3">
+          <p class="text-xs text-gray-500">GDD Lite → <code class="text-purple-400">design/gdd-lite.md</code></p>
+          <textarea id="gs-gdd-preview" rows="12" readonly
+            class="w-full px-3 py-2 rounded bg-gray-950 text-gray-300 text-xs font-mono border border-gray-700"></textarea>
+        </div>
+        <div id="gs-pane-3" class="hidden space-y-3">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs text-gray-500 block mb-1">Studio preset</label>
+              <select id="gs-preset" class="w-full px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700" onchange="gsPresetChanged()"></select>
+            </div>
+            <div>
+              <label class="text-xs text-gray-500 block mb-1">Playground kind</label>
+              <select id="gs-kind" class="w-full px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700">
+                <option value="">авто (препоръчано)</option>
+                <option value="static">static</option>
+                <option value="vite">vite</option>
+                <option value="vite-react">vite-react</option>
+                <option value="expo">expo</option>
+                <option value="unity">unity</option>
+                <option value="fastapi">fastapi</option>
+              </select>
+            </div>
+          </div>
+          <div id="gs-resolve-hint" class="text-xs text-gray-400 font-mono p-2 rounded bg-gray-950 border border-gray-800"></div>
+        </div>
+        <div id="gs-pane-4" class="hidden space-y-3">
+          <p class="text-xs text-gray-500">Studio milestones (MVP = M0–M3)</p>
+          <div id="gs-milestones" class="space-y-2 text-sm"></div>
+        </div>
+        <div id="gs-pane-5" class="hidden space-y-3">
+          <div class="grid grid-cols-1 gap-2">
+            <label class="flex items-start gap-3 p-3 rounded-lg border border-gray-700 bg-gray-800/50 cursor-pointer">
+              <input type="radio" name="gs-build-mode" value="guided" checked class="mt-1">
+              <span><span class="text-white text-sm font-medium">Guided</span><span class="block text-[10px] text-gray-500">Checkpoint build (препоръчано)</span></span>
+            </label>
+            <label class="flex items-start gap-3 p-3 rounded-lg border border-gray-700 bg-gray-800/50 cursor-pointer">
+              <input type="radio" name="gs-build-mode" value="autopilot" class="mt-1">
+              <span><span class="text-white text-sm font-medium">Autopilot</span><span class="block text-[10px] text-gray-500">Автономен build</span></span>
+            </label>
+            <label class="flex items-start gap-3 p-3 rounded-lg border border-gray-700 bg-gray-800/50 cursor-pointer">
+              <input type="radio" name="gs-build-mode" value="prototype" class="mt-1">
+              <span><span class="text-white text-sm font-medium">Prototype</span><span class="block text-[10px] text-gray-500">Само M0–M3</span></span>
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="flex gap-2 p-4 border-t border-gray-800">
+        <button onclick="gsPrev()" id="gs-prev-btn" class="hidden px-4 py-2 rounded bg-gray-800 text-gray-300 text-sm">← Назад</button>
+        <button onclick="gsNext()" id="gs-next-btn" class="flex-1 px-4 py-2 rounded bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium">Напред →</button>
+        <button onclick="gsStart()" id="gs-start-btn" class="hidden flex-1 px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">🚀 Стартирай</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- WORKSPACE VIEW -->
+  <div id="gs-view-workspace" class="hidden space-y-4">
+    <div class="flex flex-wrap items-center gap-2">
+      <button onclick="showGsList()" class="text-gray-400 hover:text-white text-sm">← Проекти</button>
+      <h2 id="gs-ws-title" class="text-white font-semibold text-lg flex-1 truncate"></h2>
+      <span id="gs-ws-badge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-900/50 text-purple-300"></span>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div class="lg:col-span-2 space-y-4">
+        <section class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <h3 class="text-sm font-semibold text-white mb-2">📄 GDD Lite</h3>
+          <pre id="gs-ws-gdd" class="text-xs text-gray-300 font-mono whitespace-pre-wrap max-h-64 overflow-auto"></pre>
+        </section>
+        <section class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <h3 class="text-sm font-semibold text-white mb-2">🗺️ Studio план</h3>
+          <div id="gs-ws-plan-empty" class="text-xs text-gray-500 mb-3">Няма запазен план. Създай Studio план от GDD.</div>
+          <div id="gs-ws-plan-stages" class="space-y-2 hidden"></div>
+          <button onclick="gsCreatePlan()" id="gs-ws-plan-btn"
+            class="mt-2 px-4 py-2 rounded bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-medium">🗺️ Създай Studio план</button>
+        </section>
+        <section class="bg-gray-900 border border-amber-800/40 rounded-xl p-4">
+          <div class="flex items-center justify-between gap-2 mb-2">
+            <h3 class="text-sm font-semibold text-white">🚦 Quality Gates</h3>
+            <button onclick="gsRunGates()" id="gs-ws-gates-btn"
+              class="px-3 py-1 rounded bg-amber-800 hover:bg-amber-700 text-white text-[10px]">Пусни проверки</button>
+          </div>
+          <p id="gs-ws-gates-summary" class="text-xs text-gray-500 mb-2">Пусни gate-check преди guided build.</p>
+          <div id="gs-ws-gates-list" class="space-y-2 text-xs"></div>
+        </section>
+      </div>
+      <div class="space-y-4">
+        <section class="bg-gray-900 border border-gray-800 rounded-xl p-4">
+          <h3 class="text-sm font-semibold text-white mb-2">🎯 Milestones</h3>
+          <p id="gs-ws-ms-current" class="text-[10px] text-amber-300 mb-2"></p>
+          <div id="gs-ws-milestones" class="space-y-1.5 text-xs"></div>
+          <div id="gs-ws-handoff" class="mt-3 p-2 rounded border border-gray-800 bg-gray-950/60 text-[10px] text-gray-400 hidden"></div>
+        </section>
+        <section class="bg-gray-900 border border-purple-800/40 rounded-xl p-4 space-y-2">
+          <h3 class="text-sm font-semibold text-white mb-2">Build (milestone по milestone)</h3>
+          <p id="gs-ws-build-hint" class="text-[10px] text-gray-500">Gate-check + план → Guided за текущия milestone.</p>
+          <button onclick="gsStartGuided()" id="gs-ws-guided-btn"
+            class="w-full px-3 py-2 rounded bg-emerald-700 hover:bg-emerald-600 text-white text-xs disabled:opacity-40 disabled:cursor-not-allowed">▶ Guided за текущия milestone</button>
+          <button onclick="gsStartAutopilot()" id="gs-ws-autopilot-btn"
+            class="w-full px-3 py-2 rounded bg-purple-700 hover:bg-purple-600 text-white text-xs disabled:opacity-40 disabled:cursor-not-allowed">🚀 Autopilot (scoped)</button>
+          <button onclick="gsRunFullStudioAuto()" id="gs-full-auto-btn"
+            class="w-full px-3 py-2 rounded bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
+            title="M0→M8 без checkpoint спирания — auto-approve всеки етап">⚡ Пълен Auto M0→M8</button>
+          <button onclick="gsAdvanceMilestone()" id="gs-ws-advance-btn"
+            class="w-full px-3 py-2 rounded bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs disabled:opacity-40 hidden">⏭ Следващ milestone</button>
+          <button onclick="gsAdvanceMilestone({unity_waiver:true})" id="gs-ws-unity-waiver-btn"
+            class="w-full px-3 py-2 rounded bg-purple-900/60 hover:bg-purple-800 text-purple-200 text-xs disabled:opacity-40 hidden"
+            title="Unity scaffold OK — пълен gameplay тест в Unity Hub локално">📦 Advance с Unity waiver</button>
+          <button onclick="gsRunVerify()" id="gs-ws-verify-inline-btn"
+            class="w-full px-3 py-2 rounded bg-cyan-800 hover:bg-cyan-700 text-white text-xs disabled:opacity-40 hidden">🔬 Пусни Verify</button>
+          <div id="gs-ws-complete-banner" class="hidden p-2 rounded border border-emerald-500/40 bg-emerald-950/30 text-emerald-300 text-xs text-center">
+            ✅ Проектът е завършен — всички milestone-и са build + verify.
+          </div>
+          <a id="gs-ws-preview" href="#" target="_blank" class="block text-center w-full px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-white text-xs">👁 Preview /apps</a>
+          <a id="gs-ws-pg-link" href="#" class="block text-center text-[10px] text-gray-500 hover:text-gray-300 pt-1">↗ Advanced в Playground</a>
+        </section>
+      </div>
+    </div>
+
+    <section id="gs-guided-panel" class="hidden mt-4 bg-gray-900 border border-emerald-800/40 rounded-xl p-4 space-y-3">
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <h3 class="text-sm font-semibold text-emerald-300">▶ Guided build</h3>
+          <p id="gs-guided-subtitle" class="text-[10px] text-gray-500"></p>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="gsOpenPlayground('plan')" class="px-2 py-1 rounded bg-gray-800 hover:bg-gray-700 text-[10px] text-gray-400">↗ Playground</button>
+          <button onclick="gsStopGuided()" id="gs-guided-stop-btn"
+            class="px-2 py-1 rounded bg-red-900/60 hover:bg-red-800 text-[10px] text-red-200">■ Спри</button>
+        </div>
+      </div>
+      <div id="gs-guided-stages" class="flex flex-wrap gap-1.5"></div>
+      <div id="gs-guided-log" class="font-mono text-[11px] max-h-52 overflow-y-auto bg-black/40 rounded p-2 border border-gray-800"></div>
+      <div id="gs-guided-checkpoint" class="hidden p-3 rounded border border-amber-800/50 bg-amber-950/20 space-y-2">
+        <div class="text-xs font-medium text-amber-200">⏸ Checkpoint — прегледай преди следващия етап</div>
+        <pre id="gs-guided-cp-review" class="text-[10px] text-gray-400 whitespace-pre-wrap max-h-32 overflow-auto"></pre>
+        <div id="gs-guided-cp-files" class="text-[10px] text-gray-500 font-mono"></div>
+        <div id="gs-guided-cp-trunk" class="text-[10px] text-violet-400 hidden"></div>
+        <div id="gs-guided-cp-options" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
+        <textarea id="gs-guided-cp-notes" rows="2" placeholder="Бележки за retry / edit plan…"
+          class="w-full text-xs bg-gray-950 border border-gray-700 rounded p-2 text-gray-300"></textarea>
+      </div>
+      <div id="gs-guided-done" class="hidden p-3 rounded border border-emerald-800/50 bg-emerald-950/20 text-sm text-emerald-300"></div>
+    </section>
+
+    <section id="gs-proof-panel" class="hidden mt-4 bg-gray-900 border border-cyan-800/40 rounded-xl p-4 space-y-3">
+      <div class="flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <h3 class="text-sm font-semibold text-cyan-300">🔬 Prove It Works</h3>
+          <p id="gs-proof-subtitle" class="text-[10px] text-gray-500">Runtime + browser + gameplay (до 5 поправки на фаза)</p>
+        </div>
+        <button onclick="gsRunVerify()" id="gs-verify-btn"
+          class="px-3 py-1.5 rounded bg-cyan-800 hover:bg-cyan-700 text-white text-[10px]">Пусни Verify</button>
+      </div>
+      <div id="gs-proof-status" class="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs"></div>
+      <div id="gs-proof-checks" class="text-[10px] text-gray-400 space-y-0.5 hidden"></div>
+      <div id="gs-proof-log" class="font-mono text-[11px] max-h-40 overflow-y-auto bg-black/40 rounded p-2 border border-gray-800"></div>
+      <div id="gs-proof-screenshot-wrap" class="hidden">
+        <img id="gs-proof-screenshot" alt="verify screenshot" class="max-h-48 rounded border border-gray-700">
+      </div>
+      <div id="gs-proof-result" class="hidden text-sm"></div>
+    </section>
+  </div>
+</div>
+
+<script>
+const GS_API = '/admin/daedalus/game-studio/api';
+let _gsStep = 1;
+let _gsBrainstorm = null;
+let _gsResolved = null;
+let _gsPresetsLoaded = false;
+let _gsWorkspaceSlug = '';
+let _gsWorkspaceCtx = null;
+let _gsGuidedJobId = null;
+let _gsGuidedOffset = 0;
+let _gsGuidedMilestoneScope = '';
+let _gsGuidedRunning = false;
+let _gsGuidedStreaming = false;
+let _gsFullAuto = false;
+const GS_GUIDED_KEY = 'gsActiveGuided';
+const GS_FULL_AUTO_KEY = 'gsFullAutoActive';
+
+function gsPersistFullAuto(on) {
+  try {
+    if (on) localStorage.setItem(GS_FULL_AUTO_KEY, JSON.stringify({ slug: _gsWorkspaceSlug, at: Date.now() }));
+    else localStorage.removeItem(GS_FULL_AUTO_KEY);
+  } catch {}
+}
+function gsLoadFullAuto() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(GS_FULL_AUTO_KEY) || 'null');
+    return raw && raw.slug === _gsWorkspaceSlug ? raw : null;
+  } catch { return null; }
+}
+function gsClearFullAuto() {
+  _gsFullAuto = false;
+  gsPersistFullAuto(false);
+  const btn = $('gs-full-auto-btn');
+  if (btn) { btn.disabled = false; btn.textContent = '⚡ Пълен Auto M0→M8'; }
+}
+
+function $(id) { return document.getElementById(id); }
+function escHtml(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+async function api(url, opts) {
+  const r = await fetch(url, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...opts });
+  let data = {};
+  try { data = await r.json(); } catch { data = { ok: false, error: 'HTTP ' + r.status }; }
+  if (!r.ok && data.ok !== false) data.ok = false;
+  if (!r.ok && !data.error) data.error = 'HTTP ' + r.status;
+  return data;
+}
+
+function showGsList() {
+  $('gs-view-list').classList.remove('hidden');
+  $('gs-view-wizard').classList.add('hidden');
+  $('gs-view-workspace').classList.add('hidden');
+  history.replaceState(null, '', '/admin/daedalus/game-studio');
+  loadGsProjects();
+}
+
+function showGsWizard() {
+  _gsStep = 1;
+  _gsBrainstorm = null;
+  _gsResolved = null;
+  paintGsStep();
+  loadGsPresets();
+  $('gs-view-list').classList.add('hidden');
+  $('gs-view-wizard').classList.remove('hidden');
+  $('gs-view-workspace').classList.add('hidden');
+  history.replaceState(null, '', '/admin/daedalus/game-studio?new=1');
+}
+
+async function loadGsProjects() {
+  const el = $('gs-project-list');
+  el.innerHTML = '<p class="text-gray-500 text-sm animate-pulse">Зареждам…</p>';
+  try {
+    const r = await api(GS_API + '/projects');
+    const projects = r.projects || [];
+    if (!projects.length) {
+      el.innerHTML = '<p class="text-gray-500 text-sm">Няма Game Studio проекти. <button onclick="showGsWizard()" class="text-purple-400 hover:underline">Създай първата игра</button></p>';
+      return;
+    }
+    el.innerHTML = projects.map(p => {
+      const slug = p.slug || '';
+      const sn = slug.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+      return `
+      <div class="p-4 rounded-xl border border-gray-800 bg-gray-900/80 hover:border-purple-700/50 transition cursor-pointer" onclick="openGsWorkspace('${sn}')">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="text-lg">🎮</span>
+          <span class="text-white font-semibold">${escHtml(p.game_title || p.name)}</span>
+          <span class="text-[10px] font-mono text-gray-500">${escHtml(p.slug)}</span>
+          <span class="text-[10px] px-1.5 py-0.5 rounded bg-gray-800 text-gray-400">${escHtml(p.kind)}</span>
+          <span class="text-[10px] px-1.5 py-0.5 rounded bg-purple-900/40 text-purple-300">${escHtml(p.studio_preset || 'custom')}</span>
+        </div>
+        <p class="text-xs text-gray-500 mt-2 line-clamp-2">${escHtml((p.description || '').replace(/^\[Game Studio\]\s*/, '').slice(0, 120))}</p>
+      </div>`;
+    }).join('');
+  } catch (e) {
+    el.innerHTML = '<p class="text-red-400 text-sm">Грешка: ' + escHtml(e.message) + '</p>';
+  }
+}
+
+function gsBrainstormPayload() {
+  return {
+    title: ($('gs-title')?.value || '').trim(),
+    genre: $('gs-genre')?.value || 'other',
+    idea: ($('gs-idea')?.value || '').trim(),
+    unique_hook: ($('gs-hook')?.value || '').trim(),
+    audience: $('gs-audience')?.value || 'casual',
+    platform_hint: $('gs-platform-hint')?.value || 'web',
+    reference_games: ($('gs-references')?.value || '').trim(),
+  };
+}
+
+function paintGsStep() {
+  for (let i = 1; i <= 5; i++) {
+    $('gs-pane-' + i)?.classList.toggle('hidden', i !== _gsStep);
+    const stepEl = $('gs-step-' + i);
+    if (stepEl) {
+      const active = i === _gsStep;
+      stepEl.classList.toggle('bg-purple-900/50', active);
+      stepEl.classList.toggle('text-purple-300', active);
+      stepEl.classList.toggle('bg-gray-800', !active);
+      stepEl.classList.toggle('text-gray-500', !active);
+    }
+  }
+  $('gs-prev-btn')?.classList.toggle('hidden', _gsStep === 1);
+  $('gs-next-btn')?.classList.toggle('hidden', _gsStep === 5);
+  $('gs-start-btn')?.classList.toggle('hidden', _gsStep !== 5);
+}
+
+async function loadGsPresets() {
+  if (_gsPresetsLoaded) return;
+  const r = await api('/admin/daedalus/playground/api/studio/presets');
+  const sel = $('gs-preset');
+  if (!sel || !r.ok) return;
+  sel.innerHTML = (r.presets || []).map(p =>
+    `<option value="${escHtml(p.id)}">${escHtml(p.label || p.id)}</option>`
+  ).join('');
+  _gsPresetsLoaded = true;
+}
+
+async function gsRunBrainstorm() {
+  const payload = gsBrainstormPayload();
+  if (!payload.title) { alert('Въведи име'); return false; }
+  if (!payload.idea) { alert('Опиши идеята'); return false; }
+  const r = await api(GS_API + '/brainstorm', { method: 'POST', body: JSON.stringify(payload) });
+  if (!r.ok) { alert(r.error || 'brainstorm failed'); return false; }
+  _gsBrainstorm = r.brainstorm || payload;
+  const s = r.suggested || {};
+  const hints = $('gs-brainstorm-hints');
+  if (hints) {
+    hints.innerHTML = `<div class="font-medium text-purple-300">${escHtml(r.pitch || '')}</div>
+      <div>Preset: <b>${escHtml(s.preset_label || s.studio_preset)}</b> · Kind: <b>${escHtml(s.kind)}</b></div>`;
+    hints.classList.remove('hidden');
+  }
+  if ($('gs-preset') && s.studio_preset) $('gs-preset').value = s.studio_preset;
+  return true;
+}
+
+async function gsLoadGdd() {
+  const r = await api(GS_API + '/gdd', {
+    method: 'POST',
+    body: JSON.stringify({
+      brainstorm: _gsBrainstorm || gsBrainstormPayload(),
+      studio_preset: $('gs-preset')?.value || '',
+      kind: $('gs-kind')?.value || '',
+    }),
+  });
+  if (!r.ok) { alert(r.error || 'GDD failed'); return false; }
+  _gsResolved = r.resolved || null;
+  if ($('gs-gdd-preview')) $('gs-gdd-preview').value = r.gdd || '';
+  if ($('gs-resolve-hint') && _gsResolved) {
+    $('gs-resolve-hint').textContent = `Preset: ${_gsResolved.studio_preset} · Kind: ${_gsResolved.kind}`;
+  }
+  gsRenderMilestones();
+  return true;
+}
+
+function gsPresetChanged() { gsLoadGdd().catch(() => {}); }
+
+function gsRenderMilestones() {
+  const box = $('gs-milestones');
+  if (!box) return;
+  const ms = (_gsResolved && _gsResolved.milestones) || [];
+  box.innerHTML = ms.map(m => {
+    const mvp = ['M0','M1','M2','M3'].includes(m.id);
+    return `<div class="p-2 rounded border ${mvp ? 'border-emerald-800/50' : 'border-gray-800'}">
+      <span class="font-mono text-purple-400 text-xs">${escHtml(m.id)}</span>
+      <span class="text-white text-sm ml-2">${escHtml(m.title)}</span>
+      <div class="text-xs text-gray-500 mt-1">${escHtml(m.goal || '')}</div></div>`;
+  }).join('');
+}
+
+async function gsNext() {
+  const btn = $('gs-next-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳…'; }
+  try {
+    if (_gsStep === 1) {
+      if (!await gsRunBrainstorm()) return;
+      _gsStep = 2; paintGsStep(); await gsLoadGdd(); return;
+    }
+    if (_gsStep === 2) { await gsLoadGdd(); _gsStep = 3; paintGsStep(); return; }
+    if (_gsStep === 3) { await gsLoadGdd(); _gsStep = 4; paintGsStep(); return; }
+    if (_gsStep === 4) { _gsStep = 5; paintGsStep(); }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Напред →'; }
+  }
+}
+
+function gsPrev() { if (_gsStep > 1) { _gsStep--; paintGsStep(); } }
+
+async function gsStart() {
+  const btn = $('gs-start-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳…'; }
+  try {
+    const mode = document.querySelector('input[name="gs-build-mode"]:checked')?.value || 'guided';
+    const payload = _gsBrainstorm || gsBrainstormPayload();
+    const r = await api(GS_API + '/start', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: payload.title,
+        brainstorm: payload,
+        studio_preset: $('gs-preset')?.value || '',
+        kind: $('gs-kind')?.value || '',
+        build_mode: mode,
+      }),
+    });
+    if (!r.ok) { alert(r.error || 'start failed'); return; }
+    openGsWorkspace(r.slug);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🚀 Стартирай'; }
+  }
+}
+
+function renderGsGates(ctx) {
+  const list = $('gs-ws-gates-list');
+  const summary = $('gs-ws-gates-summary');
+  const gates = ctx.gates || {};
+  const ids = Object.keys(gates);
+  if (!ids.length) {
+    if (summary) summary.textContent = 'Пусни gate-check преди guided build.';
+    if (list) list.innerHTML = '<p class="text-gray-600">Очаква се след Studio план.</p>';
+    return;
+  }
+  const statusIcon = { pass: '✅', warn: '⚠️', fail: '❌' };
+  if (summary) {
+    const parts = ids.map(id => {
+      const g = gates[id];
+      return `${statusIcon[g.status] || '·'} ${g.label || id}`;
+    });
+    summary.textContent = parts.join(' · ');
+  }
+  if (list) {
+    list.innerHTML = ids.map(id => {
+      const g = gates[id];
+      const checks = (g.checks || []).map(c => {
+        const ic = statusIcon[c.level] || '·';
+        const det = c.detail ? ` — ${escHtml(c.detail)}` : '';
+        return `<div class="text-gray-400 pl-2">${ic} ${escHtml(c.label)}${det}</div>`;
+      }).join('');
+      return `<div class="p-2 rounded border border-gray-800 bg-gray-950/50">
+        <div class="font-medium text-amber-200">${statusIcon[g.status] || ''} ${escHtml(g.label || id)}</div>
+        <div class="text-[10px] text-gray-500">${escHtml(g.summary || '')}</div>
+        ${checks}
+      </div>`;
+    }).join('');
+  }
+}
+
+function updateGsBuildButtons(ctx) {
+  const guided = $('gs-ws-guided-btn');
+  const autopilot = $('gs-ws-autopilot-btn');
+  const advance = $('gs-ws-advance-btn');
+  const unityWaiver = $('gs-ws-unity-waiver-btn');
+  const verifyInline = $('gs-ws-verify-inline-btn');
+  const completeBanner = $('gs-ws-complete-banner');
+  const hint = $('gs-ws-build-hint');
+  const ms = ctx.milestone_summary || {};
+  const planStages = (ctx.plan && ctx.plan.stages) || [];
+  const hasPlan = planStages.length > 0;
+  const orphans = ms.orphan_stages || 0;
+  const canStart = !!ms.can_start_milestone;
+  const canG = !!ctx.can_guided && canStart && !_gsGuidedRunning;
+  const canA = !!ctx.can_autopilot && canStart;
+  const cur = ctx.current_milestone || ms.current_milestone || 'M0';
+  const pending = ms.pending_in_current || (ctx.handoff && ctx.handoff.pending_count) || 0;
+  const curRow = (ms.milestones || []).find(m => m.id === cur);
+  const milestoneComplete = !!(curRow && curRow.complete);
+  const isFinal = !!ms.is_final_milestone;
+  const projectDone = !!(ctx.project_complete || ms.project_complete);
+  if (guided) {
+    guided.disabled = !canG;
+    guided.textContent = canG
+      ? `▶ Guided за ${cur} (${pending} етапа)`
+      : (hasPlan && milestoneComplete ? `✓ ${cur} build готов` : '▶ Guided за текущия milestone');
+  }
+  if (autopilot) autopilot.disabled = !canA;
+  if (verifyInline) {
+    const showVerify = hasPlan && milestoneComplete && !projectDone && !ctx.can_advance;
+    verifyInline.classList.toggle('hidden', !showVerify);
+    verifyInline.disabled = !milestoneComplete;
+  }
+  if (completeBanner) {
+    completeBanner.classList.toggle('hidden', !projectDone);
+  }
+  if (advance) {
+    const canAdv = !!ctx.can_advance && !isFinal;
+    const canWaiver = !!ctx.can_unity_waiver && !isFinal;
+    advance.classList.toggle('hidden', !milestoneComplete || isFinal || projectDone);
+    advance.disabled = !canAdv;
+    advance.title = canAdv ? '' : (isFinal ? 'Финален milestone — няма следващ' : 'Пусни Verify и мини преди следващ milestone');
+    if (unityWaiver) {
+      unityWaiver.classList.toggle('hidden', !milestoneComplete || canAdv || isFinal || projectDone);
+      unityWaiver.disabled = !canWaiver;
+      unityWaiver.title = canWaiver
+        ? 'Scaffold OK — пълен тест в Unity Hub; cloud не може gameplay proof'
+        : 'Няма eligible Unity waiver за този milestone';
+    }
+  }
+  if (hint) {
+    if (projectDone) {
+      hint.textContent = 'Проектът е завършен — отвори Preview или Playground за финални корекции.';
+    } else if (!hasPlan) {
+      hint.textContent = 'Стъпка 1: Създай Studio план от GDD.';
+    } else if (orphans > 0) {
+      hint.textContent = `⚠ ${orphans} етапа без валиден milestone — презареди страницата (авто-поправка) или прегенерирай плана.`;
+    } else if (!ctx.can_guided) {
+      hint.textContent = 'Стъпка 2: Пусни gate-check преди build.';
+    } else if (canStart && canG) {
+      hint.textContent = `Стъпка 3: Guided за ${cur} (${pending} етапа) — кодира checkpoint по checkpoint.`;
+    } else if (canStart && canA) {
+      hint.textContent = `Безопасен handoff: само ${cur}, без прегенериране на плана.`;
+    } else if (milestoneComplete && !ctx.can_advance && !isFinal) {
+      hint.textContent = `Milestone ${cur} build готов — пусни Verify (runtime + browser + gameplay).`;
+    } else if (milestoneComplete && ctx.can_advance && !isFinal) {
+      hint.textContent = `Verify минал — преминаваме към следващия milestone…`;
+    } else if (milestoneComplete && isFinal && !ctx.current_verify?.ok) {
+      hint.textContent = `Финален milestone ${cur} — пусни Verify за потвърждение че играта работи.`;
+    } else if (milestoneComplete && isFinal && ctx.current_verify?.ok) {
+      hint.textContent = `Финален milestone ${cur} — Verify минал. Проектът е готов за Preview.`;
+    } else if (!canStart && curRow && curRow.total === 0) {
+      hint.textContent = `${cur} няма етапи в плана — прегенерирай Studio плана.`;
+    } else {
+      hint.textContent = 'Създай план → Пусни проверки → Guided.';
+    }
+  }
+}
+
+function renderGsHandoff(ctx) {
+  const box = $('gs-ws-handoff');
+  const h = ctx.handoff;
+  if (!box || !h) return;
+  if (!h.pending_count) { box.classList.add('hidden'); return; }
+  box.classList.remove('hidden');
+  const titles = (h.stage_titles || []).map(t => escHtml(t)).join(' · ');
+  box.innerHTML = `<div class="text-amber-200 font-medium">Handoff ${escHtml(h.milestone_id)}</div>
+    <div>${h.pending_count} pending етапа — ${titles}</div>
+    <div class="text-gray-500 mt-1">✓ Запазен план · ✓ Само pending етапи · ✓ Без full rewrite</div>`;
+}
+
+function renderGsWorkspace(ctx) {
+  const p = ctx.project || {};
+  $('gs-ws-title').textContent = p.name || p.slug;
+  $('gs-ws-badge').textContent = (ctx.studio_preset || 'custom') + ' · ' + (p.kind || '');
+  $('gs-ws-gdd').textContent = ctx.gdd || '(GDD липсва)';
+  const msSum = ctx.milestone_summary || {};
+  const curEl = $('gs-ws-ms-current');
+  if (curEl) {
+    curEl.textContent = msSum.current_milestone
+      ? `Текущ: ${msSum.current_milestone} · build mode: ${ctx.build_mode || 'guided'}`
+      : '';
+  }
+  const msBox = $('gs-ws-milestones');
+  const rows = (msSum.milestones || ctx.milestones || []);
+  msBox.innerHTML = rows.map(m => {
+    const prog = m.total ? `${m.done}/${m.total}` : '—';
+    const cur = m.current ? 'ring-1 ring-amber-500/50 bg-amber-950/20' : '';
+    const done = m.complete ? 'text-emerald-400' : (m.total ? 'text-gray-300' : 'text-gray-500');
+    return `<div class="flex justify-between gap-2 p-1.5 rounded ${cur} ${done}">
+      <span><span class="font-mono">${escHtml(m.id)}</span> ${escHtml(m.title || '')}</span>
+      <span class="font-mono text-[10px]">${prog}</span></div>`;
+  }).join('');
+  if (msSum.orphan_stages > 0) {
+    msBox.innerHTML += `<div class="text-amber-400 text-[10px] mt-1 p-1.5 rounded border border-amber-800/40">⚠ ${msSum.orphan_stages} етапа без milestone — ще се поправят при reload</div>`;
+  }
+  renderGsHandoff(ctx);
+  const plan = ctx.plan;
+  const stages = plan && plan.stages;
+  if (stages && stages.length) {
+    $('gs-ws-plan-empty').classList.add('hidden');
+    $('gs-ws-plan-stages').classList.remove('hidden');
+    const curMs = ctx.current_milestone || (ctx.milestone_summary || {}).current_milestone || '';
+    $('gs-ws-plan-stages').innerHTML = stages.map(s => {
+      const inMs = !curMs || s.milestone_id === curMs;
+      const st = s.status === 'done' ? '✅' : (s.status === 'pending' ? '⏳' : '·');
+      return `<div id="gs-stage-${s.id}" class="text-xs p-2 rounded border border-gray-800 ${inMs ? 'bg-gray-950' : 'bg-gray-950/40 opacity-60'}">
+        <span id="gs-stage-badge-${s.id}" class="mr-1">${st}</span>
+        <span class="text-yellow-400 font-mono">#${s.id}</span>
+        <span class="text-[10px] text-purple-400 font-mono ml-1">${escHtml(s.milestone_id || '')}</span>
+        ${escHtml(s.title)}
+        <div class="text-gray-500 mt-0.5">${escHtml(s.goal || '')}</div></div>`;
+    }).join('');
+    $('gs-ws-plan-btn').textContent = '🔄 Прегенерирай Studio план';
+  } else {
+    $('gs-ws-plan-empty').classList.remove('hidden');
+    $('gs-ws-plan-stages').classList.add('hidden');
+    $('gs-ws-plan-btn').textContent = '🗺️ Създай Studio план';
+  }
+  $('gs-ws-preview').href = '/apps/' + encodeURIComponent(p.slug) + '/';
+  $('gs-ws-pg-link').href = '/admin/daedalus/playground?slug=' + encodeURIComponent(p.slug);
+  renderGsGates(ctx);
+  renderGsProof(ctx);
+  updateGsBuildButtons(ctx);
+}
+
+function renderGsProof(ctx) {
+  const panel = $('gs-proof-panel');
+  const v = ctx.current_verify;
+  const ms = ctx.milestone_summary || {};
+  const curRow = (ms.milestones || []).find(m => m.current);
+  const milestoneDone = curRow && curRow.complete;
+  if (!panel) return;
+  if (!v && !milestoneDone) {
+    panel.classList.add('hidden');
+    return;
+  }
+  panel.classList.remove('hidden');
+  if (!v && milestoneDone) {
+    const status = $('gs-proof-status');
+    if (status) status.innerHTML = '<div class="col-span-full text-amber-300 text-xs p-2">Milestone build завършен — пусни Verify за proof.</div>';
+    const res = $('gs-proof-result');
+    if (res) {
+      res.classList.remove('hidden');
+      res.innerHTML = '<span class="text-gray-400">Очаква Verify (runtime + browser + gameplay).</span>';
+    }
+    return;
+  }
+  if (!v) return;
+  const status = $('gs-proof-status');
+  if (status) {
+    const rt = v.runtime_ok ? '✅' : '❌';
+    const br = v.browser_ok ? '✅' : (v.browser_skipped ? '⏭️' : '❌');
+    const gp = v.gameplay_ok ? '✅' : (v.unity_local_required ? '📦' : '❌');
+    status.innerHTML = `
+      <div class="p-2 rounded bg-gray-950 border border-gray-800">Runtime ${rt} <span class="text-gray-500">(${v.runtime_attempts || 0})</span></div>
+      <div class="p-2 rounded bg-gray-950 border border-gray-800">Browser ${br} <span class="text-gray-500">(${v.browser_attempts || 0})</span></div>
+      <div class="p-2 rounded bg-gray-950 border border-gray-800">Gameplay ${gp} <span class="text-gray-500">(${v.gameplay_attempts || 0})</span></div>
+      <div class="p-2 rounded bg-gray-950 border border-gray-800">${v.ok ? '✅ PASS' : '❌ FAIL'}</div>`;
+  }
+  const checksEl = $('gs-proof-checks');
+  if (checksEl) {
+    const checks = v.gameplay_checks || [];
+    if (checks.length) {
+      checksEl.classList.remove('hidden');
+      checksEl.innerHTML = '<div class="text-gray-500 mb-1">Gameplay checks:</div>' + checks.map(c =>
+        `<div>${c.ok ? '✅' : '❌'} <span class="font-mono">${escHtml(c.id || '')}</span> — ${escHtml(c.detail || '')}</div>`
+      ).join('');
+    } else {
+      checksEl.classList.add('hidden');
+    }
+  }
+  const shot = $('gs-proof-screenshot-wrap');
+  const img = $('gs-proof-screenshot');
+  const slug = _gsWorkspaceSlug;
+  if (v.screenshot_path && slug && shot && img) {
+    shot.classList.remove('hidden');
+    img.src = '/apps/' + encodeURIComponent(slug) + '/' + String(v.screenshot_path).replace(/^\//, '') + '?t=' + Date.now();
+  } else if (shot) {
+    shot.classList.add('hidden');
+  }
+  const res = $('gs-proof-result');
+  if (res) {
+    res.classList.remove('hidden');
+    const prev = v.preview_url || ('/apps/' + encodeURIComponent(slug) + '/');
+    let extra = '';
+    if (v.proof_incomplete) {
+      extra = '<div class="text-amber-400 text-xs mt-2">⚠️ Непълен proof (липсва Chromium или Unity web preview). Advance е блокиран.</div>';
+    }
+    if (v.unity_local_required) {
+      extra += '<div class="text-purple-300 text-xs mt-1">📦 Unity: пълен тест в Unity Hub. Cloud проверява scaffold + studio/preview ако има.</div>';
+    }
+    res.innerHTML = v.ok
+      ? `<span class="text-emerald-400">✅ Verify минал (runtime + browser + gameplay).</span> <a href="${escHtml(prev)}" target="_blank" class="underline text-cyan-400">Отвори Preview</a>${extra}`
+      : `<span class="text-red-400">❌ Verify не мина.</span> Пусни отново след поправки.${extra}`;
+  }
+}
+
+function gsProofLog(line, level) {
+  const el = $('gs-proof-log');
+  if (!el) return;
+  const c = level === 'err' ? 'text-red-400' : level === 'warn' ? 'text-yellow-400' : level === 'ok' ? 'text-emerald-400' : 'text-gray-500';
+  el.innerHTML += `<div class="${c}">${escHtml(line)}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+async function gsRefreshWorkspace() {
+  if (!_gsWorkspaceSlug) return null;
+  try {
+    const r = await api(GS_API + '/projects/' + encodeURIComponent(_gsWorkspaceSlug));
+    if (r.ok) {
+      _gsWorkspaceCtx = r;
+      renderGsWorkspace(r);
+      updateGsBuildButtons(r);
+    }
+    return _gsWorkspaceCtx;
+  } catch { return _gsWorkspaceCtx; }
+}
+
+async function gsTryAdvanceCurrentMilestone() {
+  await gsRefreshWorkspace();
+  const ctx = _gsWorkspaceCtx || {};
+  const ms = ctx.milestone_summary || {};
+  if (ms.is_final_milestone || ms.project_complete || ctx.project_complete) return null;
+  const base = GS_API + '/projects/' + encodeURIComponent(_gsWorkspaceSlug) + '/milestones/advance';
+  if (ctx.can_advance) {
+    return await api(base, { method: 'POST', body: JSON.stringify({}) });
+  }
+  const mid = ctx.current_milestone || ms.current_milestone || 'M0';
+  const ver = ctx.current_verify || (ctx.verify || {})[mid] || {};
+  if (ctx.can_unity_waiver) {
+    return await api(base, { method: 'POST', body: JSON.stringify({ unity_waiver: true }) });
+  }
+  if (_gsFullAuto && ver.runtime_ok && (ver.chromium_missing || ver.proof_incomplete)) {
+    return await api(base, { method: 'POST', body: JSON.stringify({ proof_waiver: true }) });
+  }
+  return null;
+}
+
+async function gsContinueAfterVerify(verifyResult) {
+  if (!_gsWorkspaceSlug) return;
+  await gsRefreshWorkspace();
+  const ctx = _gsWorkspaceCtx || {};
+  const ms = ctx.milestone_summary || {};
+
+  if (!_gsFullAuto) {
+    if (!ctx.can_advance || ms.is_final_milestone || ms.project_complete) return;
+    const adv = await gsTryAdvanceCurrentMilestone();
+    if (!adv?.ok) return;
+    const prev = adv.previous || ms.current_milestone || '';
+    const next = adv.current_milestone || '';
+    if (typeof showToast === 'function') showToast(`⏭ ${prev} → ${next}`, 4500);
+    await gsRefreshWorkspace();
+    if (adv.auto_start_guided && _gsWorkspaceCtx?.can_guided) {
+      await gsStartGuided(true);
+    }
+    return;
+  }
+
+  if (ms.project_complete || ctx.project_complete) {
+    gsClearFullAuto();
+    alert('✅ Game Studio завършен — всички milestone-и M0→M8!');
+    return;
+  }
+
+  const adv = await gsTryAdvanceCurrentMilestone();
+  if (adv?.ok) {
+    const prev = adv.previous || ms.current_milestone || '';
+    const next = adv.current_milestone || '';
+    gsGuidedLog(`⏭ Full Auto: ${prev} → ${next}`, 'ok');
+    if (typeof showToast === 'function') showToast(`⏭ ${prev} → ${next}`, 4500);
+    await gsRefreshWorkspace();
+    await new Promise(r => setTimeout(r, 400));
+    await gsFullAutoStep();
+    return;
+  }
+
+  const ver = verifyResult || ctx.current_verify || {};
+  if (!ver.ok) {
+    if (ver.runtime_ok === false) {
+      gsGuidedLog('🔄 Verify fail — повторен guided build…', 'warn');
+      await gsStartGuided(true, true);
+    } else {
+      gsGuidedLog('⚠️ Advance блокиран — повторен опит след 5s…', 'warn');
+      setTimeout(() => gsFullAutoStep(), 5000);
+    }
+    return;
+  }
+  gsGuidedLog('🔄 Full Auto — продължавам…', 'dim');
+  await gsFullAutoStep();
+}
+
+async function gsRunVerify(milestoneId, silent) {
+  if (!_gsWorkspaceSlug) return;
+  const mid = milestoneId || (_gsWorkspaceCtx && _gsWorkspaceCtx.current_milestone) || 'M0';
+  const panel = $('gs-proof-panel');
+  const btn = $('gs-verify-btn');
+  panel?.classList.remove('hidden');
+  const log = $('gs-proof-log');
+  if (log && !silent) log.innerHTML = '';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Verify…'; }
+  gsProofLog(`🔍 Verify ${mid} (до 5 поправки на runtime + browser)…`, 'info');
+  try {
+    const r = await api(GS_API + '/projects/' + encodeURIComponent(_gsWorkspaceSlug) + '/verify', {
+      method: 'POST',
+      body: JSON.stringify({ milestone_id: mid }),
+    });
+    (r.logs || []).forEach(l => gsProofLog(l.line, l.level));
+    if (!r.ok) {
+      if (!silent) alert(r.error || 'verify failed');
+      return;
+    }
+    _gsWorkspaceCtx.current_verify = r.verify;
+    _gsWorkspaceCtx.verify = Object.assign({}, _gsWorkspaceCtx.verify || {}, { [mid]: r.verify });
+    await gsRefreshWorkspace();
+    renderGsProof(_gsWorkspaceCtx);
+    if (r.verify) {
+      await gsContinueAfterVerify(r.verify);
+    }
+    if (!silent && r.verify && !r.verify.ok && !_gsFullAuto) {
+      alert('Verify не мина след ' + (r.verify.max_fix_attempts || 5) + ' опита за поправка. Виж лога.');
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Пусни Verify'; }
+  }
+}
+
+async function openGsWorkspace(slug) {
+  _gsWorkspaceSlug = slug;
+  $('gs-view-list').classList.add('hidden');
+  $('gs-view-wizard').classList.add('hidden');
+  $('gs-view-workspace').classList.remove('hidden');
+  history.replaceState(null, '', '/admin/daedalus/game-studio?project=' + encodeURIComponent(slug));
+  $('gs-ws-gdd').textContent = 'Зареждам…';
+  try {
+    const r = await api(GS_API + '/projects/' + encodeURIComponent(slug));
+    if (!r.ok) { alert(r.error || 'not found'); showGsList(); return; }
+    _gsWorkspaceCtx = r;
+    renderGsWorkspace(r);
+    await gsMaybeReconnectGuided();
+  } catch (e) {
+    alert(e.message);
+    showGsList();
+  }
+}
+
+async function gsCreatePlan() {
+  if (!_gsWorkspaceSlug) return;
+  const existing = _gsWorkspaceCtx && _gsWorkspaceCtx.plan;
+  const hasDone = existing && (existing.stages || []).some(s => s.status === 'done');
+  if (hasDone && !confirm('Прегенериране ще изгуби прогреса по етапите. Продължи?')) return;
+  const btn = $('gs-ws-plan-btn');
+  const phases = [
+    '📋 Кристализирам Studio план от GDD…',
+    '🔬 Ultra fragmentation (milestones)…',
+    '💾 Записвам етапите…',
+  ];
+  let phaseIdx = 0;
+  btn.disabled = true;
+  btn.textContent = phases[0];
+  const phaseTimer = setInterval(() => {
+    phaseIdx = (phaseIdx + 1) % phases.length;
+    btn.textContent = phases[phaseIdx];
+  }, 7000);
+  try {
+    const gdd = (_gsWorkspaceCtx && _gsWorkspaceCtx.gdd) || '';
+    const desc = gdd
+      ? 'Прочети design/gdd-lite.md и следвай Studio milestones.\n\n' + gdd.slice(0, 4000)
+      : 'Game Studio project';
+    const preset = (_gsWorkspaceCtx && _gsWorkspaceCtx.studio_preset) || 'custom';
+    const r = await api('/admin/daedalus/playground/api/projects/' + encodeURIComponent(_gsWorkspaceSlug) + '/plan/create', {
+      method: 'POST',
+      body: JSON.stringify({
+        description: desc,
+        studio: true,
+        studio_preset: preset,
+        ultra: true,
+        skip_research: true,
+      }),
+    });
+    if (!r.ok) {
+      const msg = r.error || r.raw || (r.research_skipped === false ? 'plan failed' : 'plan failed');
+      alert(msg + (String(msg).includes('504') ? '\n\nСъвет: опитай пак — research вече се пропуска при Studio.' : ''));
+      return;
+    }
+    _gsWorkspaceCtx.plan = r.plan;
+    renderGsWorkspace(_gsWorkspaceCtx);
+    await gsRunGates(true);
+    try {
+      const ws = await api(GS_API + '/projects/' + encodeURIComponent(_gsWorkspaceSlug));
+      if (ws.ok) {
+        _gsWorkspaceCtx = ws;
+        renderGsWorkspace(ws);
+      }
+    } catch {}
+  } catch (e) {
+    alert((e.message || 'plan failed') + '\n\nАко виждаш HTTP 504 — gateway timeout. Опитай пак след deploy на fix-а.');
+  } finally {
+    clearInterval(phaseTimer);
+    btn.disabled = false;
+    btn.textContent = _gsWorkspaceCtx.plan ? '🔄 Прегенерирай Studio план' : '🗺️ Създай Studio план';
+  }
+}
+
+async function gsRunGates(silent) {
+  if (!_gsWorkspaceSlug) return;
+  const btn = $('gs-ws-gates-btn');
+  if (btn && !silent) { btn.disabled = true; btn.textContent = '⏳…'; }
+  try {
+    const r = await api(GS_API + '/projects/' + encodeURIComponent(_gsWorkspaceSlug) + '/gates', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+    if (!r.ok) {
+      if (!silent) alert(r.error || 'gates failed');
+      return;
+    }
+    _gsWorkspaceCtx.gates = r.gates;
+    _gsWorkspaceCtx.can_guided = r.can_guided;
+    _gsWorkspaceCtx.can_autopilot = r.can_autopilot;
+    _gsWorkspaceCtx.gates_passed = r.all_passed;
+    renderGsGates(_gsWorkspaceCtx);
+    updateGsBuildButtons(_gsWorkspaceCtx);
+    if (!silent && r.blocking) {
+      alert('Има блокиращи проблеми — виж Quality Gates.');
+    }
+  } finally {
+    if (btn && !silent) { btn.disabled = false; btn.textContent = 'Пусни проверки'; }
+  }
+}
+
+function gsBuildDescription(ctx) {
+  const gdd = (ctx && ctx.gdd) || '';
+  const mid = (ctx && ctx.current_milestone) || 'M0';
+  return `[Game Studio · milestone ${mid}]\nСтрой САМО етапите за ${mid}. Не преписвай завършени milestone-и.\n\n` + gdd.slice(0, 1500);
+}
+
+function gsPersistGuided(o) {
+  try { localStorage.setItem(GS_GUIDED_KEY, JSON.stringify(o)); } catch {}
+}
+function gsLoadGuided() {
+  try { return JSON.parse(localStorage.getItem(GS_GUIDED_KEY) || 'null'); } catch { return null; }
+}
+function gsClearGuided() {
+  try { localStorage.removeItem(GS_GUIDED_KEY); } catch {}
+}
+
+function gsShowGuidedPanel(milestoneId) {
+  _gsGuidedMilestoneScope = milestoneId || '';
+  $('gs-guided-panel')?.classList.remove('hidden');
+  const sub = $('gs-guided-subtitle');
+  if (sub) sub.textContent = milestoneId ? `Milestone ${milestoneId} · checkpoint след всеки етап` : '';
+  $('gs-guided-done')?.classList.add('hidden');
+  $('gs-guided-checkpoint')?.classList.add('hidden');
+  const log = $('gs-guided-log');
+  if (log && !_gsGuidedStreaming) log.innerHTML = '';
+  gsRenderGuidedStageChips();
+}
+
+function gsRenderGuidedStageChips() {
+  const box = $('gs-guided-stages');
+  const plan = _gsWorkspaceCtx && _gsWorkspaceCtx.plan;
+  const stages = (plan && plan.stages) || [];
+  const mid = (_gsWorkspaceCtx && _gsWorkspaceCtx.current_milestone) || '';
+  if (!box) return;
+  const filtered = mid ? stages.filter(s => s.milestone_id === mid) : stages;
+  box.innerHTML = filtered.map(s => {
+    const badge = s.status === 'done' ? '✅' : '⏳';
+    return `<span id="gs-chip-${s.id}" class="text-[10px] px-2 py-0.5 rounded bg-gray-800 text-gray-300">${badge} #${s.id}</span>`;
+  }).join('');
+}
+
+function gsUpdateStageStatus(stageId, icon, _label, chipCls) {
+  const badge = $('gs-stage-badge-' + stageId);
+  if (badge) badge.textContent = icon;
+  const chip = $('gs-chip-' + stageId);
+  if (chip) {
+    chip.textContent = `${icon} #${stageId}`;
+    chip.className = `text-[10px] px-2 py-0.5 rounded ${chipCls || 'bg-gray-800 text-gray-300'}`;
+  }
+}
+
+function gsGuidedLog(line, level) {
+  const el = $('gs-guided-log');
+  if (!el) return;
+  const c = level === 'err' ? 'text-red-400' : level === 'warn' ? 'text-yellow-400' : level === 'ok' ? 'text-emerald-400' : 'text-gray-500';
+  el.innerHTML += `<div class="${c}">${escHtml(line)}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+
+async function gsGuidedStreamLoop() {
+  if (!_gsWorkspaceSlug || !_gsGuidedJobId) return;
+  _gsGuidedStreaming = true;
+  _gsGuidedRunning = true;
+  const url = `/admin/daedalus/playground/api/projects/${encodeURIComponent(_gsWorkspaceSlug)}/guided/stream?job_id=${encodeURIComponent(_gsGuidedJobId)}&from=${_gsGuidedOffset}`;
+  try {
+    const resp = await fetch(url, { credentials: 'same-origin' });
+    if (!resp.ok || !resp.body) {
+      gsGuidedLog('❌ Stream HTTP ' + resp.status, 'err');
+      return;
+    }
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    const parse = chunk => {
+      buf += chunk;
+      const parts = buf.split('\n\n');
+      buf = parts.pop();
+      return parts.map(block => {
+        const ev = (block.match(/^event: (.+)/m) || [])[1] || 'message';
+        const data = (block.match(/^data: (.+)/m) || [])[1] || '{}';
+        try { return { event: ev, data: JSON.parse(data) }; } catch { return null; }
+      }).filter(Boolean);
+    };
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (const e of parse(decoder.decode(value, { stream: true }))) {
+        _gsGuidedOffset++;
+        gsPersistGuided({ slug: _gsWorkspaceSlug, job_id: _gsGuidedJobId, offset: _gsGuidedOffset });
+        await gsHandleGuidedEvent(e.event, e.data);
+        if (e.event === 'checkpoint' || e.event === 'done' || e.event === 'error' || e.event === 'milestone_done') {
+          _gsGuidedStreaming = false;
+          return;
+        }
+      }
+    }
+  } catch (e) {
+    gsGuidedLog('⚠️ Stream: ' + e.message, 'warn');
+  } finally {
+    _gsGuidedStreaming = false;
+  }
+}
+
+function gsShowCheckpoint(d) {
+  $('gs-guided-checkpoint')?.classList.remove('hidden');
+  const review = $('gs-guided-cp-review');
+  if (review) {
+    if (d.parallel_batch && d.batch_results) {
+      review.textContent = d.batch_results.map(b =>
+        `[${b.stage_id}] ${b.title}: ${b.ok ? '✅' : '⚠️'} ${(b.review || '').slice(0, 120)}`
+      ).join('\n');
+    } else {
+      review.textContent = (d.review || '').replace(/РЕЗУЛТАТ:[^\n]*/g, '').trim().slice(0, 800);
+    }
+  }
+  let filesLine = d.files && d.files.length ? '📁 ' + d.files.join(', ') : '';
+  if (d.merged && d.merged.length) filesLine += (filesLine ? ' | ' : '') + '🔀 ' + d.merged.join(', ');
+  if (d.rejected && d.rejected.length) filesLine += (filesLine ? ' | ' : '') + '⛔ ' + d.rejected.join(', ');
+  const filesEl = $('gs-guided-cp-files');
+  if (filesEl) filesEl.textContent = filesLine;
+  const trunkEl = $('gs-guided-cp-trunk');
+  if (trunkEl && d.trunk) {
+    trunkEl.textContent = `🎛 Trunk: ${d.trunk.trunk_files || 0} файла`;
+    trunkEl.classList.remove('hidden');
+  } else if (trunkEl) {
+    trunkEl.classList.add('hidden');
+  }
+  const opts = $('gs-guided-cp-options');
+  if (opts) {
+    opts.innerHTML = '';
+    (d.options || []).forEach(o => {
+      const b = document.createElement('button');
+      b.className = 'text-left px-3 py-2 rounded bg-gray-800 hover:bg-gray-700 border border-gray-600 text-xs text-white';
+      b.innerHTML = `<span class="font-medium">${escHtml(o.label)}</span><span class="block text-[9px] text-gray-400">${escHtml(o.hint || '')}</span>`;
+      b.onclick = () => gsGuidedContinue(o.id);
+      opts.appendChild(b);
+    });
+  }
+  const btn = $('gs-ws-guided-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏸ На checkpoint'; }
+}
+
+async function gsHandleGuidedEvent(ev, d) {
+  switch (ev) {
+    case 'log':
+      gsGuidedLog(d.line || '', d.level || 'info');
+      break;
+    case 'stage':
+      if (d.stage_id) gsUpdateStageStatus(d.stage_id, '🔨', 'Строи…', 'bg-yellow-800/80 text-yellow-200');
+      break;
+    case 'stage_done':
+      if (d.stage_id) {
+        gsUpdateStageStatus(d.stage_id, d.ok ? '✅' : '⚠️', '', d.ok ? 'bg-emerald-800/80 text-emerald-200' : 'bg-amber-800/80 text-amber-200');
+      }
+      break;
+    case 'checkpoint':
+      if (_gsFullAuto) {
+        gsGuidedLog('⚡ Auto-approve етап…', 'dim');
+        await gsGuidedContinue('approve');
+      } else {
+        gsShowCheckpoint(d);
+      }
+      break;
+    case 'milestone_done':
+      _gsGuidedMilestoneScope = d.milestone_id || _gsGuidedMilestoneScope;
+      gsGuidedLog(`✅ Milestone ${d.milestone_id || ''} завършен`, 'ok');
+      await gsOnGuidedFinished(`Milestone ${d.milestone_id || ''} build готов — пускам Verify…`);
+      await gsRunVerify(d.milestone_id, true);
+      break;
+    case 'done':
+      if (_gsGuidedMilestoneScope) {
+        gsGuidedLog(`✅ Milestone ${_gsGuidedMilestoneScope} завършен`, 'ok');
+        await gsOnGuidedFinished(`Milestone ${_gsGuidedMilestoneScope} build готов — пускам Verify…`);
+        await gsRunVerify(_gsGuidedMilestoneScope, true);
+      } else {
+        await gsOnGuidedFinished(`Guided build завършен — ${(d.files || []).length} файла.`);
+      }
+      break;
+    case 'error':
+      _gsGuidedMilestoneScope = '';
+      gsGuidedLog('❌ ' + (d.message || 'unknown'), 'err');
+      _gsGuidedRunning = false;
+      gsClearGuided();
+      updateGsBuildButtons(_gsWorkspaceCtx || {});
+      if (_gsFullAuto) {
+        gsGuidedLog('🔄 Full Auto: повторен опит след 3s…', 'warn');
+        setTimeout(() => gsFullAutoStep(), 3000);
+      }
+      break;
+  }
+}
+
+async function gsOnGuidedFinished(msg) {
+  _gsGuidedRunning = false;
+  gsClearGuided();
+  $('gs-guided-checkpoint')?.classList.add('hidden');
+  const done = $('gs-guided-done');
+  if (done) {
+    done.classList.remove('hidden');
+    done.innerHTML = `${escHtml(msg)} <a href="/apps/${encodeURIComponent(_gsWorkspaceSlug)}/" target="_blank" class="underline text-emerald-400 ml-2">👁 Preview</a>`;
+  }
+  try {
+    const r = await api(GS_API + '/projects/' + encodeURIComponent(_gsWorkspaceSlug));
+    if (r.ok) {
+      _gsWorkspaceCtx = r;
+      renderGsWorkspace(r);
+    }
+  } catch {}
+  updateGsBuildButtons(_gsWorkspaceCtx || {});
+}
+
+async function gsGuidedContinue(action) {
+  if (!_gsGuidedJobId || !_gsWorkspaceSlug) return;
+  const notes = ($('gs-guided-cp-notes')?.value || '').trim();
+  $('gs-guided-checkpoint')?.classList.add('hidden');
+  gsGuidedLog(`▶ ${action}…`, 'ok');
+  const r = await api(`/admin/daedalus/playground/api/projects/${encodeURIComponent(_gsWorkspaceSlug)}/guided/continue`, {
+    method: 'POST',
+    body: JSON.stringify({ job_id: _gsGuidedJobId, action, notes }),
+  });
+  if (!r.ok) { alert(r.error || 'continue failed'); return; }
+  if (r.milestone_complete) {
+    const mid = (_gsWorkspaceCtx && _gsWorkspaceCtx.current_milestone) || '';
+    await gsOnGuidedFinished('Milestone завършен — пускам Verify…');
+    await gsRunVerify(mid, true);
+    return;
+  }
+  const btn = $('gs-ws-guided-btn');
+  if (btn) btn.textContent = '⏳ Строи…';
+  await gsGuidedStreamLoop();
+}
+
+async function gsStopGuided() {
+  if (!_gsWorkspaceSlug) return;
+  if (!confirm('Спри guided build?')) return;
+  try {
+    await api(`/admin/daedalus/playground/api/projects/${encodeURIComponent(_gsWorkspaceSlug)}/guided/stop`, { method: 'POST' });
+  } catch {}
+  _gsGuidedRunning = false;
+  _gsGuidedStreaming = false;
+  gsClearGuided();
+  if (_gsFullAuto) gsClearFullAuto();
+  gsGuidedLog('■ Спряно', 'warn');
+  updateGsBuildButtons(_gsWorkspaceCtx || {});
+}
+
+async function gsMaybeReconnectGuided() {
+  if (_gsGuidedStreaming || !_gsWorkspaceSlug) return;
+  const savedAuto = gsLoadFullAuto();
+  if (savedAuto && !_gsFullAuto) {
+    _gsFullAuto = true;
+    const btn = $('gs-full-auto-btn');
+    if (btn) { btn.disabled = true; btn.textContent = '⚡ Auto работи…'; }
+    gsGuidedLog('🔄 Възстановявам Full Auto M0→M8…', 'ok');
+    setTimeout(() => gsFullAutoStep(), 800);
+  }
+  try {
+    const r = await api(`/admin/daedalus/playground/api/projects/${encodeURIComponent(_gsWorkspaceSlug)}/guided/active`);
+    if (r.active && r.snapshot) {
+      _gsGuidedJobId = r.snapshot.id;
+      _gsGuidedOffset = r.snapshot.event_count || 0;
+      _gsGuidedRunning = r.snapshot.status === 'running' || r.snapshot.status === 'checkpoint';
+      gsShowGuidedPanel(r.snapshot.milestone_scope || _gsWorkspaceCtx?.current_milestone);
+      gsGuidedLog('🔄 Закачам се към guided job…', 'ok');
+      if (r.snapshot.status === 'checkpoint' && r.snapshot.checkpoint && Object.keys(r.snapshot.checkpoint).length) {
+        gsShowCheckpoint(r.snapshot.checkpoint);
+      } else if (r.snapshot.status === 'running') {
+        await gsGuidedStreamLoop();
+      } else if (r.snapshot.status === 'done') {
+        await gsOnGuidedFinished('Guided job завършен.');
+      }
+      return;
+    }
+    const saved = gsLoadGuided();
+    if (saved && saved.slug === _gsWorkspaceSlug && saved.job_id) {
+      _gsGuidedJobId = saved.job_id;
+      _gsGuidedOffset = saved.offset || 0;
+      const chk = await api(`/admin/daedalus/playground/api/projects/${encodeURIComponent(_gsWorkspaceSlug)}/guided/active`);
+      if (chk.active) {
+        gsShowGuidedPanel(_gsWorkspaceCtx?.current_milestone);
+        gsGuidedLog('🔄 Възстановявам guided session…', 'dim');
+        if (chk.snapshot?.status === 'checkpoint' && chk.snapshot.checkpoint) {
+          gsShowCheckpoint(chk.snapshot.checkpoint);
+        } else {
+          await gsGuidedStreamLoop();
+        }
+      } else {
+        gsClearGuided();
+      }
+    }
+  } catch {}
+}
+
+async function gsRunFullStudioAuto() {
+  if (!_gsWorkspaceSlug || !_gsWorkspaceCtx) return;
+  if (!confirm(
+    'Пълен автоматичен прогон M0→M8:\n'
+    + '• Auto-approve на всеки етап (без checkpoint)\n'
+    + '• Verify + advance автоматично към следващ milestone\n'
+    + '• При грешка — повторен опит\n\n'
+    + 'Може да отнеме дълго време. Продължи?'
+  )) return;
+  _gsFullAuto = true;
+  gsPersistFullAuto(true);
+  const btn = $('gs-full-auto-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⚡ Auto работи…'; }
+  try {
+    await gsFullAutoStep();
+  } catch (e) {
+    alert('Full Auto спря: ' + (e.message || e));
+    gsClearFullAuto();
+  }
+}
+
+async function gsFullAutoStep() {
+  if (!_gsFullAuto || !_gsWorkspaceSlug) return;
+  await gsRefreshWorkspace();
+  const ctx = _gsWorkspaceCtx || {};
+  if (ctx.project_complete || (ctx.milestone_summary || {}).project_complete) {
+    gsClearFullAuto();
+    alert('✅ Game Studio завършен — всички milestone-и M0→M8!');
+    return;
+  }
+  if (!ctx.plan || !(ctx.plan.stages || []).length) {
+    gsGuidedLog('🗺️ Няма план — създавам Studio план…', 'info');
+    await gsCreatePlan();
+    return gsFullAutoStep();
+  }
+  if (!ctx.can_guided) {
+    gsGuidedLog('🚦 Gates — пускам проверки…', 'info');
+    await gsRunGates(true);
+    return gsFullAutoStep();
+  }
+  const ms = ctx.milestone_summary || {};
+  const cur = (ms.milestones || []).find(m => m.current);
+  if (cur && cur.complete) {
+    const ver = ctx.current_verify || (ctx.verify || {})[ctx.current_milestone];
+    if (!ver || (ver.milestone_id && ver.milestone_id !== ctx.current_milestone)) {
+      gsGuidedLog(`🔬 Verify ${ctx.current_milestone}…`, 'info');
+      await gsRunVerify(ctx.current_milestone, true);
+      return;
+    }
+    if (ctx.can_advance || _gsFullAuto) {
+      await gsContinueAfterVerify(ver);
+      return;
+    }
+  }
+  if (!_gsGuidedRunning && !_gsGuidedStreaming) {
+    await gsStartGuided(true, true);
+  }
+}
+
+async function gsStartGuided(skipConfirm, autoApprove) {
+  if (!_gsWorkspaceSlug || !_gsWorkspaceCtx) return;
+  const ctx = _gsWorkspaceCtx;
+  if (!ctx.can_guided) { alert('Пусни gate-check и създай план.'); return; }
+  const h = ctx.handoff || {};
+  const mid = ctx.current_milestone || h.milestone_id || 'M0';
+  const useAuto = autoApprove || _gsFullAuto;
+  if (!skipConfirm && !useAuto) {
+    const msg = `Guided за ${mid}:\n• ${h.pending_count || '?'} pending етапа\n• Запазен Studio план (без research)\n• Спира след ${mid}\n\nПродължи?`;
+    if (!confirm(msg)) return;
+  }
+  const btn = $('gs-ws-guided-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Стартирам…'; }
+  try {
+    const r = await api(GS_API + '/projects/' + encodeURIComponent(_gsWorkspaceSlug) + '/build/guided', {
+      method: 'POST',
+      body: JSON.stringify({ milestone_id: mid, auto_approve: useAuto }),
+    });
+    if (!r.ok) { alert(r.error || 'guided start failed'); if (_gsFullAuto) _gsFullAuto = false; return; }
+    _gsGuidedJobId = r.job_id;
+    _gsGuidedOffset = 0;
+    gsPersistGuided({ slug: _gsWorkspaceSlug, job_id: r.job_id, offset: 0 });
+    gsShowGuidedPanel(mid);
+    gsGuidedLog(`🎬 Старт ${mid} · auto=${useAuto ? 'да' : 'не'}`, 'ok');
+    $('gs-guided-panel')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    await gsGuidedStreamLoop();
+  } finally {
+    if (btn) updateGsBuildButtons(_gsWorkspaceCtx);
+  }
+}
+
+async function gsStartAutopilot() {
+  if (!_gsWorkspaceSlug || !_gsWorkspaceCtx) return;
+  const ctx = _gsWorkspaceCtx;
+  if (!ctx.can_autopilot) { alert('Autopilot изисква scope-check + gates.'); return; }
+  const h = ctx.handoff || {};
+  const mid = ctx.current_milestone || h.milestone_id || 'M0';
+  const msg = `Autopilot (scoped) за ${mid}:\n• Използва ЗАПАЗЕНИЯ план — НЕ го прегенерира\n• Само pending етапи за ${mid}\n• По-малко контрол от Guided\n\nСигурен ли си?`;
+  if (!confirm(msg)) return;
+  if (!confirm('Последно потвърждение: Autopilot ще пипа само файловете на текущите етапи.')) return;
+  const preset = ctx.studio_preset || 'custom';
+  const q = new URLSearchParams({
+    slug: _gsWorkspaceSlug,
+    mode: 'autopilot',
+    studio: '1',
+    studio_preset: preset,
+    use_saved_plan: '1',
+    game_studio_handoff: '1',
+    milestone_id: mid,
+    autostart: '1',
+  });
+  window.location.href = '/admin/daedalus/playground?' + q.toString();
+}
+
+async function gsAdvanceMilestone(opts) {
+  opts = opts || {};
+  if (!_gsWorkspaceSlug) return;
+  const ctx = _gsWorkspaceCtx || {};
+  const unityWaiver = !!opts.unity_waiver;
+  if (!unityWaiver && !ctx.can_advance) {
+    alert('Първо мини Verify за текущия milestone (зелен PASS).');
+    return;
+  }
+  if (unityWaiver && !ctx.can_unity_waiver) {
+    alert('Unity waiver не е наличен — пусни Verify и провери scaffold/runtime.');
+    return;
+  }
+  const msg = unityWaiver
+    ? 'Unity waiver: пълен gameplay тест е локален в Unity Hub. Продължавам към следващия milestone?'
+    : 'Преминавам към следващия milestone?';
+  if (!confirm(msg)) return;
+  const r = await api(GS_API + '/projects/' + encodeURIComponent(_gsWorkspaceSlug) + '/milestones/advance', {
+    method: 'POST',
+    body: JSON.stringify(unityWaiver ? { unity_waiver: true } : {}),
+  });
+  if (!r.ok) { alert(r.error || 'advance failed'); return; }
+  await openGsWorkspace(_gsWorkspaceSlug);
+  if (_gsFullAuto) {
+    await gsFullAutoStep();
+  }
+}
+
+function gsOpenPlayground(mode) {
+  if (!_gsWorkspaceSlug) return;
+  const ctx = _gsWorkspaceCtx || {};
+  const allowed = mode === 'autopilot' ? ctx.can_autopilot : ctx.can_guided;
+  if (!allowed) {
+    const gates = ctx.gates || {};
+    const failed = Object.values(gates).filter(g => g.blocking || g.status === 'fail');
+    if (failed.length) {
+      alert('Gates не минаха:\n' + failed.map(g => g.summary || g.label).join('\n'));
+      return;
+    }
+    if (!confirm('Проверките не са пълни. Продължи все пак?')) return;
+  }
+  const preset = (_gsWorkspaceCtx && _gsWorkspaceCtx.studio_preset) || 'custom';
+  const q = new URLSearchParams({
+    slug: _gsWorkspaceSlug,
+    mode: mode,
+    studio: '1',
+    studio_preset: preset,
+  });
+  window.location.href = '/admin/daedalus/playground?' + q.toString();
+}
+
+(function init() {
+  const params = new URLSearchParams(location.search);
+  if (params.get('new') === '1') showGsWizard();
+  else if (params.get('project')) openGsWorkspace(params.get('project'));
+  else loadGsProjects();
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') gsMaybeReconnectGuided();
+  });
+  window.addEventListener('focus', () => gsMaybeReconnectGuided());
+})();
+</script>
+
+<style>
+.line-clamp-2 {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+</style>
+{% endblock %}
