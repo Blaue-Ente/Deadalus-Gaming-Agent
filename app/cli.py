@@ -35,6 +35,14 @@ def main(argv: list[str] | None = None) -> None:
 
     models = sub.add_parser("models", help="Show configured LLM + probe local backends")
 
+    desk = sub.add_parser(
+        "desktop",
+        help="Start Studio as a desktop app (browser + local server, Windows Start Menu)",
+    )
+    desk.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"))
+    desk.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8787")))
+    desk.add_argument("--no-browser", action="store_true")
+
     args = parser.parse_args(argv)
     if args.cmd == "publish":
         import subprocess
@@ -114,6 +122,13 @@ def main(argv: list[str] | None = None) -> None:
         out = asyncio.run(_go())
         print(out.get("reply") or "")
         return
+    if args.cmd == "desktop":
+        from app.desktop import run_desktop
+        raise SystemExit(run_desktop(
+            host=getattr(args, "host", None),
+            port=getattr(args, "port", None),
+            open_browser=not bool(getattr(args, "no_browser", False)),
+        ))
     if args.cmd in (None, "serve"):
         os.environ.setdefault("DAEDALUS_STANDALONE", "1")
         import uvicorn
