@@ -189,10 +189,15 @@ async def _call_claude_primary(system: str, messages: list[dict[str, str]],
                 "openai SDK not installed — run: pip install openai"
             ) from exc
         if not api_key:
-            raise DaedalusError(
-                f"API key not configured for provider '{provider}' "
-                "(set DAEDALUS_API_KEY env var or configure in Admin › LLM)"
-            )
+            from .local_llm import dummy_api_key, is_local_provider
+            if is_local_provider(provider) or cfg.get("local"):
+                api_key = dummy_api_key(provider)
+            else:
+                raise DaedalusError(
+                    f"API key not configured for provider '{provider}' "
+                    "(set DAEDALUS_API_KEY env var or configure in Admin › LLM, "
+                    "or DAEDALUS_PROVIDER=ollama for a local model)"
+                )
         oa_client = AsyncOpenAI(api_key=api_key, base_url=base_url or None)
         oa_messages = [{"role": "system", "content": system}] + list(messages)
         resp = await oa_client.chat.completions.create(
@@ -228,53 +233,92 @@ async def _call_claude_with_tools(
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """Anthropic messages.create with tool_use — for native tools path (Phase 2)."""
-    cfg = get_config()
-    if cfg.get("sdk") != "anthropic":
-        return {"stop_reason": "end_turn", "content": []}
-    try:
-        from anthropic import AsyncAnthropic
-    except ImportError:
-        return {"stop_reason": "end_turn", "content": []}
+    """Native tool round for Anthropic *and* OpenAI-compatible providers (incl. Ollama)."""
+    from .local_llm import dummy_api_key, is_local_provider
+    from .native_tools import openai_tool_specs, to_openai_messages
 
+    cfg = get_config()
     api_key = cfg.get("api_key", "")
     base_url = cfg.get("base_url", "")
     model = cfg.get("model", _MODEL)
+    sdk = cfg.get("sdk") or "openai"
+    provider = cfg.get("provider") or ""
     if not api_key:
+        if is_local_provider(provider) or cfg.get("local"):
+            api_key = dummy_api_key(provider)
+        else:
+            return {"stop_reason": "end_turn", "content": []}
+
+    if sdk == "anthropic":
+        try:
+            from anthropic import AsyncAnthropic
+        except ImportError:
+            return {"stop_reason": "end_turn", "content": []}
+        kwargs: dict = dict(api_key=api_key, max_retries=0)
+        if base_url:
+            kwargs["base_url"] = base_url
+        client = AsyncAnthropic(**kwargs)
+        anthropic_tools = [
+            {
+                "name": t["name"],
+                "description": t["description"],
+                "input_schema": t["input_schema"],
+            }
+            for t in tools
+        ]
+        resp = await client.messages.create(
+            model=model,
+            max_tokens=_MAX_TOKENS,
+            system=system,
+            messages=messages,
+            tools=anthropic_tools,
+        )
+        content = []
+        for block in resp.content:
+            if block.type == "text":
+                content.append({"type": "text", "text": block.text})
+            elif block.type == "tool_use":
+                content.append({
+                    "type": "tool_use",
+                    "id": block.id,
+                    "name": block.name,
+                    "input": block.input,
+                })
+        return {"stop_reason": resp.stop_reason, "content": content}
+
+    try:
+        from openai import AsyncOpenAI
+    except ImportError:
         return {"stop_reason": "end_turn", "content": []}
-
-    kwargs: dict = dict(api_key=api_key, max_retries=0)
-    if base_url:
-        kwargs["base_url"] = base_url
-    client = AsyncAnthropic(**kwargs)
-
-    anthropic_tools = [
-        {
-            "name": t["name"],
-            "description": t["description"],
-            "input_schema": t["input_schema"],
-        }
-        for t in tools
-    ]
-    resp = await client.messages.create(
+    client = AsyncOpenAI(api_key=api_key, base_url=base_url or None, max_retries=0)
+    oa_messages = to_openai_messages(system, messages)
+    resp = await client.chat.completions.create(
         model=model,
         max_tokens=_MAX_TOKENS,
-        system=system,
-        messages=messages,
-        tools=anthropic_tools,
+        messages=oa_messages,
+        tools=openai_tool_specs(tools),
+        tool_choice="auto",
     )
+    choice = resp.choices[0] if resp.choices else None
+    msg = choice.message if choice else None
     content = []
-    for block in resp.content:
-        if block.type == "text":
-            content.append({"type": "text", "text": block.text})
-        elif block.type == "tool_use":
-            content.append({
-                "type": "tool_use",
-                "id": block.id,
-                "name": block.name,
-                "input": block.input,
-            })
-    return {"stop_reason": resp.stop_reason, "content": content}
+    if msg and msg.content:
+        content.append({"type": "text", "text": msg.content})
+    for tc in (getattr(msg, "tool_calls", None) or []):
+        args: Any = {}
+        raw_args = getattr(getattr(tc, "function", None), "arguments", "") or "{}"
+        try:
+            args = json.loads(raw_args)
+        except json.JSONDecodeError:
+            args = {"raw": raw_args}
+        content.append({
+            "type": "tool_use",
+            "id": tc.id,
+            "name": tc.function.name,
+            "input": args,
+        })
+    stop = "tool_use" if any(b.get("type") == "tool_use" for b in content) else "end_turn"
+    return {"stop_reason": stop, "content": content}
 
 
 # ---------------------------------------------------------------------------
@@ -1259,6 +1303,16 @@ class Daedalus:
             knowledge, past_memory, artifacts, session_recent,
             lessons=lessons, episodes=episodes, mesh_block=mesh_block,
         )
+        try:
+            from .preferences import format_block as _pref_block
+            from .learned_skills import format_block as _skill_block
+            _prefs = _pref_block()
+            _sk = _skill_block(user_message)
+            extra = "\n\n".join(p for p in (_prefs, _sk) if p)
+            if extra:
+                injected = extra + ("\n\n" + injected if injected else "")
+        except Exception as _mem_exc:
+            log.debug("preference/skill inject skipped: %s", _mem_exc)
 
         # Inject unread Agent Inbox messages (Replit Agent → Daedalus)
         inbox_block = ""
@@ -1630,7 +1684,6 @@ class Daedalus:
                 )
                 if _native_text:
                     user_content = user_content + "\n\n" + _native_text
-                    _planning_succeeded = True
                     log.info(
                         "daedalus native-tools: %d tool calls — enriched context",
                         len(_native_log),
@@ -4638,6 +4691,33 @@ class Daedalus:
 
         elapsed = (datetime.now(timezone.utc) - started).total_seconds()
 
+        try:
+            from .preferences import observe_turn
+            observe_turn(message, raw)
+        except Exception:
+            pass
+
+        dod = None
+        try:
+            from .job_contract import evaluate, finish_nudge
+            from .learned_skills import draft_from_failure
+            dod = evaluate(
+                message, raw or "",
+                tool_calls=summary.get("tool_calls") or [],
+            )
+            if not dod.complete and dod.coding_task:
+                raw = (raw or "") + finish_nudge(dod)
+                try:
+                    draft_from_failure(
+                        kind="chat",
+                        errors=dod.blockers,
+                        context=message[:400],
+                    )
+                except Exception:
+                    pass
+        except Exception as _dod_exc:
+            log.debug("job contract skipped: %s", _dod_exc)
+
         # ── Self-improvement on failure (T09) ─────────────────────────────
         # If session was slow (>90s) OR >50% of tool calls failed → schedule
         # a fire-and-forget for_self reflection that asks Дедал to propose
@@ -4707,6 +4787,8 @@ class Daedalus:
             "model": get_config().get("model", _MODEL),
             "elapsed_seconds": round(elapsed, 2),
             "timestamp": started.isoformat(),
+            "complete": None if dod is None else dod.complete,
+            "dod": None if dod is None else dod.as_dict(),
         }
 
     async def generate(

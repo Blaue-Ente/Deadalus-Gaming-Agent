@@ -24,21 +24,24 @@ Daedalus/                 this product (also the standalone repo root after expo
 
 ## vs Hermes-class agents
 
-Daedalus is built for the same job as Hermes / similar coding agents: a long-horizon
-tool loop that writes real files, runs commands, looks at the browser, and iterates
-until the thing works. Extra: **game factory** (Phaser/canvas/Vite/Unity scaffold),
-**Playground workspaces**, **autopilot** (plan → staged code → smoke → browser
-verify), and **Iyveris mesh** as an equal peer.
+Daedalus is built for the same job as [Hermes Agent](https://github.com/nousresearch/hermes-agent):
+a long-horizon tool loop that writes real files, runs a shell, looks at the web,
+and iterates until the thing works. Extra: **game factory**, **Playground**,
+**autopilot verify**, **preference memory**, and **Iyveris mesh**.
 
 | Capability | Daedalus |
 |---|---|
-| Chat + tool loop | `POST /api/v1/daedalus/chat` |
-| Sub-agents | worker slots (fast / balanced / deep / …) |
+| Chat (human speech) | Studio `/` · `POST /api/v1/daedalus/chat` |
+| Native tools | files, shell, search, fetch, image gen, remember (NEED_* fallback) |
+| Shell command center | Studio Shell · `POST /api/v1/daedalus/shell` |
+| Local LLM | Ollama / LM Studio / llama.cpp / vLLM (`DAEDALUS_PROVIDER=ollama`) |
+| Sub-agents | worker slots (fast / balanced / deep) |
 | Files + projects | Playground `playground/projects/{slug}` |
-| Autopilot | kernel `full_autopilot` (standalone) or ADN Phase 0–6 (when hosted) |
+| Autopilot | kernel `full_autopilot` + programmatic Definition of Done |
 | Browser verify | Playwright smoke for visual kinds |
-| Memory | Chroma under `DAEDALUS_DATA` |
-| LLM | AllToken / OpenRouter / Novita / NVIDIA (no ADN required) |
+| Memory | Chroma + owner preferences (`запомни, че…`) + learned skills |
+| Image gen | Novita / OpenRouter · native `generate_image` |
+| LLM (cloud) | AllToken / OpenRouter / Novita / NVIDIA |
 
 ## Quick start (PC)
 
@@ -55,9 +58,10 @@ Check the LLM key without starting the UI:
 
 ```bash
 python -m app.cli ping
+python -m app.cli models    # probe Ollama / LM Studio / llama.cpp / vLLM
 ```
 
-Open http://localhost:8787 — Studio (chat + Playground).
+Open http://localhost:8787 — Studio (chat + shell + local LLM + logo).
 
 Full Command Center (copied ADN UI):
 

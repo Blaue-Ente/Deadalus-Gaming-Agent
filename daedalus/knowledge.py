@@ -29,11 +29,14 @@ log = logging.getLogger(__name__)
 
 
 def _knowledge_sources() -> list[tuple[Path, str]]:
+    from .paths import package_root
     root = repo_root() / ".agents"
     return [
         (root / "skills", "skill"),
         (root / "plans", "plan"),
         (root / "upgrade-pool" / "items", "upgrade"),
+        (package_root() / "skills", "skill"),
+        (data_root() / "learned_skills", "learned_skill"),
     ]
 
 

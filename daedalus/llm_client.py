@@ -41,10 +41,15 @@ async def complete(
     sdk = cfg.get("sdk") or "openai"
     used_model = model or cfg.get("model") or ""
     if not api_key:
-        raise RuntimeError(
-            "Няма API ключ. Задай ALLTOKEN_API_KEY, OPENROUTER_API_KEY, "
-            "NOVITA_API_KEY или DAEDALUS_API_KEY."
-        )
+        from .local_llm import dummy_api_key, is_local_provider
+        if is_local_provider(provider) or cfg.get("local"):
+            api_key = dummy_api_key(provider)
+        else:
+            raise RuntimeError(
+                "Няма API ключ. Задай ALLTOKEN_API_KEY, OPENROUTER_API_KEY, "
+                "NOVITA_API_KEY или DAEDALUS_API_KEY, или пусни локален LLM "
+                "(DAEDALUS_PROVIDER=ollama)."
+            )
 
     messages: list[dict[str, str]] = []
     if system:

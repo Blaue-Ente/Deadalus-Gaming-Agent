@@ -23,7 +23,12 @@ routing, Postgres, and the current admin UI — not the agent's identity.
 |-------|----------|--------|
 | Identity | `daedalus/identity.py` + `identity_standalone.py` | Games-first preamble when standalone |
 | Memory | `memory.py`, `knowledge.py` | Chroma collections under `data/daedalus/` |
-| Agent loop | `agent.py`, `tools.py`, `workers.py` | NEED_* markers, parallel workers |
+| Agent loop | `agent.py`, `native_tools.py`, `tools.py`, `workers.py` | Native tools by default; NEED_* fallback |
+| Shell | `shell_center.py` | Jail + secret stripping; Studio command center |
+| Local LLM | `local_llm.py` + `llm_config.py` | Ollama, LM Studio, llama.cpp, vLLM |
+| Preferences | `preferences.py` | Owner speech → durable memory |
+| Learned skills | `learned_skills.py` | Failure/success → SKILL.md |
+| DoD | `job_contract.py` | Coding work is not complete without evidence |
 | Playground | `playground*.py`, `game_*.py` | Kinds: static, vite, phaser, expo, unity |
 | Autopilot | `builder_runtime.py` + `kernel/full_autopilot.py` | ADN `admin.py` Phase 0–6 when hosted; kernel loop when standalone |
 | Self-improve | `self_improve.py` | Gated skills; may patch `Daedalus/` and ADN |

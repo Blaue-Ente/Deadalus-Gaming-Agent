@@ -33,6 +33,8 @@ def main(argv: list[str] | None = None) -> None:
         help="Prompt to send",
     )
 
+    models = sub.add_parser("models", help="Show configured LLM + probe local backends")
+
     args = parser.parse_args(argv)
     if args.cmd == "publish":
         import subprocess
@@ -42,21 +44,47 @@ def main(argv: list[str] | None = None) -> None:
         if getattr(args, "force", False):
             cmd.append("--force")
         raise SystemExit(subprocess.call(cmd))
+    if args.cmd == "models":
+        os.environ.setdefault("DAEDALUS_STANDALONE", "1")
+        from daedalus.local_llm import probe_all
+        from daedalus.llm_config import get_config
+        try:
+            cfg = get_config()
+            print(
+                f"effective provider={cfg.get('provider')} model={cfg.get('model')} "
+                f"source={cfg.get('source')} local={bool(cfg.get('local'))} "
+                f"reachable={cfg.get('reachable', 'n/a')}"
+            )
+            if cfg.get("warning"):
+                print(f"warning: {cfg['warning']}")
+        except Exception as exc:
+            print(f"effective: {exc}")
+        for row in probe_all():
+            flag = "up" if row.get("ok") else "down"
+            ids = ",".join((row.get("models") or [])[:6]) or "-"
+            print(f"  [{flag}] {row.get('provider')} {row.get('base_url')} models={ids}")
+            if row.get("error") and not row.get("ok"):
+                print(f"         {row['error']}")
+        return
     if args.cmd == "ping":
         os.environ.setdefault("DAEDALUS_STANDALONE", "1")
         os.environ.setdefault("DAEDALUS_USE_MESH_ROUTER", "0")
         import asyncio
         from daedalus.llm_client import complete
         from daedalus.llm_config import get_config
+        from daedalus.local_llm import is_local_provider
 
         cfg = get_config()
         print(
             f"provider={cfg.get('provider')} model={cfg.get('model')} "
-            f"has_key={bool(cfg.get('api_key'))} source={cfg.get('source')}"
+            f"has_key={bool(cfg.get('api_key'))} source={cfg.get('source')} "
+            f"local={bool(cfg.get('local'))}"
         )
-        if not cfg.get("api_key"):
+        if not cfg.get("api_key") and not is_local_provider(str(cfg.get("provider") or "")):
             print("missing API key", file=sys.stderr)
             raise SystemExit(1)
+        if cfg.get("warning"):
+            print(cfg["warning"], file=sys.stderr)
 
         async def _go() -> dict:
             return await complete(
