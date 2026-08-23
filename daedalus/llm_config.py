@@ -128,6 +128,27 @@ PROVIDER_DEFAULTS: dict[str, dict] = {
         "default_model": "qwen/qwen3-next-80b-a3b-instruct",
         "sdk": "openai",
     },
+    # Local OpenAI-compatible servers (no API key on loopback)
+    "ollama": {
+        "base_url": "http://127.0.0.1:11434/v1",
+        "default_model": "qwen2.5-coder:7b",
+        "sdk": "openai",
+    },
+    "lmstudio": {
+        "base_url": "http://127.0.0.1:1234/v1",
+        "default_model": "local-model",
+        "sdk": "openai",
+    },
+    "llamacpp": {
+        "base_url": "http://127.0.0.1:8080/v1",
+        "default_model": "local-model",
+        "sdk": "openai",
+    },
+    "vllm": {
+        "base_url": "http://127.0.0.1:8000/v1",
+        "default_model": "local-model",
+        "sdk": "openai",
+    },
 }
 
 PRESET_MODELS = [
@@ -201,6 +222,13 @@ PRESET_MODELS = [
     {"id": "deepseek-ai/deepseek-v4-flash",             "label": "DeepSeek V4 Flash (NVIDIA) 🆓 ⚡",       "provider": "nvidia", "tier": "fast"},
     {"id": "openai/gpt-oss-120b",                     "label": "GPT-OSS 120B (NVIDIA) 🆓 reasoning",  "provider": "nvidia", "tier": "power"},
     {"id": "qwen/qwen3-next-80b-a3b-instruct",        "label": "Qwen3 Next 80B (NVIDIA) 🆓 ⚡",       "provider": "nvidia", "tier": "fast"},
+    # ── Local (Ollama / LM Studio / llama.cpp / vLLM) ────────────────────────
+    {"id": "qwen2.5-coder:7b",     "label": "Qwen2.5 Coder 7B (Ollama) 🖥 local",  "provider": "ollama", "tier": "fast"},
+    {"id": "qwen2.5-coder:14b",    "label": "Qwen2.5 Coder 14B (Ollama) 🖥",       "provider": "ollama", "tier": "power"},
+    {"id": "llama3.2",             "label": "Llama 3.2 (Ollama) 🖥 local",         "provider": "ollama", "tier": "cheap"},
+    {"id": "local-model",          "label": "Loaded model (LM Studio) 🖥",         "provider": "lmstudio", "tier": "fast"},
+    {"id": "local-model",          "label": "llama-server (llama.cpp) 🖥",         "provider": "llamacpp", "tier": "fast"},
+    {"id": "local-model",          "label": "vLLM local 🖥",                       "provider": "vllm", "tier": "power"},
     {"id": "meta/llama-4-maverick-17b-128e-instruct", "label": "Llama 4 Maverick (NVIDIA) 🆓 vision", "provider": "nvidia", "tier": "fast"},
     {"id": "deepseek-v4-flash",             "label": "DeepSeek V4 Flash (AllToken) ⚡",              "provider": "alltoken", "tier": "cheap"},
     {"id": "gemini-3-flash-preview",        "label": "Gemini 3 Flash (AllToken)",                   "provider": "alltoken", "tier": "cheap"},
@@ -316,11 +344,32 @@ def _apply_nvidia_free_policy(cfg: dict) -> dict:
 
 def get_config() -> dict:
     """Return resolved LLM config: {provider, model, api_key, base_url, sdk, use_cache}."""
+    from .local_llm import (
+        is_local_provider,
+        local_requested,
+        resolve_local_config,
+    )
+
+    # 0. Explicit local LLM (DAEDALUS_PROVIDER=ollama | DAEDALUS_LOCAL_LLM=1)
+    if local_requested():
+        local = resolve_local_config()
+        if local:
+            return local
+
     db_cfg = _read_db()
 
     # 1. Replit DB override — model+provider from Admin UI; key from DB or env
     if db_cfg.get("model"):
         provider = db_cfg.get("provider", "anthropic")
+        if is_local_provider(provider):
+            local = resolve_local_config(provider)
+            if local:
+                if db_cfg.get("model"):
+                    local["model"] = db_cfg["model"]
+                if db_cfg.get("base_url"):
+                    local["base_url"] = db_cfg["base_url"]
+                local["source"] = "db_local"
+                return local
         pd = PROVIDER_DEFAULTS.get(provider, PROVIDER_DEFAULTS["openai"])
         api_key = db_cfg.get("api_key") or resolve_provider_api_key(provider)
         source = "db"
@@ -359,8 +408,20 @@ def get_config() -> dict:
     env_key  = os.environ.get("DAEDALUS_API_KEY")
     env_url  = os.environ.get("DAEDALUS_BASE_URL")
     env_model = os.environ.get("DAEDALUS_MODEL")
-    if env_key and env_model:
-        provider = os.environ.get("DAEDALUS_PROVIDER", "anthropic")
+    env_provider = os.environ.get("DAEDALUS_PROVIDER", "")
+    if env_model and (env_key or is_local_provider(env_provider) or env_url):
+        provider = env_provider or ("custom" if env_url else "anthropic")
+        if is_local_provider(provider) or (env_url and not env_key):
+            local = resolve_local_config(provider if is_local_provider(provider) else "ollama")
+            if local:
+                local["model"] = env_model
+                if env_url:
+                    from .local_llm import _ensure_v1
+                    local["base_url"] = _ensure_v1(env_url)
+                if env_key:
+                    local["api_key"] = env_key
+                local["source"] = "env_local"
+                return local
         pd = PROVIDER_DEFAULTS.get(provider, PROVIDER_DEFAULTS["openai"])
         return _apply_nvidia_free_policy({
             "provider":  provider,
@@ -434,10 +495,16 @@ def get_config() -> dict:
             "use_cache": False,
             "source":    "nvidia_default",
         })
+    local = resolve_local_config(None)
+    if local and local.get("reachable"):
+        return local
+
     raise RuntimeError(
         "Няма конфигуриран LLM provider. "
         "Задай ALLTOKEN_API_KEY, OPENROUTER_API_KEY, NOVITA_API_KEY или NVIDIA_API_KEY, "
-        "или DAEDALUS_API_KEY + DAEDALUS_MODEL."
+        "или DAEDALUS_API_KEY + DAEDALUS_MODEL, "
+        "или пусни локален Ollama/LM Studio и задай DAEDALUS_PROVIDER=ollama "
+        "(или DAEDALUS_LOCAL_LLM=1)."
     )
 
 

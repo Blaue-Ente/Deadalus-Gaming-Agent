@@ -24,21 +24,42 @@ Daedalus/                 this product (also the standalone repo root after expo
 
 ## vs Hermes-class agents
 
-Daedalus is built for the same job as Hermes / similar coding agents: a long-horizon
-tool loop that writes real files, runs commands, looks at the browser, and iterates
-until the thing works. Extra: **game factory** (Phaser/canvas/Vite/Unity scaffold),
-**Playground workspaces**, **autopilot** (plan → staged code → smoke → browser
-verify), and **Iyveris mesh** as an equal peer.
+Daedalus is built for the same job as [Hermes Agent](https://github.com/nousresearch/hermes-agent):
+a long-horizon tool loop that writes real files, runs a shell, looks at the web,
+and iterates until the thing works. Extra: **game factory**, **Playground**,
+**autopilot verify**, **preference memory**, and **Iyveris mesh**.
 
 | Capability | Daedalus |
 |---|---|
-| Chat + tool loop | `POST /api/v1/daedalus/chat` |
-| Sub-agents | worker slots (fast / balanced / deep / …) |
+| Chat (human speech) | Studio `/` · `POST /api/v1/daedalus/chat` |
+| Native tools | files, shell, search, fetch, Jina `web_read`, image gen, remember |
+| Shell command center | Studio Shell · `POST /api/v1/daedalus/shell` |
+| Local LLM | Ollama / LM Studio / llama.cpp / vLLM (`DAEDALUS_PROVIDER=ollama`) |
+| Sub-agents | worker slots (no tools) **and** `spawn_subagent` (files + shell, jailed) |
 | Files + projects | Playground `playground/projects/{slug}` |
-| Autopilot | kernel `full_autopilot` (standalone) or ADN Phase 0–6 (when hosted) |
-| Browser verify | Playwright smoke for visual kinds |
-| Memory | Chroma under `DAEDALUS_DATA` |
-| LLM | AllToken / OpenRouter / Novita / NVIDIA (no ADN required) |
+| Autopilot | kernel `full_autopilot` + Definition of Done + playtest |
+| Browser | Playwright smoke **and** interactive session (goto/click/type/extract) |
+| MCP | optional servers in `$DAEDALUS_DATA/mcp.json` |
+| Memory | Chroma + owner preferences (`запомни, че…`) + learned skills |
+| Image gen | Novita / OpenRouter · native `generate_image` |
+| LLM (cloud) | AllToken / OpenRouter / Novita / NVIDIA |
+
+Standalone persona is a **compact tool contract** (fits local/small models). Set
+`DAEDALUS_FULL_PERSONA=1` for the full ADN/Iyveris prompt. Next to ADN, the full
+persona is always used.
+
+## Integrations (adapters, not vendored dumps)
+
+Three upstream projects plug in as **capability layers**. Daedalus does not
+copy their trees.
+
+| Upstream | License | What Daedalus does |
+|---|---|---|
+| [Agent Reach](https://github.com/Panniantong/Agent-Reach) | MIT | Jina Reader `web_read`; optional `yt-dlp` / `gh` / `agent-reach doctor` |
+| [MatrAIx Persona-8B](https://github.com/MatrAIx-ai/MatrAIx-Persona-8B) | MIT | Tiny player panel + playtest after game builds (no 1M dataset) |
+| [MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offline) | **AGPL-3.0** | HTTP client to `MIROFISH_URL` (default `http://127.0.0.1:5001`). Run their Docker stack yourself. **Do not copy that source into this MIT repo.** |
+
+Studio tab **Свят** shows Reach / MiroFish / MCP status and a Playtest button.
 
 ## Quick start (PC)
 
@@ -55,9 +76,10 @@ Check the LLM key without starting the UI:
 
 ```bash
 python -m app.cli ping
+python -m app.cli models    # probe Ollama / LM Studio / llama.cpp / vLLM
 ```
 
-Open http://localhost:8787 — Studio (chat + Playground).
+Open http://localhost:8787 — Studio (chat + shell + local LLM + logo).
 
 Full Command Center (copied ADN UI):
 
@@ -127,8 +149,15 @@ GITLAB_TOKEN=glpat-… ./scripts/publish-standalone-repo.sh \
   https://gitlab.com/Blaue-Ente/deadalus-agent-0.git --force
 ```
 
-GitLab `main` may be protected; Owner can unprotect briefly for `--force`.
-ADN stays in `Data-Asset-Hub`. Do not use GitHub `Blaue-Ente/Deadalus-Projekt-`
-(unrelated stub). You can rename the GitLab path to `Daedalus` in project settings.
+GitLab `main` may be protected; you need **Maintainer** (or Owner) to merge.
+The live merge request is on **GitLab**, not GitHub:
+
+https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/merge_requests/1
+
+If the Merge button is disabled: you are on the wrong site (GitHub stub
+`Blaue-Ente/Deadalus-Projekt-` is unrelated), the MR was still Draft, or your
+account is Developer-only on a protected `main`. Pipeline green ≠ permission
+to merge. ADN stays in `Data-Asset-Hub`. You can rename the GitLab path to
+`Daedalus` in project settings.
 
 See `MIGRATION.md` and `DEPLOY.md`.

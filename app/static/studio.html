@@ -4,9 +4,10 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Дедал — Daedalus</title>
+  <link rel="icon" href="/static/daedalus-mark.png" type="image/png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,700;1,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
     :root {
       --bg: #14110d;
@@ -18,7 +19,7 @@
       --gold2: #e4c56a;
       --ok: #7dba6a;
       --err: #d26a4a;
-      --panel: rgba(28, 24, 18, 0.86);
+      --panel: rgba(28, 24, 18, 0.92);
     }
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; }
@@ -26,170 +27,225 @@
       color: var(--ink);
       font-family: "IBM Plex Sans", system-ui, sans-serif;
       background:
-        radial-gradient(1200px 600px at 0% 0%, rgba(201,162,39,0.08), transparent 55%),
-        radial-gradient(900px 500px at 100% 100%, rgba(90,40,10,0.35), transparent 50%),
+        radial-gradient(1100px 520px at 8% -10%, rgba(201,162,39,0.12), transparent 55%),
+        radial-gradient(800px 480px at 100% 110%, rgba(90,40,10,0.4), transparent 50%),
         var(--bg);
-    }
-    body::before {
-      content: "";
-      position: fixed; inset: 0; pointer-events: none; opacity: 0.18;
-      background-image:
-        linear-gradient(var(--line) 1px, transparent 1px),
-        linear-gradient(90deg, var(--line) 1px, transparent 1px);
-      background-size: 48px 48px;
-      mask-image: radial-gradient(circle at 30% 20%, black, transparent 75%);
     }
     .shell {
       display: grid;
-      grid-template-columns: 280px 1fr 320px;
-      grid-template-rows: 72px 1fr;
+      grid-template-columns: 272px minmax(0, 1fr) 340px;
+      grid-template-rows: 68px 1fr;
       height: 100%;
-      gap: 0;
     }
     header {
       grid-column: 1 / -1;
       display: flex;
-      align-items: baseline;
-      gap: 1.2rem;
-      padding: 1rem 1.5rem;
+      align-items: center;
+      gap: 0.9rem;
+      padding: 0 1.2rem;
       border-bottom: 1px solid var(--line);
       background: var(--panel);
-      backdrop-filter: blur(10px);
     }
+    header img.mark { width: 40px; height: 40px; border-radius: 8px; }
     header h1 {
       font-family: "Cormorant Garamond", serif;
-      font-size: 2rem;
-      font-weight: 700;
+      font-size: 1.7rem;
       margin: 0;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.03em;
     }
     header h1 span { color: var(--gold); font-style: italic; font-weight: 500; }
-    header .tag {
-      font-family: "IBM Plex Mono", monospace;
-      font-size: 0.7rem;
-      color: var(--muted);
-      text-transform: uppercase;
-      letter-spacing: 0.16em;
-    }
+    header .tag { color: var(--muted); font-size: 0.78rem; }
+    header .tag a { color: var(--gold2); }
     header .status {
       margin-left: auto;
       font-family: "IBM Plex Mono", monospace;
-      font-size: 0.75rem;
+      font-size: 0.72rem;
       color: var(--gold2);
+      text-align: right;
     }
-    aside, main, .log {
-      overflow: auto;
-      padding: 1rem 1.1rem;
-    }
-    aside { border-right: 1px solid var(--line); background: rgba(20,17,13,0.55); }
-    .log { border-left: 1px solid var(--line); background: rgba(20,17,13,0.55); }
+    aside, main, .rail { overflow: auto; padding: 0.9rem 1rem; }
+    aside { border-right: 1px solid var(--line); }
+    .rail { border-left: 1px solid var(--line); background: rgba(20,17,13,0.45); }
     h2 {
       font-family: "IBM Plex Mono", monospace;
-      font-size: 0.68rem;
-      letter-spacing: 0.18em;
+      font-size: 0.66rem;
+      letter-spacing: 0.16em;
       text-transform: uppercase;
       color: var(--muted);
-      margin: 0 0 0.8rem;
+      margin: 0.4rem 0 0.7rem;
     }
     button, select, input, textarea {
-      font: inherit;
-      color: var(--ink);
-      background: #221c14;
-      border: 1px solid var(--line);
-      border-radius: 2px;
+      font: inherit; color: var(--ink);
+      background: #221c14; border: 1px solid var(--line); border-radius: 4px;
     }
-    button {
-      cursor: pointer;
-      padding: 0.45rem 0.7rem;
-      background: linear-gradient(180deg, #2a2418, #1a1611);
-    }
+    button { cursor: pointer; padding: 0.45rem 0.7rem; }
     button.gold { border-color: var(--gold); color: var(--gold2); }
     button:hover { border-color: var(--gold2); }
     input, select, textarea { width: 100%; padding: 0.5rem 0.6rem; }
-    textarea { min-height: 90px; resize: vertical; }
-    .row { display: flex; gap: 0.4rem; margin: 0.4rem 0 0.8rem; }
-    .proj {
-      padding: 0.55rem 0.4rem;
+    .row { display: flex; gap: 0.4rem; margin: 0.35rem 0 0.7rem; }
+    .proj, .pref {
+      padding: 0.5rem 0.4rem;
       border-bottom: 1px solid var(--line);
       cursor: pointer;
     }
     .proj.active { background: rgba(201,162,39,0.08); }
-    .proj b { display: block; }
-    .proj small { color: var(--muted); font-family: "IBM Plex Mono", monospace; }
-    .msgs { display: flex; flex-direction: column; gap: 0.8rem; min-height: 42vh; margin-bottom: 1rem; }
-    .msg { max-width: 72ch; }
-    .msg.user { margin-left: auto; color: var(--gold2); }
-    .msg.bot { white-space: pre-wrap; line-height: 1.45; }
-    .log pre {
+    .proj b, .pref b { display: block; font-size: 0.9rem; }
+    .proj small, .pref small { color: var(--muted); font-family: "IBM Plex Mono", monospace; font-size: 0.68rem; }
+    .hint { color: var(--muted); font-size: 0.78rem; line-height: 1.4; margin: 0 0 0.8rem; }
+    .msgs { display: flex; flex-direction: column; gap: 0.75rem; min-height: 38vh; padding-bottom: 0.6rem; }
+    .msg { max-width: 74ch; line-height: 1.5; white-space: pre-wrap; }
+    .msg.user { margin-left: auto; color: var(--gold2); background: rgba(201,162,39,0.08); padding: 0.55rem 0.7rem; border-radius: 10px 10px 2px 10px; }
+    .msg.bot { background: rgba(243,234,215,0.04); padding: 0.55rem 0.7rem; border-radius: 10px 10px 10px 2px; }
+    .msg .meta { display: block; font-size: 0.68rem; color: var(--muted); margin-top: 0.35rem; font-family: "IBM Plex Mono", monospace; }
+    .composer { position: sticky; bottom: 0; background: linear-gradient(transparent, var(--bg) 18%); padding-top: 0.6rem; }
+    .composer textarea { min-height: 88px; resize: vertical; }
+    .rail pre {
       font-family: "IBM Plex Mono", monospace;
       font-size: 0.72rem;
       white-space: pre-wrap;
       color: var(--muted);
-      margin: 0;
+      margin: 0 0 0.8rem;
+      min-height: 8rem;
     }
-    @media (max-width: 960px) {
+    .tabs { display: flex; gap: 0.3rem; margin-bottom: 0.6rem; }
+    .tabs button { font-size: 0.72rem; padding: 0.3rem 0.5rem; }
+    .tabs button.on { border-color: var(--gold); color: var(--gold2); }
+    .pane { display: none; }
+    .pane.on { display: block; }
+    @media (max-width: 980px) {
       .shell { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr auto; }
-      .log, aside { max-height: 28vh; border: 0; border-top: 1px solid var(--line); }
+      .rail, aside { max-height: 32vh; border: 0; border-top: 1px solid var(--line); }
     }
   </style>
 </head>
 <body>
   <div class="shell">
     <header>
-      <h1>Дедал <span>/ Daedalus</span></h1>
-      <div class="tag">Independent coding agent · games first · <a href="/admin/daedalus" style="color:var(--gold2)">Command Center</a></div>
+      <img class="mark" src="/static/daedalus-mark.png" alt="Дедал" />
+      <div>
+        <h1>Дедал <span>/ Daedalus</span></h1>
+        <div class="tag">Игри първо · говори нормално · <a href="/admin/daedalus/hub">Command Center</a></div>
+      </div>
       <div class="status" id="status">…</div>
     </header>
     <aside>
-      <h2>Playground</h2>
-      <input id="pname" placeholder="Име на проект" />
+      <h2>Проект</h2>
+      <p class="hint">Кажи „направи змия“ — Дедал строи в избрания проект. Или създай нов.</p>
+      <input id="pname" placeholder="Име на игра / приложение" />
       <div class="row">
         <select id="pkind">
-          <option value="static">static</option>
+          <option value="static">игра / static</option>
           <option value="vite">vite</option>
           <option value="vite-react">vite-react</option>
-          <option value="phaser" disabled>phaser → static</option>
           <option value="fastapi">fastapi</option>
+          <option value="streamlit">streamlit</option>
+          <option value="expo">expo</option>
         </select>
         <button class="gold" id="pcreate">Нов</button>
       </div>
       <div id="plist"></div>
+      <h2>Предпочитания</h2>
+      <p class="hint">Или напиши в чата: „запомни, че предпочитам Phaser“.</p>
+      <input id="preftext" placeholder="Запомни…" />
+      <div class="row"><button id="prefadd">Запиши</button></div>
+      <div id="preflist"></div>
     </aside>
     <main>
       <h2>Разговор</h2>
       <div class="msgs" id="msgs"></div>
-      <textarea id="prompt" placeholder="Кажи на Дедал какво да построи или поправи…"></textarea>
-      <div class="row">
-        <button class="gold" id="send">Изпрати</button>
-        <button id="build">Autopilot върху проекта</button>
+      <div class="composer">
+        <textarea id="prompt" placeholder="Пиши свободно: здравей, направи тетрис, пусни тестовете, запомни че отговаряш на български…"></textarea>
+        <div class="row">
+          <button class="gold" id="send">Изпрати</button>
+          <button id="build">Autopilot</button>
+        </div>
       </div>
     </main>
-    <section class="log">
-      <h2>Полет / verify</h2>
-      <pre id="log">Няма активен autopilot.</pre>
+    <section class="rail">
+      <div class="tabs">
+        <button class="on" data-pane="shell">Shell</button>
+        <button data-pane="flight">Полет</button>
+        <button data-pane="llm">LLM</button>
+        <button data-pane="world">Свят</button>
+      </div>
+      <div class="pane on" id="pane-shell">
+        <h2>Команден център</h2>
+        <p class="hint">Командите вървят в jail (продукт / playground). Тайните ключове не се подават на процеса.</p>
+        <input id="shcmd" placeholder="ls · pytest · npm test · python -m compileall" />
+        <div class="row"><button class="gold" id="shrun">Изпълни</button></div>
+        <pre id="shout">Готов.</pre>
+      </div>
+      <div class="pane" id="pane-flight">
+        <h2>Autopilot / verify</h2>
+        <pre id="log">Няма активен autopilot.</pre>
+      </div>
+      <div class="pane" id="pane-llm">
+        <h2>Модел</h2>
+        <pre id="llmbox">Зареждане…</pre>
+      </div>
+      <div class="pane" id="pane-world">
+        <h2>Канали</h2>
+        <p class="hint">Jina Reader (Reach) · MiroFish sidecar (AGPL, отделен процес) · MCP · playtest.</p>
+        <div class="row">
+          <button id="cxrefresh">Опресни</button>
+          <button class="gold" id="ptest">Playtest</button>
+        </div>
+        <pre id="worldbox">Зареждане…</pre>
+      </div>
     </section>
   </div>
   <script>
     const $ = (id) => document.getElementById(id);
-    let slug = null;
+    let slug = localStorage.getItem("dx.slug") || null;
+    const session = localStorage.getItem("dx.session") || ("studio-" + Math.random().toString(16).slice(2, 10));
+    localStorage.setItem("dx.session", session);
     const msgs = $("msgs");
-    const logEl = $("log");
 
-    function add(role, text) {
+    document.querySelectorAll(".tabs button").forEach((btn) => {
+      btn.onclick = () => {
+        document.querySelectorAll(".tabs button").forEach((b) => b.classList.remove("on"));
+        document.querySelectorAll(".pane").forEach((p) => p.classList.remove("on"));
+        btn.classList.add("on");
+        $("pane-" + btn.dataset.pane).classList.add("on");
+      };
+    });
+
+    function add(role, text, meta) {
       const d = document.createElement("div");
       d.className = "msg " + role;
       d.textContent = text;
+      if (meta) {
+        const m = document.createElement("span");
+        m.className = "meta";
+        m.textContent = meta;
+        d.appendChild(m);
+      }
       msgs.appendChild(d);
       msgs.scrollTop = msgs.scrollHeight;
+      return d;
     }
 
     async function refreshHealth() {
       try {
-        const h = await (await fetch("/health")).json();
-        const llm = await (await fetch("/api/v1/llm/status")).json();
-        $("status").textContent =
-          (h.standalone ? "standalone" : "adn-host") +
-          " · " + (llm.ok ? (llm.provider + "/" + llm.model) : "no LLM");
+        const [h, llm, local] = await Promise.all([
+          fetch("/health").then((r) => r.json()),
+          fetch("/api/v1/llm/status").then((r) => r.json()),
+          fetch("/api/v1/llm/local").then((r) => r.json()).catch(() => ({})),
+        ]);
+        const backends = (local.backends || []).filter((b) => b.ok).map((b) => b.provider);
+        $("status").innerHTML =
+          (h.standalone ? "standalone" : "adn") + "<br>" +
+          (llm.ok ? (llm.provider + " / " + llm.model) : "no LLM") +
+          (backends.length ? "<br>local: " + backends.join(", ") : "");
+        const lines = [];
+        const eff = local.effective || {};
+        lines.push("effective: " + (eff.provider || "?") + " / " + (eff.model || "?"));
+        lines.push("source: " + (eff.source || "?") + (eff.local ? " (local)" : ""));
+        (local.backends || []).forEach((b) => {
+          lines.push((b.ok ? "UP  " : "DOWN") + " " + b.provider + "  " + b.base_url);
+          if ((b.models || []).length) lines.push("     " + b.models.slice(0, 6).join(", "));
+        });
+        $("llmbox").textContent = lines.join("\n");
       } catch (e) {
         $("status").textContent = "offline";
       }
@@ -203,7 +259,24 @@
         const el = document.createElement("div");
         el.className = "proj" + (p.slug === slug ? " active" : "");
         el.innerHTML = "<b>" + (p.name || p.slug) + "</b><small>" + p.kind + " · " + p.slug + "</small>";
-        el.onclick = () => { slug = p.slug; refreshProjects(); };
+        el.onclick = () => { slug = p.slug; localStorage.setItem("dx.slug", slug); refreshProjects(); };
+        box.appendChild(el);
+      });
+    }
+
+    async function refreshPrefs() {
+      const data = await (await fetch("/api/v1/daedalus/preferences")).json();
+      const box = $("preflist");
+      box.innerHTML = "";
+      (data.items || []).slice(0, 12).forEach((it) => {
+        const el = document.createElement("div");
+        el.className = "pref";
+        el.innerHTML = "<b>" + (it.text || "") + "</b><small>" + (it.kind || "preference") + "</small>";
+        el.title = "Кликни за изтриване";
+        el.onclick = async () => {
+          await fetch("/api/v1/daedalus/preferences/" + it.id, { method: "DELETE" });
+          refreshPrefs();
+        };
         box.appendChild(el);
       });
     }
@@ -211,55 +284,145 @@
     $("pcreate").onclick = async () => {
       const name = $("pname").value.trim();
       if (!name) return;
-      const kind = $("pkind").value === "phaser" ? "static" : $("pkind").value;
       const res = await (await fetch("/api/v1/playground/projects", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
-        body: JSON.stringify({ name, kind, description: name }),
+        body: JSON.stringify({ name, kind: $("pkind").value, description: name }),
       })).json();
       slug = res.project.slug;
+      localStorage.setItem("dx.slug", slug);
       $("pname").value = "";
       await refreshProjects();
     };
 
-    $("send").onclick = async () => {
+    $("prefadd").onclick = async () => {
+      const text = $("preftext").value.trim();
+      if (!text) return;
+      await fetch("/api/v1/daedalus/preferences", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ text }),
+      });
+      $("preftext").value = "";
+      refreshPrefs();
+    };
+
+    async function sendChat() {
       const message = $("prompt").value.trim();
       if (!message) return;
       $("prompt").value = "";
       add("user", message);
-      add("bot", "…мисля");
-      const last = msgs.lastChild;
+      const last = add("bot", "…мисля");
       try {
         const res = await (await fetch("/api/v1/daedalus/chat", {
           method: "POST",
           headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({ message, session_id: slug || "studio" }),
+          body: JSON.stringify({ message, session_id: slug || session }),
         })).json();
         last.textContent = res.reply || res.message || JSON.stringify(res, null, 2);
+        const bits = [];
+        if (res.complete === false) bits.push("незавършено");
+        if (res.complete === true) bits.push("готово");
+        if (res.model) bits.push(res.model);
+        if (res.elapsed_seconds != null) bits.push(res.elapsed_seconds + "s");
+        if (bits.length) {
+          const m = document.createElement("span");
+          m.className = "meta";
+          m.textContent = bits.join(" · ");
+          last.appendChild(m);
+        }
+        refreshPrefs();
       } catch (e) {
         last.textContent = "Грешка: " + e;
       }
-    };
+    }
+
+    $("send").onclick = sendChat;
+    $("prompt").addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); sendChat(); }
+    });
 
     $("build").onclick = async () => {
       if (!slug) { add("bot", "Първо създай или избери проект вляво."); return; }
+      document.querySelector('[data-pane="flight"]').click();
       const description = $("prompt").value.trim() || ("Build " + slug);
       const res = await (await fetch("/api/v1/playground/projects/" + slug + "/autopilot", {
         method: "POST",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({ description, mode: "full" }),
       })).json();
-      logEl.textContent = "job " + (res.job && res.job.id) + "\n";
+      $("log").textContent = "job " + (res.job && res.job.id) + "\n";
       const src = new EventSource("/api/v1/playground/projects/" + slug + "/autopilot/stream");
-      src.onmessage = (ev) => { logEl.textContent += ev.data + "\n"; };
-      src.addEventListener("log", (ev) => { logEl.textContent += ev.data + "\n"; });
-      src.addEventListener("phase", (ev) => { logEl.textContent += "phase " + ev.data + "\n"; });
-      src.addEventListener("done", (ev) => { logEl.textContent += "DONE " + ev.data + "\n"; src.close(); });
+      src.onmessage = (ev) => { $("log").textContent += ev.data + "\n"; };
+      src.addEventListener("log", (ev) => { $("log").textContent += ev.data + "\n"; });
+      src.addEventListener("phase", (ev) => { $("log").textContent += "phase " + ev.data + "\n"; });
+      src.addEventListener("done", (ev) => { $("log").textContent += "DONE " + ev.data + "\n"; src.close(); });
       src.addEventListener("error", () => { src.close(); });
     };
 
+    $("shrun").onclick = async () => {
+      const command = $("shcmd").value.trim();
+      if (!command) return;
+      $("shout").textContent = "$ " + command + "\n…";
+      const res = await (await fetch("/api/v1/daedalus/shell", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({ command, slug: slug || "" }),
+      })).json();
+      $("shout").textContent =
+        "$ " + command + "  (exit " + res.exit_code + ", " + (res.elapsed_ms || 0) + "ms)\n" +
+        (res.cwd ? "# cwd " + res.cwd + "\n" : "") +
+        (res.stdout || "") + (res.stderr ? "\n" + res.stderr : "") +
+        (res.error && !res.ok ? "\n" + res.error : "");
+    };
+    $("shcmd").addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") { ev.preventDefault(); $("shrun").click(); }
+    });
+
+    async function refreshConnectors() {
+      try {
+        const data = await (await fetch("/api/v1/daedalus/connectors")).json();
+        const lines = [];
+        const ch = (data.reach && data.reach.channels) || {};
+        lines.push("REACH");
+        Object.keys(ch).forEach((k) => {
+          lines.push("  " + (ch[k].ready ? "UP  " : "DOWN") + " " + k + "  " + (ch[k].backend || "—"));
+        });
+        const mf = data.mirofish || {};
+        lines.push("");
+        lines.push("MIROFISH " + (mf.ok ? "UP" : "DOWN") + "  " + (mf.api || ""));
+        if (!mf.ok) lines.push("  sidecar: nikmcfly/MiroFish-Offline (AGPL)");
+        const mcp = (data.mcp && data.mcp.servers) || {};
+        lines.push("");
+        lines.push("MCP  " + (Object.keys(mcp).length ? Object.keys(mcp).join(", ") : "(none)"));
+        $("worldbox").textContent = lines.join("\n");
+      } catch (e) {
+        $("worldbox").textContent = "connectors: " + e;
+      }
+    }
+    $("cxrefresh").onclick = refreshConnectors;
+    $("ptest").onclick = async () => {
+      if (!slug) { add("bot", "Първо избери проект вляво за playtest."); return; }
+      document.querySelector('[data-pane="world"]').click();
+      $("worldbox").textContent = "playtest " + slug + "…";
+      try {
+        const data = await (await fetch("/api/v1/daedalus/playtest", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ slug, n: 4, use_browser: false, with_llm: false }),
+        })).json();
+        $("worldbox").textContent = (data.summary || JSON.stringify(data, null, 2));
+        add("bot", data.summary || "playtest готов", (data.ship_ready ? "ship?" : "blockers"));
+      } catch (e) {
+        $("worldbox").textContent = "playtest: " + e;
+      }
+    };
+
+    add("bot", "Здравей. Аз съм Дедал. Кажи ми какво да построя, какво да запомня, или просто си говорим.");
     refreshHealth();
     refreshProjects();
+    refreshPrefs();
+    refreshConnectors();
   </script>
 </body>
 </html>

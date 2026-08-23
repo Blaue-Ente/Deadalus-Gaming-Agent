@@ -117,6 +117,12 @@ async def run_full_autopilot(
     """Staged full pipeline for standalone (and portable) backends."""
     kind = await _get_kind(backend)
     kind_rules = _KIND_RULES.get(kind, _KIND_RULES["static"])
+    lessons = ""
+    try:
+        from daedalus.learned_skills import format_block
+        lessons = format_block(f"{kind} {state.description}", limit=2)
+    except Exception:
+        lessons = ""
 
     state.seed_agents()
     await backend.emit("phase", {"n": 0, "label": "Чете задачата"})
@@ -132,6 +138,7 @@ async def run_full_autopilot(
         'ФОРМАТ: {"title":"...","stages":[{"id":1,"title":"...","goal":"...",'
         '"instructions":"...","files":["src/App.jsx"]}]}\n'
         "3-8 етапа, всеки с 1-3 файла в 'files'."
+        + (f"\n\n{lessons}" if lessons else "")
     )
     plan_raw = await backend.llm(
         AgentRole.PLANNER,
@@ -228,13 +235,36 @@ async def run_full_autopilot(
         elif not bresult.get("skipped"):
             await backend.emit("log", {"line": "✓ Browser verify OK", "level": "info"})
 
+    # ── PLAYTEST (MatrAIx-style personas, visual kinds) ──────────────────
+    playtest_block = ""
+    if kind in VISUAL_KINDS:
+        await backend.emit("phase", {"n": 4, "label": "Playtest"})
+        try:
+            from daedalus.playtest import format_for_prompt, run_playtest
+
+            async def _play_llm(system: str, user: str) -> str:
+                return await backend.llm(AgentRole.REVIEWER, user, system=system)
+
+            report = await run_playtest(
+                state.slug, kind=kind, n=3, llm_fn=_play_llm,
+            )
+            playtest_block = format_for_prompt(report)
+            await backend.emit("log", {"line": report.get("summary") or "playtest", "level": "info"})
+            if not report.get("ship_ready"):
+                for b in (report.get("blockers") or [])[:4]:
+                    state.errors.append(str(b)[:200])
+        except Exception as exc:
+            log.debug("playtest skipped: %s", exc)
+            await backend.emit("log", {"line": f"playtest skipped: {exc}", "level": "dim"})
+
     # ── REVIEW ───────────────────────────────────────────────────────────
     await backend.emit("phase", {"n": 5, "label": "Review"})
     state.set_agent_status(AgentRole.REVIEWER, "running")
     review = await backend.llm(
         AgentRole.REVIEWER,
         f"Review build for {state.slug} ({kind}). test_ok={state.test_ok} browser_ok={browser_ok}. "
-        f"Files: {[c.path for c in state.changes]}. Reply APPROVED or list blockers.",
+        f"Files: {[c.path for c in state.changes]}. Reply APPROVED or list blockers."
+        + (f"\n\n{playtest_block}" if playtest_block else ""),
         system="Code reviewer. APPROVED only if shippable.",
     )
     state.review_ok = "APPROVED" in review.upper() and state.test_ok and browser_ok
@@ -259,6 +289,11 @@ async def run_full_autopilot(
     else:
         msg = "; ".join(state.errors) or "blocked at test/review/deliverable"
         state.errors.append(msg)
+        try:
+            from daedalus.learned_skills import draft_from_failure
+            draft_from_failure(kind=kind, errors=state.errors, context=state.description[:400])
+        except Exception:
+            pass
         await backend.emit("error", {"message": msg})
 
     return state

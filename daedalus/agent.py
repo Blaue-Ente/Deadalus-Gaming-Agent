@@ -189,10 +189,15 @@ async def _call_claude_primary(system: str, messages: list[dict[str, str]],
                 "openai SDK not installed — run: pip install openai"
             ) from exc
         if not api_key:
-            raise DaedalusError(
-                f"API key not configured for provider '{provider}' "
-                "(set DAEDALUS_API_KEY env var or configure in Admin › LLM)"
-            )
+            from .local_llm import dummy_api_key, is_local_provider
+            if is_local_provider(provider) or cfg.get("local"):
+                api_key = dummy_api_key(provider)
+            else:
+                raise DaedalusError(
+                    f"API key not configured for provider '{provider}' "
+                    "(set DAEDALUS_API_KEY env var or configure in Admin › LLM, "
+                    "or DAEDALUS_PROVIDER=ollama for a local model)"
+                )
         oa_client = AsyncOpenAI(api_key=api_key, base_url=base_url or None)
         oa_messages = [{"role": "system", "content": system}] + list(messages)
         resp = await oa_client.chat.completions.create(
@@ -228,53 +233,92 @@ async def _call_claude_with_tools(
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """Anthropic messages.create with tool_use — for native tools path (Phase 2)."""
-    cfg = get_config()
-    if cfg.get("sdk") != "anthropic":
-        return {"stop_reason": "end_turn", "content": []}
-    try:
-        from anthropic import AsyncAnthropic
-    except ImportError:
-        return {"stop_reason": "end_turn", "content": []}
+    """Native tool round for Anthropic *and* OpenAI-compatible providers (incl. Ollama)."""
+    from .local_llm import dummy_api_key, is_local_provider
+    from .native_tools import openai_tool_specs, to_openai_messages
 
+    cfg = get_config()
     api_key = cfg.get("api_key", "")
     base_url = cfg.get("base_url", "")
     model = cfg.get("model", _MODEL)
+    sdk = cfg.get("sdk") or "openai"
+    provider = cfg.get("provider") or ""
     if not api_key:
+        if is_local_provider(provider) or cfg.get("local"):
+            api_key = dummy_api_key(provider)
+        else:
+            return {"stop_reason": "end_turn", "content": []}
+
+    if sdk == "anthropic":
+        try:
+            from anthropic import AsyncAnthropic
+        except ImportError:
+            return {"stop_reason": "end_turn", "content": []}
+        kwargs: dict = dict(api_key=api_key, max_retries=0)
+        if base_url:
+            kwargs["base_url"] = base_url
+        client = AsyncAnthropic(**kwargs)
+        anthropic_tools = [
+            {
+                "name": t["name"],
+                "description": t["description"],
+                "input_schema": t["input_schema"],
+            }
+            for t in tools
+        ]
+        resp = await client.messages.create(
+            model=model,
+            max_tokens=_MAX_TOKENS,
+            system=system,
+            messages=messages,
+            tools=anthropic_tools,
+        )
+        content = []
+        for block in resp.content:
+            if block.type == "text":
+                content.append({"type": "text", "text": block.text})
+            elif block.type == "tool_use":
+                content.append({
+                    "type": "tool_use",
+                    "id": block.id,
+                    "name": block.name,
+                    "input": block.input,
+                })
+        return {"stop_reason": resp.stop_reason, "content": content}
+
+    try:
+        from openai import AsyncOpenAI
+    except ImportError:
         return {"stop_reason": "end_turn", "content": []}
-
-    kwargs: dict = dict(api_key=api_key, max_retries=0)
-    if base_url:
-        kwargs["base_url"] = base_url
-    client = AsyncAnthropic(**kwargs)
-
-    anthropic_tools = [
-        {
-            "name": t["name"],
-            "description": t["description"],
-            "input_schema": t["input_schema"],
-        }
-        for t in tools
-    ]
-    resp = await client.messages.create(
+    client = AsyncOpenAI(api_key=api_key, base_url=base_url or None, max_retries=0)
+    oa_messages = to_openai_messages(system, messages)
+    resp = await client.chat.completions.create(
         model=model,
         max_tokens=_MAX_TOKENS,
-        system=system,
-        messages=messages,
-        tools=anthropic_tools,
+        messages=oa_messages,
+        tools=openai_tool_specs(tools),
+        tool_choice="auto",
     )
+    choice = resp.choices[0] if resp.choices else None
+    msg = choice.message if choice else None
     content = []
-    for block in resp.content:
-        if block.type == "text":
-            content.append({"type": "text", "text": block.text})
-        elif block.type == "tool_use":
-            content.append({
-                "type": "tool_use",
-                "id": block.id,
-                "name": block.name,
-                "input": block.input,
-            })
-    return {"stop_reason": resp.stop_reason, "content": content}
+    if msg and msg.content:
+        content.append({"type": "text", "text": msg.content})
+    for tc in (getattr(msg, "tool_calls", None) or []):
+        args: Any = {}
+        raw_args = getattr(getattr(tc, "function", None), "arguments", "") or "{}"
+        try:
+            args = json.loads(raw_args)
+        except json.JSONDecodeError:
+            args = {"raw": raw_args}
+        content.append({
+            "type": "tool_use",
+            "id": tc.id,
+            "name": tc.function.name,
+            "input": args,
+        })
+    stop = "tool_use" if any(b.get("type") == "tool_use" for b in content) else "end_turn"
+    return {"stop_reason": stop, "content": content}
 
 
 # ---------------------------------------------------------------------------
@@ -1259,6 +1303,16 @@ class Daedalus:
             knowledge, past_memory, artifacts, session_recent,
             lessons=lessons, episodes=episodes, mesh_block=mesh_block,
         )
+        try:
+            from .preferences import format_block as _pref_block
+            from .learned_skills import format_block as _skill_block
+            _prefs = _pref_block()
+            _sk = _skill_block(user_message)
+            extra = "\n\n".join(p for p in (_prefs, _sk) if p)
+            if extra:
+                injected = extra + ("\n\n" + injected if injected else "")
+        except Exception as _mem_exc:
+            log.debug("preference/skill inject skipped: %s", _mem_exc)
 
         # Inject unread Agent Inbox messages (Replit Agent → Daedalus)
         inbox_block = ""
@@ -1630,7 +1684,6 @@ class Daedalus:
                 )
                 if _native_text:
                     user_content = user_content + "\n\n" + _native_text
-                    _planning_succeeded = True
                     log.info(
                         "daedalus native-tools: %d tool calls — enriched context",
                         len(_native_log),
@@ -1868,6 +1921,11 @@ class Daedalus:
             logs_grep = logs_m.group(2).strip() if logs_m and logs_m.group(2) else None
             # NEED_WORKER: <NEED_WORKER: slot | task>  — multiple allowed, run in parallel
             worker_calls = parse_worker_markers(raw)
+            try:
+                from .subagents import parse_subagent_markers
+                subagent_calls = parse_subagent_markers(raw)
+            except Exception:
+                subagent_calls = []
             # NEED_STAGE / NEED_BUNDLE_START / NEED_BUNDLE_COMMIT  (staged bundle system)
             try:
                 from .bundle import (
@@ -1893,7 +1951,7 @@ class Daedalus:
                 or pg_push_m or pg_read_m
                 or drp_law_q or drp_cases_q or drp_search_q
                 or data_prop_m or progress_m or check_perm_m
-                or blocked_m or worker_calls or project_plan_m
+                or blocked_m or worker_calls or subagent_calls or project_plan_m
                 or journal_m or task_state_m
                 or playbook_m or plan_lock_m
                 or batch_block or verify_block
@@ -3857,6 +3915,27 @@ class Daedalus:
                     log.warning("NEED_WORKER parallel call failed: %s", exc)
                     tool_results_text_parts.append(f"━━━ WORKER RESULTS — FAILED ━━━\n{exc}")
 
+            if subagent_calls:
+                try:
+                    from .subagents import format_subagent_results, run_subagents_parallel
+                    sub_results = await run_subagents_parallel(
+                        subagent_calls,
+                        memory=self.memory,
+                        session_id=session_id or "",
+                        read_file_fn=_read_file_tool,
+                    )
+                    tool_results_text_parts.append(
+                        "━━━ SUBAGENT RESULTS ━━━\n" + format_subagent_results(sub_results)
+                    )
+                    tool_calls_used.append({
+                        "tool": "subagent",
+                        "count": len(subagent_calls),
+                        "ok": all(r.get("ok") for r in sub_results),
+                    })
+                except Exception as exc:
+                    log.warning("NEED_SUBAGENT failed: %s", exc)
+                    tool_results_text_parts.append(f"━━━ SUBAGENT RESULTS — FAILED ━━━\n{exc}")
+
             tool_block = "\n\n".join(tool_results_text_parts)
 
             # ── Repeated-failure breaker (improvements.ErrorTracker) ──────────
@@ -4009,7 +4088,9 @@ class Daedalus:
                     "  <NEED_WORKER: fast | task description>   — cheap/fast model (Haiku/Groq)\n"
                     "  <NEED_WORKER: balanced | task>           — same model as master\n"
                     "  <NEED_WORKER: deep | task>               — powerful model (Opus)\n"
-                    "Multiple NEED_WORKER markers in one response run in parallel. "
+                    "Multiple NEED_WORKER markers in one response run in parallel.\n"
+                    "For a bounded file task WITH tools, emit:\n"
+                    "  <NEED_SUBAGENT: slug | task>  — isolated agent, writes jailed to slug.\n"
                     "Workers are stateless — pass full context in the task description. "
                     "Wait for their results in the next tool iteration before synthesizing.\n\n"
                     "DATA CURATION REMINDER: For inserting trading_concepts / signal_criteria / "
@@ -4638,6 +4719,33 @@ class Daedalus:
 
         elapsed = (datetime.now(timezone.utc) - started).total_seconds()
 
+        try:
+            from .preferences import observe_turn
+            observe_turn(message, raw)
+        except Exception:
+            pass
+
+        dod = None
+        try:
+            from .job_contract import evaluate, finish_nudge
+            from .learned_skills import draft_from_failure
+            dod = evaluate(
+                message, raw or "",
+                tool_calls=summary.get("tool_calls") or [],
+            )
+            if not dod.complete and dod.coding_task:
+                raw = (raw or "") + finish_nudge(dod)
+                try:
+                    draft_from_failure(
+                        kind="chat",
+                        errors=dod.blockers,
+                        context=message[:400],
+                    )
+                except Exception:
+                    pass
+        except Exception as _dod_exc:
+            log.debug("job contract skipped: %s", _dod_exc)
+
         # ── Self-improvement on failure (T09) ─────────────────────────────
         # If session was slow (>90s) OR >50% of tool calls failed → schedule
         # a fire-and-forget for_self reflection that asks Дедал to propose
@@ -4707,6 +4815,8 @@ class Daedalus:
             "model": get_config().get("model", _MODEL),
             "elapsed_seconds": round(elapsed, 2),
             "timestamp": started.isoformat(),
+            "complete": None if dod is None else dod.complete,
+            "dod": None if dod is None else dod.as_dict(),
         }
 
     async def generate(
