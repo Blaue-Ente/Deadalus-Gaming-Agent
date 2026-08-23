@@ -104,6 +104,21 @@ It **skips** when offline kit is on, load is high, RAM is tight, or autopilot is
 # DAEDALUS_EVOLUTION=0   # kill switch
 ```
 
+## Windows app (Start Menu)
+
+Per-user install — **no Administrator**. Python 3.11+ on PATH, then:
+
+```powershell
+.\packaging\windows\install.ps1
+# optional: -DesktopShortcut  -Startup
+```
+
+Start → **Дедал** opens Studio at http://127.0.0.1:8787. Data lives in
+`%LOCALAPPDATA%\Daedalus` (`.env`, memory, games). Or compile
+`packaging\windows\Daedalus.iss` with Inno Setup → `dist\Daedalus-Setup.exe`.
+
+Details: `packaging/windows/README.md`.
+
 ## Quick start (PC)
 
 ```bash
