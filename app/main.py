@@ -66,7 +66,7 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(
     title="Daedalus",
     description="Independent coding agent — games, apps, self-improvement.",
-    version="0.3.2",
+    version="0.3.3",
     lifespan=lifespan,
 )
 app.include_router(playground_router)
@@ -131,7 +131,7 @@ async def capabilities() -> dict:
             "agent-reach", "playtest", "mirofish-sidecar", "mcp",
             "browser-session", "subagents",
             "offline-kit", "llm-wardrobe", "addons", "capsule",
-            "evolution", "windows-desktop",
+            "evolution", "windows-desktop", "live-publish",
         ],
         "mesh_endpoint": "/api/iyveris",
         "studio": "/",

@@ -153,6 +153,26 @@ async def publish_local(slug: str) -> dict:
     return {"ok": True, "published": result, "url": f"/apps/{slug}/"}
 
 
+class LiveBody(BaseModel):
+    backend: str = Field(default="auto", max_length=40)
+
+
+@router.get("/projects/{slug}/live")
+async def live_status(slug: str) -> dict:
+    from daedalus.live_publish import capabilities, get_site
+    return {"ok": True, "site": get_site(slug), "capabilities": capabilities()}
+
+
+@router.post("/projects/{slug}/live")
+async def live_publish(slug: str, body: LiveBody = LiveBody()) -> dict:
+    from daedalus.live_publish import publish_live
+    backend = body.backend or "auto"
+    result = await publish_live(slug, backend=backend)
+    if not result.get("ok") and not result.get("local_url"):
+        raise HTTPException(status_code=400, detail=result.get("error") or "live publish failed")
+    return result
+
+
 @router.get("/projects/{slug}/autopilot/stream")
 async def autopilot_stream(slug: str, offset: int = 0) -> StreamingResponse:
     from daedalus import autopilot_jobs as aj

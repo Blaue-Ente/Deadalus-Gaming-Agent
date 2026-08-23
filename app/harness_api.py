@@ -301,6 +301,12 @@ async def addons_disable(addon_id: str) -> dict[str, Any]:
     return disable(addon_id)
 
 
+@router.get("/api/v1/daedalus/live")
+async def live_catalog() -> dict[str, Any]:
+    from daedalus.live_publish import capabilities
+    return capabilities()
+
+
 class EvolutionBody(BaseModel):
     enabled: bool | None = None
     interval_s: int | None = Field(default=None, ge=300, le=86400)
