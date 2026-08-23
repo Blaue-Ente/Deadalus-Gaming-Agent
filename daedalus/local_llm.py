@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from typing import Any
 from urllib.parse import urlparse
@@ -48,12 +49,16 @@ _probe_cache: dict[str, tuple[float, dict[str, Any]]] = {}
 
 
 def normalize_provider(name: str) -> str:
-    p = (name or "").strip().lower()
-    if p in ("llama.cpp", "llama-cpp", "llama_cpp"):
-        return "llamacpp"
-    if p in ("lm-studio", "lm_studio"):
-        return "lmstudio"
-    return p
+    p = re.sub(r"[\s_]+", "-", (name or "").strip().lower())
+    aliases = {
+        "llama.cpp": "llamacpp",
+        "llama-cpp": "llamacpp",
+        "llamacpp": "llamacpp",
+        "lm-studio": "lmstudio",
+        "lmstudio": "lmstudio",
+        "local": "ollama",
+    }
+    return aliases.get(p, p)
 
 
 def is_local_provider(provider: str) -> bool:
