@@ -372,6 +372,14 @@ async def execute_native_tool(
     if not allowed:
         return denial
 
+    try:
+        from .offline import deny
+        blocked = deny(name)
+        if blocked:
+            return blocked
+    except Exception:
+        pass
+
     from .tools import (
         web_search_tool, postgres_query_tool, search_code_tool,
         list_endpoints_tool, list_modules_tool, web_fetch_tool,

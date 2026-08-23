@@ -34,12 +34,13 @@ and iterates until the thing works. Extra: **game factory**, **Playground**,
 | Chat (human speech) | Studio `/` · `POST /api/v1/daedalus/chat` |
 | Native tools | files, shell, search, fetch, Jina `web_read`, image gen, remember |
 | Shell command center | Studio Shell · `POST /api/v1/daedalus/shell` |
-| Local LLM | Ollama / LM Studio / llama.cpp / vLLM (`DAEDALUS_PROVIDER=ollama`) |
+| Local LLM | Studio **Гардероб** — хардуерен профил + Ollama pull + превключване; или `DAEDALUS_PROVIDER=ollama` |
+| Offline kit | `DAEDALUS_OFFLINE=1` / Studio бутон — без Jina/търсене/картинки, с локален модел и капсули |
 | Sub-agents | worker slots (no tools) **and** `spawn_subagent` (files + shell, jailed) |
 | Files + projects | Playground `playground/projects/{slug}` |
 | Autopilot | kernel `full_autopilot` + Definition of Done + playtest |
 | Browser | Playwright smoke **and** interactive session (goto/click/type/extract) |
-| MCP | optional servers in `$DAEDALUS_DATA/mcp.json` |
+| MCP | `$DAEDALUS_DATA/mcp.json` + Studio addon shelf |
 | Memory | Chroma + owner preferences (`запомни, че…`) + learned skills |
 | Image gen | Novita / OpenRouter · native `generate_image` |
 | LLM (cloud) | AllToken / OpenRouter / Novita / NVIDIA |
@@ -60,6 +61,48 @@ copy their trees.
 | [MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offline) | **AGPL-3.0** | HTTP client to `MIROFISH_URL` (default `http://127.0.0.1:5001`). Run their Docker stack yourself. **Do not copy that source into this MIT repo.** |
 
 Studio tab **Свят** shows Reach / MiroFish / MCP status and a Playtest button.
+
+## Ship a game (test → publish)
+
+1. **Smoke** — compile / HTTP probe (`playground_runner.smoke_test`).
+2. **Browser** — Chromium render-and-see (blank screen, console, screenshot).
+3. **Playtest** — 4–6 simulated players (Studio → Свят, or after autopilot).
+4. **Ship**
+   - **Капсула** — `GET /api/v1/playground/projects/{slug}/capsule` → zip (USB / прати файл). Static: unzip, open `index.html`.
+   - **Локално /apps/** — Studio „Към /apps/“ (same Daedalus process).
+   - **Git** — `<NEED_PLAYGROUND_PUSH: slug>` (GitLab if `GITLAB_TOKEN`, else GitHub).
+   - Unity stays Git + local Editor. Expo web can publish as static.
+
+## Offline atelier (local LLM wardrobe)
+
+Daedalus does **not** ship 7GB weights. It **recommends** a Qwen/coder size from RAM/VRAM, then:
+
+```bash
+# optional: install Ollama once
+# Studio → LLM → click a recommended row (pull + activate)
+python -m app.cli models    # prints machine class + recommendations
+```
+
+Toggle **Офлайн кит** so search/Jina/image-gen refuse. Chat, files, shell, localhost browser, heuristic playtest, and capsules keep working.
+
+## Evolution (opt-in idle gardener)
+
+Self-improve already exists: Daedalus **proposes** patches, you **Approve** in Command Center. That is not silent self-editing.
+
+**Еволюция** is a separate mode (Studio tab, default **off**). While the process is up — even with no open chat — a gardener uses spare CPU/RAM to:
+
+1. Scan two rotating radar sources (GitHub/web: agents, MCP, memory, local LLM).
+2. Study one new public GitHub repo via the API (README + tree + license).
+3. Write a journal + a learned-skill note under `$DAEDALUS_DATA`.
+4. Optionally shallow-clone into `data/daedalus/evolution/research/` (never into `daedalus/`). AGPL/SSPL is refused.
+
+It **skips** when offline kit is on, load is high, RAM is tight, or autopilot is running. Harness patches still wait for Approve. `edit_modules` stays off unless you turn it on; auto-apply never includes it.
+
+```bash
+# optional: force on at boot (Studio toggle still writes settings.json)
+# DAEDALUS_EVOLUTION=1
+# DAEDALUS_EVOLUTION=0   # kill switch
+```
 
 ## Quick start (PC)
 
