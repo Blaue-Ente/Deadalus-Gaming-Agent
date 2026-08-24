@@ -1,64 +1,64 @@
-# Променливи на средата
+# Environment variables
 
-Копирай `.env.example` → `.env`. Дедал чете `.env` при старт на CLI.
+Copy `.env.example` → `.env`. Daedalus reads `.env` when the CLI starts.
 
-## Задължителни за облачен LLM
+## Required for a cloud LLM
 
-Поне **една** от:
+At least **one** of:
 
-| Променлива | Провайдър |
+| Variable | Provider |
 |---|---|
 | `ALLTOKEN_API_KEY` | AllToken |
 | `OPENROUTER_API_KEY` | OpenRouter |
-| `NOVITA_API_KEY` | Novita (и спрайтове) |
+| `NOVITA_API_KEY` | Novita (and sprites) |
 | `NVIDIA_API_KEY` | NVIDIA NIM |
 
-Без тях трябва локален провайдър (Ollama и т.н.).
+Without them you need a local provider (Ollama and so on).
 
-## Процес
+## Process
 
-| Променлива | По подразбиране | Значение |
+| Variable | Default | Meaning |
 |---|---|---|
-| `DAEDALUS_STANDALONE` | `1` в Docker/CLI | SQLite + директен LLM. Оставяй включено в това репо. |
-| `HOST` | `127.0.0.1` (desktop) / `0.0.0.0` (Docker) | Bind адрес |
-| `PORT` | `8787` | HTTP порт |
-| `DAEDALUS_DATA` | `data/daedalus/` | SQLite, Chroma, предложения, evolution |
-| `DAEDALUS_PLAYGROUND` | `playground/projects` | Работни проекти |
-| `DAEDALUS_WINDOWS_APP` | — | Слага го Windows инсталаторът; данните отиват в `%LOCALAPPDATA%\Daedalus` |
+| `DAEDALUS_STANDALONE` | `1` in Docker/CLI | SQLite + direct LLM. Leave it on in this repo. |
+| `HOST` | `127.0.0.1` (desktop) / `0.0.0.0` (Docker) | Bind address |
+| `PORT` | `8787` | HTTP port |
+| `DAEDALUS_DATA` | `data/daedalus/` | SQLite, Chroma, proposals, evolution |
+| `DAEDALUS_PLAYGROUND` | `playground/projects` | Working projects |
+| `DAEDALUS_WINDOWS_APP` | — | Set by the Windows installer; data goes to `%LOCALAPPDATA%\Daedalus` |
 
-## Локален LLM
+## Local LLM
 
-| Променлива | Пример |
+| Variable | Example |
 |---|---|
 | `DAEDALUS_PROVIDER` | `ollama` |
 | `DAEDALUS_MODEL` | `qwen2.5-coder:7b` |
 | `DAEDALUS_LOCAL_LLM` | `1` |
 | `OLLAMA_HOST` | `127.0.0.1:11434` |
-| `DAEDALUS_OFFLINE` | `1` — отказ на търсене / Jina / картинки |
+| `DAEDALUS_OFFLINE` | `1` — refuse search / Jina / images |
 
-Studio → LLM (гардероб) може да сменя модела без редакция на `.env` (`wardrobe.json` под данните).
+Studio → LLM (wardrobe) can switch models without editing `.env` (`wardrobe.json` under the data dir).
 
-## Поведение на агента
+## Agent behaviour
 
-| Променлива | Значение |
+| Variable | Meaning |
 |---|---|
-| `DAEDALUS_NATIVE_TOOLS` | `0` = само NEED_* маркери; по подразбиране нативните tools са включени |
-| `DAEDALUS_EVOLUTION` | `1` включва gardener при boot; `0` е kill switch |
-| `DAEDALUS_EVOLUTION_LLM` | `1` позволява кратък chat по време на цикъл |
+| `DAEDALUS_NATIVE_TOOLS` | `0` = NEED_* markers only; native tools are on by default |
+| `DAEDALUS_EVOLUTION` | `1` turns the gardener on at boot; `0` is a kill switch |
+| `DAEDALUS_EVOLUTION_LLM` | `1` allows a short chat during a cycle |
 
-## Публикуване
+## Publishing
 
-| Променлива | Значение |
+| Variable | Meaning |
 |---|---|
-| `NETLIFY_AUTH_TOKEN` | Траен `*.netlify.app` |
+| `NETLIFY_AUTH_TOKEN` | Durable `*.netlify.app` |
 | `GITLAB_TOKEN` | GitLab Pages `daedalus-{slug}` + git push |
-| Node.js (`npx`) | 1-часов Netlify preview без акаунт |
+| Node.js (`npx`) | 1-hour Netlify preview with no account |
 
-## MCP и sidecar
+## MCP and sidecar
 
-- MCP сървъри: файл `$DAEDALUS_DATA/mcp.json` (Studio рафтът го пише).
-- `MIROFISH_URL` / `MIROFISH_UI` — само ако сам пускаш AGPL sidecar. Не се вендорира тук.
+- MCP servers: `$DAEDALUS_DATA/mcp.json` (the Studio shelf writes it).
+- `MIROFISH_URL` / `MIROFISH_UI` — only if you run the AGPL sidecar yourself. It is not vendored here.
 
 ## Peer HTTP
 
-`.env.example` съдържа споделен секрет за опционалния HTTP peer ping. Смени го преди публичен bind. Не го commi-твай.
+`.env.example` includes a shared secret for the optional HTTP peer ping. Change it before a public bind. Do not commit it.

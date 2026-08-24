@@ -1,8 +1,10 @@
-# Как да допринасяш към Дедал
+# Contributing to Daedalus
 
-Благодарим. Това репо е самият продукт — Python пакет `daedalus`, Studio, Playground.
+Thanks. This repository **is** the product — Python package `daedalus`, Studio, Playground.
 
-## Бърз dev setup
+How to run it on a laptop (ZIP or git, Windows / Linux): [docs/INSTALL.md](docs/INSTALL.md).
+
+## Dev setup
 
 ```bash
 git clone https://gitlab.com/Blaue-Ente/deadalus-agent-0.git
@@ -15,50 +17,50 @@ export DAEDALUS_STANDALONE=1
 python3 -m pytest tests -q
 ```
 
-Опционално за браузърна проверка: `pip install -e ".[playwright]"` и `python -m playwright install chromium`.  
-Опционално за Windows GUI: `pip install -e ".[gui]"`.
+Optional browser verify: `pip install -e ".[playwright]"` and `python -m playwright install chromium`.  
+Optional Windows GUI: `pip install -e ".[gui]"`.
 
-## Правила за промяна
+## Change rules
 
-1. **Игри първо.** Ако пипаш builder-а, вертикалният slice трябва да се играе, не само да се компилира.
-2. **Verify е част от строежа.** Нов път в Playground → smoke (и браузър, ако е UI).
-3. **Без мълчаливо саморедактиране.** `edit_modules` и harness пачове минават през Approve.
-4. **Без втори оркестратор.** Не вендорирай CrewAI / пет MCP моста / in-cloud Godot Editor.
-5. **Публичните текстове говорят само за Дедал.** README, ARCHITECTURE, DEPLOY, този файл.
+1. **Games first.** If you touch the builder, the vertical slice must play, not only compile.
+2. **Verify is part of building.** New Playground path → smoke (and browser, if it is UI).
+3. **No silent self-editing.** `edit_modules` and harness patches go through Approve.
+4. **No second orchestrator.** Do not vendor CrewAI / five MCP bridges / an in-cloud Godot Editor.
+5. **Public docs talk only about Daedalus.** README, ARCHITECTURE, DEPLOY, this file — English.
 
-## Клонове и merge requests
+## Branches and merge requests
 
-1. Клонирай, създай клон от `main`.
-2. Дръж MR-а фокусиран: една идея, зелени тестове.
-3. Описанието казва *какво* се променя за потребителя, не само списък файлове.
-4. Не комитвай `.env`, ключове, `data/`, `playground/projects/`, `.venv/`.
+1. Clone, branch from `main`.
+2. Keep the MR focused: one idea, green tests.
+3. The description says *what* changes for the owner, not only a file list.
+4. Do not commit `.env`, keys, `data/`, `playground/projects/`, `.venv/`.
 
 GitLab: [Merge requests](https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/merge_requests).
 
-## Тестове
+## Tests
 
 ```bash
 python3 -m pytest tests -q
 ```
 
-CI пуска същото в `.gitlab-ci.yml`. Ако добавяш Godot/Blender път, покрий detector/scaffold с unit тест дори когато бинарният Godot липсва в CI.
+CI runs the same in `.gitlab-ci.yml`. If you add a Godot/Blender path, cover the detector/scaffold with a unit test even when the Godot binary is missing in CI.
 
-## Стил
+## Style
 
-- Python 3.11+, без нови runtime npm зависимости в hook/scripts на продукта.
-- Имена: `daedalus.*` за пакета, `playground/projects/{slug}/` за потребителски проекти.
-- UI копието на Studio е на български; коментарите в кода могат да са EN или BG, но бъди последователен във файла.
+- Python 3.11+, no new runtime npm dependencies in product hook/scripts.
+- Names: `daedalus.*` for the package, `playground/projects/{slug}/` for user projects.
+- Studio UI copy is Bulgarian (owner language). GitLab docs are English. Match the file you are in.
 
-## Докладване на бъгове
+## Bug reports
 
-Използвай GitLab Issue. Попълни: ОС, Python версия, как си инсталирал (venv / Docker / Windows installer), какво очакваш, какво става, лог от конзолата (без ключове).
+Use a GitLab Issue. Include: OS, Python version, how you installed (venv / Docker / Windows installer), expected vs actual, console log (no keys).
 
-Шаблон: `.gitlab/issue_templates/Bug.md`.
+Template: `.gitlab/issue_templates/Bug.md`.
 
-## Сигурност
+## Security
 
-Не отваряй публичен issue за уязвимост с експлойт. Виж [SECURITY.md](SECURITY.md).
+Do not open a public issue with an exploit. See [SECURITY.md](SECURITY.md).
 
-## Лиценз
+## License
 
-С contrib-а приемаш, че патчът е под [MIT](LICENSE), както останалата част от репото.
+By contributing you agree the patch is under [MIT](LICENSE), like the rest of the repo.

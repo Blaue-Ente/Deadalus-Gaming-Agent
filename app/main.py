@@ -210,6 +210,9 @@ async def studio() -> FileResponse:
 
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon() -> FileResponse:
+    ico = _STATIC / "favicon.ico"
+    if ico.is_file():
+        return FileResponse(ico)
     mark = _STATIC / "daedalus-mark.png"
     if mark.is_file():
         return FileResponse(mark)

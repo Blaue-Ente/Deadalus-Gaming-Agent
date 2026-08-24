@@ -1,27 +1,27 @@
-# Кодекс на поведение
+# Code of conduct
 
-## Нашата клетва
+## Pledge
 
-Участието в Дедал — issues, merge requests, чат около репото — е място без тормоз. Участниците се отнасят професионално, независимо от опит, език, произход или самоличност.
+Participation in Daedalus — issues, merge requests, chat around the repo — is a space without harassment. People behave professionally, regardless of experience, language, origin, or identity.
 
-## Очаквано
+## Expected
 
-- Фокус върху продукта: игри, приложения, агентски цикъл.
-- Ясна, конкретна критика на кода, не на човека.
-- Български или английски — и двата са наред.
+- Focus on the product: games, apps, the agent loop.
+- Clear, specific critique of code, not of the person.
+- Bulgarian or English — both are fine in conversation. GitLab docs stay English.
 
-## Неприемливо
+## Unacceptable
 
-- Лични нападки, тормоз, doxxing.
-- Публикуване на чужди тайни или експлойти „за забавление“.
-- Спам, офтопик реклама.
+- Personal attacks, harassment, doxxing.
+- Publishing other people’s secrets or exploits “for fun”.
+- Spam, off-topic advertising.
 
-## Приложение
+## Enforcement
 
-Maintainer-ите могат да редактират или затварят коментари, issues и MR-и, които чупят тези правила, и при повторност да ограничат достъпа.
+Maintainers may edit or close comments, issues, and MRs that break these rules, and may restrict access if it repeats.
 
-Докладвай проблеми чрез confidential GitLab issue или директно към maintainer-а на проекта.
+Report problems via a confidential GitLab issue or directly to the project maintainer.
 
-## Атрибуция
+## Attribution
 
-Адаптирано от [Contributor Covenant](https://www.contributor-covenant.org/) 2.1.
+Adapted from [Contributor Covenant](https://www.contributor-covenant.org/) 2.1.

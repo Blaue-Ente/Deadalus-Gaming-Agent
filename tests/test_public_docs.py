@@ -30,6 +30,7 @@ _PUBLIC = (
     ROOT / "CHANGELOG.md",
     ROOT / "docs" / "ENV.md",
     ROOT / "docs" / "INSTALL.md",
+    ROOT / "assets" / "logo" / "README.md",
 )
 
 
@@ -68,6 +69,7 @@ def test_readme_covers_install_and_features():
         "Daedalus.exe",
         "docs/INSTALL.md",
         "deadalus-agent-0-main.zip",
+        "assets/logo/daedalus.svg",
     ):
         assert needle in text, f"README missing {needle!r}"
 
@@ -76,3 +78,18 @@ def test_pyproject_has_no_foreign_extra():
     text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert "argos-data-nexus" not in text
     assert 'adn = ' not in text
+
+
+def test_logo_kit_exists_and_is_small():
+    logo = ROOT / "assets" / "logo"
+    svg = (logo / "daedalus.svg").read_text(encoding="utf-8")
+    assert 'aria-label="Daedalus"' in svg
+    assert "#c9a227" in svg
+    avatar = logo / "daedalus-avatar.png"
+    mark = ROOT / "app" / "static" / "daedalus-mark.png"
+    ico = ROOT / "app" / "static" / "favicon.ico"
+    assert avatar.is_file() and avatar.stat().st_size < 50_000
+    assert mark.is_file() and mark.stat().st_size < 200_000
+    assert ico.is_file()
+    assert (ROOT / "ui" / "static" / "daedalus-mark.png").is_file()
+    assert (ROOT / "packaging" / "windows" / "daedalus.ico").is_file()

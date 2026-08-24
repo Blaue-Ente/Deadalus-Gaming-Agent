@@ -1,13 +1,13 @@
-## Какво променя този MR
+## What this MR changes
 
 -
 
-## Как е проверено
+## How it was checked
 
 - [ ] `python3 -m pytest tests -q`
-- [ ] (ако пипа UI / Studio) ръчен преглед на засегнатия екран
-- [ ] (ако пипа docs) README/ARCHITECTURE не говорят за чужди продукти
+- [ ] (if UI / Studio) manual pass on the affected screen
+- [ ] (if docs) README/ARCHITECTURE talk only about Daedalus, in English
 
-## Рискове
+## Risks
 
 -

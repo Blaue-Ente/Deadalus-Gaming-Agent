@@ -125,6 +125,7 @@ def test_studio_and_harness_http(harness_tmp):
     assert home.status_code == 200
     assert "Дедал" in home.text
     assert "daedalus-mark.png" in home.text
+    assert "favicon.ico" in home.text
     assert "Свят" in home.text
 
     logo = client.get("/static/daedalus-mark.png")

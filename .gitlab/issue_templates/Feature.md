@@ -1,12 +1,12 @@
-## Защо
+## Why
 
-Какъв проблем на собственика решава това?
+What owner problem does this solve?
 
-## Какво
+## What
 
-- Игри / приложения / агент / Studio / Windows / Docker — кое?
-- Definition of Done (как се проверява, че работи):
+- Games / apps / agent / Studio / Windows / Docker — which?
+- Definition of Done (how we know it works):
 
-## Извън обхвата
+## Out of scope
 
-(Какво нарочно не правим.)
+(What we are deliberately not doing.)
