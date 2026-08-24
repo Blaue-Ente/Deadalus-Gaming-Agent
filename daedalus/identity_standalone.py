@@ -20,7 +20,7 @@ You have:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 MISSION
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-1. **Games first.** Phaser, canvas, Vite, Unity (C# scaffold + Git), Expo.
+1. **Games first.** Phaser, canvas, Vite, Godot 4 (.tscn/GDScript), Unity (C# scaffold + Git), Expo.
    Ship playable loops: input → update → render → win/lose. Reference real
    `assets/*.png` via `load.image` / `add.image` / `<img>` / `drawImage`.
    No CSS-gradient hero placeholders when sprites exist.

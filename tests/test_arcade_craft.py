@@ -8,9 +8,11 @@ from daedalus.arcade_craft import (
     dead_end_advice,
     fun_signals,
     gdd_section,
+    looks_like_campaign_bible,
     looks_like_racer,
     min_stages,
     planner_addendum,
+    scope_warnings,
     wants_high_fidelity,
     wants_racer_scaffold,
 )
@@ -112,6 +114,38 @@ def test_craft_check_warns_but_does_not_block():
     assert row["blocking"] is False
     combined = run_gates(ctx)
     assert "craft-check" in combined["gates"]
+
+
+def test_campaign_bible_is_a_warning_not_a_template():
+    veins = (
+        "3D Action RPG inspired by Dark Souls and Dishonored. "
+        "5 biomes, 12 chapters, 30+ side quests, PlayStation 5 and Xbox Series X, "
+        "FMOD, dedicated servers."
+    )
+    assert looks_like_campaign_bible(veins)
+    assert not looks_like_campaign_bible("simple 2D jump with one pit")
+    assert not looks_like_campaign_bible("dark souls vibe pixel dungeon")
+    warns = scope_warnings({"genre": "rpg", "idea": veins})
+    assert any("Campaign-bible" in w or "campaign bible" in w.lower() for w in warns)
+    gdd = gdd_section({"genre": "rpg", "idea": veins})
+    assert "Campaign bible" in gdd
+    ctx = {
+        "gdd": veins,
+        "config": {
+            "studio_preset": "action_rpg",
+            "kind": "godot",
+            "brainstorm": {"genre": "rpg", "idea": veins},
+            "build_mode": "guided",
+        },
+        "plan": {"stages": [{"title": "world", "goal": "five biomes"}]},
+        "project": {"kind": "godot", "slug": "veins"},
+    }
+    row = run_craft_check(ctx)
+    assert row["passed"] is True
+    assert row["blocking"] is False
+    detail = " ".join(str(c.get("detail", "")) for c in row.get("checks") or [])
+    blob = json.dumps(row)
+    assert "campaign bible" in (detail + blob).lower() or "Campaign bible" in blob
 
 
 def test_gdd_section_mentions_vertical_slice():

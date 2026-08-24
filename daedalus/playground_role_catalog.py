@@ -88,6 +88,28 @@ STUDIO_ROLES: dict[str, dict[str, str]] = {
             "Unit tests за чисти системи (XP, damage, inventory)."
         ),
     },
+    "npc_ai": {
+        "slot": "game_builder",
+        "label": "NPC / AI Programmer",
+        "addendum": (
+            "Роля: NPC AI. Godot NavigationAgent2D / waypoints. Един враг с четим intent. "
+            "Без огромен behaviour tree в M3."
+        ),
+    },
+    "vfx_artist": {
+        "slot": "asset",
+        "label": "VFX",
+        "addendum": (
+            "Роля: VFX. Godot GPUParticles2D или Three.js particles. Един ефект на етап (hit, jump, boost)."
+        ),
+    },
+    "audio_designer": {
+        "slot": "asset",
+        "label": "Audio",
+        "addendum": (
+            "Роля: Audio. Layer 2–3 SFX. Godot AudioBus / Howler. Без фалшиви лицензирани парчета."
+        ),
+    },
     "documenter": {
         "slot": "reviewer",
         "label": "Documentation",
@@ -139,6 +161,10 @@ _PATH_ROLE_HINTS: list[tuple[tuple[str, ...], str]] = [
     (("schema", "data/", "definitions"), "data_designer"),
     ((".github", "ci", "workflow", "eas.json"), "devops"),
     (("studio/unity",), "unity_bridge"),
+    (("scenes/", ".tscn", "scripts/"), "gameplay_programmer"),
+    (("gpu_particles", "vfx", "shader"), "vfx_artist"),
+    (("audio", "sfx", "bus"), "audio_designer"),
+    (("npc", "navigation", "agent2d"), "npc_ai"),
 ]
 
 

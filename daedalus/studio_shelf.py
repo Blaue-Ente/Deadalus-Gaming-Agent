@@ -203,11 +203,51 @@ SHELF: tuple[dict[str, Any], ...] = (
         "api": False,
         "daedalus": "Already in playground_browser + playtest. Do not skip.",
     },
+    {
+        "id": "godot-4",
+        "layer": "engine",
+        "label": "Godot 4.3",
+        "use": "2D/3D desktop games. Text .tscn + GDScript — best LLM engine after Vite.",
+        "kind_hint": "godot",
+        "url": "https://godotengine.org/",
+        "api": False,
+        "daedalus": "Playground kind godot. Scaffold + local Editor. Optional godot --headless.",
+    },
+    {
+        "id": "blender-mcp",
+        "layer": "dcc",
+        "label": "Blender jobs MCP",
+        "use": "Emit bpy scripts (primitive, PBR, 15-bone rig, GLB). Not in-process bpy.",
+        "kind_hint": "any",
+        "url": "",
+        "api": False,
+        "daedalus": "python -m daedalus.blender_mcp or blender_jobs.emit_job. Owner runs blender -b.",
+    },
+    {
+        "id": "material-maker",
+        "layer": "textures",
+        "label": "Material Maker",
+        "use": "Node-based procedural PBR. Free MIT alternative to Substance Designer.",
+        "kind_hint": "any",
+        "url": "https://rodzilla.itch.io/material-maker",
+        "api": False,
+        "daedalus": "Owner exports PNG/ORM; Daedalus wires materials. Do not vendor the app.",
+    },
+    {
+        "id": "jolt-godot",
+        "layer": "physics",
+        "label": "Jolt (Godot 4)",
+        "use": "Built-in 3D physics in Godot 4. Prefer this over rolling a custom engine.",
+        "kind_hint": "godot",
+        "url": "https://godotengine.org/",
+        "api": False,
+        "daedalus": "Arcade 2D: CharacterBody2D. 3D rigid: Jolt. Hover racers still custom math.",
+    },
 )
 
 
 _LAYER_TRIGGERS: dict[str, tuple[str, ...]] = {
-    "engine": ("3d", "three", "webgpu", "racer", "racing", "f-zero", "wipeout"),
+    "engine": ("3d", "three", "webgpu", "racer", "racing", "f-zero", "wipeout", "godot", "gdscript"),
     "physics": ("physics", "collision", "rigid"),
     "tracks": ("track", "circuit", "lap", "race", "spline"),
     "environment": ("city", "ocean", "orbit", "building", "volumetric"),
@@ -220,7 +260,7 @@ _LAYER_TRIGGERS: dict[str, tuple[str, ...]] = {
     "music": ("music", "bgm", "suno"),
     "voice": ("voice", "announcer", "eleven"),
     "animation": ("rig", "walk", "mixamo"),
-    "dcc": ("blender", "retopo"),
+    "dcc": ("blender", "retopo", "bpy", "rig"),
     "verify": ("playtest", "qa", "verify"),
 }
 
