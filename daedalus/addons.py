@@ -90,6 +90,14 @@ CATALOG: list[dict[str, Any]] = [
         "command": "python3",
         "args_template": ["-m", "daedalus.blender_mcp"],
     },
+    {
+        "id": "godot-headless",
+        "kind": "native",
+        "label": "Godot headless probe",
+        "blurb": "Един мост: файлове + godot --headless. Не пет MCP. Жив Editor MCP — след Gate 1.",
+        "offline_ok": True,
+        "native": "godot_runtime_probe",
+    },
 ]
 
 

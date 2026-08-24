@@ -214,6 +214,11 @@ export_presets.cfg
 
 
 def godot_scaffold_files(name: str, slug: str, description: str = "") -> dict[str, str]:
+    from .game_factory import wants_godot_3d_slice
+
+    if wants_godot_3d_slice(name, description):
+        from .playground_godot3d_scaffold import godot3d_scaffold_files
+        return godot3d_scaffold_files(name, slug, description)
     title = (name or slug or "GodotGame").strip()
     desc = (description or title).strip()[:400]
     mapping = {"__NAME__": title, "__SLUG__": slug or "godot-game", "__DESC__": desc}
@@ -237,6 +242,11 @@ def godot_scaffold_files(name: str, slug: str, description: str = "") -> dict[st
 
 
 def write_godot_scaffold(pdir: Path, name: str, slug: str, description: str = "") -> list[str]:
+    from .game_factory import wants_godot_3d_slice
+
+    if wants_godot_3d_slice(name, description):
+        from .playground_godot3d_scaffold import write_godot3d_scaffold
+        return write_godot3d_scaffold(pdir, name, slug, description)
     pdir = Path(pdir)
     pdir.mkdir(parents=True, exist_ok=True)
     written: list[str] = []
@@ -270,6 +280,12 @@ def verify_godot_scaffold(slug: str, paths: list[str] | None = None) -> dict:
     preview = (root / "studio" / "preview" / "index.html").is_file()
     if not preview and "studio/preview/index.html" not in paths:
         issues.append("липсва studio/preview/index.html")
+    dod = None
+    if (root / "scenes" / "main.tscn").is_file():
+        from .godot_dod import dod_v2_static
+        dod = dod_v2_static(root)
+        if not dod.get("ok"):
+            issues.extend(str(x) for x in (dod.get("blocking") or ["dod_v2"]))
     return {
         "ok": not issues,
         "issues": issues,
@@ -277,4 +293,5 @@ def verify_godot_scaffold(slug: str, paths: list[str] | None = None) -> dict:
         "gd_count": len(gd),
         "tscn_count": len(tscn),
         "file_count": len(paths),
+        "dod": dod or {},
     }

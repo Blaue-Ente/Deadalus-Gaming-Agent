@@ -148,7 +148,14 @@ def suggest_kind_heuristic(name: str = "", description: str = "") -> tuple[str, 
         return "unity", "Unity C# / URP — отвори в Unity Hub"
 
     if _GODOT_WORDS.search(blob):
+        from .game_factory import wants_godot_3d_slice
+        if wants_godot_3d_slice(name, description):
+            return "godot", "Godot 4 3D room — local Editor, headless probe"
         return "godot", "Godot 4 — текстови .tscn / GDScript, локален Editor"
+
+    from .game_factory import wants_godot_3d_slice as _want3
+    if _want3(name, description):
+        return "godot", "Godot 4 3D puzzle room — не Vite/Three"
 
     if _MOBILE_WORDS.search(blob):
         if re.search(r"\b(3d|urp|scriptable|collection rpg|open world)\b", blob, re.I):
