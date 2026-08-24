@@ -1,8 +1,14 @@
 # Дедал на Windows
 
+**Няма готов `.exe` без Python.** Дедал не е замразена игра и не е Electron.
+Има запис в Start Menu и **прозорец** със Studio — след като свалиш репото
+(ZIP или `git clone`) и пуснеш `install.ps1`. Python 3.11+ е задължителен.
+
 Инсталация **без Administrator**. Двоен клик / Start Menu отваря **прозорец** с Studio
 (Edge WebView2, ако `pywebview` се инсталира; иначе Tk панел; иначе браузър).
 Сървърът слуша само `127.0.0.1:8787`.
+
+Сваляне на кода и стъпки за всички ОС: [docs/INSTALL.md](../../docs/INSTALL.md).
 
 ## Бърз път (PowerShell)
 

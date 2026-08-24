@@ -19,8 +19,62 @@ Independent coding agent. **Games first**, apps second, verify is part of buildi
 
 ---
 
+## Сваляне на компютъра
+
+| Въпрос | Отговор |
+|---|---|
+| Има ли готов `.exe` като игра — двоен клик, без нищо друго? | **Не.** Дедал е Python приложение. Няма замразен `.exe`, който носи Python вътре. |
+| Има ли прозорец в Start Menu? | **Да, на Windows** — след като имаш Python 3.11+ и пуснеш инсталатора по-долу. Отваря се прозорец към Studio, не само таб в браузъра. |
+| Трябва ли да копирам репото? | **Да.** Кодът в това GitLab репо **е** Дедал. Сваляш го веднъж: `git clone` **или** ZIP (git не е задължителен). |
+
+**Без git (ZIP)** — бутон **Code** на тази страница → **Download source code** → zip, или директно:
+
+https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/archive/main/deadalus-agent-0-main.zip
+
+Разархивирай. После следвай Windows или Linux/macOS по-долу. Подробни стъпки: [docs/INSTALL.md](docs/INSTALL.md).
+
+### Windows — най-прекият път
+
+1. Инсталирай [Python 3.11+](https://www.python.org/downloads/windows/). На първия екран маркирай **Add python.exe to PATH**.
+2. Свали ZIP-а (или `git clone`) и го разархивирай, напр. в `Downloads\deadalus-agent-0-main`.
+3. В тази папка отвори PowerShell и пусни:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+.\packaging\windows\install.ps1 -DesktopShortcut
+```
+
+4. Старт → **Дедал** (или иконата на плота). Studio е http://127.0.0.1:8787
+
+`Daedalus-Setup.exe` може да се **компилира** с Inno Setup от `packaging/windows/Daedalus.iss`. Това е инсталатор, не самостоятелна програма: пак иска Python на машината. Пълно: [packaging/windows/README.md](packaging/windows/README.md).
+
+### Linux / macOS
+
+```bash
+# вариант A — git
+git clone https://gitlab.com/Blaue-Ente/deadalus-agent-0.git
+cd deadalus-agent-0
+
+# вариант B — без git: разархивирай ZIP-а и влез в папката
+
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+cp .env.example .env
+# попълни ключ, или ползвай Ollama
+export DAEDALUS_STANDALONE=1
+python -m app.cli serve --host 127.0.0.1 --port 8787
+```
+
+Отвори http://127.0.0.1:8787
+
+Обновяване после: ако си клонирал с git — `git pull` и пак `pip install -e .`. Ако си с ZIP — свали нов zip и замени папката (данните са в `data/daedalus/`, не ги трий).
+
+---
+
 ## Съдържание
 
+- [Сваляне на компютъра](#сваляне-на-компютъра)
 - [Какво е Дедал](#какво-е-дедал)
 - [Какво може](#какво-може)
 - [Изисквания](#изисквания)
@@ -110,7 +164,7 @@ Studio таб **Свят** показва Reach / playtest / MCP статус.
 
 ## Инсталация
 
-Клонирай **това** репо. То е продуктът.
+Първо [свали кода](#сваляне-на-компютъра) (clone **или** ZIP). Цялата папка е продуктът — не само един файл.
 
 ```bash
 git clone https://gitlab.com/Blaue-Ente/deadalus-agent-0.git
@@ -354,6 +408,7 @@ deadalus-agent-0/
 |---|---|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Слоеве, пътища, игрова доктрина |
 | [DEPLOY.md](DEPLOY.md) | PC, Docker, Windows, fly.io, Render |
+| [docs/INSTALL.md](docs/INSTALL.md) | Сваляне на PC: ZIP или git, Windows / Linux / Docker |
 | [docs/ENV.md](docs/ENV.md) | Променливи на средата |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Как да допринасяш |
 | [SECURITY.md](SECURITY.md) | Как се докладват проблеми |

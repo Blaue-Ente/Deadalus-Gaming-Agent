@@ -29,6 +29,7 @@ _PUBLIC = (
     ROOT / "CODE_OF_CONDUCT.md",
     ROOT / "CHANGELOG.md",
     ROOT / "docs" / "ENV.md",
+    ROOT / "docs" / "INSTALL.md",
 )
 
 
@@ -64,8 +65,16 @@ def test_readme_covers_install_and_features():
         "godot",
         "pytest",
         "8787",
+        "deadalus-agent-0-main.zip",
+        "docs/INSTALL.md",
     ):
         assert needle in text, f"README missing {needle!r}"
+
+
+def test_readme_says_no_frozen_exe():
+    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "Няма замразен" in text or "няма замразен" in text
+    assert "Python 3.11" in text
 
 
 def test_pyproject_has_no_foreign_extra():

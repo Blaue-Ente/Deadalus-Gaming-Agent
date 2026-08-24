@@ -1,5 +1,7 @@
 # Деплой на Дедал (PC + облак)
 
+**Само да го пуснеш на лаптопа:** виж [docs/INSTALL.md](docs/INSTALL.md) (ZIP или `git clone`; на Windows няма готов `.exe` без Python).
+
 Дедал е един FastAPI процес на порт **8787**. Postgres не е нужен: SQLite живее под `$DAEDALUS_DATA`.
 
 ## Наживо

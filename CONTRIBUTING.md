@@ -2,6 +2,8 @@
 
 Благодарим. Това репо е самият продукт — Python пакет `daedalus`, Studio, Playground.
 
+Как да го пуснеш на лаптопа (ZIP или git, Windows / Linux): [docs/INSTALL.md](docs/INSTALL.md).
+
 ## Бърз dev setup
 
 ```bash
