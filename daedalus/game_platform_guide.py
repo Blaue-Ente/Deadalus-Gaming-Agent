@@ -49,9 +49,9 @@ _STAGING: dict[str, list[str]] = {
         "game.js — rAF loop, input, FSM, score",
     ],
     "vite": [
-        "package.json — phaser OR pixi.js + vite",
-        "src/main.js — boot Phaser.Game / PIXI.Application",
-        "src/scenes/GameScene.js — update/render loop",
+        "package.json — three (3D / racer) OR phaser / pixi.js + vite",
+        "src/main.js — boot WebGPURenderer / Phaser.Game / PIXI.Application",
+        "src/scenes/GameScene.js — update/render loop (or src/track.js + src/VehicleFactory.js)",
         "src/scenes/MenuScene.js — title + start",
     ],
     "vite-react": [
@@ -70,8 +70,8 @@ _STAGING: dict[str, list[str]] = {
 
 _LIBRARIES: dict[str, list[str]] = {
     "static": ["Canvas 2D API", "PixiJS CDN (optional)", "Howler CDN (optional)"],
-    "vite": ["phaser", "pixi.js", "matter-js", "howler"],
-    "vite-react": ["phaser + react", "pixi.js", "@react-three/fiber (3D shell)", "howler"],
+    "vite": ["phaser", "pixi.js", "three", "matter-js", "howler"],
+    "vite-react": ["phaser + react", "pixi.js", "three / @react-three/fiber", "howler"],
     "expo": ["expo-av", "expo-haptics", "@shopify/react-native-skia (2D games)", "expo-gl (3D)"],
 }
 
@@ -86,6 +86,7 @@ _UI_SHORT: dict[str, str] = {
 _GAME_WORDS = re.compile(
     r"\b(игр[аи]|game|arcade|arena|арен|battle|битк|platformer|shooter|puzzle|пъзел|"
     r"rpg|snake|tetris|minecraft|boss|level|score|sprite|canvas|phaser|pixi|expo|"
+    r"racing|racer|f-?zero|wipeout|hover|three\.?js|webgpu|"
     r"mobile|мобил|ios|android|hero|герой|enemy|враг)\b",
     re.I,
 )
@@ -135,7 +136,11 @@ def suggest_kind_heuristic(name: str = "", description: str = "") -> tuple[str, 
     if _REACT_UI_WORDS.search(blob) and _WEB_ENGINE_WORDS.search(blob):
         return "vite-react", "React UI + canvas/WebGL gameplay → vite-react"
 
-    if _WEB_ENGINE_WORDS.search(blob) or re.search(r"\b(2d|3d|arcade|shooter|platformer)\b", blob, re.I):
+    if _WEB_ENGINE_WORDS.search(blob) or re.search(
+        r"\b(2d|3d|arcade|shooter|platformer|racing|racer|f-?zero|wipeout|hover)\b", blob, re.I
+    ):
+        if re.search(r"\b(3d|webgpu|three|f-?zero|wipeout|racing|racer|hover)\b", blob, re.I):
+            return "vite", "3D arcade / racer → Vite + Three.js (WebGPU/TSL като FM1)"
         return "vite", "Браузър игра → Vite + Phaser/Pixi/canvas"
 
     if is_likely_game(blob):
@@ -177,7 +182,10 @@ def get_hints(kind: str = "auto", name: str = "", description: str = "") -> dict
             "Game state в useRef, не useState на всеки frame."
         )
     elif effective == "vite" and game:
-        arch = "Phaser.Scene или Pixi Application — централен game loop, не React."
+        if re.search(r"\b(3d|webgpu|three|racing|racer|f-?zero)\b", f"{name} {description}", re.I):
+            arch = "Three.js WebGPURenderer + TSL materials — game loop in rAF, not React. Spline track + VehicleFactory."
+        else:
+            arch = "Phaser.Scene или Pixi Application — централен game loop, не React."
     elif effective == "expo" and game:
         arch = "GameScreen с View layout; звук с expo-av; без AudioContext/canvas DOM."
 
@@ -226,9 +234,9 @@ def autopilot_research_addendum(kind: str, *, slug: str = "") -> str:
         )
     if kind in ("vite", "vite-react", "static"):
         return base + (
-            "• WEB ИГРА: търси Phaser/PixiJS/canvas patterns. "
-            "NEED_SKILL_CATALOG: game platform picker OR phaser OR pixi. "
-            "За vite-react: React само за UI, gameplay в canvas.\n"
+            "• WEB ИГРА: 2D → Phaser/PixiJS/canvas; 3D/racing/F-Zero → Three.js WebGPU "
+            "(src/racer/) — НЕ Phaser. "
+            "NEED_SKILL_CATALOG: arcade craft OR three-webgpu-tsl OR game platform picker.\n"
         )
     return base
 
@@ -270,11 +278,15 @@ def game_review_system_addendum(kind: str) -> str:
         )
     if kind == "vite":
         return (
-            "\nИГРА НА VITE — Phaser 3 е ВАЛИДНА и ПРЕПОРЪЧИТЕЛНА платформа:\n"
-            "- import Phaser from 'phaser', class X extends Phaser.Scene — ОДОБРЕНО\n"
-            "- this.load.image / this.add.image / preloadImages от assetLoader.js — ОДОБРЕНО\n"
+            "\nИГРА НА VITE — 2D: Phaser 3 е валиден. 3D/racing: Three.js WebGPU/WebGL е ПРЕПОРЪЧАНИЯТ път:\n"
+            "- import * as THREE from 'three', WebGLRenderer / WebGPURenderer — ОДОБРЕНО\n"
+            "- CatmullRomCurve3, TubeGeometry, InstancedMesh, MeshStandardMaterial — ОДОБРЕНО\n"
+            "- src/racer/track.js + vehicle.js (VehicleFactory) — ОДОБРЕНО\n"
+            "- import Phaser from 'phaser', class X extends Phaser.Scene — ОДОБРЕНО за 2D\n"
+            "- this.load.image / this.add.image / preloadImages от assetLoader.js — ОДОБРЕНО за 2D\n"
             "- Entity файлове (Projectile.js, Player.js) НЕ трябва да съдържат load.image — OK\n"
-            "- НЕ отхвърляй Phaser само защото платформата е 'vite'\n"
+            "- НЕ отхвърляй Three.js или Phaser само защото платформата е 'vite'\n"
+            "- ЗАБРАНЕНО за 3D brief: pixel-art default, Phaser boot, LLM vertex-dump hero mesh\n"
         )
     if kind == "vite-react":
         return (

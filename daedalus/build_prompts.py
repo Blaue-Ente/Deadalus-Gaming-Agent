@@ -64,7 +64,8 @@ _KIND_RULES: dict[str, str] = {
 [ПЛАТФОРМА: VITE (Vanilla JS + npm)]
 • Задължителни файлове: index.html, main.js, vite.config.js с base:'./'
 • index.html: <script type="module" src="/main.js"></script>
-• ЗА ИГРИ: Phaser 3 (npm phaser) + src/game/; спрайтове от assets/*.png.
+• ЗА ИГРИ 2D: Phaser 3 (npm phaser) + src/game/; спрайтове от assets/*.png.
+• ЗА ИГРИ 3D / racing / F-Zero: Three.js (WebGPURenderer с WebGL fallback) + src/racer/. НЕ Phaser. НЕ pixel-art default. Запази M0 scaffold (ship/track/fail/boost) и надграждай.
 """,
     "vite-react": """\
 [ПЛАТФОРМА: VITE + REACT 18]

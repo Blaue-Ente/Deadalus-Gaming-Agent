@@ -65,7 +65,9 @@ _KIND_ADDENDA: dict[str, str] = {
   3) src/scenes/MenuScene.js (или src/ui/menu.js)
   4) src/scenes/GameScene.js — gameplay loop
   5) src/lib/audio.js / src/lib/input.js — helpers
-Игри: Phaser boot в отделен файл; assets/*.png в uses_visuals етап.
+Игри 2D: Phaser boot в отделен файл; assets/*.png в uses_visuals етап.
+Игри 3D/racing: Three.js в src/racer/ (boot, track, vehicle, world) — НЕ Phaser, НЕ pixel-art.
+Ако проектът вече има racer scaffold, етап 1 е да го пуснеш, не да го триеш.
 """,
     "vite-react": """
 ━━━ VITE-REACT PLAN ━━━
@@ -179,6 +181,7 @@ def build_planner_system_prompt(
     ultra: bool = False,
     studio: bool = False,
     studio_preset: str = "custom",
+    description: str = "",
 ) -> str:
     """Assemble full planner system prompt for a given kind."""
     kind_add = autopilot_plan_addendum(kind, is_game=is_game)
@@ -217,6 +220,14 @@ def build_planner_system_prompt(
         parts.extend(["", kind_add])
     if extra_addendum:
         parts.extend(["", extra_addendum.strip()])
+    if is_game:
+        try:
+            from .arcade_craft import planner_addendum as _craft_plan
+            from .studio_shelf import prompt_block as _shelf_block
+            desc = f"{studio_preset} {kind} {description} {extra_addendum}"
+            parts.extend(["", _craft_plan(kind, desc), _shelf_block(desc, limit=8)])
+        except Exception:
+            pass
     parts.extend([
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         "",
@@ -243,6 +254,16 @@ def build_planner_system_prompt(
 def _default_files_for_kind(kind: str, stage_index: int, title: str) -> list[str]:
     """Fallback file hints when LLM omits 'files' field."""
     t = (title or "").lower()
+    if kind == "vite" and any(
+        w in t for w in ("ship", "track", "vehicle", "racer", "boost", "slice", "handling")
+    ):
+        racer_defaults = [
+            ["package.json", "vite.config.js", "index.html"],
+            ["src/main.js", "src/racer/boot.js"],
+            ["src/racer/track.js"],
+            ["src/racer/vehicle.js"],
+        ]
+        return list(racer_defaults[min(stage_index, len(racer_defaults) - 1)])
     defaults: dict[str, list[list[str]]] = {
         "static": [
             ["index.html"],
@@ -314,10 +335,14 @@ def enrich_plan(plan: dict[str, Any], kind: str) -> dict[str, Any]:
 
 def min_stages_for_complexity(kind: str, *, is_game: bool, description: str) -> int:
     """Suggest minimum stage count when validating coarse plans."""
-    blob = (description or "").lower()
-    complex_words = ("игра", "game", "3d", "multi", "dashboard", "auth", "arena", "battle")
-    if is_game or any(w in blob for w in complex_words):
-        return 8 if kind in ("expo", "vite-react", "vite", "unity") else 6
-    if kind in ("fastapi", "streamlit", "node"):
-        return 4
-    return 3
+    try:
+        from .arcade_craft import min_stages
+        return min_stages(kind, is_game=is_game, description=description)
+    except Exception:
+        blob = (description or "").lower()
+        complex_words = ("игра", "game", "3d", "multi", "dashboard", "auth", "arena", "battle")
+        if is_game or any(w in blob for w in complex_words):
+            return 8 if kind in ("expo", "vite-react", "vite", "unity") else 6
+        if kind in ("fastapi", "streamlit", "node"):
+            return 4
+        return 3

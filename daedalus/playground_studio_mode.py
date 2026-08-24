@@ -51,6 +51,11 @@ STUDIO_PRESETS: dict[str, dict[str, Any]] = {
         "recommended_kind": "vite",
         "description": "Movement, levels, obstacles, score.",
     },
+    "racing": {
+        "label": "Racing / Hover / F-Zero-class",
+        "recommended_kind": "vite",
+        "description": "Browser 3D racer — spline track, handling, boost, rivals. Web first (FM1 path).",
+    },
     "open_world": {
         "label": "Open World / Exploration",
         "recommended_kind": "unity",
@@ -138,6 +143,33 @@ PLATFORMER_MILESTONES: list[dict[str, Any]] = [
     {"id": "M3", "title": "Game Feel", "goal": "Score, lives, game over", "keywords": ("score", "hud", "game over")},
 ]
 
+RACING_MILESTONES: list[dict[str, Any]] = [
+    {
+        "id": "M0",
+        "title": "Vertical slice",
+        "goal": "One ship, one camera, one track segment, accelerate/steer, fail state",
+        "keywords": ("scaffold", "ship", "camera", "vehicle", "boot"),
+    },
+    {
+        "id": "M1",
+        "title": "Handling",
+        "goal": "Boost, brakes, lap, integrity — gas has consequences",
+        "keywords": ("boost", "turbo", "lap", "handling", "damage"),
+    },
+    {
+        "id": "M2",
+        "title": "Track reading",
+        "goal": "Wayfinding chevrons, visible pads, dummy rival",
+        "keywords": ("track", "checkpoint", "chevron", "rival", "ai"),
+    },
+    {
+        "id": "M3",
+        "title": "Arcade feel",
+        "goal": "HUD, audio bus, difficulty, mobile landscape",
+        "keywords": ("hud", "audio", "mobile", "touch", "polish"),
+    },
+]
+
 BACKEND_MILESTONES: list[dict[str, Any]] = [
     {"id": "M0", "title": "API Skeleton", "goal": "App, health, schemas", "keywords": ("main", "health")},
     {"id": "M1", "title": "Auth", "goal": "Login, tokens", "keywords": ("auth", "login")},
@@ -154,6 +186,7 @@ _PRESET_MILESTONES: dict[str, list[dict[str, Any]]] = {
     "strategy": GAME_MILESTONES,
     "survival": GAME_MILESTONES,
     "platformer": PLATFORMER_MILESTONES,
+    "racing": RACING_MILESTONES,
     "open_world": GAME_MILESTONES,
     "multiplayer": GAME_MILESTONES,
     "hybrid_mobile": GAME_MILESTONES[:6],
@@ -209,6 +242,14 @@ def infer_studio_preset(description: str) -> str:
         return "backend_api"
     if any(w in blob for w in ("framework7", "pakeplus", "hybrid ios", "web shell")):
         return "hybrid_mobile"
+    if any(
+        w in blob
+        for w in (
+            "racing", "racer", "f-zero", "fzero", "wipeout", "hover",
+            "circuit", "grand prix", "състезан", "писта",
+        )
+    ):
+        return "racing"
     if any(w in blob for w in ("platformer", "jump", "runner", "mario", "side-scroll")):
         return "platformer"
     if any(w in blob for w in ("puzzle", "match-3", "casual", "tetris", "судоку")):

@@ -66,8 +66,9 @@ Studio tab **Свят** shows Reach / MiroFish / MCP status and a Playtest butto
 
 1. **Smoke** — compile / HTTP probe (`playground_runner.smoke_test`).
 2. **Browser** — Chromium render-and-see (blank screen, console, screenshot).
-3. **Playtest** — 4–6 simulated players (Studio → Свят, or after autopilot).
-4. **Ship**
+3. **Playtest** — 4–6 simulated players (Studio → Свят, or after autopilot). Fun gate: wayfinding, fail, visible pickups.
+4. **Arcade craft** — 3D / F-Zero-class games follow `arcade_craft` (vertical slice, Three.js WebGPU, Tripo/Meshy/Hunyuan for hero meshes). Phaser is the 2D default, not the 3D one. Racing Vite projects boot a playable M0 (`src/racer/`) instead of a hello-world page.
+5. **Ship**
    - **Капсула** — `GET /api/v1/playground/projects/{slug}/capsule` → zip (USB / прати файл). Static: unzip, open `index.html`.
    - **Локално /apps/** — Studio „Към /apps/“ (same Daedalus process).
    - **Наживо** — Studio button: local `/apps/` plus a public `https` (Netlify token → GitLab Pages → 1-hour Netlify preview). Static / vite / expo-web only.
