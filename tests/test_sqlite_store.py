@@ -1,4 +1,4 @@
-"""SQLite registry + planner tables work without ADN Postgres."""
+"""SQLite registry + planner tables work in this product."""
 from __future__ import annotations
 
 import asyncio

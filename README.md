@@ -1,226 +1,380 @@
-# Daedalus / Дедал
+# Дедал / Daedalus
 
-Independent coding agent — **games first**, apps second, self-improvement always.
+Независим coding агент. **Игри първо**, приложения второ, проверката е част от строежа.
 
-This directory is the Daedalus **product**. It can run:
+Independent coding agent. **Games first**, apps second, verify is part of building.
 
-1. **Next to ArgosDataNexus** in this monorepo (ADN keeps its admin UI + Postgres).
-2. **Alone** — laptop, Docker, or cloud — with SQLite + a direct OpenAI-compatible LLM.
+[![pipeline status](https://gitlab.com/Blaue-Ente/deadalus-agent-0/badges/main/pipeline.svg)](https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/pipelines)
+[![Latest Release](https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/badges/release.svg)](https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/releases)
 
-ADN is an optional peer on the Iyveris mesh, not the agent's identity.
+Дедал пише реални файлове, пуска shell, строи игри и приложения, после **проверява** че работят — smoke, браузър, playtest. Не е чатбот за съвети. Работи на лаптоп, Docker или облак, с SQLite и директен LLM (облак или локален Ollama).
 
-```
-Daedalus/                 this product (also the standalone repo root after export)
-  daedalus/               Python package
-    kernel/               plan → code → test → verify
-    identity*.py          games-first persona
-    memory.py             Chroma session memory
-    playground*.py        app/game builder
-    agent.py              tool loop (files, search, workers, git, sandbox)
-  app/main.py             FastAPI + Studio UI + mesh peer
-  ui/                     copied Command Center (ADN templates stay in ADN)
-  Dockerfile              local PC + cloud
-```
-
-## vs Hermes-class agents
-
-Daedalus is built for the same job as [Hermes Agent](https://github.com/nousresearch/hermes-agent):
-a long-horizon tool loop that writes real files, runs a shell, looks at the web,
-and iterates until the thing works. Extra: **game factory**, **Playground**,
-**autopilot verify**, **preference memory**, and **Iyveris mesh**.
-
-| Capability | Daedalus |
+| | |
 |---|---|
-| Chat (human speech) | Studio `/` · `POST /api/v1/daedalus/chat` |
-| Native tools | files, shell, search, fetch, Jina `web_read`, image gen, remember |
-| Shell command center | Studio Shell · `POST /api/v1/daedalus/shell` |
-| Local LLM | Studio **Гардероб** — хардуерен профил + Ollama pull + превключване; или `DAEDALUS_PROVIDER=ollama` |
-| Offline kit | `DAEDALUS_OFFLINE=1` / Studio бутон — без Jina/търсене/картинки, с локален модел и капсули |
-| Sub-agents | worker slots (no tools) **and** `spawn_subagent` (files + shell, jailed) |
-| Files + projects | Playground `playground/projects/{slug}` |
-| Autopilot | kernel `full_autopilot` + Definition of Done + playtest |
-| Browser | Playwright smoke **and** interactive session (goto/click/type/extract) |
-| MCP | `$DAEDALUS_DATA/mcp.json` + Studio addon shelf |
-| Memory | Chroma + owner preferences (`запомни, че…`) + learned skills |
-| Image gen | Novita / OpenRouter · native `generate_image` |
-| LLM (cloud) | AllToken / OpenRouter / Novita / NVIDIA |
+| Репозиторий | https://gitlab.com/Blaue-Ente/deadalus-agent-0 |
+| Лиценз | [MIT](LICENSE) |
+| Python | 3.11+ |
+| Studio | http://127.0.0.1:8787 |
+| Пакет | `daedalus` · CLI `daedalus` |
 
-Standalone persona is a **compact tool contract** (fits local/small models). Set
-`DAEDALUS_FULL_PERSONA=1` for the full ADN/Iyveris prompt. Next to ADN, the full
-persona is always used.
+---
 
-## Integrations (adapters, not vendored dumps)
+## Съдържание
 
-Three upstream projects plug in as **capability layers**. Daedalus does not
-copy their trees.
+- [Какво е Дедал](#какво-е-дедал)
+- [Какво може](#какво-може)
+- [Изисквания](#изисквания)
+- [Инсталация](#инсталация)
+  - [Linux и macOS](#linux-и-macos)
+  - [Windows (Start Menu)](#windows-start-menu)
+  - [Docker](#docker)
+- [Първо стартиране](#първо-стартиране)
+- [LLM — облак и локално](#llm--облак-и-локално)
+- [Playground и Game Studio](#playground-и-game-studio)
+- [Проверка и публикуване](#проверка-и-публикуване)
+- [Офлайн ателие](#офлайн-ателие)
+- [Еволюция](#еволюция)
+- [CLI](#cli)
+- [Тестове и CI](#тестове-и-ci)
+- [Структура на репото](#структура-на-репото)
+- [Документация](#документация)
+- [Сигурност и принос](#сигурност-и-принос)
+- [Лиценз](#лиценз)
 
-| Upstream | License | What Daedalus does |
-|---|---|---|
-| [Agent Reach](https://github.com/Panniantong/Agent-Reach) | MIT | Jina Reader `web_read`; optional `yt-dlp` / `gh` / `agent-reach doctor` |
-| [MatrAIx Persona-8B](https://github.com/MatrAIx-ai/MatrAIx-Persona-8B) | MIT | Tiny player panel + playtest after game builds (no 1M dataset) |
-| [MiroFish-Offline](https://github.com/nikmcfly/MiroFish-Offline) | **AGPL-3.0** | HTTP client to `MIROFISH_URL` (default `http://127.0.0.1:5001`). Run their Docker stack yourself. **Do not copy that source into this MIT repo.** |
+---
 
-Studio tab **Свят** shows Reach / MiroFish / MCP status and a Playtest button.
+## Какво е Дедал
 
-## Ship a game (test → publish)
+Дедал е **един процес**: FastAPI + Studio UI + агентски цикъл (план → код → тест → проверка).
 
-1. **Smoke** — compile / HTTP probe (`playground_runner.smoke_test`).
-2. **Browser** — Chromium render-and-see (blank screen, console, screenshot).
-3. **Playtest** — 4–6 simulated players (Studio → Свят, or after autopilot). Fun gate: wayfinding, fail, visible pickups.
-4. **Arcade craft** — 3D / F-Zero-class games follow `arcade_craft` (vertical slice, Three.js WebGPU, Tripo/Meshy/Hunyuan for hero meshes). Phaser is the 2D default, not the 3D one. Racing Vite projects boot a playable M0 (`src/racer/`) instead of a hello-world page.
-5. **Godot 4** — desktop 2D/RPG: Playground kind `godot` (text `.tscn` + GDScript). Cloud writes files; open in Godot 4.3. Meshes: `python -m daedalus.blender_mcp` or `blender_jobs.emit_job` (no `bpy` in the cloud).
-6. **Ship**
-   - **Капсула** — `GET /api/v1/playground/projects/{slug}/capsule` → zip (USB / прати файл). Static: unzip, open `index.html`.
-   - **Локално /apps/** — Studio „Към /apps/“ (same Daedalus process).
-   - **Наживо** — Studio button: local `/apps/` plus a public `https` (Netlify token → GitLab Pages → 1-hour Netlify preview). Static / vite / expo-web only.
-   - **Git** — `<NEED_PLAYGROUND_PUSH: slug>` (GitLab if `GITLAB_TOKEN`, else GitHub).
-   - Unity stays Git + local Editor. Godot 4 same (folder → Godot). Expo web can publish as static.
+- Чатът е човешки: поздрав и въпрос получават отговор; „направи змия“ пише файлове.
+- Инструментите са реални: четене/запис, shell в jail, търсене, браузър, памет.
+- Игрите се **играят**, не се описват. Phaser/canvas/Vite за браузър; Godot 4 за десктоп 2D/3D; Unity е scaffold + локален Editor.
+- Самоподобрението минава през **Approve** в Command Center — Дедал не редактира себе си мълчаливо.
 
-## Offline atelier (local LLM wardrobe)
+Данните живеят под `$DAEDALUS_DATA` (по подразбиране `data/daedalus/` на машината, `%LOCALAPPDATA%\Daedalus` на Windows, `/var/lib/daedalus` в Docker). Проектите са в `playground/projects/{slug}/`.
 
-Daedalus does **not** ship 7GB weights. It **recommends** a Qwen/coder size from RAM/VRAM, then:
+---
+
+## Какво може
+
+| Възможност | Къде |
+|---|---|
+| Чат (български / английски) | Studio `/` · `POST /api/v1/daedalus/chat` |
+| Файлове и проекти | Playground `playground/projects/{slug}` |
+| Shell | Studio Shell · `POST /api/v1/daedalus/shell` (jail, без тайни в env) |
+| Нативни инструменти | `read_file`, `write_file`, `run_command`, `web_search`, `web_fetch`, `web_read`, `generate_image`, `remember`, `code_search`, `browser`, `mcp_call`, `spawn_subagent`, `playtest` |
+| Локален LLM | Studio **Гардероб** — хардуерен профил + Ollama pull; или `DAEDALUS_PROVIDER=ollama` |
+| Офлайн кит | `DAEDALUS_OFFLINE=1` / бутон в Studio — без търсене/картинки, с локален модел и капсули |
+| Подагенти | worker слотове **и** `spawn_subagent` (файлове + shell, в jail) |
+| Автопилот | kernel `full_autopilot` + Definition of Done + playtest |
+| Браузър | Playwright smoke **и** интерактивна сесия (goto / click / type) |
+| MCP | `$DAEDALUS_DATA/mcp.json` + рафт с добавки в Studio |
+| Памет | Chroma + предпочитания („запомни, че…“) + научени умения |
+| Картинки | Novita / OpenRouter · `generate_image` |
+| Облачен LLM | AllToken / OpenRouter / Novita / NVIDIA |
+| Игри — браузър | Phaser, canvas, Vite; 3D аркада / състезания → Vite + Three.js WebGPU (`src/racer/`) |
+| Игри — Godot 4 | kind `godot`: `.tscn` + GDScript; 2D scaffold или 3D greybox стая |
+| Мешове | `python -m daedalus.blender_mcp` или `blender_jobs.emit_job` (без `bpy` в облака) |
+| Живо публикуване | локално `/apps/{slug}/` + Netlify / GitLab Pages / 1-часов preview |
+| Капсула | zip за USB — `GET /api/v1/playground/projects/{slug}/capsule` |
+| Windows приложение | Start Menu **Дедал** (WebView2 / Tk) |
+| Еволюция | опционален idle gardener; пачове пак чакат Approve |
+
+Studio таб **Свят** показва Reach / playtest / MCP статус.
+
+---
+
+## Изисквания
+
+**Задължително**
+
+- Python 3.11 или по-нов
+- Поне един LLM: облачен ключ **или** локален Ollama / LM Studio / llama.cpp / vLLM
+
+**По желание**
+
+| За | Какво |
+|---|---|
+| Браузърна проверка | `pip install -e ".[playwright]"` + `python -m playwright install chromium` |
+| Windows прозорец | `pip install -e ".[gui]"` (Edge WebView2) |
+| Vite / Phaser игри | Node.js 18+ и npm |
+| Godot проекти | [Godot 4.3](https://godotengine.org/download) на машината на собственика |
+| Blender jobs | [Blender 4.x](https://www.blender.org/download/) локално — Дедал само **излъчва** скрипт |
+| Docker | Docker Engine + Compose |
+| Живо публикуване | `NETLIFY_AUTH_TOKEN` и/или `GITLAB_TOKEN`, или Node (`npx`) за 1-часов preview |
+
+Дедал **не** праща 7 GB тежести. Гардеробът препоръчва Qwen/coder според RAM/VRAM, ти дърпаш модела.
+
+---
+
+## Инсталация
+
+Клонирай **това** репо. То е продуктът.
 
 ```bash
-# optional: install Ollama once
-# Studio → LLM → click a recommended row (pull + activate)
-python -m app.cli models    # prints machine class + recommendations
+git clone https://gitlab.com/Blaue-Ente/deadalus-agent-0.git
+cd deadalus-agent-0
 ```
 
-Toggle **Офлайн кит** so search/Jina/image-gen refuse. Chat, files, shell, localhost browser, heuristic playtest, and capsules keep working.
-
-## Evolution (opt-in idle gardener)
-
-Self-improve already exists: Daedalus **proposes** patches, you **Approve** in Command Center. That is not silent self-editing.
-
-**Еволюция** is a separate mode (Studio tab, default **off**). While the process is up — even with no open chat — a gardener uses spare CPU/RAM to:
-
-1. Scan two rotating radar sources (GitHub/web: agents, MCP, memory, local LLM).
-2. Study one new public GitHub repo via the API (README + tree + license).
-3. Write a journal + a learned-skill note under `$DAEDALUS_DATA`.
-4. Optionally shallow-clone into `data/daedalus/evolution/research/` (never into `daedalus/`). AGPL/SSPL is refused.
-
-It **skips** when offline kit is on, load is high, RAM is tight, or autopilot is running. Harness patches still wait for Approve. `edit_modules` stays off unless you turn it on; auto-apply never includes it.
+### Linux и macOS
 
 ```bash
-# optional: force on at boot (Studio toggle still writes settings.json)
-# DAEDALUS_EVOLUTION=1
-# DAEDALUS_EVOLUTION=0   # kill switch
-```
-
-## Windows app (Start Menu)
-
-Per-user install — **no Administrator**. Python 3.11+ on PATH, then:
-
-```powershell
-.\packaging\windows\install.ps1
-# optional: -DesktopShortcut  -Startup
-```
-
-Start → **Дедал** opens a **window** with Studio at http://127.0.0.1:8787
-(WebView2 when `pip install -e ".[gui]"` is available, else Tk, else the
-browser). Data lives in `%LOCALAPPDATA%\Daedalus` (`.env`, memory, games).
-Or compile `packaging\windows\Daedalus.iss` with Inno Setup →
-`dist\Daedalus-Setup.exe`.
-
-Details: `packaging/windows/README.md`.
-
-## Quick start (PC)
-
-```bash
-cd Daedalus
-python3 -m venv .venv && source .venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e .
+cp .env.example .env
+# попълни поне един ключ, или остави празно и ползвай Ollama
 export DAEDALUS_STANDALONE=1
-export ALLTOKEN_API_KEY=sk-at-...   # or OPENROUTER_API_KEY / NOVITA_API_KEY
 python -m app.cli serve --port 8787
 ```
 
-Check the LLM key without starting the UI:
+Еквивалент след `pip install -e .`:
+
+```bash
+daedalus serve --host 127.0.0.1 --port 8787
+```
+
+Проверка на LLM без UI:
 
 ```bash
 python -m app.cli ping
-python -m app.cli models    # probe Ollama / LM Studio / llama.cpp / vLLM
+python -m app.cli models
 ```
 
-Open http://localhost:8787 — Studio (chat + shell + local LLM + logo).
-
-Full Command Center (copied ADN UI):
-
-- http://localhost:8787/admin/daedalus
-- http://localhost:8787/admin/daedalus/playground
-- http://localhost:8787/admin/daedalus/game-studio
-
-LLM presets, workers, memory, tasks, and blockers are served from the same
-`/admin/daedalus/*` URLs. Image gen uses Novita or OpenRouter when those keys
-are set (no ADN MeshRouter).
-
-```bash
-# Docker
-cp .env.example .env   # fill a key
-docker compose up --build
-```
-
-SQLite, Playground files, and Chroma memory all live on the `daedalus-data`
-volume (`DAEDALUS_DATA=/var/lib/daedalus`).
-
-Without Docker, from this directory:
+Локален дим без да пипаш Docker:
 
 ```bash
 ./scripts/smoke-local.sh
 ```
 
-## Cloud
+### Windows (Start Menu)
 
-Same container. Set `ALLTOKEN_API_KEY` (or another provider key) and persist
-`/var/lib/daedalus`. See `DEPLOY.md` for fly.io, Render, and GitLab Registry.
+Без Administrator. Python 3.11+ с **Add python.exe to PATH**, после в папката на репото:
 
-## Next to ADN (do not break ADN)
-
-Leave `DAEDALUS_STANDALONE` **unset** in the ADN process. Imports stay:
-
-```python
-from argos_data_nexus.modules.daedalus import get_daedalus
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+.\packaging\windows\install.ps1
+# по желание: -DesktopShortcut  -Startup
 ```
 
-Admin UI remains at ADN `/admin/daedalus/*`. The shim points at this package.
-Never move `admin.py` playground routes out of ADN.
+Старт → **Дедал** отваря прозорец към http://127.0.0.1:8787 (WebView2 ако има `pywebview`, иначе Tk, иначе браузър).
 
-## What this agent is for
+| Какво | Къде |
+|---|---|
+| Ключове и `.env` | `%LOCALAPPDATA%\Daedalus\` |
+| Игри и памет | `%LOCALAPPDATA%\Daedalus\` |
+| Код + venv | `%LOCALAPPDATA%\Programs\Daedalus\` |
 
-1. **Games** — Phaser, canvas, Vite, Unity scaffold, Expo. Real assets via
-   `load.image` / `add.image`, not CSS-gradient placeholders.
-2. **Applications** — FastAPI, React/Vite, Streamlit, static.
-3. **Self-improvement** — proposals with owner-gated skills.
+Inno Setup: `iscc packaging\windows\Daedalus.iss` → `dist\Daedalus-Setup.exe`.
 
-## Separate GitHub / GitLab repo
+Пълни стъпки: [`packaging/windows/README.md`](packaging/windows/README.md).
 
-Standalone product remote (clone this for laptop/Docker/cloud — not the ADN monorepo):
-
-https://gitlab.com/Blaue-Ente/deadalus-agent-0
+### Docker
 
 ```bash
-git clone https://gitlab.com/Blaue-Ente/deadalus-agent-0.git
-cd deadalus-agent-0
-cp .env.example .env   # fill ALLTOKEN_API_KEY or OPENROUTER_API_KEY
+cp .env.example .env
+# попълни ALLTOKEN_API_KEY или OPENROUTER_API_KEY (или друг ключ)
 docker compose up --build
 ```
 
-Re-export from the ADN checkout:
+SQLite, Playground и Chroma са в volume `daedalus-data` (`DAEDALUS_DATA=/var/lib/daedalus`).
 
-```bash
-GITLAB_TOKEN=glpat-… ./scripts/publish-standalone-repo.sh \
-  https://gitlab.com/Blaue-Ente/deadalus-agent-0.git --force
+Облак (fly.io, Render, GitLab Registry): виж [`DEPLOY.md`](DEPLOY.md).
+
+---
+
+## Първо стартиране
+
+Отвори http://127.0.0.1:8787 — това е **Studio** (чат, shell, гардероб, лого).
+
+Command Center (същият процес):
+
+| Страница | URL |
+|---|---|
+| Начало | http://127.0.0.1:8787/admin/daedalus |
+| Playground | http://127.0.0.1:8787/admin/daedalus/playground |
+| Game Studio | http://127.0.0.1:8787/admin/daedalus/game-studio |
+| Предложения (Approve) | http://127.0.0.1:8787/admin/daedalus/proposals |
+| Умения | http://127.0.0.1:8787/admin/daedalus/skills |
+| OpenAPI | http://127.0.0.1:8787/docs |
+| Здраве | http://127.0.0.1:8787/health |
+
+LLM пресети, работници, памет, задачи и блокери са на същите `/admin/daedalus/*` адреси.
+
+---
+
+## LLM — облак и локално
+
+Попълни **поне едно** в `.env` (виж [`docs/ENV.md`](docs/ENV.md)):
+
+```
+ALLTOKEN_API_KEY=
+OPENROUTER_API_KEY=
+NOVITA_API_KEY=
+NVIDIA_API_KEY=
 ```
 
-GitLab `main` may be protected; you need **Maintainer** (or Owner) to merge.
-The live merge request is on **GitLab**, not GitHub:
+Локално, без ключ:
 
-https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/merge_requests/1
+```bash
+# Ollama на машината, после:
+export DAEDALUS_PROVIDER=ollama
+export DAEDALUS_MODEL=qwen2.5-coder:7b
+# или кликни препоръчан ред в Studio → LLM (дърпа + активира)
+```
 
-If the Merge button is disabled: you are on the wrong site (GitHub stub
-`Blaue-Ente/Deadalus-Projekt-` is unrelated), the MR was still Draft, or your
-account is Developer-only on a protected `main`. Pipeline green ≠ permission
-to merge. ADN stays in `Data-Asset-Hub`. You can rename the GitLab path to
-`Daedalus` in project settings.
+`python -m app.cli models` показва клас на машината и какво да дърпаш.
 
-See `MIGRATION.md` and `DEPLOY.md`.
+---
+
+## Playground и Game Studio
+
+Всеки проект е папка `playground/projects/{slug}/` с kind:
+
+| Kind | За какво |
+|---|---|
+| `static` | HTML / CSS / JS без build |
+| `vite` | Vite + vanilla JS; Phaser/Pixi за 2D; Three.js WebGPU за 3D аркада / racer |
+| `vite-react` | Vite + React 18 |
+| `fastapi` | Python API |
+| `streamlit` | Streamlit приложение |
+| `node` | Node / Express |
+| `expo` | Expo / React Native (web export е статичен) |
+| `unity` | C# scaffold — отваряш в Unity Hub локално |
+| `godot` | Godot 4.3, текст `.tscn` / GDScript; 2D или 3D greybox стая |
+
+**Игрова фабрика (реално състояние)**
+
+- Браузърни 3D / F-Zero клас: Vite + Three.js, вертикален slice, playable M0 в `src/racer/`. Phaser не е 3D пътят.
+- Godot 2D: `project.godot`, сцена, играч, Game autoload.
+- Godot 3D: greybox стая, CharacterBody3D, плоча → врата, камера, HUD; `studio/scene_index.json` + `studio/asset_contract.json`. Headless probe ако има `godot` в PATH.
+- Blender: emit-only jobs (`set_pivot`, `collision_hint`, GLB). Облакът не импортира `bpy`.
+- Дедал не си пише собствен енджин, не държи 3D foundation model и не пуска пет MCP моста към Godot.
+
+---
+
+## Проверка и публикуване
+
+1. **Smoke** — compile / HTTP probe.
+2. **Браузър** — Chromium: празен екран, конзола, скрийншот.
+3. **Playtest** — 4–6 симулирани играчи (Studio → Свят, или след автопилот). Fun gate: ориентиране, fail state, видими pickup-и.
+4. **Ship**
+   - **Капсула** — zip (USB / прати файл). Статично: unzip, отвори `index.html`.
+   - **Локално /apps/** — Studio „Към /apps/“.
+   - **Наживо** — публичен `https`: Netlify токен → GitLab Pages → 1-часов Netlify preview. Само static / vite / expo-web.
+   - **Git** — push към GitLab ако има `GITLAB_TOKEN`, иначе GitHub.
+   - Unity и Godot: папката се отваря в съответния Editor.
+
+---
+
+## Офлайн ателие
+
+```bash
+export DAEDALUS_OFFLINE=1
+# или бутонът в Studio
+```
+
+Търсене, Jina и image-gen се отказват. Чат, файлове, shell, localhost браузър, heuristic playtest и капсули продължават. Нужен е локален модел в гардероба.
+
+---
+
+## Еволюция
+
+Отделна опция (Studio таб, **изключена** по подразбиране). Докато процесът работи — дори без отворен чат — gardener ползва свободен CPU/RAM да:
+
+1. Сканира две въртящи се radar точки (агенти, MCP, памет, локален LLM).
+2. Прегледа едно публично GitHub репо (README + дърво + лиценз).
+3. Запише журнал и skill note под `$DAEDALUS_DATA`.
+4. По желание shallow-clone в `data/daedalus/evolution/research/` (никога в `daedalus/`). AGPL/SSPL се отказват.
+
+Спира при офлайн кит, високо натоварване, малко RAM или работещ автопилот. Пачове към самия Дедал пак чакат **Approve**. `edit_modules` е изключен, докато не го включиш.
+
+```bash
+# DAEDALUS_EVOLUTION=1    # принудително при boot
+# DAEDALUS_EVOLUTION=0    # kill switch
+```
+
+---
+
+## CLI
+
+След `pip install -e .` командата е `daedalus` (същото като `python -m app.cli`).
+
+| Команда | Какво прави |
+|---|---|
+| `daedalus serve [--host] [--port] [--reload]` | HTTP Studio + API |
+| `daedalus ping [--message …]` | Един LLM call без UI |
+| `daedalus models` | Ефективен провайдър + probe на локални бекенди |
+| `daedalus desktop [--ui auto\|webview\|tk\|browser\|none]` | Прозорец + локален сървър |
+
+---
+
+## Тестове и CI
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"
+python3 -m pytest tests -q
+```
+
+GitLab CI (`.gitlab-ci.yml`) пуска същите тестове и строи Docker образ; при наличен Container Registry го push-ва като `$CI_REGISTRY_IMAGE:latest`.
+
+---
+
+## Структура на репото
+
+```
+deadalus-agent-0/
+  daedalus/               пакетът на агента
+    kernel/               план → код → тест → verify
+    identity*.py          персона (игри първо)
+    memory.py             Chroma сесийна памет
+    playground*.py        builder за приложения и игри
+    agent.py              tool loop
+    arcade_craft.py       3D браузърни racers
+    blender_jobs.py       emit на Blender скриптове
+    game_factory.py       доктрина за Godot 3D стая
+  app/                    FastAPI, CLI, desktop
+    main.py               Studio + API
+    cli.py                daedalus serve / ping / models / desktop
+  ui/                     Command Center (HTML / JS / CSS)
+  playground/projects/    работни проекти (gitignored)
+  tests/                  pytest
+  packaging/windows/      Start Menu инсталатор
+  scripts/smoke-local.sh  дим на здравето на процеса
+  Dockerfile              + docker-compose.yml
+```
+
+---
+
+## Документация
+
+| Файл | Тема |
+|---|---|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | Слоеве, пътища, игрова доктрина |
+| [DEPLOY.md](DEPLOY.md) | PC, Docker, Windows, fly.io, Render |
+| [docs/ENV.md](docs/ENV.md) | Променливи на средата |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Как да допринасяш |
+| [SECURITY.md](SECURITY.md) | Как се докладват проблеми |
+| [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) | Правила за участие |
+| [CHANGELOG.md](CHANGELOG.md) | История на версиите |
+| [AGENTS.md](AGENTS.md) | Кратък бриф за coding агенти в това репо |
+| [packaging/windows/README.md](packaging/windows/README.md) | Windows приложение |
+| [LICENSE](LICENSE) | MIT |
+
+---
+
+## Сигурност и принос
+
+Уязвимости: виж [SECURITY.md](SECURITY.md).  
+Merge request: виж [CONTRIBUTING.md](CONTRIBUTING.md).  
+Проблеми: [Issues](https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/issues).
+
+---
+
+## Лиценз
+
+[MIT](LICENSE) © 2026 Daedalus Contributors.
+
+Опционалният MiroFish sidecar (ако го пуснеш сам) е **AGPL-3.0**. Дедал говори с него само по HTTP — изходният му код **не** влиза в това репо.

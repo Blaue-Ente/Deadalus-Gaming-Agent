@@ -1,4 +1,4 @@
-"""Copied Command Center URLs: planner, radar, run-background — not the stub."""
+"""Command Center URLs: planner, radar, run-background — not the stub."""
 from __future__ import annotations
 
 import pytest
