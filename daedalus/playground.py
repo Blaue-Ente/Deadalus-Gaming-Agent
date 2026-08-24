@@ -379,6 +379,10 @@ def _write_scaffold(pdir: Path, kind: str, name: str, slug: str, description: st
         from .playground_unity_scaffold import write_unity_scaffold
         write_unity_scaffold(pdir, name, slug, description)
         return
+    if kind == "vite":
+        from .playground_racer_scaffold import maybe_write_racer_scaffold
+        if maybe_write_racer_scaffold(pdir, kind, name, slug, description):
+            return
     templates = _SCAFFOLD.get(kind, _SCAFFOLD["static"])
     ctx = {"name": name, "slug": slug, "description": description or f"Проект: {name}"}
     from .playground_expo_scaffold import _apply_template_ctx as _expo_ctx

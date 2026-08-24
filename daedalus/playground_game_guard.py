@@ -26,6 +26,8 @@ _ASSET_REF = re.compile(
     r"load\.image\s*\(|load\.spritesheet\s*\(|this\.load\.|"
     r"add\.image\s*\(|add\.sprite\s*\(|textures\.|"
     r"import\s+.*from\s+['\"]phaser['\"]|Phaser\.Scene|extends\s+Phaser\.Scene|"
+    r"from\s+['\"]three['\"]|from\s+['\"]three/webgpu['\"]|"
+    r"WebGLRenderer|WebGPURenderer|GLTFLoader|\.glb\b|"
     r"drawImage\s*\(|"
     r"new\s+Image\s*\(|"
     r"<img\b|"
@@ -54,6 +56,10 @@ _CANVAS_DRAW = re.compile(
     r"(?:ctx|context|this\.ctx|this\.context)\s*\.\s*"
     r"(?:fillRect|arc|strokeRect|clearRect|fillText|strokeText|"
     r"beginPath|moveTo|lineTo|quadraticCurveTo|bezierCurveTo|drawImage)\s*\(",
+    re.I,
+)
+_THREE_DRAW = re.compile(
+    r"WebGLRenderer|WebGPURenderer|new\s+THREE\.|from\s+['\"]three['\"]",
     re.I,
 )
 
@@ -152,7 +158,7 @@ def scan_game_visuals(
             # Canvas 2D primitive rendering (fillRect, arc, etc.) is a valid
             # alternative to sprite loading — do not require PNG asset refs
             # when the corpus already contains real canvas drawing calls.
-            if not _CANVAS_DRAW.search(combined):
+            if not _CANVAS_DRAW.search(combined) and not _THREE_DRAW.search(combined):
                 violations.append({
                     "path": "(project)",
                     "match": f"{len(paths)} assets",

@@ -100,7 +100,10 @@ def _project_snapshot(slug: str, *, max_chars: int = 5000) -> str:
     if not root.is_dir():
         return f"(missing project {slug})"
     bits: list[str] = []
-    for rel in ("index.html", "main.js", "src/main.js", "src/App.jsx", "game.js", "README.md"):
+    for rel in (
+        "index.html", "main.js", "src/main.js", "src/App.jsx", "game.js", "README.md",
+        "src/racer/vehicle.js", "src/racer/track.js", "src/racer/boot.js",
+    ):
         path = root / rel
         if path.is_file():
             bits.append(f"=== {rel} ===\n{path.read_text(encoding='utf-8', errors='replace')[:1800]}")
@@ -113,10 +116,16 @@ def _project_snapshot(slug: str, *, max_chars: int = 5000) -> str:
 
 def _heuristic(snapshot: str) -> dict[str, Any]:
     low = snapshot.lower()
-    has_canvas = "canvas" in low or "<canvas" in low or "phaser" in low
+    has_canvas = (
+        "canvas" in low or "<canvas" in low or "phaser" in low
+        or "webglrenderer" in low or "webgpurenderer" in low or "from 'three'" in low
+    )
     has_input = any(tok in low for tok in ("keydown", "keyup", "pointer", "touch", "click", "addlistener"))
     has_loop = any(tok in low for tok in ("requestanimationframe", "setinterval", "gameloop", "update("))
-    has_win = any(tok in low for tok in ("score", "gameover", "win", "lose", "alive", "game over"))
+    has_win = any(tok in low for tok in (
+        "score", "gameover", "win", "lose", "alive", "game over",
+        "integrity", "failed", "провал", "off-track", "offtrack",
+    ))
     blockers = []
     if not has_canvas:
         blockers.append("Няма canvas/Phaser — първата рисунка може да липсва.")
@@ -126,12 +135,21 @@ def _heuristic(snapshot: str) -> dict[str, Any]:
         blockers.append("Не се вижда game loop.")
     if not has_win:
         blockers.append("Няма явен win/lose или score.")
+    extra_signals: dict[str, Any] = {}
+    try:
+        from .arcade_craft import fun_signals
+        extra = fun_signals(snapshot)
+        extra_signals = dict(extra.get("signals") or {})
+        blockers.extend(extra.get("blockers") or [])
+    except Exception:
+        extra_signals = {}
     return {
         "signals": {
             "canvas": has_canvas,
             "input": has_input,
             "loop": has_loop,
             "win_lose": has_win,
+            **extra_signals,
         },
         "blockers": blockers,
         "ship_hint": not blockers,

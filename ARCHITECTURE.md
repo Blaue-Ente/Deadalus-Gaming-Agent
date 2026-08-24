@@ -59,6 +59,9 @@ routing, Postgres, and the current admin UI — not the agent's identity.
 - Asset gate: generated `assets/*.png` must be referenced (`load.image` / `<img>`).
 - Verify: smoke + browser render-and-see + playtest personas + quality critic.
 - Unity is scaffold + Git, not in-cloud Editor.
+- Arcade craft (`arcade_craft.py` + `studio_shelf.py` + `playground_racer_scaffold.py`):
+  FM1-grade 3D uses Vite + Three.js WebGPU/TSL, specialist mesh/audio tools, vertical
+  slice + fun gates. Racing briefs boot a playable M0 in `src/racer/` (not Phaser).
 
 ## License boundary (MiroFish)
 

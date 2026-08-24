@@ -128,6 +128,8 @@ def process_brainstorm(raw: dict[str, Any] | None) -> dict[str, Any]:
         preset = "multiplayer"
     elif brainstorm.get("genre") == "rpg":
         preset = "rpg_collection"
+    elif brainstorm.get("genre") == "racing":
+        preset = "racing"
 
     platform_hint = brainstorm.get("platform_hint", "web")
     hint_blob = f"{blob} {platform_hint}"
@@ -185,6 +187,7 @@ def _default_core_loop(brainstorm: dict[str, Any]) -> str:
         "rpg": "Събери екип → битка → XP/loot → подобри герои",
         "strategy": "Планирай → изпълни ход → реакция на AI → ескалирай",
         "platformer": "Бягай/скачай → избягвай препятствия → стигни цел",
+        "racing": "Ускори → чети пистата → turbo/риск → обиколка → позиция",
         "survival": "Събери ресурси → craft → оцелей → разшири база",
         "casual": "Кратка сесия → мигновен feedback → награда → replay",
         "multiplayer": "Match → играй рунд → резултат → rematch",
@@ -203,6 +206,11 @@ def _scope_warnings(brainstorm: dict[str, Any], preset: str) -> list[str]:
         warnings.append("Cross-platform: започни с една платформа (web или mobile), после порт.")
     if not brainstorm.get("idea"):
         warnings.append("Добави кратко описание на идеята за по-добър GDD и план.")
+    try:
+        from .arcade_craft import scope_warnings as _craft_scope
+        warnings.extend(_craft_scope(brainstorm))
+    except Exception:
+        pass
     return warnings
 
 
@@ -328,6 +336,20 @@ def generate_gdd_lite(
     for m in mvp_ms:
         lines.append(f"- **{m.get('id', '?')} — {m.get('title', '')}:** {m.get('goal', '')}")
     lines.append("")
+    try:
+        from .arcade_craft import gdd_section
+        from .studio_shelf import prompt_block
+        lines.append(gdd_section(b).rstrip())
+        lines.append("")
+        idea_blob = " ".join(
+            str(x) for x in (b.get("genre"), b.get("idea"), b.get("reference_games")) if x
+        )
+        lines.append("## Studio shelf")
+        lines.append("")
+        lines.append(prompt_block(idea_blob, limit=8))
+        lines.append("")
+    except Exception:
+        pass
     lines.append("---")
     lines.append("*Следваща стъпка: Studio план с `studio=true` и gate-check преди guided build (GS-B).*")
     lines.append("")
@@ -351,6 +373,8 @@ def _progression_block(preset: str) -> str:
         return "XP, нива, unlock на способности/герои, колекция."
     if preset == "puzzle":
         return "Нива с rising difficulty, звезди, optional challenges."
+    if preset == "racing":
+        return "Обиколки, позиции, ghost/рекърд, unlock на пилоти и купи."
     if preset == "strategy":
         return "Tech tree, unit upgrades, campaign map."
     return "Краткосрочни цели (run) + дългосрочни unlock-и (meta)."
@@ -361,7 +385,7 @@ def _content_scope_block(b: dict[str, Any], preset: str) -> str:
     return (
         f"Фокус MVP: {idea}. "
         f"Preset `{preset}` — избягвай feature creep извън M0–M3. "
-        "Art: placeholder sprites OK; polish в M7."
+        "Art: greybox OK само в M0; hero ships/vehicles не остават кубчета. Polish в M7."
     )
 
 
@@ -435,6 +459,18 @@ async def start_game_studio_project(
         slug=slug,
     )
     project_slug = proj["slug"]
+    try:
+        from .playground_racer_scaffold import maybe_write_racer_scaffold
+        maybe_write_racer_scaffold(
+            pg.project_dir(project_slug),
+            effective_kind,
+            title,
+            project_slug,
+            description,
+            studio_preset=effective_preset,
+        )
+    except Exception:
+        pass
 
     files = {
         GDD_PATH: gdd_md,

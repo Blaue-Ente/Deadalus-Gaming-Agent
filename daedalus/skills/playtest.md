@@ -13,6 +13,7 @@ description: Run MatrAIx-style simulated players on a Playground game before cla
 1. Smoke + browser verify first.
 2. Native tool `playtest` with the project `slug` (or Studio → Свят → Playtest).
 3. Read `blockers` and `quotes`. Fix loop / controls / first 30s / win-lose.
+   For racers also: wayfinding from distance, fail/damage, visible boost pads, risk on the gas.
 4. Do not say "готово" while playtest `ship_ready` is false.
 
 **Anti-patterns**:

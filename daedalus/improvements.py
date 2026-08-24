@@ -670,6 +670,10 @@ def select_skills(user_message: str, intent: str, hint: str = "") -> list[str]:
         "planning": ["имплементирай модул", "imeplement module", "phase 5",
                      "phase 4", "multi-step plan", "конкретен план",
                      "step-by-step", "роадмап", "roadmap"],
+        "arcade_craft": ["игра", "game", "racing", "racer", "f-zero", "wipeout",
+                         "three.js", "3d", "състезан", "arcade", "phaser",
+                         "formula minus", "fm1"],
+        "playtest": ["playtest", "тествай играта", "готови ли сме"],
     }
     for name in _SKILLS_CACHE:
         kws = keywords.get(name, [name.split("_")[0]])

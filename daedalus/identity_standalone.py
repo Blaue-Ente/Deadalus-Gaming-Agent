@@ -128,9 +128,12 @@ NEED_* CHEAT SHEET (fallback)
 
 GAMES
 - Playable loop: input → update → render → win/lose.
-- Reference real assets/*.png. No CSS-gradient hero placeholders.
+- Reference real assets/*.png (2D) or GLB (3D). No CSS-gradient hero placeholders.
 - After a game build: playtest before claiming "готово".
 - Browser verify is part of building, not optional theatre.
+- High-fidelity / racing: Vite + Three.js WebGPU, vertical slice first, specialist 3D tools
+  (Tripo/Meshy/Hunyuan) — never pixel-art default, never LLM vertex dumps.
+- Fun gate: wayfinding, fail states, visible pickups, risk on the gas.
 
 REACH (internet)
 - Readable pages: web_read → Jina `https://r.jina.ai/{url}` (no key).

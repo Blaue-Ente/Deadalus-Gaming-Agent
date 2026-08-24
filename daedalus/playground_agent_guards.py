@@ -21,7 +21,7 @@ _ENTRYPOINTS: dict[str, list[str]] = {
 
 _NON_ENTRYPOINT_READS: dict[str, list[str]] = {
     "vite-react": ["src/App.jsx", "App.jsx"],
-    "vite": ["src/scenes/GameScene.js", "src/game/phaserBoot.js"],
+    "vite": ["src/scenes/GameScene.js", "src/game/phaserBoot.js", "src/racer/vehicle.js"],
 }
 
 def outbox_guardrails_block(*, slug: str = "", kind: str = "static") -> str:
