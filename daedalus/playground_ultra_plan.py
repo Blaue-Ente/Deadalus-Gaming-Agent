@@ -215,6 +215,10 @@ def _path_for_entity(name: str, kind: str) -> str:
         if "level" in name.lower() or name.lower().startswith("level"):
             return f"Assets/_Project/Code/Gameplay/Levels/{name}.cs"
         return f"Assets/_Project/Code/Gameplay/{name}.cs"
+    if kind == "godot":
+        if "level" in name.lower() or name.lower().startswith("level"):
+            return f"scenes/{name}.tscn"
+        return f"scripts/{name}.gd"
     ext = "tsx" if kind == "expo" else "jsx" if kind == "vite-react" else "js"
     if kind == "expo":
         return f"src/components/{name}.{ext}"

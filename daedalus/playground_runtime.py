@@ -18,11 +18,16 @@ from . import playground as pg
 VISUAL_KINDS = ("static", "vite", "vite-react", "streamlit", "expo")
 
 # Kinds prepared locally (Unity Hub / Xcode) — never start a dev subprocess in cloud.
-LOCAL_ONLY_KINDS = ("unity",)
+LOCAL_ONLY_KINDS = ("unity", "godot")
 
 UNITY_LOCAL_ONLY_MSG = (
     "Unity Editor не работи в ADN cloud. Подготви C# проекта и го качи в GitHub/GitLab — "
     "отвори в Unity Hub на локална машина."
+)
+
+GODOT_LOCAL_ONLY_MSG = (
+    "Godot Editor не работи в ADN cloud. Отвори папката в Godot 4.3 локално. "
+    "Ако `godot` е в PATH: godot --headless --path . --quit"
 )
 
 ADMIN_PREVIEW_PREFIX = "/admin/daedalus/playground/preview"
@@ -50,8 +55,11 @@ def is_local_only_kind(kind: str) -> bool:
 
 
 def local_only_kind_message(kind: str) -> str:
-    if (kind or "").strip() == "unity":
+    k = (kind or "").strip()
+    if k == "unity":
         return UNITY_LOCAL_ONLY_MSG
+    if k == "godot":
+        return GODOT_LOCAL_ONLY_MSG
     return f"Платформата {kind} не се стартира в cloud sandbox."
 
 

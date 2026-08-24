@@ -35,8 +35,16 @@ GAME PLATFORM PICKER — official Playground recommendations
    • NEVER: window, document, AudioContext, HTML canvas.getContext('2d'), vite.config.
    • NOTE: <Canvas> from Skia is a RN component (PascalCase), NOT HTML <canvas>.
 
+5) GODOT 4 (GDScript, local Editor)
+   • Best for: 2D Metroidvania / RPG / desktop games. Text .tscn + .gd — LLM-friendly.
+   • Scaffold writes project.godot, scenes/main.tscn, scripts/player.gd.
+   • Cloud does not run the Editor. Open the folder in Godot 4.3 locally.
+   • Meshes: blender_jobs → GLB in assets/. Optional MCP: python -m daedalus.blender_mcp.
+
 QUICK PICK:
 • Browser arcade / 2D web → vite + Phaser or PixiJS
+• Browser 3D / F-Zero-class → vite + Three.js WebGPU
+• 2D desktop Metroidvania / Godot → godot
 • Browser with rich menus → vite-react + canvas gameplay module
 • Mobile touch game → expo
 • Simple puzzle in one file → static
@@ -66,6 +74,12 @@ _STAGING: dict[str, list[str]] = {
         "src/components/HUD.jsx — View/Text overlays",
         "src/audio/sounds.js — expo-av Audio.Sound",
     ],
+    "godot": [
+        "project.godot — name, main scene, autoload Game, physics layers",
+        "scenes/main.tscn — player + floor + pit",
+        "scripts/player.gd — move/jump/fail",
+        "scripts/autoload/game.gd — score/fail/reset",
+    ],
 }
 
 _LIBRARIES: dict[str, list[str]] = {
@@ -73,6 +87,7 @@ _LIBRARIES: dict[str, list[str]] = {
     "vite": ["phaser", "pixi.js", "three", "matter-js", "howler"],
     "vite-react": ["phaser + react", "pixi.js", "three / @react-three/fiber", "howler"],
     "expo": ["expo-av", "expo-haptics", "@shopify/react-native-skia (2D games)", "expo-gl (3D)"],
+    "godot": ["GDScript", "NavigationAgent2D", "GPUParticles2D", "blender_jobs GLB"],
 }
 
 _UI_SHORT: dict[str, str] = {
@@ -80,7 +95,9 @@ _UI_SHORT: dict[str, str] = {
     "vite": "🎮 Браузър игра — Vite + Phaser/PixiJS. Canvas loop, npm пакети, HMR.",
     "vite-react": "🖥️ Меню/HUD в React, gameplay в canvas. Не рендерирай sprites в JSX.",
     "expo": "📱 Мобилна игра — React Native. View/Text, expo-av. Без Web Audio/HTML.",
-    "auto": "🧠 Дедал избира: web → vite/vite-react, mobile → expo, просто → static.",
+    "unity": "🎮 Unity C# / URP — локален Unity Hub, scaffold + Git.",
+    "godot": "🎮 Godot 4 — .tscn/.gd, локален Editor. blender_jobs за GLB.",
+    "auto": "🧠 Дедал избира: web → vite/vite-react, Godot 2D → godot, mobile → expo.",
 }
 
 _GAME_WORDS = re.compile(
@@ -116,6 +133,11 @@ _UNITY_WORDS = re.compile(
     re.I,
 )
 
+_GODOT_WORDS = re.compile(
+    r"\b(godot|gdscript|metroidvania|\.tscn|tscn)\b",
+    re.I,
+)
+
 def suggest_kind_heuristic(name: str = "", description: str = "") -> tuple[str, str]:
     """Rule-based kind suggestion when user picks auto or for UI hints."""
     blob = f"{name} {description}".strip()
@@ -124,6 +146,9 @@ def suggest_kind_heuristic(name: str = "", description: str = "") -> tuple[str, 
 
     if _UNITY_WORDS.search(blob):
         return "unity", "Unity C# / URP — отвори в Unity Hub"
+
+    if _GODOT_WORDS.search(blob):
+        return "godot", "Godot 4 — текстови .tscn / GDScript, локален Editor"
 
     if _MOBILE_WORDS.search(blob):
         if re.search(r"\b(3d|urp|scriptable|collection rpg|open world)\b", blob, re.I):
@@ -164,6 +189,7 @@ def resolve_kind(kind: str, name: str = "", description: str = "") -> tuple[str,
         "vite-react": "Избрана платформа: Vite + React",
         "expo": "Избрана платформа: Expo / React Native",
         "unity": "Избрана платформа: Unity C# (локален Unity Hub)",
+        "godot": "Избрана платформа: Godot 4 (локален Editor)",
         "fastapi": "Backend API",
         "streamlit": "Python data app",
         "node": "Node.js server",
@@ -243,8 +269,18 @@ def autopilot_research_addendum(kind: str, *, slug: str = "") -> str:
 
 def game_review_system_addendum(kind: str) -> str:
     """Extra rules for LLM code reviewer on game projects."""
-    if kind not in ("static", "vite", "vite-react", "expo", "unity"):
+    if kind not in ("static", "vite", "vite-react", "expo", "unity", "godot"):
         return ""
+    if kind == "godot":
+        return (
+            "\nGODOT 4 — ПРАВИЛА ЗА REVIEWER:\n"
+            "- extends CharacterBody2D / Node2D / Control — ОДОБРЕНО\n"
+            "- [gd_scene format=3] .tscn — ОДОБРЕНО\n"
+            "- Autoload Game за score/fail — ОДОБРЕНО\n"
+            "- signal.connect(callable) (Godot 4) — ОДОБРЕНО\n"
+            "- ЗАБРАНЕНО: Phaser, React, HTML gameplay, Unity C# в този kind\n"
+            "- Файлът НЕ се изпълнява в browser sandbox — Godot Hub локално\n"
+        )
     if kind == "unity":
         return (
             "\nUNITY (C# + URP) — ПРАВИЛА ЗА REVIEWER:\n"
@@ -302,7 +338,7 @@ def game_review_system_addendum(kind: str) -> str:
 
 def autopilot_plan_addendum(kind: str) -> str:
     """Append to planner system prompt for game projects."""
-    if kind not in ("static", "vite", "vite-react", "expo"):
+    if kind not in ("static", "vite", "vite-react", "expo", "godot"):
         return ""
     hints = get_hints(kind, description="game")
     staging = "\n".join(f"  • {s}" for s in (hints.get("staging") or []))
@@ -323,5 +359,5 @@ def kind_detect_system_prompt() -> str:
         "Ти си platform architect. Анализираш описание и избираш НАЙ-ПОДХОДЯЩАТА платформа.\n\n"
         + PLATFORM_PICKER_GUIDE
         + "\n\nОТГОВОРИ САМО С ВАЛИДЕН JSON:\n"
-        '{"kind":"<static|vite|vite-react|fastapi|streamlit|node|expo|unity>","reason":"<1 изречение BG>"}'
+        '{"kind":"<static|vite|vite-react|fastapi|streamlit|node|expo|unity|godot>","reason":"<1 изречение BG>"}'
     )

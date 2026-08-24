@@ -673,6 +673,8 @@ def select_skills(user_message: str, intent: str, hint: str = "") -> list[str]:
         "arcade_craft": ["игра", "game", "racing", "racer", "f-zero", "wipeout",
                          "three.js", "3d", "състезан", "arcade", "phaser",
                          "formula minus", "fm1"],
+        "godot": ["godot", "gdscript", "metroidvania", ".tscn", "tscn"],
+        "blender_jobs": ["blender", "bpy", "gltf", "glb export", "armature"],
         "playtest": ["playtest", "тествай играта", "готови ли сме"],
     }
     for name in _SKILLS_CACHE:
