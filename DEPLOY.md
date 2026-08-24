@@ -1,19 +1,19 @@
-# Деплой на Дедал (PC + облак)
+# Deploy Daedalus (PC + cloud)
 
-Дедал е един FastAPI процес на порт **8787**. Postgres не е нужен: SQLite живее под `$DAEDALUS_DATA`.
+Daedalus is one FastAPI process on port **8787**. Postgres is not required: SQLite lives under `$DAEDALUS_DATA`.
 
-## Наживо
+## Live
 
-Studio → **Наживо** (или `POST /api/v1/playground/projects/{slug}/live`):
+Studio → **Live** (or `POST /api/v1/playground/projects/{slug}/live`):
 
-1. Строи static (vite/expo) и сервира `/apps/{slug}/` на същия процес.
-2. Взема първия публичен backend, който работи:
-   - `NETLIFY_AUTH_TOKEN` → траен `*.netlify.app` (секунди; иска Node/`npx`)
-   - `GITLAB_TOKEN` → публичен GitLab Pages проект `daedalus-{slug}` (`*.gitlab.io`, CI 1–2 мин)
-   - Netlify `--allow-anonymous` → моментален URL, **claim до 1 час**
-3. Офлайн кит → само локално `/apps/`.
+1. Builds static (vite/expo) and serves `/apps/{slug}/` on this process.
+2. Picks the first public backend that works:
+   - `NETLIFY_AUTH_TOKEN` → durable `*.netlify.app` (seconds; needs Node/`npx`)
+   - `GITLAB_TOKEN` → public GitLab Pages project `daedalus-{slug}` (`*.gitlab.io`, CI 1–2 min)
+   - Netlify `--allow-anonymous` → instant URL, **claim within 1 hour**
+3. Offline kit → local `/apps/` only.
 
-Безплатен custom `.com` не е включен. Получаваш реален https поддомейн.
+A free custom `.com` is not included. You get a real https subdomain.
 
 ## Windows (Start Menu)
 
@@ -35,19 +35,19 @@ install). Ollama stays a local provider.
 Uninstall: Settings → Apps → Daedalus, or `uninstall.ps1` (add `-RemoveData`
 to wipe memory/games). Wizard installer: `packaging/windows/build-setup.ps1`.
 
-## Локален PC
+## Local PC
 
 ```bash
 cd deadalus-agent-0
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[playwright]"   # по желание, за браузърна проверка
+pip install -e ".[playwright]"   # optional, for browser verify
 python -m playwright install chromium
 export DAEDALUS_STANDALONE=1
-export ALLTOKEN_API_KEY=...      # или OPENROUTER_API_KEY / локален Ollama
+export ALLTOKEN_API_KEY=...      # or OPENROUTER_API_KEY / local Ollama
 python -m app.cli serve --host 127.0.0.1 --port 8787
 ```
 
-| Какво | URL |
+| What | URL |
 |---|---|
 | Studio | http://127.0.0.1:8787 |
 | Command Center | http://127.0.0.1:8787/admin/daedalus |
@@ -55,39 +55,39 @@ python -m app.cli serve --host 127.0.0.1 --port 8787
 | API docs | http://127.0.0.1:8787/docs |
 | Health | http://127.0.0.1:8787/health |
 
-## Docker (PC или VPS)
+## Docker (PC or VPS)
 
 ```bash
 cp .env.example .env
-# попълни ключ
+# fill a key
 docker compose up --build -d
 ```
 
-Данните (проекти, SQLite, Chroma) са в volume `daedalus-data` на `/var/lib/daedalus`. Образът задава `DAEDALUS_DATA` там и без compose, така че `docker run -v daedalus-data:/var/lib/daedalus` пази паметта между рестарти.
+Data (projects, SQLite, Chroma) lives in volume `daedalus-data` at `/var/lib/daedalus`. The image sets `DAEDALUS_DATA` there even without compose, so `docker run -v daedalus-data:/var/lib/daedalus` keeps memory across restarts.
 
-## Облак
+## Cloud
 
-- Една реплика стига (jobs са in-process).
-- Persist-ни volume-а. Там са Playground работните копия + SQLite.
-- Сложи reverse proxy (Caddy/nginx) отпред за HTTPS.
-- Преди да отвориш порта към интернет: смени peer секрета в `.env` (виж [docs/ENV.md](docs/ENV.md)) и слушай през TLS, не директно `0.0.0.0` без защита.
+- One replica is enough (jobs are in-process).
+- Persist the volume. It holds Playground workspaces + SQLite.
+- Put a reverse proxy (Caddy/nginx) in front for HTTPS.
+- Before exposing the port: change the peer secret in `.env` (see [docs/ENV.md](docs/ENV.md)) and listen through TLS, not bare `0.0.0.0`.
 
 ### fly.io
 
 ```bash
-fly launch --copy-config --yes   # ползва fly.toml; създай volume daedalus_data
+fly launch --copy-config --yes   # uses fly.toml; create volume daedalus_data
 fly secrets set ALLTOKEN_API_KEY=...
 fly deploy
 ```
 
 ### Render
 
-Свържи това GitLab репо и ползвай `render.yaml` (Docker + диск на `/var/lib/daedalus`). Задай `ALLTOKEN_API_KEY` (или друг ключ) в dashboard-а.
+Connect this GitLab repo and use `render.yaml` (Docker + disk at `/var/lib/daedalus`). Set `ALLTOKEN_API_KEY` (or another key) in the dashboard.
 
 ### GitLab Container Registry
 
-На `main`, `.gitlab-ci.yml` строи образа и, когато `CI_REGISTRY` е сетнат, push-ва `$CI_REGISTRY_IMAGE:latest`. Деплойвай този образ където Docker върви.
+On `main`, `.gitlab-ci.yml` builds the image and, when `CI_REGISTRY` is set, pushes `$CI_REGISTRY_IMAGE:latest`. Deploy that image anywhere Docker runs.
 
-## Среда
+## Environment
 
-Виж `.env.example` и [docs/ENV.md](docs/ENV.md). Минимум: един от `ALLTOKEN_API_KEY`, `OPENROUTER_API_KEY`, `NOVITA_API_KEY`, `NVIDIA_API_KEY`, **или** локален провайдър. `NOVITA_API_KEY` / `OPENROUTER_API_KEY` включват и генериране на спрайтове в Playground.
+See `.env.example` and [docs/ENV.md](docs/ENV.md). Minimum: one of `ALLTOKEN_API_KEY`, `OPENROUTER_API_KEY`, `NOVITA_API_KEY`, `NVIDIA_API_KEY`, **or** a local provider. `NOVITA_API_KEY` / `OPENROUTER_API_KEY` also enable Playground sprite generation.

@@ -161,13 +161,12 @@ function New-DaedalusShortcut([string] $LinkPath, [string] $Target) {
     $s.WorkingDirectory = $InstallRoot
     $s.WindowStyle = 7
     $s.Description = "$DisplayName — coding agent (Studio)"
-    $iconExe = Join-Path $InstallRoot "Daedalus.exe"
-    if (Test-Path $iconExe) {
-        $s.IconLocation = $iconExe
+    $iconIco = Join-Path $InstallRoot "packaging\windows\daedalus.ico"
+    if (-not (Test-Path $iconIco)) {
+        $iconIco = Join-Path $InstallRoot "app\static\favicon.ico"
     }
-    else {
-        $icon = Join-Path $InstallRoot "app\static\daedalus-mark.png"
-        if (Test-Path $icon) { $s.IconLocation = $icon }
+    if (Test-Path $iconIco) {
+        $s.IconLocation = $iconIco
     }
     $s.Save()
 }

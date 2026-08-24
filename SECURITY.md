@@ -1,28 +1,28 @@
-# Сигурност — Дедал
+# Security — Daedalus
 
-## Докладване
+## Reporting
 
-Ако намериш уязвимост в Дедал (RCE извън jail-а, изтичане на ключове, auth bypass на Studio, когато е изложен в мрежата):
+If you find a vulnerability in Daedalus (RCE outside the jail, key leakage, auth bypass on Studio when it is exposed on a network):
 
-1. Отвори **confidential** GitLab issue: https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/issues/new
-2. Или пиши на maintainer-а през GitLab (не публикувай PoC в публичен ticket).
+1. Open a **confidential** GitLab issue: https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/issues/new
+2. Or write the maintainer on GitLab (do not post a PoC in a public ticket).
 
-Не commi-твай `.env`, токени, Chroma dump-ове с лични чатове.
+Do not commit `.env`, tokens, or Chroma dumps with private chats.
 
-## Какво Дедал прави сам
+## What Daedalus already does
 
-- Shell командите вървят в jail; тайните се махат от env преди `run_command`.
-- `write_file` пише в Playground проект, не в harness-а. Пачове към `daedalus/` минават през предложения + Approve.
-- Windows приложението слуша само `127.0.0.1:8787`.
-- Офлайн китът отказва търсене, Jina и image-gen.
+- Shell commands run in a jail; secrets are stripped from env before `run_command`.
+- `write_file` writes a Playground project, not the harness. Patches to `daedalus/` go through proposals + Approve.
+- The Windows app binds `127.0.0.1:8787` only.
+- Offline kit refuses search, Jina, and image-gen.
 
-## Какво трябва да направиш ти
+## What you should do
 
-- На лаптоп: `daedalus serve --host 127.0.0.1`.
-- На VPS: HTTPS reverse proxy, сменен peer секрет от `.env.example`, persist-нат volume само за теб.
-- Не expосе-вай порт 8787 към интернет без TLS и без сменен секрет.
-- Пази `GITLAB_TOKEN` / `NETLIFY_AUTH_TOKEN` / LLM ключове извън git.
+- On a laptop: `daedalus serve --host 127.0.0.1`.
+- On a VPS: HTTPS reverse proxy, a changed peer secret from `.env.example`, a volume only you persist.
+- Do not expose port 8787 to the internet without TLS and a changed secret.
+- Keep `GITLAB_TOKEN` / `NETLIFY_AUTH_TOKEN` / LLM keys out of git.
 
-## Поддържани версии
+## Supported versions
 
-Поддържаме клона `main` на това репо. Няма отделен LTS. Обнови с `git pull` и `pip install -e .`.
+We support the `main` branch of this repo. There is no separate LTS. Update with `git pull` and `pip install -e .`.
