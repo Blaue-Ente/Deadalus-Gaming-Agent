@@ -52,8 +52,8 @@ def dod_v2_static(pdir: Path) -> dict[str, Any]:
         )
         add(
             "camera_clip",
-            "SpringArm3D" in tscn or "Camera3D" in tscn,
-            "SpringArm3D preferred so the camera does not sit inside the mesh",
+            "Camera3D" in tscn,
+            "Camera3D present (follow-cam offset; SpringArm is optional)",
         )
         add("console", "get_node(" not in player.split("_physics_process")[-1] if "_physics_process" in player else True,
             "No get_node in the hot path of player.gd")

@@ -44,7 +44,7 @@ renderer/rendering_method="forward_plus"
 """
 
 _MAIN_TSCN = r"""
-[gd_scene load_steps=12 format=3]
+[gd_scene load_steps=24 format=3]
 
 [ext_resource type="Script" path="res://scripts/player.gd" id="1_player"]
 [ext_resource type="Script" path="res://scripts/plate.gd" id="2_plate"]
@@ -71,11 +71,51 @@ emission_enabled = true
 emission = Color(0.2, 0.8, 0.3, 1)
 emission_energy_multiplier = 2.0
 
+[sub_resource type="BoxMesh" id="BoxMesh_floor"]
+size = Vector3(16, 0.4, 16)
+material = SubResource("Mat_floor")
+
+[sub_resource type="BoxMesh" id="BoxMesh_wall_ns"]
+size = Vector3(16, 3, 0.4)
+material = SubResource("Mat_wall")
+
+[sub_resource type="BoxMesh" id="BoxMesh_wall_ew"]
+size = Vector3(0.4, 3, 16)
+material = SubResource("Mat_wall")
+
+[sub_resource type="BoxMesh" id="BoxMesh_player"]
+size = Vector3(0.8, 1.6, 0.8)
+material = SubResource("Mat_player")
+
+[sub_resource type="BoxMesh" id="BoxMesh_plate"]
+size = Vector3(2, 0.15, 2)
+material = SubResource("Mat_plate")
+
+[sub_resource type="BoxMesh" id="BoxMesh_door"]
+size = Vector3(4, 3, 0.35)
+material = SubResource("Mat_door")
+
+[sub_resource type="BoxMesh" id="BoxMesh_beacon"]
+size = Vector3(0.4, 0.4, 0.4)
+material = SubResource("Mat_goal")
+
 [sub_resource type="BoxShape3D" id="BoxShape3D_player"]
 size = Vector3(0.8, 1.6, 0.8)
 
+[sub_resource type="BoxShape3D" id="BoxShape3D_floor"]
+size = Vector3(16, 0.4, 16)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_ns"]
+size = Vector3(16, 3, 0.4)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_wall_ew"]
+size = Vector3(0.4, 3, 16)
+
 [sub_resource type="BoxShape3D" id="BoxShape3D_plate"]
 size = Vector3(2, 0.2, 2)
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_door"]
+size = Vector3(4, 3, 0.35)
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_goal"]
 size = Vector3(1.4, 2, 1.4)
@@ -84,38 +124,58 @@ size = Vector3(1.4, 2, 1.4)
 
 [node name="Sun" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.612, 6, 10, 4)
-shadow_enabled = true
+shadow_enabled = false
 light_energy = 1.2
 
-[node name="Floor" type="CSGBox3D" parent="."]
+[node name="Floor" type="StaticBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.2, 0)
-size = Vector3(16, 0.4, 16)
-use_collision = true
-material = SubResource("Mat_floor")
+collision_layer = 1
 
-[node name="WallN" type="CSGBox3D" parent="."]
+[node name="Mesh" type="MeshInstance3D" parent="Floor"]
+mesh = SubResource("BoxMesh_floor")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Floor"]
+shape = SubResource("BoxShape3D_floor")
+
+[node name="WallN" type="StaticBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, -8)
-size = Vector3(16, 3, 0.4)
-use_collision = true
-material = SubResource("Mat_wall")
+collision_layer = 1
 
-[node name="WallS" type="CSGBox3D" parent="."]
+[node name="Mesh" type="MeshInstance3D" parent="WallN"]
+mesh = SubResource("BoxMesh_wall_ns")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="WallN"]
+shape = SubResource("BoxShape3D_wall_ns")
+
+[node name="WallS" type="StaticBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 8)
-size = Vector3(16, 3, 0.4)
-use_collision = true
-material = SubResource("Mat_wall")
+collision_layer = 1
 
-[node name="WallW" type="CSGBox3D" parent="."]
+[node name="Mesh" type="MeshInstance3D" parent="WallS"]
+mesh = SubResource("BoxMesh_wall_ns")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="WallS"]
+shape = SubResource("BoxShape3D_wall_ns")
+
+[node name="WallW" type="StaticBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 1.5, 0)
-size = Vector3(0.4, 3, 16)
-use_collision = true
-material = SubResource("Mat_wall")
+collision_layer = 1
 
-[node name="WallE" type="CSGBox3D" parent="."]
+[node name="Mesh" type="MeshInstance3D" parent="WallW"]
+mesh = SubResource("BoxMesh_wall_ew")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="WallW"]
+shape = SubResource("BoxShape3D_wall_ew")
+
+[node name="WallE" type="StaticBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 1.5, 0)
-size = Vector3(0.4, 3, 16)
-use_collision = true
-material = SubResource("Mat_wall")
+collision_layer = 1
+
+[node name="Mesh" type="MeshInstance3D" parent="WallE"]
+mesh = SubResource("BoxMesh_wall_ew")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="WallE"]
+shape = SubResource("BoxShape3D_wall_ew")
 
 [node name="Player" type="CharacterBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 5)
@@ -126,16 +186,11 @@ script = ExtResource("1_player")
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Player"]
 shape = SubResource("BoxShape3D_player")
 
-[node name="Body" type="CSGBox3D" parent="Player"]
-size = Vector3(0.8, 1.6, 0.8)
-material = SubResource("Mat_player")
+[node name="Body" type="MeshInstance3D" parent="Player"]
+mesh = SubResource("BoxMesh_player")
 
-[node name="SpringArm3D" type="SpringArm3D" parent="Player"]
-transform = Transform3D(1, 0, 0, 0, 0.906, 0.423, 0, -0.423, 0.906, 0, 1.1, 0)
-spring_length = 7.0
-collision_mask = 1
-
-[node name="Camera3D" type="Camera3D" parent="Player/SpringArm3D"]
+[node name="Camera3D" type="Camera3D" parent="Player"]
+transform = Transform3D(1, 0, 0, 0, 0.906, 0.423, 0, -0.423, 0.906, 0, 2.4, 7.0)
 current = true
 fov = 70.0
 
@@ -145,23 +200,25 @@ collision_layer = 4
 collision_mask = 2
 script = ExtResource("2_plate")
 
-[node name="Mesh" type="CSGBox3D" parent="Plate"]
-size = Vector3(2, 0.15, 2)
-material = SubResource("Mat_plate")
+[node name="Mesh" type="MeshInstance3D" parent="Plate"]
+mesh = SubResource("BoxMesh_plate")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Plate"]
 shape = SubResource("BoxShape3D_plate")
 
-[node name="Door" type="CSGBox3D" parent="."]
+[node name="Door" type="StaticBody3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, -5)
-size = Vector3(4, 3, 0.35)
-use_collision = true
-material = SubResource("Mat_door")
+collision_layer = 1
 
-[node name="GoalBeacon" type="CSGBox3D" parent="."]
+[node name="Mesh" type="MeshInstance3D" parent="Door"]
+mesh = SubResource("BoxMesh_door")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Door"]
+shape = SubResource("BoxShape3D_door")
+
+[node name="GoalBeacon" type="MeshInstance3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3.4, -5)
-size = Vector3(0.4, 0.4, 0.4)
-material = SubResource("Mat_goal")
+mesh = SubResource("BoxMesh_beacon")
 
 [node name="Goal" type="Area3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, -6.5)
@@ -170,8 +227,6 @@ collision_mask = 2
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="Goal"]
 shape = SubResource("BoxShape3D_goal")
-
-[node name="NavRegion" type="NavigationRegion3D" parent="."]
 
 [node name="HUD" type="CanvasLayer" parent="."]
 script = ExtResource("3_hud")
@@ -227,7 +282,7 @@ _PLATE_GD = r'''
 extends Area3D
 ## Pressure plate — standing on it disables the door collision/visibility.
 
-@onready var _door: CSGBox3D = get_parent().get_node("Door") as CSGBox3D
+@onready var _door: StaticBody3D = get_parent().get_node("Door") as StaticBody3D
 
 func _ready() -> void:
 	body_entered.connect(_on_enter)
@@ -245,7 +300,8 @@ func _set_open(open: bool) -> void:
 	if _door == null:
 		return
 	_door.visible = not open
-	_door.use_collision = not open
+	_door.collision_layer = 0 if open else 1
+	_door.collision_mask = 0 if open else 1
 '''.lstrip()
 
 _HUD_GD = r'''
@@ -304,24 +360,35 @@ func _unhandled_input(event: InputEvent) -> void:
 
 _PROBE_GD = r'''
 extends Node
-## Headless probe — dumps studio/probe.json and quits when launched with --probe.
+## Headless probe — writes studio/probe.json on exit when launched with --probe.
+
+var _armed: bool = false
+var _dumped: bool = false
 
 func _ready() -> void:
-	if "--probe" not in OS.get_cmdline_user_args():
+	_armed = "--probe" in OS.get_cmdline_user_args()
+	if not _armed:
 		return
-	await get_tree().create_timer(8.0).timeout
+	tree_exiting.connect(_dump)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	_dump()
+	get_tree().quit()
+
+func _dump() -> void:
+	if not _armed or _dumped:
+		return
+	_dumped = true
 	var payload := {
 		"fps": Engine.get_frames_per_second(),
 		"failed": Game.is_failed,
 		"won": Game.is_won,
 		"score": Game.score,
 	}
-	var path := "res://studio/probe.json"
-	var f := FileAccess.open(path, FileAccess.WRITE)
+	var f := FileAccess.open("res://studio/probe.json", FileAccess.WRITE)
 	if f:
 		f.store_string(JSON.stringify(payload))
 		f.close()
-	get_tree().quit()
 '''.lstrip()
 
 _ICON_SVG = """\

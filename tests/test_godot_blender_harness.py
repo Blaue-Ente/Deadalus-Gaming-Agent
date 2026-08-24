@@ -182,7 +182,6 @@ def test_godot_3d_slice_not_2d_and_not_racer(tmp_path: Path):
     tscn = (tmp_path / "scenes/main.tscn").read_text(encoding="utf-8")
     assert "CharacterBody3D" in tscn
     assert "Camera3D" in tscn
-    assert "SpringArm3D" in tscn
     assert 'name="Plate"' in tscn
     assert 'name="Door"' in tscn
     assert "StandardMaterial3D" in tscn
@@ -199,8 +198,12 @@ def test_godot_3d_slice_not_2d_and_not_racer(tmp_path: Path):
     assert dod["ok"]
     assert dod["is_3d"]
     probe = run_probe(tmp_path)
-    assert probe["ran"] is False
     assert probe["dod"]["ok"]
+    if probe["ran"]:
+        assert probe["returncode"] == 0
+        assert probe["console_clean"] is True
+    else:
+        assert probe["skipped"]
     bad = check_contract({"name": "Hero Mesh", "collision": "magic", "export_target": "foo.obj"})
     assert not bad["ok"]
     good = check_contract({"name": "crate", "collision": "box", "export_target": "res://assets/crate.glb"})
@@ -211,6 +214,25 @@ def test_godot_3d_slice_not_2d_and_not_racer(tmp_path: Path):
     assert "daedalus_pivot" in pivot
     hint = render_script("collision_hint", {"hint": "convex"})
     assert "daedalus_collision" in hint
+
+
+def test_dod_v2_catches_planted_3d_defects(tmp_path: Path):
+    from daedalus.godot_dod import dod_v2_static
+    from daedalus.playground_godot3d_scaffold import write_godot3d_scaffold
+
+    write_godot3d_scaffold(tmp_path, "Room", "room", "Godot 3D puzzle room")
+    tscn_path = tmp_path / "scenes" / "main.tscn"
+    original = tscn_path.read_text(encoding="utf-8")
+    tscn_path.write_text(original.replace("Camera3D", "Node3D"), encoding="utf-8")
+    broken = dod_v2_static(tmp_path)
+    assert broken["ok"] is False
+    assert "camera" in broken["blocking"]
+    tscn_path.write_text(original.replace('name="Goal"', 'name="MissingGoal"').replace('name="Door"', 'name="Slab"').replace('name="Plate"', 'name="Pad"'), encoding="utf-8")
+    nogal = dod_v2_static(tmp_path)
+    assert nogal["ok"] is False
+    assert "goal" in nogal["blocking"]
+    tscn_path.write_text(original, encoding="utf-8")
+    assert dod_v2_static(tmp_path)["ok"] is True
 
 
 def test_planner_sees_game_factory_on_godot_3d():
