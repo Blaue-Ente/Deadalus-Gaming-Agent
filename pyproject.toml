@@ -5,9 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "daedalus"
 version = "0.3.4"
-description = "Daedalus — independent coding agent harness (games, apps, self-improvement)"
+description = "Daedalus — independent coding agent (games first, apps second, verify while building)"
 readme = "README.md"
 requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Daedalus Contributors" }]
+keywords = ["daedalus", "coding-agent", "games", "godot", "playground"]
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
@@ -19,8 +22,12 @@ dependencies = [
     "python-multipart>=0.0.9",
 ]
 
+[project.urls]
+Homepage = "https://gitlab.com/Blaue-Ente/deadalus-agent-0"
+Issues = "https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/issues"
+Changelog = "https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/blob/main/CHANGELOG.md"
+
 [project.optional-dependencies]
-adn = ["argos-data-nexus"]
 playwright = ["playwright>=1.60.0"]
 gui = ["pywebview>=5.0"]
 dev = ["pytest>=8.0.0"]
