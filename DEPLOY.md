@@ -17,17 +17,23 @@ Studio → **Наживо** (или `POST /api/v1/playground/projects/{slug}/liv
 
 ## Windows (Start Menu)
 
+Extra option: `Daedalus.exe` plus a private CPython (Python on PATH is optional). See [docs/INSTALL.md](docs/INSTALL.md).
+
 ```powershell
-# Python 3.11+ с "Add python.exe to PATH"
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 .\packaging\windows\install.ps1 -DesktopShortcut
 ```
 
-Копира продукта в `%LOCALAPPDATA%\Programs\Daedalus`, прави venv, опитва `pip install -e ".[gui]"` (pywebview / Edge WebView2) и пряк път **Дедал**. Studio слуша само **127.0.0.1:8787**.
+Copies the product to `%LOCALAPPDATA%\Programs\Daedalus`, creates a venv,
+tries `pip install -e ".[gui]"` (pywebview / Edge WebView2), compiles
+`Daedalus.exe`, and a Start Menu shortcut **Daedalus**. Studio binds
+**127.0.0.1:8787** only.
 
-Ключове: `%LOCALAPPDATA%\Daedalus\.env` (копие на `.env.example` при първа инсталация). Ollama си остава локален провайдър.
+Keys: `%LOCALAPPDATA%\Daedalus\.env` (copied from `.env.example` on first
+install). Ollama stays a local provider.
 
-Премахване: Settings → Apps → Дедал, или `uninstall.ps1` (с `-RemoveData` чисти памет/игри). Inno Setup: `packaging/windows/Daedalus.iss`.
+Uninstall: Settings → Apps → Daedalus, or `uninstall.ps1` (add `-RemoveData`
+to wipe memory/games). Wizard installer: `packaging/windows/build-setup.ps1`.
 
 ## Локален PC
 

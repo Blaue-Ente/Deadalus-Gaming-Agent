@@ -1,7 +1,7 @@
 #Requires -Version 5.1
 <#
 .SYNOPSIS
-  Remove the Дедал Start Menu app. Data stays unless -RemoveData.
+  Remove the Daedalus Start Menu app. Data stays unless -RemoveData.
 #>
 param(
     [switch] $RemoveData
@@ -9,7 +9,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $AppName = "Daedalus"
-$DisplayName = "Дедал"
+$DisplayName = "Daedalus"
 $DefaultInstall = Join-Path $env:LOCALAPPDATA "Programs\$AppName"
 $DataRoot = Join-Path $env:LOCALAPPDATA $AppName
 $InstallRoot = $DefaultInstall
@@ -20,13 +20,18 @@ if (Test-Path $reg) {
     if ($fromReg) { $InstallRoot = $fromReg }
 }
 
-$links = @(
-    (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\$DisplayName.lnk"),
-    (Join-Path ([Environment]::GetFolderPath("Desktop")) "$DisplayName.lnk"),
-    (Join-Path ([Environment]::GetFolderPath("Startup")) "$DisplayName.lnk")
+$linkNames = @($DisplayName, "Дедал")
+$linkDirs = @(
+    (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"),
+    [Environment]::GetFolderPath("Desktop"),
+    [Environment]::GetFolderPath("Startup")
 )
-foreach ($link in $links) {
-    if (Test-Path $link) { Remove-Item -Force $link }
+foreach ($dir in $linkDirs) {
+    if (-not $dir) { continue }
+    foreach ($name in $linkNames) {
+        $link = Join-Path $dir "$name.lnk"
+        if (Test-Path $link) { Remove-Item -Force $link }
+    }
 }
 
 if (Test-Path $reg) { Remove-Item -Recurse -Force $reg }
@@ -35,25 +40,27 @@ if (Test-Path $InstallRoot) {
     $resolved = [IO.Path]::GetFullPath($InstallRoot)
     $allowed = [IO.Path]::GetFullPath($DefaultInstall)
     if ($resolved -eq $allowed) {
-        Write-Host "Премахвам $resolved"
+        Write-Host "Removing $resolved"
         Remove-Item -Recurse -Force $resolved
     }
     else {
-        $venv = Join-Path $resolved ".venv"
-        if (Test-Path $venv) {
-            Remove-Item -Recurse -Force $venv
-            Write-Host "Махнат venv в $venv"
+        foreach ($rel in @(".venv", "runtime", "Daedalus.exe")) {
+            $p = Join-Path $resolved $rel
+            if (Test-Path $p) {
+                Remove-Item -Recurse -Force $p
+                Write-Host "Removed $p"
+            }
         }
-        Write-Host "Кодът в $resolved не е изтрит (не е %LOCALAPPDATA%\Programs\Daedalus)."
+        Write-Host "Source tree at $resolved was not deleted (not %LOCALAPPDATA%\Programs\Daedalus)."
     }
 }
 
 if ($RemoveData -and (Test-Path $DataRoot)) {
-    Write-Host "Премахвам данни $DataRoot"
+    Write-Host "Removing data $DataRoot"
     Remove-Item -Recurse -Force $DataRoot
 }
 else {
-    Write-Host "Данните остават в $DataRoot (памет, игри, .env). Изтрий с -RemoveData ако искаш."
+    Write-Host "Data kept in $DataRoot (memory, games, .env). Add -RemoveData to wipe it."
 }
 
-Write-Host "Дедал е махнат от менюто."
+Write-Host "Daedalus was removed from the Start Menu."

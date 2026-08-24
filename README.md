@@ -15,13 +15,38 @@ Independent coding agent. **Games first**, apps second, verify is part of buildi
 | Лиценз | [MIT](LICENSE) |
 | Python | 3.11+ |
 | Studio | http://127.0.0.1:8787 |
-| Пакет | `daedalus` · CLI `daedalus` |
+| Package | `daedalus` · CLI `daedalus` |
 
 ---
 
-## Съдържание
+## Get Daedalus on your PC
 
-- [Какво е Дедал](#какво-е-дедал)
+The GitLab tree **is** the product. Copy the whole repo (ZIP or `git clone`). Git is optional.
+
+| How | Windows | Linux / macOS |
+|---|---|---|
+| Extra `.exe` option | `install.ps1` or `Daedalus-Setup.exe` → Start Menu **Daedalus.exe**. Private CPython is fetched if you have none. Not a PyInstaller one-file freeze. | — |
+| Developer | Python 3.11+ venv (below) | Python 3.11+ venv (below) |
+| Docker | `docker compose up --build` | same |
+
+**ZIP (no git):** [deadalus-agent-0-main.zip](https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/archive/main/deadalus-agent-0-main.zip) or **Code → Download source code**. Unzip, then:
+
+```powershell
+# Windows — Start Menu + Daedalus.exe (downloads CPython if PATH has no 3.11+)
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+.\packaging\windows\install.ps1 -DesktopShortcut
+```
+
+Build the wizard installer on a Windows PC: `.\packaging\windows\build-setup.ps1` → `dist\Daedalus-Setup.exe`.
+
+Step-by-step: [docs/INSTALL.md](docs/INSTALL.md) · [packaging/windows/README.md](packaging/windows/README.md).
+
+---
+
+## Contents
+
+- [Get Daedalus on your PC](#get-daedalus-on-your-pc)
+- [What Daedalus is](#какво-е-дедал)
 - [Какво може](#какво-може)
 - [Изисквания](#изисквания)
 - [Инсталация](#инсталация)
@@ -110,7 +135,7 @@ Studio таб **Свят** показва Reach / playtest / MCP статус.
 
 ## Инсталация
 
-Клонирай **това** репо. То е продуктът.
+Clone or unzip **this** repository. That folder is the product. Details: [docs/INSTALL.md](docs/INSTALL.md).
 
 ```bash
 git clone https://gitlab.com/Blaue-Ente/deadalus-agent-0.git
@@ -150,25 +175,23 @@ python -m app.cli models
 
 ### Windows (Start Menu)
 
-Без Administrator. Python 3.11+ с **Add python.exe to PATH**, после в папката на репото:
+No Administrator. Extra option next to ZIP/git:
 
 ```powershell
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
-.\packaging\windows\install.ps1
-# по желание: -DesktopShortcut  -Startup
+.\packaging\windows\install.ps1 -DesktopShortcut
+# wizard installer (build on Windows):  .\packaging\windows\build-setup.ps1
 ```
 
-Старт → **Дедал** отваря прозорец към http://127.0.0.1:8787 (WebView2 ако има `pywebview`, иначе Tk, иначе браузър).
+If Python 3.11+ is not on PATH, a **private** CPython is installed under the app folder (not on PATH). Start → **Daedalus** opens a window on http://127.0.0.1:8787 (WebView2, else Tk, else the browser).
 
-| Какво | Къде |
+| What | Where |
 |---|---|
-| Ключове и `.env` | `%LOCALAPPDATA%\Daedalus\` |
-| Игри и памет | `%LOCALAPPDATA%\Daedalus\` |
-| Код + venv | `%LOCALAPPDATA%\Programs\Daedalus\` |
+| `.env` and keys | `%LOCALAPPDATA%\Daedalus\` |
+| Games and memory | `%LOCALAPPDATA%\Daedalus\` |
+| `Daedalus.exe`, venv, private CPython | `%LOCALAPPDATA%\Programs\Daedalus\` |
 
-Inno Setup: `iscc packaging\windows\Daedalus.iss` → `dist\Daedalus-Setup.exe`.
-
-Пълни стъпки: [`packaging/windows/README.md`](packaging/windows/README.md).
+[packaging/windows/README.md](packaging/windows/README.md)
 
 ### Docker
 
@@ -354,6 +377,7 @@ deadalus-agent-0/
 |---|---|
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Слоеве, пътища, игрова доктрина |
 | [DEPLOY.md](DEPLOY.md) | PC, Docker, Windows, fly.io, Render |
+| [docs/INSTALL.md](docs/INSTALL.md) | Copy the repo, Windows `.exe` option, venv, Docker |
 | [docs/ENV.md](docs/ENV.md) | Променливи на средата |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Как да допринасяш |
 | [SECURITY.md](SECURITY.md) | Как се докладват проблеми |

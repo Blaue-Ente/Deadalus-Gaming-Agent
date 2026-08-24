@@ -1,7 +1,7 @@
 """Desktop mode — start Studio and open a Windows window (or the browser).
 
-This is the process behind ``daedalus desktop`` / Daedalus.vbs. It binds
-loopback only, reuses an already-running instance, and never requires ADN.
+This is the process behind ``daedalus desktop`` / ``Daedalus.exe``. It binds
+loopback only, reuses an already-running instance, and never requires a host app.
 
 Preferred surface: pywebview + Edge WebView2. Fallback: tkinter panel.
 Last resort: the default browser. ``--no-browser`` / ``ui=none`` is headless.

@@ -27,9 +27,10 @@
 
 - CLI: `daedalus serve | ping | models | desktop`.
 - Docker Compose + GitLab CI образ.
-- Windows Start Menu инсталатор (WebView2 / Tk).
+- Windows: `install.ps1` / `Daedalus-Setup.exe` with private CPython and `Daedalus.exe` launcher (WebView2 / Tk).
 - LLM: AllToken, OpenRouter, Novita, NVIDIA, Ollama и други локални бекенди.
 
 ### Документация
 
 - README и спътниците описват само Дедал като самостоятелен продукт.
+- [docs/INSTALL.md](docs/INSTALL.md) — ZIP/git, venv, Docker, Windows `Daedalus.exe` extra option.

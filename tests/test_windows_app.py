@@ -166,14 +166,27 @@ def test_installer_scripts_exist():
     install = (root / "install.ps1").read_text(encoding="utf-8")
     uninstall = (root / "uninstall.ps1").read_text(encoding="utf-8")
     iss = (root / "Daedalus.iss").read_text(encoding="utf-8")
+    bundled = (root / "Get-BundledPython.ps1").read_text(encoding="utf-8")
+    launcher = (root / "DaedalusLauncher.cs").read_text(encoding="utf-8")
+    build = (root / "build-setup.ps1").read_text(encoding="utf-8")
     assert "LOCALAPPDATA" in install
     assert "Start Menu" in install
     assert "pythonw.exe" in install
     assert "[gui]" in install or "pywebview" in install
+    assert "BundlePython" in install
+    assert "Daedalus.exe" in install
     assert "PrivilegesRequired=lowest" in iss
     assert "install.ps1" in iss
+    assert "-BundlePython" in iss
     assert "-RemoveData" in uninstall
     assert "Programs\\Daedalus" in uninstall or "Programs\\$AppName" in uninstall
+    assert "3.12.10" in bundled
+    assert "globalcdn.nuget.org" in bundled or "nuget.org" in bundled
+    assert "DaedalusPythonSha512" in bundled
+    assert "-m app.cli desktop" in launcher
+    assert "DAEDALUS_WINDOWS_APP" in launcher
+    assert "ISCC" in build or "iscc" in build
+    assert (root / "redist" / "README.md").is_file()
 
 
 def test_capabilities_windows_desktop(win_tmp, monkeypatch):
