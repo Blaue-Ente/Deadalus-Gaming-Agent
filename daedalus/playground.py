@@ -36,7 +36,7 @@ log = logging.getLogger(__name__)
 ADN_ROOT = repo_root()
 PROJECTS_DIR = playground_projects_dir()
 
-VALID_KINDS = {"static", "fastapi", "streamlit", "vite", "vite-react", "node", "expo", "unity", "auto"}
+VALID_KINDS = {"static", "fastapi", "streamlit", "vite", "vite-react", "node", "expo", "unity", "godot", "auto"}
 VALID_SOURCES = {"built", "cloned", "imported", "revived"}
 
 _SLUG_RE = re.compile(r"[^a-z0-9-]+")
@@ -109,6 +109,10 @@ def detect_kind(root: Path) -> tuple[str, str, str]:
         return "unity", "", "studio/preview/index.html"
     if has("ProjectSettings/ProjectVersion.txt"):
         return "unity", "", "studio/preview/index.html"
+
+    # Godot 4
+    if has("project.godot"):
+        return "godot", "", "studio/preview/index.html"
 
     # Expo / React Native
     if has("app.json") or has("app.config.js") or has("app.config.ts"):
@@ -366,6 +370,9 @@ server.listen(PORT, () => console.log(`Server running on http://localhost:${{POR
     "unity": {
         # Unity scaffold via playground_unity_scaffold (imported below).
     },
+    "godot": {
+        # Godot scaffold via playground_godot_scaffold (imported below).
+    },
 }
 
 # Merge NativeBot-style Expo Router scaffold
@@ -378,6 +385,10 @@ def _write_scaffold(pdir: Path, kind: str, name: str, slug: str, description: st
     if kind == "unity":
         from .playground_unity_scaffold import write_unity_scaffold
         write_unity_scaffold(pdir, name, slug, description)
+        return
+    if kind == "godot":
+        from .playground_godot_scaffold import write_godot_scaffold
+        write_godot_scaffold(pdir, name, slug, description)
         return
     if kind == "vite":
         from .playground_racer_scaffold import maybe_write_racer_scaffold

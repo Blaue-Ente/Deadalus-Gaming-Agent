@@ -78,6 +78,31 @@ def wants_racer_scaffold(name: str = "", description: str = "") -> bool:
     return bool(_RACER_SCAFFOLD_RE.search(blob_of(name, description)))
 
 
+def looks_like_campaign_bible(text: str) -> bool:
+    """True for Shadow-Veins-class GDDs: biomes, chapters, console SKUs before M0 is fun.
+
+    A dumped sample GDD (3D Action RPG, 5 biomes, 12 chapters, PS5/Xbox, FMOD)
+    is a campaign bible — not an M0 template.
+    """
+    low = (text or "").lower()
+    hits = 0
+    if re.search(r"\b\d+\s*biomes?\b", low):
+        hits += 1
+    if re.search(r"\b\d+\s*chapters?\b", low):
+        hits += 1
+    if re.search(r"\b\d+\s*magic schools?\b", low):
+        hits += 1
+    if re.search(r"\b\d+\+?\s*side quests?\b", low):
+        hits += 1
+    if re.search(r"\b(ps5|playstation 5|xbox series|dedicated servers?)\b", low):
+        hits += 1
+    if re.search(r"\b(fmod|wwise)\b", low):
+        hits += 1
+    if re.search(r"\b(dark souls|elden ring|dishonored)\b", low):
+        hits += 1
+    return hits >= 2
+
+
 def fidelity_traps(text: str) -> list[str]:
     """LLM defaults that kill arcade-grade games."""
     blob = text or ""
@@ -133,9 +158,9 @@ def asset_route(text: str) -> dict[str, str]:
 
 def min_stages(kind: str, *, is_game: bool, description: str) -> int:
     if wants_high_fidelity(description) or looks_like_racer(description):
-        return 12 if kind in ("vite", "vite-react", "unity", "expo") else 8
+        return 12 if kind in ("vite", "vite-react", "unity", "expo", "godot") else 8
     if is_game:
-        return 8 if kind in ("expo", "vite-react", "vite", "unity") else 6
+        return 8 if kind in ("expo", "vite-react", "vite", "unity", "godot") else 6
     return 3
 
 
@@ -192,6 +217,11 @@ def gdd_section(brainstorm: dict[str, Any] | None) -> str:
     for trap in fidelity_traps(idea):
         lines.append(f"- ⚠️ {trap}")
         lines.append("")
+    if looks_like_campaign_bible(idea):
+        lines.append(
+            "- ⚠️ Campaign bible (biomes/chapters/console SKUs) is a scope warning, not an M0 template."
+        )
+        lines.append("")
     return "\n".join(lines)
 
 
@@ -207,6 +237,11 @@ def scope_warnings(brainstorm: dict[str, Any] | None) -> list[str]:
         if any(str(s).lower() in ("multiplayer", "netcode_mvp", "matchmaking") for s in systems):
             out.append("Multiplayer is a later wall — FM1 shipped single-player first. Keep MVP offline.")
         out.extend(fidelity_traps(idea))
+    if looks_like_campaign_bible(idea):
+        out.append(
+            "Campaign-bible GDD (multi-biome / 12 chapters / console SKUs): that is not M0. "
+            "Ship one verb + one fail first. Do not seed Game Studio from a Souls-like campaign doc."
+        )
     return out
 
 

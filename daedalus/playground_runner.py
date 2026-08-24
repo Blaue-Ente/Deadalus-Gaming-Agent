@@ -451,6 +451,21 @@ async def smoke_test(slug: str, *, settle: float = 3.5) -> dict[str, Any]:
             "local_only": True,
         }
 
+    if kind == "godot":
+        from .playground_godot_scaffold import verify_godot_scaffold
+        gv = verify_godot_scaffold(slug)
+        ok = bool(gv.get("ok"))
+        return {
+            "ok": ok,
+            "skipped": False,
+            "healthy": ok,
+            "exited": False,
+            "install_ok": True,
+            "logs": [f"[godot] scaffold check: {gv.get('file_count', 0)} files, {gv.get('gd_count', 0)} .gd"],
+            "error": "" if ok else (gv.get("error") or "Godot scaffold непълен"),
+            "local_only": True,
+        }
+
     # ── Vite kinds: compile gate (no long-lived dev server) ──────────────
     if kind in ("vite", "vite-react"):
         root = pg.project_dir(slug)

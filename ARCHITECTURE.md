@@ -62,6 +62,9 @@ routing, Postgres, and the current admin UI — not the agent's identity.
 - Arcade craft (`arcade_craft.py` + `studio_shelf.py` + `playground_racer_scaffold.py`):
   FM1-grade 3D uses Vite + Three.js WebGPU/TSL, specialist mesh/audio tools, vertical
   slice + fun gates. Racing briefs boot a playable M0 in `src/racer/` (not Phaser).
+- Godot 4 (`playground_godot_scaffold.py` + `godot_tools.py`): text `.tscn`/GDScript,
+  local Editor. Blender jobs (`blender_jobs.py`, `python -m daedalus.blender_mcp`) emit bpy
+  — they do not import `bpy` in the cloud.
 
 ## License boundary (MiroFish)
 
