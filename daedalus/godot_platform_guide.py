@@ -13,7 +13,7 @@ GODOT_PLAN_ADDENDUM = """
   3) scripts/autoload/game.gd — fail/score/reset
   4) scenes/ui/hud.tscn — HP/score, без gameplay logic
   5) scripts/npc/*.gd — Recast-style waypoints или NavigationAgent2D
-  6) assets/*.glb from tools/blender/ — import, не vertex dumps
+  6) assets/*.glb from tools/blender/ — import via glb_instance_tscn, не vertex dumps
 Един .tscn ИЛИ един .gd на етап. НЕ цял проект в един prompt.
 ЗАБРАНЕНО: Phaser, React, HTML gameplay, C# Unity в този kind.
 Cloud: Godot Editor не се пуска тук. Scaffold + Git → локален Godot 4.3.
@@ -53,7 +53,14 @@ GODOT_PHASES: tuple[dict[str, str], ...] = (
     {"id": "M4", "title": "VFX", "goal": "One GPUParticles2D / shader for juice (hit, jump)"},
     {"id": "M5", "title": "Audio", "goal": "Bus + 2–3 layered SFX; no fake licensed BGM"},
     {"id": "M6", "title": "Assets", "goal": "Import GLB/PNG; blender_jobs emit, Mixamo for humanoids"},
-    {"id": "M7", "title": "QA", "goal": "Headless check if godot in PATH; playtest heuristics"},
+    {
+        "id": "M7",
+        "title": "QA",
+        "goal": (
+            "Headless check if godot in PATH; _exit_tree/disconnect; no get_node in _process; "
+            "type hints; pooling"
+        ),
+    },
 )
 
 
@@ -65,7 +72,9 @@ def kind_rules_block() -> str:
 • Input: ui_* defaults OK в M0; после custom actions в project.godot.
 • Physics layers: world=1 player=2 enemies=3 pickups=4
 • Autoload Game = scripts/autoload/game.gd
-• 3D hero meshes: Blender jobs → GLB в assets/, не raw vertices.
+• 3D hero meshes: Blender jobs → GLB в assets/, после glb_instance_tscn — не raw vertices.
+• QA: _exit_tree + queue_free + disconnect; cache nodes (без get_node в _process);
+  type hints; pooling за bullets/VFX; coyote time + jump buffer на CharacterBody2D.
 • AGENT не пуска Godot Editor в cloud. Локално: Godot 4.3 → Open folder.
 • Optional CLI: godot --headless --path . --quit
 • ЗАБРАНЕНО: NEED_PLAYGROUND_RUN за godot в sandbox без binary.
@@ -86,4 +95,8 @@ def pipeline_prompt() -> str:
     for phase, role in zip(GODOT_PHASES, GODOT_CREW_ROLES):
         lines.append(f"- {phase['id']} [{role}]: {phase['goal']}")
     lines.append("Verify after M1: player can move, fail exists, HUD readable.")
+    lines.append(
+        "QA notes: _exit_tree / queue_free / signal disconnect; "
+        "never get_node() in _process; type hints; object pooling; coyote + jump buffer."
+    )
     return "\n".join(lines)

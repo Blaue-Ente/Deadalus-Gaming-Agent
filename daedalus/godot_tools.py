@@ -57,6 +57,32 @@ def scene_tscn(
     return "\n".join(lines)
 
 
+def glb_instance_tscn(
+    *,
+    root_name: str = "Hero",
+    glb_path: str = "res://assets/hero.glb",
+    script_path: str = "",
+) -> str:
+    """Node3D wrapper that instances an imported GLB PackedScene.
+
+    Godot imports ``.glb`` as a scene. Instance it — do not dump vertices into
+    ``.tscn``. Path convention is ``res://assets/*.glb`` (not ``exports/``).
+    """
+    ext = 1 + (1 if script_path else 0)
+    lines = [f"[gd_scene load_steps={ext + 1} format=3]", ""]
+    lines.append(f'[ext_resource type="PackedScene" path="{glb_path}" id="1_glb"]')
+    if script_path:
+        lines.append(f'[ext_resource type="Script" path="{script_path}" id="2_script"]')
+    lines.append("")
+    lines.append(f'[node name="{root_name}" type="Node3D"]')
+    if script_path:
+        lines.append('script = ExtResource("2_script")')
+    lines.append("")
+    lines.append('[node name="Mesh" parent="." instance=ExtResource("1_glb")]')
+    lines.append("")
+    return "\n".join(lines)
+
+
 def export_command(*, preset: str = "Web", path: str = ".") -> str:
     """Documented CLI. Cloud agents do not assume `godot` exists."""
     return (
@@ -89,4 +115,5 @@ def crew_tool_catalog() -> list[dict[str, Any]]:
         {"id": "project_configurator", "writes": "project.godot fields", "fn": "godot_tools.patch_project_name"},
         {"id": "build_exporter", "writes": "CLI hint", "fn": "godot_tools.export_command"},
         {"id": "signal_manager", "writes": "GDScript connect()", "fn": "godot_tools.signal_connect_snippet"},
+        {"id": "glb_instance", "writes": "Node3D .tscn wrapping GLB", "fn": "godot_tools.glb_instance_tscn"},
     ]

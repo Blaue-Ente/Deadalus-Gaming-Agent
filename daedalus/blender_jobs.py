@@ -1,11 +1,11 @@
 """Blender job templates — bpy scripts for the owner desktop, not in-cloud bpy.
 
-The described 41KB Blender MCP assumed Blender's Python and an addon tab.
-Daedalus cannot import bpy in the cloud VM. Instead we emit scripts under
+Daedalus cannot import bpy in the cloud VM. We emit scripts under
 ``tools/blender/`` and optionally run ``blender -b --python`` when the binary
 exists.
 
-Tools match the advertised set: primitives, PBR, export, humanoid rig, etc.
+Recipes stolen from a dumped Blender MCP (modify/modifier/light/render/Y-up
+GLB). Not stolen: arbitrary ``exec``, SSE-inside-Blender, mock-when-no-bpy.
 """
 from __future__ import annotations
 
@@ -20,9 +20,13 @@ JOB_IDS: tuple[str, ...] = (
     "create_mesh_grid",
     "apply_material_pbr",
     "add_camera_light",
+    "add_light",
     "set_transform",
+    "modify_mesh",
+    "add_modifier",
     "create_rig",
     "parent_armature",
+    "render_preview",
     "export_glb",
     "export_fbx",
     "batch_export",
@@ -58,6 +62,9 @@ ops = {{
     "uv_sphere": bpy.ops.mesh.primitive_uv_sphere_add,
     "cylinder": bpy.ops.mesh.primitive_cylinder_add,
     "plane": bpy.ops.mesh.primitive_plane_add,
+    "torus": bpy.ops.mesh.primitive_torus_add,
+    "cone": bpy.ops.mesh.primitive_cone_add,
+    "monkey": bpy.ops.mesh.primitive_monkey_add,
 }}
 fn = ops.get(KIND, bpy.ops.mesh.primitive_cube_add)
 fn(location=(0, 0, 0))
@@ -102,6 +109,19 @@ bpy.ops.object.light_add(type="SUN", location=(4, 2, 8))
 bpy.context.active_object.name = "DaedalusSun"
 print("camera+light")
 ''',
+    "add_light": _HEADER
+    + '''
+KIND = "{kind}"
+NAME = "{name}"
+_ensure_object_mode()
+data = bpy.data.lights.new(name=NAME, type=KIND)
+data.energy = {energy}
+data.color = ({r}, {g}, {b})
+obj = bpy.data.objects.new(name=NAME, object_data=data)
+obj.location = ({x}, {y}, {z})
+bpy.context.collection.objects.link(obj)
+print("light", NAME, KIND)
+''',
     "set_transform": _HEADER
     + '''
 obj = bpy.data.objects.get("{name}") or bpy.context.active_object
@@ -110,6 +130,67 @@ if obj is None:
 obj.location = Vector(({x}, {y}, {z}))
 obj.scale = Vector(({sx}, {sy}, {sz}))
 print("transform", obj.name)
+''',
+    "modify_mesh": _HEADER
+    + '''
+NAME = "{name}"
+OPERATION = "{operation}"
+obj = bpy.data.objects.get(NAME)
+if obj is None or obj.type != "MESH":
+    raise SystemExit("need a mesh named " + NAME)
+_ensure_object_mode()
+bpy.ops.object.select_all(action="DESELECT")
+obj.select_set(True)
+bpy.context.view_layer.objects.active = obj
+bpy.ops.object.mode_set(mode="EDIT")
+try:
+    if OPERATION == "subdivide":
+        bpy.ops.mesh.subdivide(number_cuts={cuts})
+    elif OPERATION == "extrude":
+        bpy.ops.mesh.extrude_region_move(
+            TRANSFORM_OT_translate={{ "value": ({ex_x}, {ex_y}, {ex_z}) }}
+        )
+    elif OPERATION == "bevel":
+        bpy.ops.mesh.bevel(offset={offset}, segments={segments})
+    elif OPERATION == "inset":
+        bpy.ops.mesh.inset(thickness={thickness})
+    elif OPERATION == "delete_faces":
+        bpy.ops.mesh.delete(type="FACE")
+    elif OPERATION == "merge_by_distance":
+        bpy.ops.mesh.remove_doubles(threshold={distance})
+    else:
+        raise SystemExit("unknown mesh op " + OPERATION)
+finally:
+    bpy.ops.object.mode_set(mode="OBJECT")
+print("modified", NAME, OPERATION, "verts", len(obj.data.vertices))
+''',
+    "add_modifier": _HEADER
+    + '''
+NAME = "{name}"
+MOD = "{modifier_type}"
+obj = bpy.data.objects.get(NAME)
+if obj is None:
+    raise SystemExit("no object " + NAME)
+mod = obj.modifiers.new(name=MOD + "_mod", type=MOD)
+if MOD == "SUBSURF":
+    mod.levels = {levels}
+    mod.render_levels = {render_levels}
+elif MOD == "MIRROR":
+    mod.use_axis = ({mirror_x} == 1, {mirror_y} == 1, {mirror_z} == 1)
+elif MOD == "ARRAY":
+    mod.count = {count}
+    mod.relative_offset_displace = ({ox}, {oy}, {oz})
+elif MOD == "SOLIDIFY":
+    mod.thickness = {thickness}
+elif MOD == "BEVEL":
+    mod.width = {width}
+    mod.segments = {segments}
+elif MOD == "BOOLEAN":
+    mod.operation = "{bool_op}"
+    target = bpy.data.objects.get("{target}")
+    if target is not None:
+        mod.object = target
+print("modifier", MOD, "on", NAME)
 ''',
     "create_rig": _HEADER
     + '''
@@ -161,11 +242,36 @@ bpy.context.view_layer.objects.active = arm
 bpy.ops.object.parent_set(type="ARMATURE_AUTO")
 print("skinned", mesh.name, "→", arm.name)
 ''',
+    "render_preview": _HEADER
+    + '''
+OUT = "{out}"
+ENGINE = "{engine}"
+scene = bpy.context.scene
+scene.render.engine = ENGINE
+scene.render.filepath = OUT
+scene.render.resolution_x = {res_x}
+scene.render.resolution_y = {res_y}
+if ENGINE == "CYCLES" and hasattr(scene, "cycles"):
+    scene.cycles.samples = {samples}
+if scene.camera is None:
+    bpy.ops.object.camera_add(location=(6, -8, 5))
+    cam = bpy.context.active_object
+    cam.rotation_euler = (1.1, 0.0, 0.7)
+    scene.camera = cam
+bpy.ops.render.render(write_still=True)
+print("rendered", OUT)
+''',
     "export_glb": _HEADER
     + '''
 OUT = "{out}"
 _ensure_object_mode()
-bpy.ops.export_scene.gltf(filepath=OUT, export_format="GLB", export_apply=True)
+bpy.ops.export_scene.gltf(
+    filepath=OUT,
+    export_format="GLB",
+    export_apply=True,
+    use_selection=False,
+    export_yup=True,
+)
 print("exported", OUT)
 ''',
     "export_fbx": _HEADER
@@ -188,7 +294,13 @@ for obj in list(bpy.data.objects):
     obj.select_set(True)
     bpy.context.view_layer.objects.active = obj
     path = os.path.join(OUT_DIR, obj.name + ".glb")
-    bpy.ops.export_scene.gltf(filepath=path, export_format="GLB", use_selection=True, export_apply=True)
+    bpy.ops.export_scene.gltf(
+        filepath=path,
+        export_format="GLB",
+        use_selection=True,
+        export_apply=True,
+        export_yup=True,
+    )
     print("exported", path)
 ''',
 }
@@ -207,6 +319,17 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "roughness": 0.4,
     },
     "add_camera_light": {},
+    "add_light": {
+        "kind": "SUN",
+        "name": "KeyLight",
+        "energy": 10.0,
+        "r": 1.0,
+        "g": 1.0,
+        "b": 1.0,
+        "x": 4.0,
+        "y": 2.0,
+        "z": 8.0,
+    },
     "set_transform": {
         "name": "HeroMesh",
         "x": 0,
@@ -216,8 +339,45 @@ DEFAULTS: dict[str, dict[str, Any]] = {
         "sy": 1,
         "sz": 1,
     },
+    "modify_mesh": {
+        "name": "HeroMesh",
+        "operation": "subdivide",
+        "cuts": 1,
+        "ex_x": 0.0,
+        "ex_y": 0.0,
+        "ex_z": 1.0,
+        "offset": 0.1,
+        "segments": 2,
+        "thickness": 0.1,
+        "distance": 0.001,
+    },
+    "add_modifier": {
+        "name": "HeroMesh",
+        "modifier_type": "SUBSURF",
+        "levels": 2,
+        "render_levels": 3,
+        "mirror_x": 1,
+        "mirror_y": 0,
+        "mirror_z": 0,
+        "count": 2,
+        "ox": 1.0,
+        "oy": 0.0,
+        "oz": 0.0,
+        "thickness": 0.01,
+        "width": 0.1,
+        "segments": 2,
+        "bool_op": "UNION",
+        "target": "",
+    },
     "create_rig": {"name": "HeroArmature"},
     "parent_armature": {"mesh": "HeroMesh", "armature": "HeroArmature"},
+    "render_preview": {
+        "out": "studio/preview/blender.png",
+        "engine": "CYCLES",
+        "res_x": 1280,
+        "res_y": 720,
+        "samples": 32,
+    },
     "export_glb": {"out": "assets/hero.glb"},
     "export_fbx": {"out": "assets/hero.fbx"},
     "batch_export": {"out_dir": "assets/glb"},

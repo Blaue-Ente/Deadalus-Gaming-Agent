@@ -273,6 +273,7 @@ def run_craft_check(ctx: dict[str, Any]) -> dict[str, Any]:
     """Arcade-craft / fun / fidelity — warn-only, never blocks guided."""
     from .arcade_craft import (
         fun_signals,
+        looks_like_campaign_bible,
         looks_like_racer,
         scope_warnings,
         wants_high_fidelity,
@@ -288,6 +289,15 @@ def run_craft_check(ctx: dict[str, Any]) -> dict[str, Any]:
         stages = []
     blob = f"{brainstorm.get('idea', '')} {brainstorm.get('genre', '')} {gdd}"
     hi = wants_high_fidelity(blob) or looks_like_racer(blob) or (config.get("studio_preset") == "racing")
+    bible = looks_like_campaign_bible(blob)
+
+    if bible:
+        checks.append(_check(
+            "scope",
+            "Campaign bible vs M0",
+            "warn",
+            "GDD looks like a campaign bible (biomes/chapters/console SKUs). M0 is one verb + one fail.",
+        ))
 
     if hi:
         checks.append(_check(
@@ -307,7 +317,7 @@ def run_craft_check(ctx: dict[str, Any]) -> dict[str, Any]:
             checks.append(_check("fun", "Fun gate (plan)", "warn", fun["blockers"][0][:180]))
         else:
             checks.append(_check("fun", "Fun gate (plan)", "pass", "wayfinding/fail/risk mentioned"))
-    else:
+    elif not bible:
         checks.append(_check("craft", "Arcade craft", "pass", "standard game — craft extras optional"))
 
     return {

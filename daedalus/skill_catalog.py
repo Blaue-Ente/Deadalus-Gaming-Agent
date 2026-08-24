@@ -330,8 +330,9 @@ _EXTRA_DOCS: list[dict] = [
         "category": "gamedev",
         "text": (
             "Daedalus cannot import bpy in the cloud. Emit tools/blender/<job>.py "
-            "(clear_scene, create_primitive, apply_material_pbr, create_rig, parent_armature, "
-            "export_glb/fbx, batch_export). Owner: blender -b --python …. "
+            "(clear_scene, create_primitive, modify_mesh, add_modifier, add_light, "
+            "apply_material_pbr, create_rig, parent_armature, render_preview, "
+            "export_glb/fbx with export_yup, batch_export). Owner: blender -b --python …. "
             "MCP: python -m daedalus.blender_mcp. Mixamo for cinematic humanoid clips."
         ),
     },

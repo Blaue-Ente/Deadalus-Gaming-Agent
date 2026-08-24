@@ -7,7 +7,7 @@ from daedalus.blender_jobs import JOB_IDS, emit_job, render_script
 from daedalus.blender_mcp import handle
 from daedalus.game_platform_guide import suggest_kind_heuristic
 from daedalus.godot_platform_guide import GODOT_CREW_ROLES, GODOT_PHASES, pipeline_prompt
-from daedalus.godot_tools import crew_tool_catalog, scene_tscn, script_template, signal_connect_snippet
+from daedalus.godot_tools import crew_tool_catalog, glb_instance_tscn, scene_tscn, script_template, signal_connect_snippet
 from daedalus.playground_godot_scaffold import godot_scaffold_files, write_godot_scaffold
 from daedalus.playground_role_catalog import STUDIO_ROLES
 from daedalus.playground_studio_mode import infer_studio_preset, milestones_for_preset
@@ -67,6 +67,7 @@ def test_crew_roles_map_to_studio():
         "project_configurator",
         "build_exporter",
         "signal_manager",
+        "glb_instance",
     } <= ids
     gd = script_template(
         class_name="Enemy",
@@ -77,6 +78,11 @@ def test_crew_roles_map_to_studio():
     conn = signal_connect_snippet("pit", "body_entered", "self", "_on_pit")
     assert ".connect(" in conn
     assert "[gd_scene" in scene_tscn(script_path="res://scripts/x.gd")
+    wrap = glb_instance_tscn(root_name="Crate", glb_path="res://assets/crate.glb")
+    assert 'path="res://assets/crate.glb"' in wrap
+    assert "PackedScene" in wrap
+    assert 'instance=ExtResource("1_glb")' in wrap
+    assert "Node3D" in wrap
 
 
 def test_blender_jobs_render_and_emit(tmp_path: Path):
@@ -90,7 +96,21 @@ def test_blender_jobs_render_and_emit(tmp_path: Path):
     assert info["ok"]
     path = tmp_path / info["path"]
     assert path.is_file()
-    assert "export_scene.gltf" in path.read_text(encoding="utf-8")
+    glb = path.read_text(encoding="utf-8")
+    assert "export_scene.gltf" in glb
+    assert "export_yup=True" in glb
+    prim = render_script("create_primitive", {"kind": "torus", "name": "Ring"})
+    assert "primitive_torus_add" in prim
+    assert "primitive_monkey_add" in render_script("create_primitive")
+    mesh = render_script("modify_mesh", {"name": "HeroMesh", "operation": "bevel"})
+    assert "HeroMesh" in mesh
+    assert "mesh.bevel" in mesh
+    mod = render_script("add_modifier", {"modifier_type": "ARRAY", "count": 4})
+    assert "ARRAY" in mod
+    light = render_script("add_light", {"kind": "AREA", "name": "Fill"})
+    assert "AREA" in light
+    preview = render_script("render_preview")
+    assert "render.render" in preview
     rig = render_script("create_rig", {"name": "HeroArmature"})
     assert "HeroArmature" in rig
     assert "Hips" in rig
@@ -134,3 +154,8 @@ def test_planner_sees_godot_pipeline():
     assert "GODOT" in sys or "Godot" in sys
     assert "BLENDER JOBS" in sys or "blender" in sys.lower()
     assert ".tscn" in sys
+    from daedalus.godot_platform_guide import pipeline_prompt
+
+    qa = pipeline_prompt()
+    assert "get_node()" in qa
+    assert "_exit_tree" in qa
