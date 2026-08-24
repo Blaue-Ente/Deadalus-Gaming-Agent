@@ -44,7 +44,7 @@ routing, Postgres, and the current admin UI — not the agent's identity.
 | Evolution | `evolution.py` | Opt-in idle gardener; radar + GitHub study; proposals stay pending |
 | Kernel | `daedalus/kernel/` | Portable plan→code→test from Daedalus-Agent |
 | HTTP | `Daedalus/app/main.py` | Studio, `/admin/daedalus/*` Command Center, health, chat, playground API, `/api/iyveris` |
-| Windows | `app/desktop.py` + `packaging/windows/` | Per-user Start Menu app; `daedalus desktop` |
+| Windows | `app/desktop.py`, `app/windows_gui.py`, `packaging/windows/` | Per-user Start Menu app; window via WebView2 / Tk; `daedalus desktop` |
 | UI copy | `Daedalus/ui/` | ADN templates copied, not moved |
 | Store | `daedalus/store.py` | SQLite when standalone; ADN Postgres otherwise |
 | ADN shim | `argos_data_nexus/modules/daedalus/` | Import alias only |
