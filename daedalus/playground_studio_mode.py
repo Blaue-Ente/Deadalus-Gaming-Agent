@@ -66,10 +66,15 @@ STUDIO_PRESETS: dict[str, dict[str, Any]] = {
         "recommended_kind": "unity",
         "description": "Netcode-ready architecture, match, sync (MVP offline-first).",
     },
-    "hybrid_mobile": {
+        "hybrid_mobile": {
         "label": "Hybrid Mobile (Web shell → iOS)",
         "recommended_kind": "expo",
         "description": "Expo/Vite prototype + Framework7/PakePlus iOS path.",
+    },
+    "godot_2d": {
+        "label": "Godot 2D (Metroidvania / RPG / platformer)",
+        "recommended_kind": "godot",
+        "description": "Godot 4.3 text scenes + GDScript. Local Editor; blender_jobs for GLB.",
     },
     "backend_api": {
         "label": "Game Backend API",
@@ -177,6 +182,33 @@ BACKEND_MILESTONES: list[dict[str, Any]] = [
     {"id": "M3", "title": "Economy", "goal": "Inventory, currencies", "keywords": ("inventory", "economy")},
 ]
 
+GODOT_MILESTONES: list[dict[str, Any]] = [
+    {
+        "id": "M0",
+        "title": "Architecture",
+        "goal": "project.godot, autoload Game, physics layers, main scene",
+        "keywords": ("scaffold", "project.godot", "autoload", "boot"),
+    },
+    {
+        "id": "M1",
+        "title": "Gameplay",
+        "goal": "Player move/jump, floor, fail/reset",
+        "keywords": ("player", "move", "jump", "fail"),
+    },
+    {
+        "id": "M2",
+        "title": "UI / HUD",
+        "goal": "On-screen goal, HP/score — no gameplay logic in Control",
+        "keywords": ("hud", "ui", "score"),
+    },
+    {
+        "id": "M3",
+        "title": "NPC / AI",
+        "goal": "One enemy or companion with NavigationAgent2D",
+        "keywords": ("npc", "enemy", "navigation"),
+    },
+]
+
 _PRESET_MILESTONES: dict[str, list[dict[str, Any]]] = {
     "custom": GAME_MILESTONES,
     "action": GAME_MILESTONES,
@@ -191,6 +223,7 @@ _PRESET_MILESTONES: dict[str, list[dict[str, Any]]] = {
     "multiplayer": GAME_MILESTONES,
     "hybrid_mobile": GAME_MILESTONES[:6],
     "backend_api": BACKEND_MILESTONES,
+    "godot_2d": GODOT_MILESTONES,
 }
 
 STUDIO_PLANNER_ADDENDUM = """
@@ -203,6 +236,7 @@ STUDIO_PLANNER_ADDENDUM = """
 - Играта може да е ВСЯКА тема (action, puzzle, RPG, racing, horror, etc.) — не само creatures
 - По един deliverable на stage; files[] задължително
 - Unity kind: paths under Assets/_Project/Code/
+- Godot kind: scenes/*.tscn + scripts/*.gd (едно на етап)
 - MVP = първите 4 milestones
 """
 
@@ -250,6 +284,11 @@ def infer_studio_preset(description: str) -> str:
         )
     ):
         return "racing"
+    if any(
+        w in blob
+        for w in ("godot", "gdscript", "metroidvania", ".tscn", "tscn")
+    ):
+        return "godot_2d"
     if any(w in blob for w in ("platformer", "jump", "runner", "mario", "side-scroll")):
         return "platformer"
     if any(w in blob for w in ("puzzle", "match-3", "casual", "tetris", "судоку")):

@@ -133,9 +133,9 @@ def asset_route(text: str) -> dict[str, str]:
 
 def min_stages(kind: str, *, is_game: bool, description: str) -> int:
     if wants_high_fidelity(description) or looks_like_racer(description):
-        return 12 if kind in ("vite", "vite-react", "unity", "expo") else 8
+        return 12 if kind in ("vite", "vite-react", "unity", "expo", "godot") else 8
     if is_game:
-        return 8 if kind in ("expo", "vite-react", "vite", "unity") else 6
+        return 8 if kind in ("expo", "vite-react", "vite", "unity", "godot") else 6
     return 3
 
 

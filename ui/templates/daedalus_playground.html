@@ -206,6 +206,7 @@
               <option value="vite-react">vite-react — публикуем</option>
               <option value="node">node — dev test</option>
               <option value="unity">unity — C# URP (Unity Hub)</option>
+              <option value="godot">godot — GDScript (Godot 4.3)</option>
             </select>
           </div>
           <div id="np-kind-note" class="text-[10px] font-mono px-2 py-1 rounded"></div>
@@ -244,6 +245,7 @@
                 <option value="survival">Survival / Crafting</option>
                 <option value="platformer">Platformer</option>
                 <option value="racing">Racing / Hover / F-Zero</option>
+                <option value="godot_2d">Godot 2D / Metroidvania</option>
                 <option value="open_world">Open World</option>
                 <option value="multiplayer">Multiplayer</option>
                 <option value="hybrid_mobile">Hybrid Web → iOS</option>
@@ -814,12 +816,14 @@ async function loadProjects() {
     const running = p.running && p.running.status === 'running';
     const isStatic = p.kind === 'static';
     const isUnity = p.kind === 'unity';
+    const isGodot = p.kind === 'godot';
+    const isLocalEditor = isUnity || isGodot;
     const isPublishable = p.kind === 'static' || p.kind === 'vite' || p.kind === 'vite-react' || p.kind === 'expo';
-    const runBtn = (isStatic || isUnity) ? '' :
+    const runBtn = (isStatic || isLocalEditor) ? '' :
       (running
         ? `<button onclick="stopProj('${p.slug}')" class="btn-sm bg-red-700 hover:bg-red-600">■ Стоп</button>`
         : `<button onclick="runProj('${p.slug}','${p.kind}')" class="btn-sm bg-blue-700 hover:bg-blue-600">▶ Run</button>`);
-    const unityPushBtn = isUnity
+    const unityPushBtn = isLocalEditor
       ? `<button onclick="pushProj('${p.slug}','gitlab')" class="btn-sm bg-orange-700 hover:bg-orange-600" title="Качи в GitLab и отвори в Unity Hub">⬆ GitLab</button>`
         + `<button onclick="pushGithubOneClick('${p.slug}')" class="btn-sm bg-indigo-800 hover:bg-indigo-700" title="Нов GitHub repo + push (1 клик)">⬆ GitHub</button>`
       : `<button onclick="pushGithubOneClick('${p.slug}')" class="btn-sm bg-indigo-800 hover:bg-indigo-700" title="Нов GitHub repo + push (1 клик)">⬆ GitHub</button>`;
@@ -1348,6 +1352,7 @@ const STUDIO_KIND_HINTS = {
   survival: 'unity',
   platformer: 'vite',
   racing: 'vite',
+  godot_2d: 'godot',
   open_world: 'unity',
   multiplayer: 'unity',
   hybrid_mobile: 'vite',
@@ -3168,6 +3173,10 @@ async function runProj(slug, kind) {
     alert('Unity Editor не може да се пусне в cloud.\n\nКачи проекта с ⬆ GitHub и го отвори в Unity Hub на локална машина.');
     return;
   }
+  if (kind === 'godot') {
+    alert('Godot Editor не може да се пусне в cloud.\n\nОтвори папката в Godot 4.3. Ако имаш CLI: godot --headless --path . --quit');
+    return;
+  }
   const btn = event.target;
   btn.textContent = '⏳ Стартира…'; btn.disabled = true;
   // Always install deps for vite/vite-react/node/expo (need node_modules); ask for others
@@ -3619,6 +3628,8 @@ const KIND_INFO = {
   'vite-react':{ pub: true,  note: '✅ Публикуем — React 18 + JSX. <b>🔨 Build &amp; Publish</b> ще build-не dist/ и го запише в ADN на <b>/apps/{slug}</b>', cls: 'text-cyan-400 bg-cyan-900/30 border border-cyan-700/40' },
   node:        { pub: false, note: '⚙️ Dev test само — Push GitHub → <b>Railway / Render</b> (Node.js, безплатно)', cls: 'text-yellow-400 bg-yellow-900/20 border border-yellow-700/30' },
   expo:        { pub: true,  note: '📱 React Native / Expo. Dev preview = Expo Web в браузъра. <b>🔨 Build &amp; Publish</b> = <code>expo export --platform web</code> → /apps/{slug}. ⚠️ Първа инсталация ~5 мин.', cls: 'text-pink-400 bg-pink-900/30 border border-pink-700/40' },
+  unity:       { pub: false, note: '🎮 Unity C# — не се пуска в cloud. Scaffold + Git → Unity Hub локално.', cls: 'text-amber-400 bg-amber-900/20 border border-amber-700/30' },
+  godot:       { pub: false, note: '🎮 Godot 4 — текстови .tscn/.gd. Отвори папката в Godot 4.3. Optional: <code>godot --headless --path . --quit</code>. GLB: blender jobs MCP.', cls: 'text-sky-400 bg-sky-900/20 border border-sky-700/30' },
 };
 
 function updateKindNote() {

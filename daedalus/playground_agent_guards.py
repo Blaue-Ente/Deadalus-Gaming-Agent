@@ -17,6 +17,7 @@ _ENTRYPOINTS: dict[str, list[str]] = {
     "vite-react": ["index.html", "src/main.jsx", "vite.config.js"],
     "static": ["index.html", "game.js", "script.js", "style.css"],
     "expo": ["App.jsx", "app.json", "package.json"],
+    "godot": ["project.godot", "scenes/main.tscn", "scripts/player.gd"],
 }
 
 _NON_ENTRYPOINT_READS: dict[str, list[str]] = {

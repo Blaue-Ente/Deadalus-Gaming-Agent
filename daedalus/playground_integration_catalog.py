@@ -161,6 +161,7 @@ def integrations_for_preset(preset: str) -> list[str]:
         "survival": base + ["unity_game_framework"],
         "platformer": base,
         "racing": [],
+        "godot_2d": [],
         "open_world": base + ["unity_game_framework", "unity_community_library"],
         "multiplayer": base + ["unity_game_framework", "firebase_ios_sdk"],
         "hybrid_mobile": ["framework7", "pakeplus_ios", "firebase_ios_sdk"],
