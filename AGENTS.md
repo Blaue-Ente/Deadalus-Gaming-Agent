@@ -1,4 +1,4 @@
-# Дедал — coding agent
+# Daedalus — coding agent
 
 Games first. Apps second. Verify is part of building.
 
@@ -7,4 +7,5 @@ Games first. Apps second. Verify is part of building.
 - Playground files: `playground/projects/{slug}/`.
 - LLM: AllToken / OpenRouter / Novita / NVIDIA via `daedalus.llm_config`. Local: Ollama / LM Studio / llama.cpp / vLLM.
 - Do not silent-edit the harness. Self-improve patches wait for Approve.
-- Public docs (README, ARCHITECTURE, DEPLOY, CONTRIBUTING) describe only Daedalus.
+- Public docs (README, ARCHITECTURE, DEPLOY, CONTRIBUTING) are English and describe only Daedalus.
+- Mark: `assets/logo/` (labyrinth + compass-bird). Studio UI copy stays Bulgarian for the owner.

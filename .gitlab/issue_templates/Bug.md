@@ -1,23 +1,23 @@
-## Какво стана
+## What happened
 
-(Какво очакваше и какво видя.)
+(Expected vs actual.)
 
-## Стъпки за възпроизвеждане
+## Steps to reproduce
 
 1.
 2.
 3.
 
-## Среда
+## Environment
 
-- ОС:
-- Инсталация: venv / Docker / Windows Start Menu
+- OS:
+- Install: venv / Docker / Windows Start Menu
 - Python:
-- Дедал commit / tag:
-- LLM провайдър (без ключ):
+- Daedalus commit / tag:
+- LLM provider (no key):
 
-## Логове
+## Logs
 
 ```
-(премахни API ключове и токени)
+(strip API keys and tokens)
 ```

@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Daedalus">
+  <!--
+    Daedalus mark: labyrinth (craft / plan) + compass-bird (the inventor).
+    Studio palette: gold #c9a227 on #14110d. No letters  works as an avatar.
+  -->
+  <rect width="128" height="128" rx="24" fill="#14110d"/>
+  <rect x="6" y="6" width="116" height="116" rx="20" fill="none" stroke="#c9a227" stroke-width="2"/>
+  <rect x="12" y="12" width="104" height="104" rx="16" fill="none" stroke="#c9a227" stroke-width="2.4"
+        stroke-dasharray="7 3 2 3" opacity="0.9"/>
+  <g transform="translate(64 64)" fill="none" stroke="#c9a227" stroke-linecap="round" stroke-linejoin="round">
+    <circle r="36" stroke-width="2.8" stroke-dasharray="78 16 36 14"/>
+    <circle r="28" stroke-width="2.8" stroke-dasharray="48 14 64 18" transform="rotate(38)"/>
+    <circle r="20" stroke-width="2.6" stroke-dasharray="38 12 28 10" transform="rotate(-22)"/>
+    <circle r="13" stroke-width="2.4" stroke-dasharray="26 8"/>
+  </g>
+  <g transform="translate(64 67)" fill="#e4c56a">
+    <path d="M0-3 L-24 8 L-16 13 L0 3 Z"/>
+    <path d="M0-3 L24 8 L16 13 L0 3 Z"/>
+    <path d="M0-16 L5-1 L0 12 L-5-1 Z"/>
+    <path d="M-3.2-12 L0-24 L3.2-12 Z"/>
+    <path d="M-7 10 L0 20 L7 10 Z"/>
+  </g>
+</svg>
