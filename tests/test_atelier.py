@@ -64,9 +64,11 @@ def test_offline_denies_web(harness_tmp):
     assert enabled() is True
     msg = deny("web_read")
     assert msg and "OFFLINE" in msg
+    assert deny("reach_search") and "OFFLINE" in deny("reach_search")
     assert deny("run_command") is None
     set_offline(False)
     assert deny("web_read") is None
+    assert deny("reach_search") is None
 
 
 def test_install_plan_does_not_pull():

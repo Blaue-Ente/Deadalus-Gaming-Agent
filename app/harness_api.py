@@ -107,6 +107,13 @@ class ReachReadBody(BaseModel):
     max_chars: int | None = Field(default=8000, ge=200, le=20000)
 
 
+class ReachSearchBody(BaseModel):
+    query: str = Field(..., min_length=2, max_length=400)
+    channel: str = Field(default="auto", max_length=20)
+    subreddit: str = Field(default="", max_length=80)
+    limit: int = Field(default=6, ge=1, le=15)
+
+
 class PlaytestBody(BaseModel):
     slug: str = Field(..., min_length=1, max_length=80)
     kind: str = Field(default="static", max_length=40)
@@ -141,6 +148,17 @@ async def reach_read(body: ReachReadBody) -> dict[str, Any]:
     if looks_like_rss(body.url):
         return read_rss(body.url)
     return await web_read(body.url, max_chars=body.max_chars or 8000)
+
+
+@router.post("/api/v1/daedalus/reach/search")
+async def reach_search_http(body: ReachSearchBody) -> dict[str, Any]:
+    from daedalus.reach import reach_search
+    return await reach_search(
+        body.query,
+        channel=body.channel,
+        subreddit=body.subreddit,
+        limit=body.limit,
+    )
 
 
 @router.get("/api/v1/daedalus/playtest/personas")

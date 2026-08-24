@@ -34,7 +34,7 @@ Daedalus is **one product**: coding agent + Studio + Playground. One FastAPI pro
 | Preferences | `preferences.py` | Owner speech → durable memory |
 | Learned skills | `learned_skills.py` | Failure/success → SKILL.md |
 | DoD | `job_contract.py` | Code without evidence is not done |
-| Reach | `reach.py` | Jina Reader + optional CLIs |
+| Reach | `reach.py` | Jina Reader, DuckDuckGo search, Reddit (DDG / optional rdt) |
 | Playtest | `playtest.py` | Judge personas; no 1M dataset |
 | MiroFish | `mirofish_client.py` | HTTP-only to a sidecar — never vendor |
 | MCP | `mcp_client.py` | JSON-RPC stdio/HTTP from `mcp.json` |

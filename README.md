@@ -93,7 +93,7 @@ Data lives under `$DAEDALUS_DATA` (default `data/daedalus/` on the machine, `%LO
 | Chat (Bulgarian / English) | Studio `/` · `POST /api/v1/daedalus/chat` |
 | Files and projects | Playground `playground/projects/{slug}` |
 | Shell | Studio Shell · `POST /api/v1/daedalus/shell` (jail, secrets stripped from env) |
-| Native tools | `read_file`, `write_file`, `run_command`, `web_search`, `web_fetch`, `web_read`, `generate_image`, `remember`, `code_search`, `browser`, `mcp_call`, `spawn_subagent`, `playtest` |
+| Native tools | `read_file`, `write_file`, `run_command`, `web_search`, `reach_search`, `web_fetch`, `web_read`, `generate_image`, `remember`, `code_search`, `browser`, `mcp_call`, `spawn_subagent`, `playtest` |
 | Local LLM | Studio **wardrobe** — hardware profile + Ollama pull; or `DAEDALUS_PROVIDER=ollama` |
 | Offline kit | `DAEDALUS_OFFLINE=1` / Studio toggle — no search/images; local model + capsules still work |
 | Sub-agents | worker slots **and** `spawn_subagent` (files + shell, jailed) |
@@ -101,6 +101,7 @@ Data lives under `$DAEDALUS_DATA` (default `data/daedalus/` on the machine, `%LO
 | Browser | Playwright smoke **and** an interactive session (goto / click / type) |
 | MCP | `$DAEDALUS_DATA/mcp.json` + Studio addon shelf |
 | Memory | Chroma + preferences (“remember that…”) + learned skills |
+| Reach | Jina read, DuckDuckGo search, Reddit threads (`reach_search`; login optional) |
 | Images | Novita / OpenRouter · `generate_image` |
 | Cloud LLM | AllToken / OpenRouter / Novita / NVIDIA |
 | Games — browser | Phaser, canvas, Vite; 3D arcade / racing → Vite + Three.js WebGPU (`src/racer/`) |
@@ -111,7 +112,7 @@ Data lives under `$DAEDALUS_DATA` (default `data/daedalus/` on the machine, `%LO
 | Windows app | Start Menu **Daedalus** (WebView2 / Tk) |
 | Evolution | optional idle gardener; patches still wait for Approve |
 
-Studio tab **World** shows Reach / playtest / MCP status.
+Studio tab **World** shows Reach / playtest / MCP status and can search the web or Reddit.
 
 ---
 
@@ -311,9 +312,10 @@ Search, Jina, and image-gen refuse. Chat, files, shell, localhost browser, heuri
 A separate mode (Studio tab, **off** by default). While the process is up — even with no open chat — a gardener uses spare CPU/RAM to:
 
 1. Scan two rotating radar sources (agents, MCP, memory, local LLM).
-2. Study one public GitHub repo (README + tree + license).
-3. Write a journal and skill note under `$DAEDALUS_DATA`.
-4. Optionally shallow-clone into `data/daedalus/evolution/research/` (never into `daedalus/`). AGPL/SSPL is refused.
+2. Search the live web and Reddit through Reach (DuckDuckGo; Reddit JSON needs owner login).
+3. Study one public GitHub repo (README + tree + license) — including GitHub URLs found in Reach hits.
+4. Write a journal and skill note under `$DAEDALUS_DATA`.
+5. Optionally shallow-clone into `data/daedalus/evolution/research/` (never into `daedalus/`). AGPL/SSPL is refused.
 
 It skips when the offline kit is on, load is high, RAM is tight, or autopilot is running. Harness patches still wait for **Approve**. `edit_modules` stays off until you turn it on.
 

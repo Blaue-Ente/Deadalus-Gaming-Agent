@@ -198,7 +198,7 @@
       </div>
       <div class="pane" id="pane-evo">
         <h2>Еволюция</h2>
-        <p class="hint">Изключено по подразбиране. Когато е включено, Дедал на празен ход търси нови LLM / coding / memory неща, изучава GitHub и пише бележки. Промени по harness чакат Approve. Autopilot и натоварена машина спират цикъла.</p>
+        <p class="hint">Изключено по подразбиране. Когато е включено, Дедал на празен ход търси нови LLM / coding / memory неща: радар, GitHub и Reach (уеб + Reddit). Промени по harness чакат Approve. Autopilot и натоварена машина спират цикъла.</p>
         <div class="row">
           <button class="gold" id="evoon">Включи</button>
           <button id="evocycle">Един цикъл</button>
@@ -211,10 +211,19 @@
       </div>
       <div class="pane" id="pane-world">
         <h2>Канали</h2>
-        <p class="hint">Jina Reader (Reach) · MiroFish sidecar (AGPL, отделен процес) · MCP · playtest.</p>
+        <p class="hint">Reach: Jina (чети страница) · DuckDuckGo (търси) · Reddit (публични нишки; входът е опция). MiroFish sidecar · MCP · playtest.</p>
         <div class="row">
           <button id="cxrefresh">Опресни</button>
           <button class="gold" id="ptest">Playtest</button>
+        </div>
+        <input id="reachq" placeholder="търси уеб или Reddit…" />
+        <div class="row">
+          <select id="reachch" aria-label="канал">
+            <option value="auto">auto</option>
+            <option value="web">уеб</option>
+            <option value="reddit">Reddit</option>
+          </select>
+          <button class="gold" id="reachgo">Търси</button>
         </div>
         <pre id="worldbox">Зареждане…</pre>
       </div>
@@ -449,7 +458,8 @@
         const ch = (data.reach && data.reach.channels) || {};
         lines.push("REACH");
         Object.keys(ch).forEach((k) => {
-          lines.push("  " + (ch[k].ready ? "UP  " : "DOWN") + " " + k + "  " + (ch[k].backend || "—"));
+          const note = ch[k].note ? " — " + String(ch[k].note).slice(0, 80) : "";
+          lines.push("  " + (ch[k].ready ? "UP  " : "DOWN") + " " + k + "  " + (ch[k].backend || "—") + note);
         });
         const mf = data.mirofish || {};
         lines.push("");
@@ -467,6 +477,40 @@
       }
     }
     $("cxrefresh").onclick = refreshConnectors;
+    $("reachgo").onclick = async () => {
+      const query = ($("reachq").value || "").trim();
+      if (!query) return;
+      $("worldbox").textContent = "търсене… " + query;
+      try {
+        const data = await (await fetch("/api/v1/daedalus/reach/search", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({
+            query,
+            channel: $("reachch").value || "auto",
+            limit: 6,
+          }),
+        })).json();
+        const lines = [
+          "REACH SEARCH  " + (data.channel || "") + "  " + (data.backend || ""),
+          data.query || query,
+        ];
+        if (data.note) lines.push(data.note);
+        if (data.error && !(data.results || []).length) lines.push("грешка: " + data.error);
+        (data.results || []).forEach((r) => {
+          lines.push("• " + (r.title || "") + (r.subreddit ? "  r/" + r.subreddit : ""));
+          if (r.url) lines.push("  " + r.url);
+          if (r.snippet) lines.push("  " + String(r.snippet).slice(0, 160));
+        });
+        if (!(data.results || []).length && !data.error) lines.push("(няма резултати)");
+        $("worldbox").textContent = lines.join("\n");
+      } catch (e) {
+        $("worldbox").textContent = "reach search: " + e;
+      }
+    };
+    $("reachq").addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter") { ev.preventDefault(); $("reachgo").click(); }
+    });
     $("offon").onclick = async () => {
       const cur = ($("offon").textContent || "").indexOf("ВКЛ") >= 0;
       await fetch("/api/v1/daedalus/offline", {
@@ -500,6 +544,9 @@
         lines.push("load " + (head.load1 ?? "?") + " / " + (head.cores ?? "?") + " cpu  RAM свободни " + (head.mem_avail_mb ?? "?") + "MB");
         const sum = data.last_summary || {};
         if (sum.studied) lines.push("последно репо: " + sum.studied);
+        if (sum.reach && sum.reach.length) {
+          lines.push("reach: " + sum.reach.map((r) => (r.channel || "?") + "×" + (r.n || 0)).join(", "));
+        }
         if (data.last_cycle) lines.push("последен цикъл: " + new Date(data.last_cycle * 1000).toLocaleString("bg"));
         lines.push("видени URL: " + (data.seen || 0) + "  цикли: " + (data.cycle_count || 0));
         (data.journal || []).slice(-4).forEach((row) => {

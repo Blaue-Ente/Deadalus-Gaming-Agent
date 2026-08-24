@@ -20,6 +20,7 @@ PERM_MAP: dict[str, str | None] = {
     "web_search": "web_search",
     "web_fetch": "web_search",
     "web_read": "web_search",
+    "reach_search": "web_search",
     "reach_status": None,
     "postgres_query": "postgres_query",
     "code_search": None,
@@ -190,8 +191,34 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "reach_search",
+        "description": (
+            "Search the live web or Reddit via the Reach layer. "
+            "channel=web uses DuckDuckGo; channel=reddit finds public threads "
+            "(DuckDuckGo site:reddit.com, or rdt-cli / owner cookie if present). "
+            "Prefer this over web_search when the owner asks about Reddit or "
+            "wants a capability-layer search."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "channel": {
+                    "type": "string",
+                    "description": "auto | web | reddit",
+                },
+                "subreddit": {
+                    "type": "string",
+                    "description": "Optional subreddit for channel=reddit (e.g. gamedev)",
+                },
+                "limit": {"type": "integer"},
+            },
+            "required": ["query"],
+        },
+    },
+    {
         "name": "reach_status",
-        "description": "Probe internet backends (Jina, yt-dlp, gh, agent-reach doctor).",
+        "description": "Probe internet backends (Jina, DuckDuckGo, Reddit, yt-dlp, gh, agent-reach doctor).",
         "input_schema": {"type": "object", "properties": {}},
     },
     {
@@ -443,6 +470,32 @@ async def execute_native_tool(
                     f"    {str(res.get('snippet', ''))[:140]}"
                 )
             return "\n".join(lines) if len(lines) > 1 else "── web_search: no results ──"
+
+        if name == "reach_search":
+            from .reach import reach_search
+            q = str(args.get("query") or "")
+            channel = str(args.get("channel") or "auto")
+            subreddit = str(args.get("subreddit") or "")
+            try:
+                limit = int(args.get("limit") or 6)
+            except (TypeError, ValueError):
+                limit = 6
+            r = await reach_search(q, channel=channel, subreddit=subreddit, limit=limit)
+            lines = [
+                f"── reach_search [{r.get('channel') or channel}] "
+                f"{r.get('backend') or '—'} q={q!r} ──"
+            ]
+            if r.get("note"):
+                lines.append(str(r["note"]))
+            for res in r.get("results") or []:
+                extra = f"  r/{res['subreddit']}" if res.get("subreddit") else ""
+                lines.append(
+                    f"  • {res.get('title', '')}{extra} — {res.get('url', '')}\n"
+                    f"    {str(res.get('snippet', ''))[:140]}"
+                )
+            if r.get("error") and not r.get("results"):
+                return f"── reach_search FAILED: {r.get('error')} ──"
+            return "\n".join(lines) if len(lines) > 1 else "── reach_search: no results ──"
 
         if name == "web_fetch":
             url = str(args.get("url") or "")

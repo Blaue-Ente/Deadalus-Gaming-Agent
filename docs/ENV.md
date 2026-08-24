@@ -45,6 +45,8 @@ Studio → LLM (wardrobe) can switch models without editing `.env` (`wardrobe.js
 | `DAEDALUS_NATIVE_TOOLS` | `0` = NEED_* markers only; native tools are on by default |
 | `DAEDALUS_EVOLUTION` | `1` turns the gardener on at boot; `0` is a kill switch |
 | `DAEDALUS_EVOLUTION_LLM` | `1` allows a short chat during a cycle |
+| `DAEDALUS_REDDIT_COOKIE` | optional `reddit_session` value (Cookie-Editor). Stays on this machine. Unlocks native Reddit JSON; without it, Reach uses DuckDuckGo `site:reddit.com` |
+| `DAEDALUS_REDDIT_USER_AGENT` | optional User-Agent for Reddit JSON (default names Daedalus) |
 
 ## Publishing
 
