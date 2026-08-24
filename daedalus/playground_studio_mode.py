@@ -76,6 +76,11 @@ STUDIO_PRESETS: dict[str, dict[str, Any]] = {
         "recommended_kind": "godot",
         "description": "Godot 4.3 text scenes + GDScript. Local Editor; blender_jobs for GLB.",
     },
+    "godot_3d": {
+        "label": "Godot 3D (puzzle room / greybox slice)",
+        "recommended_kind": "godot",
+        "description": "One room, CharacterBody3D, plate puzzle, headless probe. Not Vite/Three.",
+    },
     "backend_api": {
         "label": "Game Backend API",
         "recommended_kind": "fastapi",
@@ -182,6 +187,33 @@ BACKEND_MILESTONES: list[dict[str, Any]] = [
     {"id": "M3", "title": "Economy", "goal": "Inventory, currencies", "keywords": ("inventory", "economy")},
 ]
 
+GODOT_3D_MILESTONES: list[dict[str, Any]] = [
+    {
+        "id": "M0",
+        "title": "3D room",
+        "goal": "CharacterBody3D, camera, lights, floor, debug overlay",
+        "keywords": ("scaffold", "player", "camera", "room"),
+    },
+    {
+        "id": "M1",
+        "title": "Puzzle",
+        "goal": "One riddle (plate → door), fail/win, goal visible from spawn",
+        "keywords": ("plate", "door", "puzzle", "goal"),
+    },
+    {
+        "id": "M2",
+        "title": "Headless QA",
+        "goal": "DoD v2 + godot --headless --probe; scene index",
+        "keywords": ("probe", "headless", "dod", "index"),
+    },
+    {
+        "id": "M3",
+        "title": "GLB import",
+        "goal": "Blender pivot/collision hint → res://assets/*.glb via contract",
+        "keywords": ("glb", "blender", "contract", "pivot"),
+    },
+]
+
 GODOT_MILESTONES: list[dict[str, Any]] = [
     {
         "id": "M0",
@@ -224,6 +256,7 @@ _PRESET_MILESTONES: dict[str, list[dict[str, Any]]] = {
     "hybrid_mobile": GAME_MILESTONES[:6],
     "backend_api": BACKEND_MILESTONES,
     "godot_2d": GODOT_MILESTONES,
+    "godot_3d": GODOT_3D_MILESTONES,
 }
 
 STUDIO_PLANNER_ADDENDUM = """
@@ -284,6 +317,10 @@ def infer_studio_preset(description: str) -> str:
         )
     ):
         return "racing"
+    from .game_factory import wants_godot_3d_slice
+
+    if wants_godot_3d_slice("", blob):
+        return "godot_3d"
     if any(
         w in blob
         for w in ("godot", "gdscript", "metroidvania", ".tscn", "tscn")

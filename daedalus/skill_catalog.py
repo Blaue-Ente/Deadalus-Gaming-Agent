@@ -317,11 +317,12 @@ _EXTRA_DOCS: list[dict] = [
         "category": "gamedev",
         "text": (
             "⚠️ LOCAL Editor (kind godot). Cloud writes .tscn/.gd only.\n"
-            "project.godot + scenes/main.tscn + scripts/player.gd + autoload Game. "
-            "One scene or script per stage. NavigationAgent2D for NPC. "
-            "Optional: godot --headless --path . --quit. "
-            "Hero GLB from daedalus.blender_jobs, not vertex dumps. "
-            "Do not vendor CrewAI — Daedalus roles already map architect/gameplay/ui/npc/vfx/audio/qa."
+            "2D: project.godot + scenes/main.tscn + scripts/player.gd + autoload Game. "
+            "3D M0: CharacterBody3D room + plate puzzle + SpringArm camera + studio/scene_index.json. "
+            "Headless: godot --headless --path . --quit-after 180 -- --probe. "
+            "One scene or script per stage. NavigationAgent2D for 2D NPC. "
+            "Hero GLB from daedalus.blender_jobs (pivot + collision_hint), not vertex dumps. "
+            "Do not vendor CrewAI or five Godot MCP bridges."
         ),
     },
     {
@@ -331,8 +332,8 @@ _EXTRA_DOCS: list[dict] = [
         "text": (
             "Daedalus cannot import bpy in the cloud. Emit tools/blender/<job>.py "
             "(clear_scene, create_primitive, modify_mesh, add_modifier, add_light, "
-            "apply_material_pbr, create_rig, parent_armature, render_preview, "
-            "export_glb/fbx with export_yup, batch_export). Owner: blender -b --python …. "
+            "apply_material_pbr, create_rig, parent_armature, set_pivot, collision_hint, "
+            "render_preview, export_glb/fbx with export_yup, batch_export). Owner: blender -b --python …. "
             "MCP: python -m daedalus.blender_mcp. Mixamo for cinematic humanoid clips."
         ),
     },
