@@ -13,6 +13,7 @@ GDD_SECTIONS: tuple[str, ...] = (
     "content_scope",
     "technical",
     "mvp_scope",
+    "arcade_craft",
 )
 
 BRAINSTORM_GENRES: tuple[str, ...] = (
@@ -21,6 +22,7 @@ BRAINSTORM_GENRES: tuple[str, ...] = (
     "rpg",
     "strategy",
     "platformer",
+    "racing",
     "survival",
     "casual",
     "multiplayer",
@@ -54,6 +56,7 @@ CCGS_SKILL_SLUGS: tuple[str, ...] = (
     "smoke-check",
     "balance-check",
     "scope-check",
+    "craft-check",
 )
 
 SYSTEM_SUGGESTIONS: dict[str, list[str]] = {
@@ -62,6 +65,7 @@ SYSTEM_SUGGESTIONS: dict[str, list[str]] = {
     "rpg": ["entities", "inventory", "xp", "team", "skills"],
     "strategy": ["units", "grid", "resources", "ai", "fog_of_war"],
     "platformer": ["movement", "physics", "levels", "checkpoints", "collectibles"],
+    "racing": ["handling", "track", "boost", "rivals", "laps", "wayfinding"],
     "survival": ["crafting", "hunger", "resources", "world_gen", "threats"],
     "casual": ["sessions", "tutorial", "daily_reward", "simple_controls"],
     "multiplayer": ["matchmaking", "sync", "lobby", "netcode_mvp"],
@@ -95,6 +99,7 @@ def section_title(section_id: str) -> str:
         "content_scope": "Обхват на съдържанието",
         "technical": "Технически избори",
         "mvp_scope": "MVP обхват (M0–M3)",
+        "arcade_craft": "Arcade craft (полеви бележки)",
     }
     return titles.get(section_id, section_id.replace("_", " ").title())
 

@@ -9,7 +9,7 @@ from typing import Any, Literal
 
 GateLevel = Literal["pass", "warn", "fail"]
 
-AMBITIOUS_PRESETS = frozenset({"open_world", "multiplayer", "hybrid_mobile"})
+AMBITIOUS_PRESETS = frozenset({"open_world", "multiplayer", "hybrid_mobile", "racing"})
 PROTOTYPE_MILESTONES = frozenset({"M0", "M1", "M2", "M3"})
 
 
@@ -269,18 +269,68 @@ def config_kind(ctx: dict[str, Any]) -> str:
     return config.get("kind") or (ctx.get("project") or {}).get("kind") or ""
 
 
+def run_craft_check(ctx: dict[str, Any]) -> dict[str, Any]:
+    """Arcade-craft / fun / fidelity — warn-only, never blocks guided."""
+    from .arcade_craft import (
+        fun_signals,
+        looks_like_racer,
+        scope_warnings,
+        wants_high_fidelity,
+    )
+
+    checks: list[dict[str, Any]] = []
+    config = ctx.get("config") or {}
+    brainstorm = config.get("brainstorm") or {}
+    gdd = (ctx.get("gdd") or "")
+    plan = ctx.get("plan") or {}
+    stages = plan.get("stages") if isinstance(plan, dict) else []
+    if not isinstance(stages, list):
+        stages = []
+    blob = f"{brainstorm.get('idea', '')} {brainstorm.get('genre', '')} {gdd}"
+    hi = wants_high_fidelity(blob) or looks_like_racer(blob) or (config.get("studio_preset") == "racing")
+
+    if hi:
+        checks.append(_check(
+            "vertical_slice",
+            "Vertical slice first",
+            "warn" if len(stages) < 8 else "pass",
+            "High-fidelity racer: ≥8 tiny stages; M0 = one ship on one segment",
+        ))
+        traps = scope_warnings(brainstorm)
+        if traps:
+            checks.append(_check("fidelity", "Fidelity traps", "warn", traps[0][:180]))
+        else:
+            checks.append(_check("fidelity", "Fidelity traps", "pass", "no pixel-art/mesh-from-zero flags"))
+        snap_bits = [str(s.get("title", "")) + " " + str(s.get("goal", "")) for s in stages if isinstance(s, dict)]
+        fun = fun_signals(" ".join(snap_bits) + " " + blob)
+        if fun["blockers"]:
+            checks.append(_check("fun", "Fun gate (plan)", "warn", fun["blockers"][0][:180]))
+        else:
+            checks.append(_check("fun", "Fun gate (plan)", "pass", "wayfinding/fail/risk mentioned"))
+    else:
+        checks.append(_check("craft", "Arcade craft", "pass", "standard game — craft extras optional"))
+
+    return {
+        "gate": "craft-check",
+        "label": "Craft Check",
+        "at": datetime.now(timezone.utc).isoformat(),
+        **_aggregate(checks),
+    }
+
+
 GATE_RUNNERS = {
     "gate-check": run_gate_check,
     "scope-check": run_scope_check,
     "smoke-check": run_smoke_check,
     "balance-check": run_balance_check,
+    "craft-check": run_craft_check,
 }
 
 
 def gates_for_build_mode(build_mode: str) -> list[str]:
     if build_mode == "prototype":
-        return ["smoke-check", "gate-check", "scope-check"]
-    return ["gate-check", "scope-check", "balance-check"]
+        return ["smoke-check", "gate-check", "scope-check", "craft-check"]
+    return ["gate-check", "scope-check", "balance-check", "craft-check"]
 
 
 def run_gates(ctx: dict[str, Any], gate_ids: list[str] | None = None) -> dict[str, Any]:

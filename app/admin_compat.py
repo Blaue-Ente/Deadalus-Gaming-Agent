@@ -739,6 +739,7 @@ async def playground_plan_create(slug: str, request: Request):
         ultra=ultra,
         studio=studio,
         studio_preset=studio_preset,
+        description=f"{proj.get('name', '')} {description}",
     )
     plan: dict[str, Any] | None = None
     try:

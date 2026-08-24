@@ -243,6 +243,19 @@ def ensure_game_scaffold(slug: str, kind: str) -> list[str]:
         return []
 
     root = project_dir(slug)
+    try:
+        from .arcade_craft import wants_racer_scaffold
+        blob = ""
+        readme = root / "README.md"
+        pkg = root / "package.json"
+        if readme.exists():
+            blob += readme.read_text(encoding="utf-8", errors="replace")[:800]
+        if (root / "src/racer/vehicle.js").exists() or wants_racer_scaffold(slug, blob):
+            return []
+        if pkg.exists() and '"three"' in pkg.read_text(encoding="utf-8", errors="replace"):
+            return []
+    except Exception:
+        pass
     written: list[str] = []
 
     def _write(rel: str, content: str) -> None:
