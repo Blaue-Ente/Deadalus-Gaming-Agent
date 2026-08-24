@@ -114,9 +114,11 @@ Per-user install — **no Administrator**. Python 3.11+ on PATH, then:
 # optional: -DesktopShortcut  -Startup
 ```
 
-Start → **Дедал** opens Studio at http://127.0.0.1:8787. Data lives in
-`%LOCALAPPDATA%\Daedalus` (`.env`, memory, games). Or compile
-`packaging\windows\Daedalus.iss` with Inno Setup → `dist\Daedalus-Setup.exe`.
+Start → **Дедал** opens a **window** with Studio at http://127.0.0.1:8787
+(WebView2 when `pip install -e ".[gui]"` is available, else Tk, else the
+browser). Data lives in `%LOCALAPPDATA%\Daedalus` (`.env`, memory, games).
+Or compile `packaging\windows\Daedalus.iss` with Inno Setup →
+`dist\Daedalus-Setup.exe`.
 
 Details: `packaging/windows/README.md`.
 

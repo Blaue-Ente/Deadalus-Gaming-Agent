@@ -74,17 +74,91 @@ def test_desktop_reuses_running_instance(win_tmp, monkeypatch):
     from app.desktop import run_desktop
     opened: list[str] = []
     monkeypatch.setattr("app.desktop.instance_healthy", lambda *a, **k: True)
-    monkeypatch.setattr("app.desktop.webbrowser.open", lambda url: opened.append(url))
-    code = run_desktop(host="127.0.0.1", port=8787, open_browser=True, serve=True)
+    monkeypatch.setattr(
+        "app.desktop.present_ui",
+        lambda url, **kw: opened.append(url) or "browser",
+    )
+    code = run_desktop(host="127.0.0.1", port=8787, open_browser=True, ui="browser", serve=True)
     assert code == 0
     assert opened and opened[0].startswith("http://127.0.0.1:8787")
 
 
-def test_cli_desktop_help():
+def test_desktop_passes_ui_mode(win_tmp, monkeypatch):
+    from app.desktop import run_desktop
+    seen: list[str] = []
+    monkeypatch.setattr("app.desktop.instance_healthy", lambda *a, **k: True)
+    monkeypatch.setattr(
+        "app.desktop.present_ui",
+        lambda url, **kw: seen.append(str(kw.get("mode"))) or "tk",
+    )
+    assert run_desktop(host="127.0.0.1", port=8787, ui="tk", serve=True) == 0
+    assert seen == ["tk"]
+
+
+def test_desktop_headless_skips_ui(win_tmp, monkeypatch):
+    from app.desktop import run_desktop
+    called: list[str] = []
+    monkeypatch.setattr("app.desktop.instance_healthy", lambda *a, **k: True)
+    monkeypatch.setattr("app.desktop.present_ui", lambda url, **kw: called.append(url) or "none")
+    code = run_desktop(host="127.0.0.1", port=8787, open_browser=False, serve=True)
+    assert code == 0
+    assert called == []
+
+
+def test_gui_probe_and_resolve():
+    from app.windows_gui import choose_ui, probe, present_ui, resolve_ui
+
+    info = probe()
+    assert set(info) >= {"webview", "tkinter", "preferred"}
+    assert info["preferred"] in {"webview", "tk", "browser"}
+    assert choose_ui("auto", open_browser=False) == "none"
+    assert choose_ui("auto", open_browser=True) == "auto"
+    assert choose_ui("weird") == "auto"
+    have = {"webview": True, "tkinter": True, "preferred": "webview"}
+    assert resolve_ui("auto", available=have) == "webview"
+    assert resolve_ui("none", available=have) == "none"
+    assert resolve_ui("browser", available=have) == "browser"
+    missing = {"webview": False, "tkinter": True, "preferred": "tk"}
+    assert resolve_ui("webview", available=missing) == "tk"
+    none = {"webview": False, "tkinter": False, "preferred": "browser"}
+    assert resolve_ui("tk", available=none) == "browser"
+    assert present_ui("http://127.0.0.1:9/", mode="none") == "none"
+
+
+def test_present_ui_browser(monkeypatch):
+    from app.windows_gui import present_ui
+    opened: list[str] = []
+    monkeypatch.setattr("app.windows_gui.webbrowser.open", lambda url: opened.append(url))
+    assert present_ui("http://127.0.0.1:8787/", mode="browser") == "browser"
+    assert opened == ["http://127.0.0.1:8787/"]
+
+
+def test_cli_desktop_help(capsys):
     from app.cli import main
     with pytest.raises(SystemExit) as raised:
         main(["desktop", "--help"])
     assert raised.value.code == 0
+    out = capsys.readouterr().out
+    assert "--gui" in out
+    assert "--browser" in out
+    assert "--no-gui" in out
+
+
+def test_cli_desktop_flag_resolution():
+    from argparse import Namespace
+    from app.cli import _desktop_open_browser, _desktop_ui
+
+    auto = Namespace(ui="auto", gui=False, no_gui=False, browser=False, no_browser=False)
+    assert _desktop_ui(auto) == "auto"
+    assert _desktop_open_browser(auto) is True
+    headless = Namespace(ui="auto", gui=False, no_gui=True, browser=False, no_browser=False)
+    assert _desktop_ui(headless) == "none"
+    gui_wins = Namespace(ui="auto", gui=True, no_gui=True, browser=False, no_browser=True)
+    assert _desktop_ui(gui_wins) == "auto"
+    browser = Namespace(ui="auto", gui=False, no_gui=False, browser=True, no_browser=False)
+    assert _desktop_ui(browser) == "browser"
+    forced = Namespace(ui="tk", gui=False, no_gui=False, browser=False, no_browser=False)
+    assert _desktop_ui(forced) == "tk"
 
 
 def test_installer_scripts_exist():
@@ -95,6 +169,7 @@ def test_installer_scripts_exist():
     assert "LOCALAPPDATA" in install
     assert "Start Menu" in install
     assert "pythonw.exe" in install
+    assert "[gui]" in install or "pywebview" in install
     assert "PrivilegesRequired=lowest" in iss
     assert "install.ps1" in iss
     assert "-RemoveData" in uninstall
@@ -113,4 +188,5 @@ def test_capabilities_windows_desktop(win_tmp, monkeypatch):
     client = TestClient(app)
     caps = client.get("/capabilities")
     assert "windows-desktop" in caps.json()["capabilities"]
+    assert "windows-gui" in caps.json()["capabilities"]
     reset_sqlite_pool()

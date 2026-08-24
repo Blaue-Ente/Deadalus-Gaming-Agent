@@ -1,6 +1,8 @@
 # Дедал на Windows
 
-Инсталация **без Administrator**. Двоен клик / Start Menu отваря Studio в браузъра. Сървърът слуша само `127.0.0.1:8787`.
+Инсталация **без Administrator**. Двоен клик / Start Menu отваря **прозорец** с Studio
+(Edge WebView2, ако `pywebview` се инсталира; иначе Tk панел; иначе браузър).
+Сървърът слуша само `127.0.0.1:8787`.
 
 ## Бърз път (PowerShell)
 
@@ -16,7 +18,9 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 # .\packaging\windows\install.ps1 -Startup
 ```
 
-4. Старт → **Дедал**. Първият старт вдига Studio на http://127.0.0.1:8787
+4. Старт → **Дедал**. Първият старт вдига прозорец към http://127.0.0.1:8787
+
+По желание (ако инсталаторът не успя): `%LOCALAPPDATA%\Programs\Daedalus\.venv\Scripts\pip install -e ".[gui]"` — тогава Studio е в собствен прозорец, не в Chrome.
 
 Ключове (облак) или Ollama: `%LOCALAPPDATA%\Daedalus\.env`  
 Игри / памет: `%LOCALAPPDATA%\Daedalus\`  
@@ -46,4 +50,6 @@ Settings → Apps → Дедал, или:
 
 ## Какво не е
 
-Това **не** е компилиран `.exe` без Python. Chroma + FastAPI се държат в venv. Ollama си остава отделно приложение, ако искаш локален модел.
+Това **не** е компилиран `.exe` без Python и **не** е Electron. Прозорецът е Edge WebView2
+(`pywebview`) или стандартен Tk панел. Chroma + FastAPI се държат в venv. Ollama си остава
+отделно приложение, ако искаш локален модел.

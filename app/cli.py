@@ -6,6 +6,22 @@ import os
 import sys
 
 
+def _desktop_ui(args: argparse.Namespace) -> str:
+    ui = str(getattr(args, "ui", "auto") or "auto")
+    if getattr(args, "browser", False):
+        ui = "browser"
+    if getattr(args, "gui", False):
+        ui = "auto"
+    if getattr(args, "no_browser", False) or getattr(args, "no_gui", False):
+        if ui == "auto" and not getattr(args, "gui", False) and not getattr(args, "browser", False):
+            ui = "none"
+    return ui
+
+
+def _desktop_open_browser(args: argparse.Namespace) -> bool:
+    return _desktop_ui(args) != "none"
+
+
 def main(argv: list[str] | None = None) -> None:
     from app.envload import load_env_file
 
@@ -37,11 +53,28 @@ def main(argv: list[str] | None = None) -> None:
 
     desk = sub.add_parser(
         "desktop",
-        help="Start Studio as a desktop app (browser + local server, Windows Start Menu)",
+        help="Start Studio as a desktop window (WebView2 / Tk) plus local server",
     )
     desk.add_argument("--host", default=os.environ.get("HOST", "127.0.0.1"))
     desk.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8787")))
-    desk.add_argument("--no-browser", action="store_true")
+    desk.add_argument(
+        "--ui",
+        choices=["auto", "webview", "tk", "browser", "none"],
+        default="auto",
+        help="Desktop surface (default: auto = webview → tk → browser)",
+    )
+    desk.add_argument("--gui", action="store_true", help="Open a desktop window (default)")
+    desk.add_argument("--no-gui", action="store_true", help="Start the server only")
+    desk.add_argument(
+        "--browser",
+        action="store_true",
+        help="Open the default browser instead of a window",
+    )
+    desk.add_argument(
+        "--no-browser",
+        action="store_true",
+        help="Start the server only (same as --no-gui)",
+    )
 
     args = parser.parse_args(argv)
     if args.cmd == "publish":
@@ -127,7 +160,8 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(run_desktop(
             host=getattr(args, "host", None),
             port=getattr(args, "port", None),
-            open_browser=not bool(getattr(args, "no_browser", False)),
+            open_browser=_desktop_open_browser(args),
+            ui=_desktop_ui(args),
         ))
     if args.cmd in (None, "serve"):
         os.environ.setdefault("DAEDALUS_STANDALONE", "1")

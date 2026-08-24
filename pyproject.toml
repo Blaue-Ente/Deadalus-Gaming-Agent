@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "daedalus"
-version = "0.3.3"
+version = "0.3.4"
 description = "Daedalus — independent coding agent harness (games, apps, self-improvement)"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -22,6 +22,7 @@ dependencies = [
 [project.optional-dependencies]
 adn = ["argos-data-nexus"]
 playwright = ["playwright>=1.60.0"]
+gui = ["pywebview>=5.0"]
 dev = ["pytest>=8.0.0"]
 
 [project.scripts]
