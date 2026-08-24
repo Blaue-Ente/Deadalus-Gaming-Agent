@@ -26,6 +26,8 @@ JOB_IDS: tuple[str, ...] = (
     "add_modifier",
     "create_rig",
     "parent_armature",
+    "set_pivot",
+    "collision_hint",
     "render_preview",
     "export_glb",
     "export_fbx",
@@ -242,6 +244,36 @@ bpy.context.view_layer.objects.active = arm
 bpy.ops.object.parent_set(type="ARMATURE_AUTO")
 print("skinned", mesh.name, "→", arm.name)
 ''',
+    "set_pivot": _HEADER
+    + '''
+NAME = "{name}"
+MODE = "{mode}"
+obj = bpy.data.objects.get(NAME) or bpy.context.active_object
+if obj is None:
+    raise SystemExit("no object")
+_ensure_object_mode()
+bpy.ops.object.select_all(action="DESELECT")
+obj.select_set(True)
+bpy.context.view_layer.objects.active = obj
+if MODE == "geometry":
+    bpy.ops.object.origin_set(type="ORIGIN_GEOMETRY", center="BOUNDS")
+elif MODE == "cursor":
+    bpy.ops.object.origin_set(type="ORIGIN_CURSOR")
+else:
+    bpy.ops.object.origin_set(type="ORIGIN_GEOMETRY", center="BOUNDS")
+obj["daedalus_pivot"] = "{pivot}"
+print("pivot", obj.name, MODE, obj.get("daedalus_pivot"))
+''',
+    "collision_hint": _HEADER
+    + '''
+NAME = "{name}"
+HINT = "{hint}"
+obj = bpy.data.objects.get(NAME) or bpy.context.active_object
+if obj is None:
+    raise SystemExit("no object")
+obj["daedalus_collision"] = HINT
+print("collision_hint", obj.name, HINT)
+''',
     "render_preview": _HEADER
     + '''
 OUT = "{out}"
@@ -371,6 +403,8 @@ DEFAULTS: dict[str, dict[str, Any]] = {
     },
     "create_rig": {"name": "HeroArmature"},
     "parent_armature": {"mesh": "HeroMesh", "armature": "HeroArmature"},
+    "set_pivot": {"name": "HeroMesh", "mode": "geometry", "pivot": "bottom_center"},
+    "collision_hint": {"name": "HeroMesh", "hint": "box"},
     "render_preview": {
         "out": "studio/preview/blender.png",
         "engine": "CYCLES",

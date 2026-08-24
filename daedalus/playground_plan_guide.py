@@ -248,7 +248,8 @@ def build_planner_system_prompt(
             if kind == "godot":
                 from .godot_platform_guide import pipeline_prompt
                 from .blender_jobs import prompt_block as _blend
-                parts.extend(["", pipeline_prompt(), _blend()])
+                from .game_factory import planner_addendum as _factory
+                parts.extend(["", pipeline_prompt(), _blend(), _factory(kind, desc)])
         except Exception:
             pass
     parts.extend([

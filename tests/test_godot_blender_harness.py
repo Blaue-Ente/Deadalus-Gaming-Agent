@@ -159,3 +159,72 @@ def test_planner_sees_godot_pipeline():
     qa = pipeline_prompt()
     assert "get_node()" in qa
     assert "_exit_tree" in qa
+
+
+def test_godot_3d_slice_not_2d_and_not_racer(tmp_path: Path):
+    from daedalus.asset_contract import check as check_contract
+    from daedalus.game_factory import ANTI_BUILD, wants_godot_3d_slice
+    from daedalus.godot_dod import dod_v2_static
+    from daedalus.godot_runtime_probe import run_probe
+    from daedalus.godot_scene_index import build as build_index
+    from daedalus.playground_godot_scaffold import write_godot_scaffold
+
+    assert wants_godot_3d_slice("Room", "Godot 3D puzzle room with one riddle")
+    assert not wants_godot_3d_slice("Veins", "Godot 4 GDScript dungeon")
+    assert not wants_godot_3d_slice("Mist", "F-Zero hover racer 3d")
+    assert infer_studio_preset("godot 3d puzzle room") == "godot_3d"
+    kind, reason = suggest_kind_heuristic("Plate", "3d puzzle room vertical slice")
+    assert kind == "godot"
+    assert "3D" in reason or "3d" in reason.lower()
+
+    written = write_godot_scaffold(tmp_path, "Plate Room", "plate-room", "Godot 3D puzzle room")
+    assert "scenes/main.tscn" in written
+    tscn = (tmp_path / "scenes/main.tscn").read_text(encoding="utf-8")
+    assert "CharacterBody3D" in tscn
+    assert "Camera3D" in tscn
+    assert "SpringArm3D" in tscn
+    assert 'name="Plate"' in tscn
+    assert 'name="Door"' in tscn
+    assert "StandardMaterial3D" in tscn
+    player = (tmp_path / "scripts/player.gd").read_text(encoding="utf-8")
+    assert "move_and_slide" in player
+    assert "CharacterBody2D" not in player
+    assert (tmp_path / "studio/scene_index.json").is_file()
+    assert (tmp_path / "studio/asset_contract.json").is_file()
+    idx = build_index(tmp_path)
+    types = set(idx["node_types"])
+    assert "CharacterBody3D" in types
+    assert "Camera3D" in types
+    dod = dod_v2_static(tmp_path)
+    assert dod["ok"]
+    assert dod["is_3d"]
+    probe = run_probe(tmp_path)
+    assert probe["ran"] is False
+    assert probe["dod"]["ok"]
+    bad = check_contract({"name": "Hero Mesh", "collision": "magic", "export_target": "foo.obj"})
+    assert not bad["ok"]
+    good = check_contract({"name": "crate", "collision": "box", "export_target": "res://assets/crate.glb"})
+    assert good["ok"]
+    assert "Own engine" in ANTI_BUILD[0]
+    pivot = render_script("set_pivot", {"name": "HeroMesh"})
+    assert "origin_set" in pivot
+    assert "daedalus_pivot" in pivot
+    hint = render_script("collision_hint", {"hint": "convex"})
+    assert "daedalus_collision" in hint
+
+
+def test_planner_sees_game_factory_on_godot_3d():
+    from daedalus.playground_plan_guide import build_planner_system_prompt
+
+    sys = build_planner_system_prompt(
+        "godot",
+        "kind rules",
+        is_game=True,
+        studio=True,
+        studio_preset="godot_3d",
+        description="Godot 3D puzzle room",
+    )
+    assert "GAME FACTORY" in sys
+    assert "Headless first" in sys
+    assert "CrewAI" not in sys or "Do not vendor CrewAI" in sys or "NEVER" in sys
+
