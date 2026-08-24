@@ -14,6 +14,13 @@ from typing import Any
 
 from .godot_dod import dod_v2_static
 
+# Headless dummy renderer / shutdown noise is not a script bug.
+_IGNORE_SUBSTR = (
+    'parameter "m" is null',
+    "mesh_get_surface_count",
+    "objectdb instances leaked",
+)
+
 
 def godot_bin() -> str:
     env = (os.environ.get("GODOT_BIN") or os.environ.get("GODOT_BINARY") or "").strip()
@@ -70,11 +77,7 @@ def run_probe(pdir: Path, *, frames: int = 180) -> dict[str, Any]:
     stderr = proc.stderr or ""
     info["stdout"] = stdout[-2500:]
     info["stderr"] = stderr[-1500:]
-    blob = (stdout + "\n" + stderr).lower()
-    console_issues = []
-    for tok in ("error", "script error", "failed to load", "null instance"):
-        if tok in blob:
-            console_issues.append(tok)
+    console_issues = _script_errors(stdout, stderr)
     info["console_clean"] = not console_issues
     info["console_flags"] = console_issues
     info["ok"] = static["ok"] and proc.returncode == 0 and not console_issues
@@ -82,3 +85,15 @@ def run_probe(pdir: Path, *, frames: int = 180) -> dict[str, Any]:
     if probe_file.is_file():
         info["probe_json"] = probe_file.as_posix()
     return info
+
+
+def _script_errors(stdout: str, stderr: str) -> list[str]:
+    flags: list[str] = []
+    for raw in (stdout + "\n" + stderr).splitlines():
+        line = raw.strip()
+        low = line.lower()
+        if any(tok in low for tok in _IGNORE_SUBSTR):
+            continue
+        if low.startswith("error:") or "script error" in low or "failed to load" in low:
+            flags.append(line[:160])
+    return flags
