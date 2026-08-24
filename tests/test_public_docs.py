@@ -29,6 +29,7 @@ _PUBLIC = (
     ROOT / "CODE_OF_CONDUCT.md",
     ROOT / "CHANGELOG.md",
     ROOT / "docs" / "ENV.md",
+    ROOT / "docs" / "INSTALL.md",
 )
 
 
@@ -64,6 +65,9 @@ def test_readme_covers_install_and_features():
         "godot",
         "pytest",
         "8787",
+        "Daedalus.exe",
+        "docs/INSTALL.md",
+        "deadalus-agent-0-main.zip",
     ):
         assert needle in text, f"README missing {needle!r}"
 
