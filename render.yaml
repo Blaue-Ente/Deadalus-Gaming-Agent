@@ -1,4 +1,4 @@
-# render.com — Blueprint from this directory after the standalone repo exists.
+# render.com — Blueprint for this repository.
 services:
   - type: web
     name: daedalus

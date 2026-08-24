@@ -1,4 +1,4 @@
-# Cloud / local CI for the standalone Daedalus product (this directory is the repo root after export).
+# CI for Daedalus — this directory is the product root.
 stages: [test, build]
 
 pytest:

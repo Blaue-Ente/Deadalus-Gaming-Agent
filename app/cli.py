@@ -42,7 +42,7 @@ def main(argv: list[str] | None = None) -> None:
         help="Replace a GitLab/GitHub starter README (git push -uf)",
     )
 
-    ping = sub.add_parser("ping", help="Call the configured LLM once (no Chroma / no ADN)")
+    ping = sub.add_parser("ping", help="Call the configured LLM once (no Studio, no memory)")
     ping.add_argument(
         "--message",
         default="Reply with the single word pong.",

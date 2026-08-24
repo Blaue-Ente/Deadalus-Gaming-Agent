@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Boot standalone Daedalus the way a laptop/VPS would, and probe product URLs.
-# Usage: from Daedalus/  ./scripts/smoke-local.sh
+# Boot Daedalus the way a laptop/VPS would, and probe product URLs.
+# Usage: from the repo root  ./scripts/smoke-local.sh
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
