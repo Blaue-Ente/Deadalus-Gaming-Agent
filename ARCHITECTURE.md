@@ -35,7 +35,8 @@ Daedalus is **one product**: coding agent + Studio + Playground. One FastAPI pro
 | Learned skills | `learned_skills.py` | Failure/success → SKILL.md |
 | DoD | `job_contract.py` | Code without evidence is not done |
 | Reach | `reach.py` | Jina Reader + optional CLIs |
-| Playtest | `playtest.py` | Judge personas; no 1M dataset |
+| Playtest | `playtest.py` | Judge personas; pairwise A/B of two slugs |
+| Design Arena | `design_arena.py` | Playable brief + practices; no vendor dump |
 | MiroFish | `mirofish_client.py` | HTTP-only to a sidecar — never vendor |
 | MCP | `mcp_client.py` | JSON-RPC stdio/HTTP from `mcp.json` |
 | Browser | `playground_browser.py`, `browser_session.py` | Smoke + interactive session |

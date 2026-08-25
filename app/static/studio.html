@@ -211,11 +211,12 @@
       </div>
       <div class="pane" id="pane-world">
         <h2>Канали</h2>
-        <p class="hint">Jina Reader (Reach) · MiroFish sidecar (AGPL, отделен процес) · MCP · playtest.</p>
+        <p class="hint">Jina Reader (Reach) · Design Arena brief/A/B · MiroFish sidecar · MCP · playtest.</p>
         <div class="row">
           <button id="cxrefresh">Опресни</button>
           <button class="gold" id="ptest">Playtest</button>
         </div>
+        <input id="ptestb" placeholder="сравни с друг slug (A/B)…" />
         <pre id="worldbox">Зареждане…</pre>
       </div>
     </section>
@@ -461,6 +462,12 @@
         (data.addons || []).forEach((a) => {
           lines.push("  " + (a.enabled ? "ON " : "off") + " " + a.label);
         });
+        try {
+          const da = await (await fetch("/api/v1/daedalus/design-arena")).json();
+          lines.push("");
+          lines.push("DESIGN ARENA  " + (da.source || ""));
+          (da.keep || []).slice(0, 2).forEach((k) => lines.push("  • " + k));
+        } catch (e) {}
         $("worldbox").textContent = lines.join("\n");
       } catch (e) {
         $("worldbox").textContent = "connectors: " + e;
@@ -584,15 +591,22 @@
     $("ptest").onclick = async () => {
       if (!slug) { add("bot", "Първо избери проект вляво за playtest."); return; }
       document.querySelector('[data-pane="world"]').click();
-      $("worldbox").textContent = "playtest " + slug + "…";
+      const other = (($("ptestb") && $("ptestb").value) || "").trim();
+      $("worldbox").textContent = other
+        ? "A/B " + slug + " vs " + other + "…"
+        : "playtest " + slug + "…";
       try {
-        const data = await (await fetch("/api/v1/daedalus/playtest", {
+        const url = other ? "/api/v1/daedalus/playtest/compare" : "/api/v1/daedalus/playtest";
+        const payload = other
+          ? { slug_a: slug, slug_b: other, n: 4, use_browser: false, with_llm: false }
+          : { slug, n: 4, use_browser: false, with_llm: false };
+        const data = await (await fetch(url, {
           method: "POST",
           headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({ slug, n: 4, use_browser: false, with_llm: false }),
+          body: JSON.stringify(payload),
         })).json();
         $("worldbox").textContent = (data.summary || JSON.stringify(data, null, 2));
-        add("bot", data.summary || "playtest готов", (data.ship_ready ? "ship?" : "blockers"));
+        add("bot", data.summary || "playtest готов", (data.winner || (data.ship_ready ? "ship?" : "blockers")));
       } catch (e) {
         $("worldbox").textContent = "playtest: " + e;
       }

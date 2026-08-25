@@ -134,6 +134,15 @@ RADAR_SOURCES: list[dict[str, Any]] = [
         "limit": 5,
         "category": "coding-agents",
     },
+    {
+        "id": "github-designarena-runner",
+        "label": "GitHub: Design Arena agent-runner",
+        "type": "github",
+        "query": "Design-Arena agent-runner coding agent harness MIT",
+        "min_stars": 0,
+        "limit": 4,
+        "category": "coding-agents",
+    },
     # ── Web searches (use web_search_tool) ─────────────────────────────────
     {
         "id": "web-agents-radar",
@@ -166,6 +175,14 @@ RADAR_SOURCES: list[dict[str, Any]] = [
         "query": "bytebytego top AI github repositories 2026",
         "limit": 4,
         "category": "curated",
+    },
+    {
+        "id": "web-designarena-gamedev",
+        "label": "Design Arena — agentic game/app practices",
+        "type": "web",
+        "query": "site:notes.designarena.ai agentic game development Agent Runner harness",
+        "limit": 4,
+        "category": "coding-agents",
     },
 ]
 

@@ -33,6 +33,7 @@ PERM_MAP: dict[str, str | None] = {
     "mcp_call": None,
     "spawn_subagent": None,
     "playtest": None,
+    "design_brief": None,
     "mirofish": None,
 }
 
@@ -245,15 +246,36 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "design_brief",
+        "description": (
+            "Expand a one-line game/app prompt into a playable brief "
+            "(loop, controls, win/lose, art, M0 feasibility) before writing files. "
+            "Design Arena practice; Daedalus text. Works offline."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "prompt": {"type": "string"},
+                "kind": {"type": "string"},
+            },
+            "required": ["prompt"],
+        },
+    },
+    {
         "name": "playtest",
         "description": (
             "MatrAIx-style simulated players critique a Playground game "
-            "(loop, controls, first 30s, win/lose)."
+            "(loop, controls, first 30s, win/lose). Pass slug_b to A/B two builds "
+            "(Design Arena pairwise idea)."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "slug": {"type": "string"},
+                "slug_b": {
+                    "type": "string",
+                    "description": "Optional second slug — pairwise compare",
+                },
                 "kind": {"type": "string"},
                 "n": {"type": "integer"},
                 "use_browser": {"type": "boolean"},
@@ -527,14 +549,45 @@ async def execute_native_tool(
             return f"── spawn_subagent {status} {r.get('slug')} ──\n{r.get('summary') or r.get('error')}"
 
         if name == "playtest":
+            slug_b = str(args.get("slug_b") or "").strip()
+            kind = str(args.get("kind") or "static")
+            n = int(args.get("n") or 4)
+            use_browser = bool(args.get("use_browser"))
+            if slug_b:
+                from .playtest import compare_playtests
+                r = await compare_playtests(
+                    str(args.get("slug") or ""),
+                    slug_b,
+                    kind=kind,
+                    n=n,
+                    use_browser=use_browser,
+                )
+                if not r.get("ok"):
+                    return f"── playtest A/B FAILED: {r.get('error')} ──"
+                return (
+                    f"── playtest A/B winner={r.get('winner')} ──\n"
+                    f"{r.get('summary')}\n"
+                    f"A blockers: {r.get('a', {}).get('blockers')}\n"
+                    f"B blockers: {r.get('b', {}).get('blockers')}"
+                )
             from .playtest import format_for_prompt, run_playtest
             r = await run_playtest(
                 str(args.get("slug") or ""),
-                kind=str(args.get("kind") or "static"),
-                n=int(args.get("n") or 4),
-                use_browser=bool(args.get("use_browser")),
+                kind=kind,
+                n=n,
+                use_browser=use_browser,
             )
             return "── playtest ──\n" + format_for_prompt(r)
+
+        if name == "design_brief":
+            from .design_arena import expand_brief
+            r = expand_brief(
+                str(args.get("prompt") or ""),
+                kind=str(args.get("kind") or ""),
+            )
+            if not r.get("ok"):
+                return f"── design_brief FAILED: {r.get('error')} ──"
+            return "── design_brief ──\n" + (r.get("prompt_block") or "")
 
         if name == "mirofish":
             from . import mirofish_client as mf

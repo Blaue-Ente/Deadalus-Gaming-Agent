@@ -115,6 +115,20 @@ class PlaytestBody(BaseModel):
     with_llm: bool = False
 
 
+class PlaytestCompareBody(BaseModel):
+    slug_a: str = Field(..., min_length=1, max_length=80)
+    slug_b: str = Field(..., min_length=1, max_length=80)
+    kind: str = Field(default="static", max_length=40)
+    n: int = Field(default=4, ge=1, le=6)
+    use_browser: bool = False
+    with_llm: bool = False
+
+
+class DesignBriefBody(BaseModel):
+    prompt: str = Field(..., min_length=2, max_length=2000)
+    kind: str = Field(default="", max_length=40)
+
+
 class MirofishSubmitBody(BaseModel):
     text: str = Field(..., min_length=20, max_length=80000)
     requirement: str = Field(default="", max_length=4000)
@@ -167,6 +181,39 @@ async def playtest_run(body: PlaytestBody) -> dict[str, Any]:
         use_browser=body.use_browser,
         llm_fn=llm_fn,
     )
+
+
+@router.post("/api/v1/daedalus/playtest/compare")
+async def playtest_compare(body: PlaytestCompareBody) -> dict[str, Any]:
+    from daedalus.playtest import compare_playtests
+    llm_fn = None
+    if body.with_llm:
+        from daedalus.llm_client import complete
+
+        async def llm_fn(system: str, user: str) -> str:
+            r = await complete(system=system, user=user, max_tokens=600, temperature=0.4)
+            return str(r.get("reply") or "")
+
+    return await compare_playtests(
+        body.slug_a,
+        body.slug_b,
+        kind=body.kind,
+        n=body.n,
+        use_browser=body.use_browser,
+        llm_fn=llm_fn,
+    )
+
+
+@router.get("/api/v1/daedalus/design-arena")
+async def design_arena_lessons() -> dict[str, Any]:
+    from daedalus.design_arena import lessons
+    return lessons()
+
+
+@router.post("/api/v1/daedalus/design-arena/brief")
+async def design_arena_brief(body: DesignBriefBody) -> dict[str, Any]:
+    from daedalus.design_arena import expand_brief
+    return expand_brief(body.prompt, kind=body.kind)
 
 
 @router.get("/api/v1/daedalus/mirofish")

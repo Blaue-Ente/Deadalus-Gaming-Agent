@@ -245,7 +245,7 @@ def brief_enrichment(kind: str, name: str = "", criteria: str = "") -> str:
     libs = ", ".join(hints.get("libraries") or []) or "подходящи за платформата"
     staging = "\n".join(f"  - {s}" for s in (hints.get("staging") or [])[:6])
     arch = hints.get("architecture") or ""
-    return (
+    body = (
         f"\n\n━━━ GAME PLATFORM GUIDE (автоматично — {reason}) ━━━\n"
         f"Ефективна платформа: {effective}\n"
         f"Препоръчани библиотеки: {libs}\n"
@@ -253,6 +253,15 @@ def brief_enrichment(kind: str, name: str = "", criteria: str = "") -> str:
         f"Предложена файлова структура:\n{staging}\n"
         f"Спазвай PLATFORM_PICKER правилата — не смесвай web APIs в Expo.\n"
     )
+    try:
+        from .design_arena import expand_brief
+        arena = expand_brief(f"{name} {criteria}".strip(), kind=effective)
+        extra = arena.get("prompt_block") or ""
+        if extra:
+            return body + extra
+    except Exception:
+        pass
+    return body
 
 
 def autopilot_research_addendum(kind: str, *, slug: str = "") -> str:

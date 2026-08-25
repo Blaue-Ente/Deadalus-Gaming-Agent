@@ -109,7 +109,8 @@ Data lives under `$DAEDALUS_DATA` (default `data/daedalus/` on the machine, `%LO
 | Live publish | local `/apps/{slug}/` + Netlify / GitLab Pages / 1-hour preview |
 | Capsule | zip for USB — `GET /api/v1/playground/projects/{slug}/capsule` |
 | Windows app | Start Menu **Daedalus** (WebView2 / Tk) |
-| Evolution | optional idle gardener; patches still wait for Approve |
+| Playtest | MatrAIx-style personas; optional A/B of two slugs (`playtest` + `slug_b`) |
+| Design Arena practices | Playable brief before files (`design_brief`); ideas only — we do not vendor Agent Runner |
 
 Studio tab **World** shows Reach / playtest / MCP status.
 

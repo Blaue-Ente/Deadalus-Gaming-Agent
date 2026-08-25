@@ -128,7 +128,7 @@ async def capabilities() -> dict:
             "files", "shell-sandbox", "browser-verify", "git", "workers",
             "web-search", "mesh-peer", "local-llm", "shell-center",
             "native-tools", "image-gen", "preferences", "learned-skills",
-            "agent-reach", "playtest", "mirofish-sidecar", "mcp",
+            "agent-reach", "playtest", "design-arena-practices", "mirofish-sidecar", "mcp",
             "browser-session", "subagents",
             "offline-kit", "llm-wardrobe", "addons", "capsule",
             "evolution", "windows-desktop", "windows-gui", "live-publish",
