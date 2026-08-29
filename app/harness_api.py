@@ -28,6 +28,10 @@ class ModelSelectionBody(BaseModel):
     api_key: str = Field(default="", max_length=1000)
 
 
+class RoutingProfileBody(BaseModel):
+    id: str = Field(..., min_length=1, max_length=40)
+
+
 @router.get("/api/v1/llm/local")
 async def llm_local() -> dict[str, Any]:
     from daedalus.local_llm import probe_all, resolve_local_config, local_requested
@@ -93,6 +97,37 @@ async def llm_select(body: ModelSelectionBody) -> dict[str, Any]:
         "local": is_local_provider(provider),
         "resources": snapshot(probe_local=False),
     }
+
+
+@router.post("/admin/llm-router/api/profile")
+async def llm_apply_profile(body: RoutingProfileBody) -> dict[str, Any]:
+    from daedalus.llm_config import get_config
+    from daedalus.llm_router_config import apply_profile, get_llm_profile, router_write_context
+    from daedalus.provider_catalog import resources
+    from daedalus.routing_profiles import profile_by_id
+
+    provider_rows = resources(probe_local=True)
+    profile = profile_by_id(body.id, provider_rows)
+    if not profile:
+        raise HTTPException(status_code=404, detail=f"unknown routing profile: {body.id}")
+    if not profile.get("available"):
+        raise HTTPException(status_code=409, detail=profile.get("reason") or "profile unavailable")
+    current = get_config()
+    master = profile["slots"]["master"]
+    master_key = (
+        str(current.get("api_key") or "")
+        if current.get("provider") == master.get("provider")
+        else ""
+    )
+    with router_write_context():
+        applied = apply_profile(
+            profile["slots"],
+            source_id=profile["id"],
+            source_label=profile["label"],
+            source_kind="resource-profile",
+            master_api_key=master_key,
+        )
+    return {"ok": True, "applied": applied, "profile": get_llm_profile()}
 
 
 @router.post("/api/v1/daedalus/shell")

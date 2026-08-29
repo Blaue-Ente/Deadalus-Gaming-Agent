@@ -94,15 +94,23 @@ def test_ollama_selection_is_normal_provider_route(harness_tmp, monkeypatch):
     assert cfg["model"] == "qwen2.5-coder:14b"
     assert cfg["source"] == "db_local"
     assert cfg["api_key"]
-    resources = client.get(
+    resource_payload = client.get(
         "/api/v1/llm/resources?probe_local=false",
         headers={"Authorization": f"Bearer {get_or_create_token()}"},
-    ).json()["resources"]
+    ).json()
+    resources = resource_payload["resources"]
     ollama = next(row for row in resources if row["id"] == "ollama")
     assert next(model for model in ollama["models"] if model["id"] == cfg["model"])["selected"] is True
+    assert {profile["id"] for profile in resource_payload["profiles"]} == {
+        "auto",
+        "private",
+        "balanced",
+        "maximum-quality",
+    }
     page = client.get("/admin/llm-router")
     assert page.status_code == 200
     assert "Ollama работи като нормален provider" in page.text
+    assert "Профили по роли" in page.text
     assert "/admin/static/llm-picker.js" in page.text
     assert client.get("/admin/static/llm-picker.js").status_code == 200
 

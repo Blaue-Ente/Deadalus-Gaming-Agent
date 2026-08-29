@@ -144,6 +144,7 @@ def resources(*, probe_local: bool = True) -> list[dict[str, Any]]:
 
 def snapshot(*, probe_local: bool = True) -> dict[str, Any]:
     from .llm_config import describe_effective_config
+    from .routing_profiles import available_profiles
 
     rows = resources(probe_local=probe_local)
     return {
@@ -154,5 +155,6 @@ def snapshot(*, probe_local: bool = True) -> dict[str, Any]:
             "cloud": [row["id"] for row in rows if row["kind"] in ("cloud", "gateway")],
             "custom": [row["id"] for row in rows if row["kind"] == "custom"],
         },
+        "profiles": available_profiles(rows),
         "effective": describe_effective_config().get("effective") or {},
     }

@@ -102,6 +102,56 @@
     return card;
   }
 
+  async function applyProfile(profile, button) {
+    button.disabled = true;
+    button.textContent = "Прилагам…";
+    try {
+      const response = await fetch("/admin/llm-router/api/profile", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({id: profile.id}),
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) {
+        throw new Error(data.detail || data.error || "Profile apply failed");
+      }
+      showMessage(`Активен routing профил: ${profile.label}`, true);
+      await loadResources(true);
+    } catch (error) {
+      showMessage(error.message || String(error));
+    } finally {
+      button.disabled = false;
+      button.textContent = "Приложи";
+    }
+  }
+
+  function renderProfiles(profiles) {
+    const box = byId("llm-profiles");
+    box.replaceChildren();
+    profiles.forEach((profile) => {
+      const card = document.createElement("article");
+      card.className = "cc-card border rounded-xl p-4";
+      const title = document.createElement("h3");
+      title.className = "cc-heading text-base";
+      title.textContent = profile.label;
+      const description = document.createElement("p");
+      description.className = "text-xs text-argos-dim mt-2 min-h-12";
+      description.textContent = profile.description;
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "cc-btn-primary border rounded-lg px-3 py-2 mt-3 w-full";
+      button.textContent = profile.available ? "Приложи" : "Недостъпен";
+      button.disabled = !profile.available;
+      if (profile.available) {
+        button.addEventListener("click", () => applyProfile(profile, button));
+      } else {
+        button.title = profile.reason || "";
+      }
+      card.append(title, description, button);
+      box.appendChild(card);
+    });
+  }
+
   async function loadResources(probeLocal = true) {
     const suffix = probeLocal ? "" : "?probe_local=false";
     try {
@@ -113,6 +163,7 @@
       byId("llm-active").textContent =
         `${effective.provider || "—"} · ${effective.model || "—"}`;
       byId("llm-source").textContent = `source: ${effective.source || "—"}`;
+      renderProfiles(data.profiles || []);
 
       const local = byId("llm-local");
       const ready = byId("llm-cloud-ready");
