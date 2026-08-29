@@ -1,6 +1,5 @@
 {% extends "_shell.html" %}
 {% set page = 'game_studio' %}
-{% set daedalus_tab = 'game_studio' %}
 {% block title %}Game Studio — Дедал{% endblock %}
 {% block eyebrow %}Дедал · Game Studio · Brainstorm → GDD → Build{% endblock %}
 {% block heading %}Game Studio{% endblock %}
@@ -8,14 +7,12 @@
 
 {% block content %}
 <div class="max-w-5xl mx-auto">
-{% include "_daedalus_nav.html" %}
-
   <p class="text-gray-400 text-sm mb-4">
     Отделен поток за игри — brainstorm, GDD lite, Studio milestones, после guided или autopilot build.
     Racing / F-Zero-клас: Vite + Three.js WebGPU, vertical slice първо, specialist 3D инструменти (виж Arcade craft в GDD).
     Godot 2D / Metroidvania: kind <code>godot</code>, текстови .tscn/.gd.
     Godot 3D puzzle room: същият kind, 3D M0 (плоча → врата), headless probe — не Vite.
-    <a href="/admin/daedalus/playground" class="text-indigo-400 hover:text-indigo-300">Playground</a> остава за apps и Revive.
+    <a href="/admin/daedalus/projects" class="text-indigo-400 hover:text-indigo-300">Проекти</a> остава за apps и Revive.
   </p>
 
   <!-- LIST VIEW -->
@@ -1132,16 +1129,15 @@ async function gsHandleGuidedEvent(ev, d) {
       }
       break;
     case 'milestone_done':
-      _gsGuidedMilestoneScope = d.milestone_id || _gsGuidedMilestoneScope;
-      gsGuidedLog(`✅ Milestone ${d.milestone_id || ''} завършен`, 'ok');
-      await gsOnGuidedFinished(`Milestone ${d.milestone_id || ''} build готов — пускам Verify…`);
-      await gsRunVerify(d.milestone_id, true);
+      _gsGuidedMilestoneScope = '';
+      gsGuidedLog(`✅ Milestone ${d.milestone_id || ''} build + Verify завършени`, 'ok');
+      await gsOnGuidedFinished(`Milestone ${d.milestone_id || ''} е построен и проверен.`);
       break;
     case 'done':
+      if (!_gsGuidedRunning) break;
       if (_gsGuidedMilestoneScope) {
         gsGuidedLog(`✅ Milestone ${_gsGuidedMilestoneScope} завършен`, 'ok');
-        await gsOnGuidedFinished(`Milestone ${_gsGuidedMilestoneScope} build готов — пускам Verify…`);
-        await gsRunVerify(_gsGuidedMilestoneScope, true);
+        await gsOnGuidedFinished(`Milestone ${_gsGuidedMilestoneScope} е построен и проверен.`);
       } else {
         await gsOnGuidedFinished(`Guided build завършен — ${(d.files || []).length} файла.`);
       }

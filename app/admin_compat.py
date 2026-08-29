@@ -14,7 +14,14 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+    StreamingResponse,
+)
 from fastapi.templating import Jinja2Templates
 
 log = logging.getLogger(__name__)
@@ -141,21 +148,36 @@ def _extract_json_list(text: str) -> list | None:
 
 @router.get("/daedalus/hub", response_class=HTMLResponse)
 async def hub_page(request: Request):
-    return _page(request, "daedalus_hub.html")
+    return RedirectResponse("/", status_code=307)
 
 
 @router.get("/daedalus", response_class=HTMLResponse)
 async def chat_page(request: Request):
+    return RedirectResponse("/admin/daedalus/agent", status_code=307)
+
+
+@router.get("/daedalus/agent", response_class=HTMLResponse)
+async def agent_page(request: Request):
     return _page(request, "daedalus.html")
 
 
 @router.get("/daedalus/playground", response_class=HTMLResponse)
 async def playground_page(request: Request):
+    return RedirectResponse("/admin/daedalus/projects", status_code=307)
+
+
+@router.get("/daedalus/projects", response_class=HTMLResponse)
+async def projects_page(request: Request):
     return _page(request, "daedalus_playground.html")
 
 
 @router.get("/daedalus/game-studio", response_class=HTMLResponse)
 async def game_studio_page(request: Request):
+    return RedirectResponse("/admin/daedalus/projects/game-studio", status_code=307)
+
+
+@router.get("/daedalus/projects/game-studio", response_class=HTMLResponse)
+async def project_game_studio_page(request: Request):
     return _page(request, "daedalus_game_studio.html")
 
 
@@ -166,6 +188,11 @@ async def connectors_page(request: Request):
 
 @router.get("/daedalus/proposals", response_class=HTMLResponse)
 async def proposals_page(request: Request):
+    return RedirectResponse("/admin/daedalus/review", status_code=307)
+
+
+@router.get("/daedalus/review", response_class=HTMLResponse)
+async def review_page(request: Request):
     return _page(request, "proposals.html")
 
 
@@ -177,6 +204,11 @@ async def skills_page(request: Request):
 @router.get("/daedalus/bundles", response_class=HTMLResponse)
 async def bundles_page(request: Request):
     return _page(request, "bundles.html")
+
+
+@router.get("/daedalus/settings", response_class=HTMLResponse)
+async def settings_page(request: Request):
+    return _page(request, "daedalus_settings.html")
 
 
 @router.get("/llm-router", response_class=HTMLResponse)
@@ -1691,6 +1723,111 @@ async def playground_revive(request: Request):
         return JSONResponse({"ok": True, "project": _jsonable(proj), "onboard": onboard, "compat": compat})
     except Exception as exc:
         return JSONResponse({"ok": False, "error": gh.github_error_hint(exc)}, status_code=500)
+
+
+@router.post("/daedalus/playground/api/projects/{slug}/revive-pipeline")
+async def playground_revive_pipeline(slug: str, request: Request):
+    from daedalus import daedalus_mesh as mesh
+    from daedalus.build_prompts import resolve_build_model
+    from daedalus.playground_revive import revive_pipeline
+
+    body = await _body(request)
+    build_model, _ = resolve_build_model()
+    try:
+        result = await revive_pipeline(
+            slug,
+            publish=body.get("publish", True),
+            route_fn=mesh.route,
+            build_model=build_model,
+        )
+        return JSONResponse(result, status_code=200 if result.get("ok") else 400)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)[:400]}, status_code=400)
+
+
+@router.post("/daedalus/playground/api/projects/{slug}/revive-repair")
+async def playground_revive_repair(slug: str):
+    from daedalus import daedalus_mesh as mesh
+    from daedalus.build_prompts import resolve_build_model
+    from daedalus.playground_revive import onboard_project
+
+    build_model, _ = resolve_build_model()
+    try:
+        result = await onboard_project(
+            slug,
+            repair_on_fail=True,
+            route_fn=mesh.route,
+            build_model=build_model,
+        )
+        return JSONResponse(result, status_code=200 if result.get("ok") else 400)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)[:400]}, status_code=400)
+
+
+@router.get("/daedalus/playground/api/projects/{slug}/upstream-diff")
+async def playground_upstream_diff(slug: str):
+    from daedalus.playground_revive import upstream_diff
+
+    result = await upstream_diff(slug)
+    return JSONResponse(result, status_code=200 if result.get("ok") else 404)
+
+
+@router.post("/daedalus/playground/api/projects/{slug}/publish")
+async def playground_publish(slug: str, request: Request):
+    from daedalus.playground_agent_guards import publish_with_repair
+
+    body = await _body(request)
+    try:
+        return JSONResponse(await publish_with_repair(slug, icon=body.get("icon") or "🎮"))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)[:400]}, status_code=400)
+
+
+@router.post("/daedalus/playground/api/projects/{slug}/rebuild")
+async def playground_rebuild(slug: str):
+    from daedalus.playground_agent_guards import publish_with_repair
+
+    try:
+        result = await publish_with_repair(slug)
+        result["rebuilt"] = True
+        return JSONResponse(result)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)[:400]}, status_code=400)
+
+
+@router.post("/daedalus/playground/api/projects/{slug}/unpublish")
+async def playground_unpublish(slug: str):
+    from daedalus import playground as pg
+    from daedalus import playground_publish as publish
+
+    await publish.unpublish(slug)
+    await pg.update_project(slug, status="idle")
+    return JSONResponse({"ok": True, "slug": slug})
+
+
+@router.post("/daedalus/playground/api/projects/{slug}/delete-published")
+async def playground_delete_published(slug: str):
+    from daedalus import playground_publish as publish
+
+    try:
+        return JSONResponse({"ok": await publish.delete_published(slug), "slug": slug})
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)[:400]}, status_code=400)
+
+
+@router.get("/daedalus/playground/api/projects/{slug}/assets/raw")
+async def playground_asset_raw(slug: str, path: str):
+    from daedalus import playground as pg
+
+    try:
+        if not path.startswith("assets/"):
+            raise ValueError("asset path must start with assets/")
+        target = pg._safe_join(pg.project_dir(slug), path)
+        if not target.is_file():
+            return JSONResponse({"ok": False, "error": "asset not found"}, status_code=404)
+        return FileResponse(target)
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
 
 
 @router.post("/daedalus/playground/api/projects/{slug}/push")
