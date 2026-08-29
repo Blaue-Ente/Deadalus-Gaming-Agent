@@ -260,3 +260,20 @@ def local_requested() -> bool:
         return True
     provider = normalize_provider(os.environ.get("DAEDALUS_PROVIDER") or "")
     return provider in LOCAL_PROVIDERS
+
+
+def offline_requested() -> bool:
+    """Return whether privacy policy explicitly requires a local route."""
+    try:
+        from .llm_wardrobe import load
+
+        if load().get("offline"):
+            return True
+    except Exception:
+        pass
+    return (os.environ.get("DAEDALUS_OFFLINE") or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )

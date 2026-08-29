@@ -361,14 +361,27 @@ def _resolve_llm_config() -> dict:
     from .local_llm import (
         is_local_provider,
         local_requested,
+        offline_requested,
         resolve_local_config,
     )
 
-    # 0. Explicit local LLM (DAEDALUS_PROVIDER=ollama | DAEDALUS_LOCAL_LLM=1)
-    if local_requested():
-        local = resolve_local_config()
-        if local:
-            return local
+    # Privacy policy is distinct from provider selection and may force local.
+    if offline_requested():
+        offline_provider = os.environ.get("DAEDALUS_PROVIDER") or "ollama"
+        if not is_local_provider(offline_provider):
+            try:
+                from .llm_wardrobe import load
+
+                offline_provider = str(load().get("backend") or "ollama")
+            except Exception:
+                offline_provider = "ollama"
+        if not is_local_provider(offline_provider):
+            offline_provider = "ollama"
+        local = resolve_local_config(offline_provider)
+        if not local:
+            raise RuntimeError("Offline policy requires a configured local LLM provider.")
+        local["source"] = "offline_policy"
+        return local
 
     db_cfg = _read_db()
 
@@ -446,6 +459,13 @@ def _resolve_llm_config() -> dict:
             "use_cache": provider == "anthropic",
             "source":    "env",
         })
+
+    # Wardrobe / DAEDALUS_LOCAL_LLM is a default only when no explicit DB or
+    # DAEDALUS_* model route exists. Ollama selected in DB already returned above.
+    if local_requested():
+        local = resolve_local_config()
+        if local:
+            return local
 
     # 2b. NVIDIA free-only without explicit DB model — use NVIDIA default master
     if is_nvidia_free_only():

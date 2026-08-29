@@ -49,6 +49,77 @@ def test_get_config_prefers_explicit_ollama(monkeypatch):
     assert cfg["base_url"].endswith("/v1")
 
 
+def test_provider_resources_group_available_ai(harness_tmp, monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "configured")
+    from daedalus.provider_catalog import snapshot
+
+    data = snapshot(probe_local=False)
+    resources = {row["id"]: row for row in data["resources"]}
+    assert resources["openrouter"]["configured"] is True
+    assert resources["ollama"]["kind"] == "local"
+    assert "qwen2.5-coder:7b" in {
+        model["id"] for model in resources["ollama"]["models"]
+    }
+    assert data["groups"]["local"] == ["ollama", "lmstudio", "llamacpp", "vllm"]
+
+
+def test_ollama_selection_is_normal_provider_route(harness_tmp, monkeypatch):
+    monkeypatch.setattr(
+        "daedalus.local_llm.probe_endpoint",
+        lambda base_url, timeout=1.6: {
+            "ok": False,
+            "base_url": base_url,
+            "models": [],
+            "error": "not running",
+        },
+    )
+    from app.main import app
+    from daedalus.owner_auth import get_or_create_token
+
+    client = TestClient(app)
+    selected = client.post(
+        "/admin/llm-router/api/selection",
+        json={"provider": "ollama", "model": "qwen2.5-coder:14b"},
+        headers={"Authorization": f"Bearer {get_or_create_token()}"},
+    )
+    assert selected.status_code == 200
+    assert selected.json()["selection"]["provider"] == "ollama"
+
+    from daedalus.llm_config import get_config
+
+    cfg = get_config()
+    assert cfg["provider"] == "ollama"
+    assert cfg["model"] == "qwen2.5-coder:14b"
+    assert cfg["source"] == "db_local"
+    assert cfg["api_key"]
+
+
+def test_saved_cloud_route_wins_over_active_wardrobe(harness_tmp, monkeypatch):
+    monkeypatch.setattr(
+        "daedalus.local_llm.probe_endpoint",
+        lambda base_url, timeout=1.6: {
+            "ok": False,
+            "base_url": base_url,
+            "models": [],
+            "error": "not running",
+        },
+    )
+    from daedalus.llm_config import get_config, set_config
+    from daedalus.llm_router_config import router_write_context
+    from daedalus.llm_wardrobe import activate
+
+    with router_write_context():
+        set_config(
+            model="deepseek/deepseek-v3.2",
+            api_key="cloud-key",
+            provider="openrouter",
+        )
+    activate("code-7b")
+    cfg = get_config()
+    assert cfg["provider"] == "openrouter"
+    assert cfg["source"] == "db"
+
+
 def test_shell_echo_and_block_sudo(harness_tmp):
     from daedalus.shell_center import run_command
     ok = run_command("echo daedalus-shell")

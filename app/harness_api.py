@@ -21,6 +21,13 @@ class PrefBody(BaseModel):
     kind: str = Field(default="preference", max_length=40)
 
 
+class ModelSelectionBody(BaseModel):
+    provider: str = Field(..., min_length=1, max_length=60)
+    model: str = Field(..., min_length=1, max_length=180)
+    base_url: str = Field(default="", max_length=500)
+    api_key: str = Field(default="", max_length=1000)
+
+
 @router.get("/api/v1/llm/local")
 async def llm_local() -> dict[str, Any]:
     from daedalus.local_llm import probe_all, resolve_local_config, local_requested
@@ -47,6 +54,45 @@ async def llm_local() -> dict[str, Any]:
 async def llm_local_models() -> dict[str, Any]:
     from daedalus.local_llm import probe_all
     return {"ok": True, "backends": probe_all()}
+
+
+@router.get("/api/v1/llm/resources")
+async def llm_resources(probe_local: bool = True) -> dict[str, Any]:
+    from daedalus.provider_catalog import snapshot
+
+    return snapshot(probe_local=probe_local)
+
+
+@router.post("/admin/llm-router/api/selection")
+async def llm_select(body: ModelSelectionBody) -> dict[str, Any]:
+    from daedalus.llm_config import PROVIDER_DEFAULTS, set_config
+    from daedalus.llm_router_config import router_write_context
+    from daedalus.local_llm import is_local_provider
+    from daedalus.provider_catalog import provider_definition, snapshot
+
+    definition = provider_definition(body.provider)
+    provider = definition.id
+    if provider not in PROVIDER_DEFAULTS and provider != "custom":
+        raise HTTPException(status_code=400, detail=f"unknown provider: {provider}")
+    base_url = body.base_url.strip()
+    if provider == "custom" and not base_url:
+        raise HTTPException(status_code=400, detail="custom provider requires base_url")
+    if base_url and not base_url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="base_url must use http:// or https://")
+    with router_write_context():
+        saved = set_config(
+            model=body.model.strip(),
+            api_key=body.api_key.strip(),
+            provider=provider,
+            base_url=base_url,
+            use_cache=provider == "anthropic",
+        )
+    return {
+        "ok": True,
+        "selection": {key: value for key, value in saved.items() if key != "api_key"},
+        "local": is_local_provider(provider),
+        "resources": snapshot(probe_local=False),
+    }
 
 
 @router.post("/api/v1/daedalus/shell")
