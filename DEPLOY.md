@@ -1,11 +1,10 @@
 # Deploy Daedalus (PC + cloud)
 
-Daedalus is a single FastAPI process on port **8787**. No Postgres required
-in standalone mode (SQLite under `DAEDALUS_DATA`). ADN is not started.
+Daedalus is one FastAPI process on port **8787**. Postgres is not required: SQLite lives under `$DAEDALUS_DATA`.
 
-## Live URL (Наживо)
+## Live
 
-Studio → **Наживо** (or `POST /api/v1/playground/projects/{slug}/live`):
+Studio → **Live** (or `POST /api/v1/playground/projects/{slug}/live`):
 
 1. Builds static (vite/expo) and serves `/apps/{slug}/` on this process.
 2. Picks the first public backend that works:
@@ -14,83 +13,81 @@ Studio → **Наживо** (or `POST /api/v1/playground/projects/{slug}/live`):
    - Netlify `--allow-anonymous` → instant URL, **claim within 1 hour**
 3. Offline kit → local `/apps/` only.
 
-Free custom `.com` is not included. You get a real https subdomain.
+A free custom `.com` is not included. You get a real https subdomain.
 
-## Windows (Start Menu app)
+## Windows (Start Menu)
+
+Extra option: `Daedalus.exe` plus a private CPython (Python on PATH is optional). See [docs/INSTALL.md](docs/INSTALL.md).
 
 ```powershell
-# Python 3.11+ with "Add python.exe to PATH"
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 .\packaging\windows\install.ps1 -DesktopShortcut
 ```
 
-This copies the product to `%LOCALAPPDATA%\Programs\Daedalus`, creates a venv,
-and a Start Menu shortcut **Дедал**. Studio binds **127.0.0.1:8787** only.
-Put cloud keys in `%LOCALAPPDATA%\Daedalus\.env` (copied from `.env.example`
-on first install). Ollama still works as a local provider.
+Copies the product to `%LOCALAPPDATA%\Programs\Daedalus`, creates a venv,
+tries `pip install -e ".[gui]"` (pywebview / Edge WebView2), compiles
+`Daedalus.exe`, and a Start Menu shortcut **Daedalus**. Studio binds
+**127.0.0.1:8787** only.
 
-Uninstall: Settings → Apps → Дедал, or `uninstall.ps1` (add `-RemoveData` to
-wipe memory/games). Inno Setup script: `packaging/windows/Daedalus.iss`.
+Keys: `%LOCALAPPDATA%\Daedalus\.env` (copied from `.env.example` on first
+install). Ollama stays a local provider.
+
+Uninstall: Settings → Apps → Daedalus, or `uninstall.ps1` (add `-RemoveData`
+to wipe memory/games). Wizard installer: `packaging/windows/build-setup.ps1`.
 
 ## Local PC
 
 ```bash
-cd Daedalus
+cd deadalus-agent-0
 python3 -m venv .venv && source .venv/bin/activate
-pip install -e ".[playwright]"   # playwright optional, for browser verify
-python -m playwright install chromium   # if you installed the extra
+pip install -e ".[playwright]"   # optional, for browser verify
+python -m playwright install chromium
 export DAEDALUS_STANDALONE=1
-export ALLTOKEN_API_KEY=...      # or OPENROUTER_API_KEY
+export ALLTOKEN_API_KEY=...      # or OPENROUTER_API_KEY / local Ollama
 python -m app.cli serve --host 127.0.0.1 --port 8787
 ```
 
-Studio: http://127.0.0.1:8787  
-Command Center: http://127.0.0.1:8787/admin/daedalus  
-Playground: http://127.0.0.1:8787/admin/daedalus/playground  
-API docs: http://127.0.0.1:8787/docs  
-Health: http://127.0.0.1:8787/health
+| What | URL |
+|---|---|
+| Studio | http://127.0.0.1:8787 |
+| Command Center | http://127.0.0.1:8787/admin/daedalus |
+| Playground | http://127.0.0.1:8787/admin/daedalus/playground |
+| API docs | http://127.0.0.1:8787/docs |
+| Health | http://127.0.0.1:8787/health |
 
 ## Docker (PC or VPS)
 
 ```bash
-export ALLTOKEN_API_KEY=...
+cp .env.example .env
+# fill a key
 docker compose up --build -d
 ```
 
-Data (projects, SQLite, Chroma memory) lives in the `daedalus-data` volume
-mounted at `/var/lib/daedalus`. The image sets `DAEDALUS_DATA` there even
-without compose, so a plain `docker run -v daedalus-data:/var/lib/daedalus`
-keeps memory across restarts.
+Data (projects, SQLite, Chroma) lives in volume `daedalus-data` at `/var/lib/daedalus`. The image sets `DAEDALUS_DATA` there even without compose, so `docker run -v daedalus-data:/var/lib/daedalus` keeps memory across restarts.
 
-## Cloud notes
+## Cloud
 
-- **One replica is enough** for the agent loop (jobs are in-process).
-- Persist the volume. Back it up; it holds Playground workspaces + SQLite.
-- Put a reverse proxy (Caddy/nginx) in front if you want HTTPS.
-- Set `IYVERIS_MESH_KEY` to a long secret before exposing `/api/iyveris`.
-- Do **not** set `DAEDALUS_STANDALONE=1` on the ADN Replit/service — that
-  process must keep using Postgres + MeshRouter.
+- One replica is enough (jobs are in-process).
+- Persist the volume. It holds Playground workspaces + SQLite.
+- Put a reverse proxy (Caddy/nginx) in front for HTTPS.
+- Before exposing the port: change the peer secret in `.env` (see [docs/ENV.md](docs/ENV.md)) and listen through TLS, not bare `0.0.0.0`.
 
 ### fly.io
 
 ```bash
-fly launch --copy-config --yes   # uses fly.toml; create the daedalus_data volume
+fly launch --copy-config --yes   # uses fly.toml; create volume daedalus_data
 fly secrets set ALLTOKEN_API_KEY=...
 fly deploy
 ```
 
 ### Render
 
-Connect the standalone GitLab/GitHub repo and use `render.yaml` (Docker + disk
-at `/var/lib/daedalus`). Set `ALLTOKEN_API_KEY` in the dashboard.
+Connect this GitLab repo and use `render.yaml` (Docker + disk at `/var/lib/daedalus`). Set `ALLTOKEN_API_KEY` (or another key) in the dashboard.
 
 ### GitLab Container Registry
 
-On `main`, `.gitlab-ci.yml` builds the image and, when `CI_REGISTRY` is set,
-pushes `$CI_REGISTRY_IMAGE:latest`. Deploy that image anywhere Docker runs.
+On `main`, `.gitlab-ci.yml` builds the image and, when `CI_REGISTRY` is set, pushes `$CI_REGISTRY_IMAGE:latest`. Deploy that image anywhere Docker runs.
 
 ## Environment
 
-See `.env.example`. Minimum: one of `ALLTOKEN_API_KEY`, `OPENROUTER_API_KEY`,
-`NOVITA_API_KEY`, `NVIDIA_API_KEY`. Optional `NOVITA_API_KEY` or
-`OPENROUTER_API_KEY` for Playground sprite generation.
+See `.env.example` and [docs/ENV.md](docs/ENV.md). Minimum: one of `ALLTOKEN_API_KEY`, `OPENROUTER_API_KEY`, `NOVITA_API_KEY`, `NVIDIA_API_KEY`, **or** a local provider. `NOVITA_API_KEY` / `OPENROUTER_API_KEY` also enable Playground sprite generation.

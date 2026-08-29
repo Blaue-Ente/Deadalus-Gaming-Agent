@@ -14,7 +14,7 @@ from typing import Any, Mapping, MutableMapping
 
 
 APP_NAME = "Daedalus"
-DISPLAY_NAME = "Дедал"
+DISPLAY_NAME = "Daedalus"
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8787
 

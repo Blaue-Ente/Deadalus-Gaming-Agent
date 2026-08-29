@@ -17,8 +17,9 @@ HANDOFF_SYS_ADDENDUM = """
 - Прочети design/gdd-lite.md и studio/*.md за контекст
 - Запази boot, menu, save и prior milestone progress
 - Един етап = един deliverable; merge incremental
-- Приложи резултатите от проучването (skills, Phaser/canvas patterns) — не импровизирай от нулата
+- Приложи резултатите от проучването (skills, Phaser/canvas/Three.js patterns) — не импровизирай от нулата
 - WRITE преди READ — не чети файл преди да го създадеш
+- ARCADE CRAFT: един deliverable на етап; verify преди следващия. Не default-вай pixel art на 3D brief. Cul-de-sac (3× същата грешка) → смени подхода.
 """.strip()
 
 
@@ -217,7 +218,13 @@ def build_description_for_milestone(
     )
     gdd_excerpt = (gdd or "")[:1200]
     body = (base or "").strip()
-    return f"{header}{body}\n\n--- GDD excerpt ---\n{gdd_excerpt}"[:4500]
+    extra = ""
+    try:
+        from .arcade_craft import planner_addendum
+        extra = "\n\n" + planner_addendum(kind, gdd_excerpt or body)
+    except Exception:
+        extra = ""
+    return f"{header}{body}\n\n--- GDD excerpt ---\n{gdd_excerpt}{extra}"[:5500]
 
 
 def milestone_summary(config: dict[str, Any] | None, plan: dict[str, Any] | None) -> dict[str, Any]:

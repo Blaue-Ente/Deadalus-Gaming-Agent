@@ -10,3 +10,5 @@ playground/
 *.egg-info/
 dist/
 build/
+packaging/windows/redist/*.nupkg
+packaging/windows/runtime/

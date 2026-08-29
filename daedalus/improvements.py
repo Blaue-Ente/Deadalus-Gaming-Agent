@@ -652,7 +652,7 @@ def _load_skills() -> None:
 
 
 def select_skills(user_message: str, intent: str, hint: str = "") -> list[str]:
-    """Return up to 2 skill names matching the request."""
+    """Return up to 3 skill names matching the request."""
     _load_skills()
     if not _SKILLS_CACHE:
         return []
@@ -683,6 +683,12 @@ def select_skills(user_message: str, intent: str, hint: str = "") -> list[str]:
                        "inventory flag", "world flags"],
         "dialogue": ["dialogue graph", "диалогов граф", "npc реплик",
                      "разклонен диалог"],
+        "arcade_craft": ["игра", "game", "racing", "racer", "f-zero", "wipeout",
+                         "three.js", "3d", "състезан", "arcade", "phaser",
+                         "formula minus", "fm1"],
+        "godot": ["godot", "gdscript", "metroidvania", ".tscn", "tscn", "puzzle room", "characterbody3d"],
+        "blender_jobs": ["blender", "bpy", "gltf", "glb export", "armature"],
+        "playtest": ["playtest", "тествай играта", "готови ли сме"],
     }
     for name in _SKILLS_CACHE:
         kws = keywords.get(name, [name.split("_")[0]])

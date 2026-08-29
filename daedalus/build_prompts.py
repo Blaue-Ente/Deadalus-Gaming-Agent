@@ -64,7 +64,8 @@ _KIND_RULES: dict[str, str] = {
 [ПЛАТФОРМА: VITE (Vanilla JS + npm)]
 • Задължителни файлове: index.html, main.js, vite.config.js с base:'./'
 • index.html: <script type="module" src="/main.js"></script>
-• ЗА ИГРИ: Phaser 3 (npm phaser) + src/game/; спрайтове от assets/*.png.
+• ЗА ИГРИ 2D: Phaser 3 (npm phaser) + src/game/; спрайтове от assets/*.png.
+• ЗА ИГРИ 3D / racing / F-Zero: Three.js (WebGPURenderer с WebGL fallback) + src/racer/. НЕ Phaser. НЕ pixel-art default. Запази M0 scaffold (ship/track/fail/boost) и надграждай.
 """,
     "vite-react": """\
 [ПЛАТФОРМА: VITE + REACT 18]
@@ -85,6 +86,7 @@ _KIND_RULES: dict[str, str] = {
 """,
     "expo": "",
     "unity": "",
+    "godot": "",
 }
 
 _MODE_APPLIES_TO = {"static", "vite", "vite-react", "node", "fastapi"}
@@ -126,6 +128,10 @@ def build_combined_sys(kind: str, coding_mode: str) -> str:
         from .unity_platform_guide import UNITY_PLAN_ADDENDUM, kind_rules_block
         kind_block = kind_rules_block()
         game_arch = UNITY_PLAN_ADDENDUM
+    elif kind == "godot":
+        from .godot_platform_guide import GODOT_PLAN_ADDENDUM, kind_rules_block
+        kind_block = kind_rules_block()
+        game_arch = GODOT_PLAN_ADDENDUM
     elif kind in ("static", "vite", "vite-react"):
         game_arch = _WEB_GAME_ARCH_RULES
     else:

@@ -1,4 +1,4 @@
-# Standalone Daedalus — Studio on /  Command Center on /admin/daedalus
+# Дедал — Studio на /   Command Center на /admin/daedalus
 services:
   daedalus:
     build: .

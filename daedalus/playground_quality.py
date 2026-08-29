@@ -141,6 +141,13 @@ def build_critic_messages(
         "дизайна’, а напр. ‘hero секцията няма contrast — затъмни фона и увеличи "
         "заглавието’ или ‘играта няма hit-feedback — добави particle при сблъсък’."
     )
+    try:
+        from .arcade_craft import critic_notes
+        note = critic_notes(description)
+        if note:
+            text += "\n\n" + note
+    except Exception:
+        pass
     parts: list[dict] = [{"type": "text", "text": text}]
     if screenshot_b64:
         parts.append({

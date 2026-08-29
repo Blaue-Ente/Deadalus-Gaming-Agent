@@ -66,7 +66,7 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(
     title="Daedalus",
     description="Independent coding agent — games, apps, self-improvement.",
-    version="0.3.3",
+    version="0.3.4",
     lifespan=lifespan,
 )
 app.include_router(playground_router)
@@ -132,7 +132,7 @@ async def capabilities() -> dict:
             "agent-reach", "playtest", "mirofish-sidecar", "mcp",
             "browser-session", "subagents",
             "offline-kit", "llm-wardrobe", "addons", "capsule",
-            "evolution", "windows-desktop", "live-publish",
+            "evolution", "windows-desktop", "windows-gui", "live-publish",
             "effort-routing", "world-kit", "long-horizon",
         ],
         "mesh_endpoint": "/api/iyveris",
@@ -216,6 +216,9 @@ async def studio() -> FileResponse:
 
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon() -> FileResponse:
+    ico = _STATIC / "favicon.ico"
+    if ico.is_file():
+        return FileResponse(ico)
     mark = _STATIC / "daedalus-mark.png"
     if mark.is_file():
         return FileResponse(mark)

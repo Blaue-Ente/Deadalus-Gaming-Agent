@@ -1,4 +1,4 @@
-"""Standalone product tests run with ``Daedalus/`` as the import root."""
+"""Product tests run with the repository root on ``sys.path``."""
 from __future__ import annotations
 
 import sys

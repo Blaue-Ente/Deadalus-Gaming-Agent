@@ -54,6 +54,18 @@ async def assess_deliverable(slug: str, kind: str, *, verified: bool) -> dict[st
     elif kind in ("fastapi", "streamlit", "node"):
         deliverable = bool(verified)
         reason = "" if deliverable else "runtime smoke test не мина"
+    elif kind == "godot":
+        from .playground_godot_scaffold import verify_godot_scaffold
+        proj = await pg.get_project(slug)
+        gh_url = (proj or {}).get("github_repo") or ""
+        gl_url = (proj or {}).get("gitlab_repo") or ""
+        remote_url = gl_url or gh_url
+        gv = verify_godot_scaffold(slug)
+        deliverable = bool(gv.get("ok")) or bool(remote_url)
+        if not deliverable:
+            reason = gv.get("error") or "Godot scaffold непълен — липсват project.godot/.gd/.tscn"
+        elif remote_url:
+            preview_url = remote_url
     elif kind == "unity":
         proj = await pg.get_project(slug)
         gh_url = (proj or {}).get("github_repo") or ""
@@ -91,5 +103,5 @@ async def assess_deliverable(slug: str, kind: str, *, verified: bool) -> dict[st
         "github_url": proj.get("github_repo") or "",
         "gitlab_url": proj.get("gitlab_repo") or "",
         "remote_url": proj.get("gitlab_repo") or proj.get("github_repo") or "",
-        "local_only": kind == "unity",
+        "local_only": kind in ("unity", "godot"),
     }

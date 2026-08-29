@@ -51,6 +51,11 @@ STUDIO_PRESETS: dict[str, dict[str, Any]] = {
         "recommended_kind": "vite",
         "description": "Movement, levels, obstacles, score.",
     },
+    "racing": {
+        "label": "Racing / Hover / F-Zero-class",
+        "recommended_kind": "vite",
+        "description": "Browser 3D racer — spline track, handling, boost, rivals. Web first (FM1 path).",
+    },
     "open_world": {
         "label": "Open World / Exploration",
         "recommended_kind": "unity",
@@ -61,10 +66,20 @@ STUDIO_PRESETS: dict[str, dict[str, Any]] = {
         "recommended_kind": "unity",
         "description": "Netcode-ready architecture, match, sync (MVP offline-first).",
     },
-    "hybrid_mobile": {
+        "hybrid_mobile": {
         "label": "Hybrid Mobile (Web shell → iOS)",
         "recommended_kind": "expo",
         "description": "Expo/Vite prototype + Framework7/PakePlus iOS path.",
+    },
+    "godot_2d": {
+        "label": "Godot 2D (Metroidvania / RPG / platformer)",
+        "recommended_kind": "godot",
+        "description": "Godot 4.3 text scenes + GDScript. Local Editor; blender_jobs for GLB.",
+    },
+    "godot_3d": {
+        "label": "Godot 3D (puzzle room / greybox slice)",
+        "recommended_kind": "godot",
+        "description": "One room, CharacterBody3D, plate puzzle, headless probe. Not Vite/Three.",
     },
     "backend_api": {
         "label": "Game Backend API",
@@ -138,11 +153,92 @@ PLATFORMER_MILESTONES: list[dict[str, Any]] = [
     {"id": "M3", "title": "Game Feel", "goal": "Score, lives, game over", "keywords": ("score", "hud", "game over")},
 ]
 
+RACING_MILESTONES: list[dict[str, Any]] = [
+    {
+        "id": "M0",
+        "title": "Vertical slice",
+        "goal": "One ship, one camera, one track segment, accelerate/steer, fail state",
+        "keywords": ("scaffold", "ship", "camera", "vehicle", "boot"),
+    },
+    {
+        "id": "M1",
+        "title": "Handling",
+        "goal": "Boost, brakes, lap, integrity — gas has consequences",
+        "keywords": ("boost", "turbo", "lap", "handling", "damage"),
+    },
+    {
+        "id": "M2",
+        "title": "Track reading",
+        "goal": "Wayfinding chevrons, visible pads, dummy rival",
+        "keywords": ("track", "checkpoint", "chevron", "rival", "ai"),
+    },
+    {
+        "id": "M3",
+        "title": "Arcade feel",
+        "goal": "HUD, audio bus, difficulty, mobile landscape",
+        "keywords": ("hud", "audio", "mobile", "touch", "polish"),
+    },
+]
+
 BACKEND_MILESTONES: list[dict[str, Any]] = [
     {"id": "M0", "title": "API Skeleton", "goal": "App, health, schemas", "keywords": ("main", "health")},
     {"id": "M1", "title": "Auth", "goal": "Login, tokens", "keywords": ("auth", "login")},
     {"id": "M2", "title": "Player Data", "goal": "Profile, cloud save", "keywords": ("player", "save")},
     {"id": "M3", "title": "Economy", "goal": "Inventory, currencies", "keywords": ("inventory", "economy")},
+]
+
+GODOT_3D_MILESTONES: list[dict[str, Any]] = [
+    {
+        "id": "M0",
+        "title": "3D room",
+        "goal": "CharacterBody3D, camera, lights, floor, debug overlay",
+        "keywords": ("scaffold", "player", "camera", "room"),
+    },
+    {
+        "id": "M1",
+        "title": "Puzzle",
+        "goal": "One riddle (plate → door), fail/win, goal visible from spawn",
+        "keywords": ("plate", "door", "puzzle", "goal"),
+    },
+    {
+        "id": "M2",
+        "title": "Headless QA",
+        "goal": "DoD v2 + godot --headless --probe; scene index",
+        "keywords": ("probe", "headless", "dod", "index"),
+    },
+    {
+        "id": "M3",
+        "title": "GLB import",
+        "goal": "Blender pivot/collision hint → res://assets/*.glb via contract",
+        "keywords": ("glb", "blender", "contract", "pivot"),
+    },
+]
+
+GODOT_MILESTONES: list[dict[str, Any]] = [
+    {
+        "id": "M0",
+        "title": "Architecture",
+        "goal": "project.godot, autoload Game, physics layers, main scene",
+        "keywords": ("scaffold", "project.godot", "autoload", "boot"),
+    },
+    {
+        "id": "M1",
+        "title": "Gameplay",
+        "goal": "Player move/jump, floor, fail/reset",
+        "keywords": ("player", "move", "jump", "fail"),
+    },
+    {
+        "id": "M2",
+        "title": "UI / HUD",
+        "goal": "On-screen goal, HP/score — no gameplay logic in Control",
+        "keywords": ("hud", "ui", "score"),
+    },
+    {
+        "id": "M3",
+        "title": "NPC / AI",
+        "goal": "One enemy or companion with NavigationAgent2D",
+        "keywords": ("npc", "enemy", "navigation"),
+    },
 ]
 
 _PRESET_MILESTONES: dict[str, list[dict[str, Any]]] = {
@@ -154,10 +250,13 @@ _PRESET_MILESTONES: dict[str, list[dict[str, Any]]] = {
     "strategy": GAME_MILESTONES,
     "survival": GAME_MILESTONES,
     "platformer": PLATFORMER_MILESTONES,
+    "racing": RACING_MILESTONES,
     "open_world": GAME_MILESTONES,
     "multiplayer": GAME_MILESTONES,
     "hybrid_mobile": GAME_MILESTONES[:6],
     "backend_api": BACKEND_MILESTONES,
+    "godot_2d": GODOT_MILESTONES,
+    "godot_3d": GODOT_3D_MILESTONES,
 }
 
 STUDIO_PLANNER_ADDENDUM = """
@@ -170,6 +269,7 @@ STUDIO_PLANNER_ADDENDUM = """
 - Играта може да е ВСЯКА тема (action, puzzle, RPG, racing, horror, etc.) — не само creatures
 - По един deliverable на stage; files[] задължително
 - Unity kind: paths under Assets/_Project/Code/
+- Godot kind: scenes/*.tscn + scripts/*.gd (едно на етап)
 - MVP = първите 4 milestones
 """
 
@@ -209,6 +309,23 @@ def infer_studio_preset(description: str) -> str:
         return "backend_api"
     if any(w in blob for w in ("framework7", "pakeplus", "hybrid ios", "web shell")):
         return "hybrid_mobile"
+    if any(
+        w in blob
+        for w in (
+            "racing", "racer", "f-zero", "fzero", "wipeout", "hover",
+            "circuit", "grand prix", "състезан", "писта",
+        )
+    ):
+        return "racing"
+    from .game_factory import wants_godot_3d_slice
+
+    if wants_godot_3d_slice("", blob):
+        return "godot_3d"
+    if any(
+        w in blob
+        for w in ("godot", "gdscript", "metroidvania", ".tscn", "tscn")
+    ):
+        return "godot_2d"
     if any(w in blob for w in ("platformer", "jump", "runner", "mario", "side-scroll")):
         return "platformer"
     if any(w in blob for w in ("puzzle", "match-3", "casual", "tetris", "судоку")):

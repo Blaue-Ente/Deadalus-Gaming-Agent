@@ -1,11 +1,13 @@
-; Inno Setup 6 — compile on Windows to get Дедал-Setup.exe
-;   iscc packaging\windows\Daedalus.iss
-; The installer is per-user (no Administrator). After files are extracted
-; it runs install.ps1 -InPlace to create the venv and Start Menu shortcut.
+; Inno Setup 6 — compile on Windows:
+;   powershell -File packaging\windows\build-setup.ps1
+;   (or: iscc packaging\windows\Daedalus.iss)
+;
+; Per-user, no Administrator. After files are extracted, install.ps1
+; -InPlace -BundlePython installs a private CPython + venv + Daedalus.exe.
 
-#define MyAppName "Дедал"
+#define MyAppName "Daedalus"
 #define MyAppNameEn "Daedalus"
-#define MyAppVersion "0.3.3"
+#define MyAppVersion "0.3.4"
 #define MyAppPublisher "Blaue-Ente"
 #define MyAppURL "https://gitlab.com/Blaue-Ente/deadalus-agent-0"
 
@@ -29,18 +31,21 @@ UninstallDisplayName={#MyAppName}
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 CloseApplications=no
+MinVersion=10.0
+LicenseFile=..\..\LICENSE
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
 Source: "..\..\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; \
-  Excludes: ".git\*,.venv\*,data\*,playground\*,__pycache__\*,.pytest_cache\*,daedalus.egg-info\*,dist\*,.agents\*,*.pyc,.env"
+  Excludes: ".git\*,.venv\*,data\*,playground\*,__pycache__\*,.pytest_cache\*,daedalus.egg-info\*,dist\*,.agents\*,*.pyc,.env,runtime\*"
+Source: "redist\*"; DestDir: "{app}\packaging\windows\redist"; Flags: ignoreversion skipifsourcedoesntexist
 
 [Run]
 Filename: "powershell.exe"; \
-  Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\packaging\windows\install.ps1"" -InPlace"; \
-  StatusMsg: "Creating Python venv and Start Menu shortcut…"; Flags: waituntilterminated
+  Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\packaging\windows\install.ps1"" -InPlace -BundlePython"; \
+  StatusMsg: "Installing private Python, venv, and Daedalus.exe…"; Flags: waituntilterminated
 
 [UninstallRun]
 Filename: "powershell.exe"; \
@@ -48,5 +53,5 @@ Filename: "powershell.exe"; \
   RunOnceId: "DaedalusUninstall"; Flags: waituntilterminated
 
 [Icons]
-Name: "{group}\{#MyAppName}"; Filename: "{app}\Daedalus.vbs"; WorkingDir: "{app}"
+; App shortcut is created by install.ps1 after Daedalus.exe is compiled.
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"

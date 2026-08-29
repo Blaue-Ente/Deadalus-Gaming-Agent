@@ -37,6 +37,7 @@ PLAN_KIND_LABELS: dict[str, str] = {
     "node": "Node.js (Express / http, npm)",
     "expo": "Expo / React Native (JSX компоненти, без HTML)",
     "unity": "Unity (C# URP — отвори в Unity Hub локално)",
+    "godot": "Godot 4.3 (GDScript + .tscn — локален Editor)",
 }
 
 
@@ -65,7 +66,9 @@ _KIND_ADDENDA: dict[str, str] = {
   3) src/scenes/MenuScene.js (или src/ui/menu.js)
   4) src/scenes/GameScene.js — gameplay loop
   5) src/lib/audio.js / src/lib/input.js — helpers
-Игри: Phaser boot в отделен файл; assets/*.png в uses_visuals етап.
+Игри 2D: Phaser boot в отделен файл; assets/*.png в uses_visuals етап.
+Игри 3D/racing: Three.js в src/racer/ (boot, track, vehicle, world) — НЕ Phaser, НЕ pixel-art.
+Ако проектът вече има racer scaffold, етап 1 е да го пуснеш, не да го триеш.
 """,
     "vite-react": """
 ━━━ VITE-REACT PLAN ━━━
@@ -126,6 +129,17 @@ MAX ~200 реда/файл; Pressable + StyleSheet; без web APIs.
   6) Assets/_Project/UI/*.cs — screens
 Всяка игра (action, puzzle, RPG, racing…) — data-driven C#, MAX ~200 реда/файл.
 """,
+    "godot": """
+━━━ GODOT PLAN (GDScript + .tscn) ━━━
+Типични етапи:
+  1) project.godot (scaffold — не презаписвай autoload/layers)
+  2) scenes/main.tscn
+  3) scripts/player.gd
+  4) scripts/autoload/game.gd
+  5) scenes/ui/hud.tscn
+  6) scripts/npc/enemy.gd
+Един .tscn или .gd на етап. GLB от tools/blender/, не vertex dumps.
+""",
 }
 
 _GAME_EXTRA: dict[str, str] = {
@@ -147,6 +161,10 @@ PanResponder за input; Animated API — без gesture-handler/reanimated.
 ИГРА: Assets/_Project/Code/Gameplay/ — по 1 система/файл; ScriptableObjects за data.
 uses_visuals за sprites в Assets/_Project/Art/.
 """,
+    "godot": """
+ИГРА: CharacterBody2D + fail в Game autoload. HUD чете Game, не дублира state.
+uses_visuals за assets/*.png или GLB import.
+""",
 }
 
 
@@ -155,6 +173,9 @@ def autopilot_plan_addendum(kind: str, *, is_game: bool = False) -> str:
     if kind == "unity":
         from .unity_platform_guide import autopilot_plan_addendum as _unity_add
         base = _unity_add(kind, is_game=is_game)
+    elif kind == "godot":
+        from .godot_platform_guide import autopilot_plan_addendum as _godot_add
+        base = _godot_add(kind, is_game=is_game)
     else:
         base = _KIND_ADDENDA.get(kind, "")
     if is_game and kind in _GAME_EXTRA:
@@ -179,6 +200,7 @@ def build_planner_system_prompt(
     ultra: bool = False,
     studio: bool = False,
     studio_preset: str = "custom",
+    description: str = "",
 ) -> str:
     """Assemble full planner system prompt for a given kind."""
     kind_add = autopilot_plan_addendum(kind, is_game=is_game)
@@ -217,6 +239,19 @@ def build_planner_system_prompt(
         parts.extend(["", kind_add])
     if extra_addendum:
         parts.extend(["", extra_addendum.strip()])
+    if is_game:
+        try:
+            from .arcade_craft import planner_addendum as _craft_plan
+            from .studio_shelf import prompt_block as _shelf_block
+            desc = f"{studio_preset} {kind} {description} {extra_addendum}"
+            parts.extend(["", _craft_plan(kind, desc), _shelf_block(desc, limit=8)])
+            if kind == "godot":
+                from .godot_platform_guide import pipeline_prompt
+                from .blender_jobs import prompt_block as _blend
+                from .game_factory import planner_addendum as _factory
+                parts.extend(["", pipeline_prompt(), _blend(), _factory(kind, desc)])
+        except Exception:
+            pass
     parts.extend([
         "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
         "",
@@ -243,6 +278,16 @@ def build_planner_system_prompt(
 def _default_files_for_kind(kind: str, stage_index: int, title: str) -> list[str]:
     """Fallback file hints when LLM omits 'files' field."""
     t = (title or "").lower()
+    if kind == "vite" and any(
+        w in t for w in ("ship", "track", "vehicle", "racer", "boost", "slice", "handling")
+    ):
+        racer_defaults = [
+            ["package.json", "vite.config.js", "index.html"],
+            ["src/main.js", "src/racer/boot.js"],
+            ["src/racer/track.js"],
+            ["src/racer/vehicle.js"],
+        ]
+        return list(racer_defaults[min(stage_index, len(racer_defaults) - 1)])
     defaults: dict[str, list[list[str]]] = {
         "static": [
             ["index.html"],
@@ -286,6 +331,12 @@ def _default_files_for_kind(kind: str, stage_index: int, title: str) -> list[str
             ["Assets/_Project/Code/Core/Save/SaveService.cs"],
             ["Assets/_Project/Code/Gameplay/GameLoop.cs"],
             ["Assets/_Project/UI/MainMenuController.cs"],
+        ],
+        "godot": [
+            ["project.godot", "scenes/main.tscn"],
+            ["scripts/player.gd"],
+            ["scripts/autoload/game.gd"],
+            ["scenes/ui/hud.tscn"],
         ],
     }
     pool = defaults.get(kind, [["index.html"]])
@@ -345,17 +396,18 @@ def min_stages_for_complexity(kind: str, *, is_game: bool, description: str) -> 
             return 12
         if dec.get("tier") == "whisper":
             return 0
-        if dec.get("min_stages"):
-            base = int(dec["min_stages"])
-            if is_game and kind in ("expo", "vite-react", "vite", "unity"):
-                return max(base, 8)
-            return base
     except Exception:
-        pass
-    blob = (description or "").lower()
-    complex_words = ("игра", "game", "3d", "multi", "dashboard", "auth", "arena", "battle")
-    if is_game or any(w in blob for w in complex_words):
-        return 8 if kind in ("expo", "vite-react", "vite", "unity") else 6
-    if kind in ("fastapi", "streamlit", "node"):
-        return 4
-    return 3
+        dec = {}
+    try:
+        from .arcade_craft import min_stages
+        n = min_stages(kind, is_game=is_game, description=description)
+        floor = int((dec or {}).get("min_stages") or 0)
+        return max(n, floor) if floor else n
+    except Exception:
+        blob = (description or "").lower()
+        complex_words = ("игра", "game", "3d", "multi", "dashboard", "auth", "arena", "battle")
+        if is_game or any(w in blob for w in complex_words):
+            return 8 if kind in ("expo", "vite-react", "vite", "unity", "godot") else 6
+        if kind in ("fastapi", "streamlit", "node"):
+            return 4
+        return 3

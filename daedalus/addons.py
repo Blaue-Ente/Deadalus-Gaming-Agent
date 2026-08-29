@@ -81,6 +81,23 @@ CATALOG: list[dict[str, Any]] = [
         "command": "npx",
         "args_template": ["-y", "@netlify/mcp"],
     },
+    {
+        "id": "blender-mcp",
+        "kind": "mcp",
+        "label": "Blender jobs (MCP)",
+        "blurb": "Емитира bpy скриптове (примитив, PBR, риг, GLB). Не изисква Blender в cloud. stdio: python3 -m daedalus.blender_mcp",
+        "offline_ok": True,
+        "command": "python3",
+        "args_template": ["-m", "daedalus.blender_mcp"],
+    },
+    {
+        "id": "godot-headless",
+        "kind": "native",
+        "label": "Godot headless probe",
+        "blurb": "Един мост: файлове + godot --headless. Не пет MCP. Жив Editor MCP — след Gate 1.",
+        "offline_ok": True,
+        "native": "godot_runtime_probe",
+    },
 ]
 
 

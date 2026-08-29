@@ -1,67 +1,78 @@
 # Daedalus architecture
 
-Daedalus is an **independent coding agent**. ADN is an optional host for LLM
-routing, Postgres, and the current admin UI — not the agent's identity.
+Daedalus is **one product**: coding agent + Studio + Playground. One FastAPI process, port **8787**, SQLite, a direct OpenAI-compatible LLM.
 
 ```
-                 ┌─────────────────────────────────────┐
-  Owner          │  Daedalus product                    │
-  (BG / EN)      │  memory · persona · playground       │
-                 │  autopilot · self-improve · kernel   │
-                 └───────────┬───────────┬──────────────┘
-                             │           │
-                    LLM ports│           │ Iyveris mesh
-                             ▼           ▼
-                 OpenAI-compat     ADN / sister apps
-                 AllToken, OR,     (equal peers)
-                 Novita, NVIDIA
+  Owner (BG / EN)
+           │
+           ▼
+  ┌─────────────────────────────────────┐
+  │  Daedalus                            │
+  │  memory · persona · playground       │
+  │  autopilot · self-improve · kernel   │
+  └──────────────┬──────────────────────┘
+                 │
+                 ▼
+        OpenAI-compatible LLM
+        AllToken · OpenRouter · Novita · NVIDIA
+        or Ollama / LM Studio / llama.cpp / vLLM
 ```
 
 ## Layers
 
-| Layer | Location | Notes |
-|-------|----------|--------|
-| Identity | `daedalus/identity.py` + `identity_standalone.py` | Compact tool contract when standalone; full Iyveris persona next to ADN |
-| Memory | `memory.py`, `knowledge.py` | Chroma collections under `data/daedalus/` |
-| Agent loop | `agent.py`, `native_tools.py`, `tools.py`, `workers.py`, `subagents.py` | Native tools by default; NEED_* fallback; tool-using sub-agents |
-| Shell | `shell_center.py` | Jail + secret stripping; Studio command center |
-| Local LLM | `local_llm.py` + `llm_wardrobe.py` + `machine_profile.py` | Probe backends; hardware-aware catalog; persist active model |
-| Offline | `offline.py` | Blocks network native tools; wardrobe forces local |
-| Addons | `addons.py` | Curated MCP shelf → `mcp.json` |
-| Capsule | `capsule.py` | Zip a playground project for USB / file send |
-| Live publish | `live_publish.py` | /apps/ + Netlify / GitLab Pages / 1h preview |
+| Layer | Where | Notes |
+|------|------|---------|
+| Identity | `daedalus/identity.py` + `identity_standalone.py` | Compact tool contract in this product |
+| Memory | `memory.py`, `knowledge.py` | Chroma collections under `$DAEDALUS_DATA` |
+| Agent loop | `agent.py`, `native_tools.py`, `tools.py`, `workers.py`, `subagents.py` | Native tools by default; jailed sub-agents |
+| Shell | `shell_center.py` | Jail + strip secrets from env |
+| Local LLM | `local_llm.py` + `llm_wardrobe.py` + `machine_profile.py` | Probe + hardware catalog |
+| Offline | `offline.py` | Blocks network native tools |
+| Addons | `addons.py` | MCP shelf → `mcp.json` |
+| Capsule | `capsule.py` | Zip a playground project |
+| Live | `live_publish.py` | `/apps/` + Netlify / GitLab Pages / 1h preview |
 | Preferences | `preferences.py` | Owner speech → durable memory |
 | Learned skills | `learned_skills.py` | Failure/success → SKILL.md |
-| DoD | `job_contract.py` | Coding work is not complete without evidence |
-| Reach | `reach.py` | Jina Reader + optional CLIs (Agent Reach pattern) |
-| Playtest | `playtest.py` | MatrAIx-style personas; no 1M dataset |
-| MiroFish | `mirofish_client.py` | HTTP-only to AGPL sidecar — never vendor |
+| DoD | `job_contract.py` | Code without evidence is not done |
+| Reach | `reach.py` | Jina Reader + optional CLIs |
+| Playtest | `playtest.py` | Judge personas; no 1M dataset |
+| MiroFish | `mirofish_client.py` | HTTP-only to a sidecar — never vendor |
 | MCP | `mcp_client.py` | JSON-RPC stdio/HTTP from `mcp.json` |
-| Browser | `playground_browser.py`, `browser_session.py` | Smoke verify + interactive session |
-| Playground | `playground*.py`, `game_*.py` | Kinds: static, vite, phaser, expo, unity |
-| Autopilot | `builder_runtime.py` + `kernel/full_autopilot.py` | ADN `admin.py` Phase 0–6 when hosted; kernel loop when standalone |
-| Self-improve | `self_improve.py` | Gated skills; may patch `Daedalus/` and ADN |
-| Evolution | `evolution.py` | Opt-in idle gardener; radar + GitHub study; proposals stay pending |
-| Kernel | `daedalus/kernel/` | Portable plan→code→test from Daedalus-Agent |
-| HTTP | `Daedalus/app/main.py` | Studio, `/admin/daedalus/*` Command Center, health, chat, playground API, `/api/iyveris` |
-| Windows | `app/desktop.py` + `packaging/windows/` | Per-user Start Menu app; `daedalus desktop` |
-| UI copy | `Daedalus/ui/` | ADN templates copied, not moved |
-| Store | `daedalus/store.py` | SQLite when standalone; ADN Postgres otherwise |
-| ADN shim | `argos_data_nexus/modules/daedalus/` | Import alias only |
+| Browser | `playground_browser.py`, `browser_session.py` | Smoke + interactive session |
+| Playground | `playground*.py`, `game_*.py` | static, vite, phaser-via-vite, expo, unity, godot |
+| Autopilot | `builder_runtime.py` + `kernel/full_autopilot.py` | Kernel loop |
+| Self-improve | `self_improve.py` | Gated skills; patches wait for Approve |
+| Evolution | `evolution.py` | Opt-in idle gardener |
+| Kernel | `daedalus/kernel/` | plan → code → test → verify |
+| HTTP | `app/main.py` | Studio, `/admin/daedalus/*`, health, chat, playground API |
+| Windows | `app/desktop.py`, `app/windows_gui.py`, `packaging/windows/` | Start Menu; WebView2 / Tk |
+| UI | `ui/` | Command Center templates and static files |
+| Store | `daedalus/store.py` | SQLite |
 
-## Ports
+## Paths
 
-`daedalus/host.py` — lazy ADN imports (db pool, storage, auth, MeshRouter).
 `daedalus/paths.py` — repo / product / data / playground roots.
 
-## Games doctrine
+Defaults:
+
+| What | Path |
+|---|---|
+| Code | git clone root |
+| SQLite + Chroma + proposals | `$DAEDALUS_DATA` → `data/daedalus/` |
+| Projects | `playground/projects/{slug}/` |
+| Docker data | `/var/lib/daedalus` |
+| Windows data | `%LOCALAPPDATA%\Daedalus` |
+
+## Game doctrine
 
 - Asset gate: generated `assets/*.png` must be referenced (`load.image` / `<img>`).
-- Verify: smoke + browser render-and-see + playtest personas + quality critic.
-- Unity is scaffold + Git, not in-cloud Editor.
+- Verify: smoke + browser render-and-see + playtest + quality critic.
+- Unity is scaffold + Git, not an in-cloud Editor.
+- Arcade craft (`arcade_craft.py` + `studio_shelf.py` + `playground_racer_scaffold.py`): 3D arcade uses Vite + Three.js WebGPU/TSL. A racing brief boots a playable M0 in `src/racer/` (not Phaser).
+- Godot 4 (`playground_godot_scaffold.py`, `playground_godot3d_scaffold.py`, `godot_tools.py`): text `.tscn`/GDScript, local Editor. 3D M0 is a greybox room with a plate and a door.
+- Blender jobs (`blender_jobs.py`, `python -m daedalus.blender_mcp`) **emit** a bpy script — they do not import `bpy` in the Daedalus process.
+- Not: own engine, own 3D foundation model, five parallel Godot MCP servers, silent self-editing, “one sentence → finished game”.
 
 ## License boundary (MiroFish)
 
-MiroFish-Offline is AGPL-3.0. `daedalus/mirofish_client.py` is an original HTTP
-client. Shipping or linking their backend inside this process would taint the
-MIT tree — keep it as a separate Docker/compose stack.
+MiroFish-Offline is AGPL-3.0. `daedalus/mirofish_client.py` is an original HTTP client. Do not pull their backend into this process — keep it as a separate Docker stack if you use it at all.

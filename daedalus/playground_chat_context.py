@@ -80,6 +80,14 @@ def diagnose_project(
         if not cs:
             warnings.append("няма C# файлове — Unity codegen не е записан")
 
+    if kind == "godot":
+        if "project.godot" not in paths:
+            issues.append("липсва project.godot")
+        if not any(p.endswith(".gd") for p in paths):
+            warnings.append("няма GDScript (.gd)")
+        if not any(p.endswith(".tscn") for p in paths):
+            warnings.append("няма сцена (.tscn)")
+
     if assets_png and not src_code and kind in ("vite", "vite-react", "static"):
         issues.append(
             f"има {len(assets_png)} PNG assets, но няма source code — Autopilot е спрял след Phase 3 (assets) "

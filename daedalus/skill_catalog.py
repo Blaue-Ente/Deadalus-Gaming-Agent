@@ -266,8 +266,75 @@ _EXTRA_DOCS: list[dict] = [
             "EXPO: mobile iOS/Android — React Native View/Text, expo-av sound, Animated. "
             "NEVER AudioContext/window/HTML canvas.\n\n"
             "Quick pick: browser 2D → vite+Phaser|Pixi; UI+game → vite-react+canvas; "
-            "mobile → expo; trivial → static.\n"
+            "mobile → expo; 2D desktop/Metroidvania → godot; trivial → static.\n"
+            "3D arcade / F-Zero-class racer → vite + Three.js WebGPURenderer + TSL "
+            "(Formula Minus One path). Phaser is the wrong default for that brief.\n"
             "Hybrid pattern (vite-react): App.jsx FSM, GameCanvas.jsx loop, HUD.jsx React."
+        ),
+    },
+    {
+        "id": "skill:gamedev:arcade-craft-fm1",
+        "title": "Arcade craft — FM1-grade 3D racers (vertical slice, specialist tools)",
+        "category": "gamedev",
+        "text": (
+            "Field study: Formula Minus One https://fm1.moises.cloud (v0.8). "
+            "Vite hashed ES modules + PWA landscape. Renderer: Three.js WebGPU + TSL "
+            "(WebGPUBackend, StandardNodeLibrary). Custom VehicleFactory (per-pilot handling). "
+            "Named tracks + story cups. Procedural city/pyramids. Aqua ocean via FFT-Ocean "
+            "techniques + Poseidon TSL (MIT). Web Audio oscillators for engine/wind — not Howler. "
+            "No Rapier/cannon in the shipped bundle (arcade math). Input: keyboard, gamepad, "
+            "touch stick, tilt, phone-as-pad via WebRTC. Modes: championship, time trial, "
+            "elimination, 1v1, daily, ghost, replay. Feel: Turbo, Overboost, slipstream, "
+            "barrel roll, airbrakes, integrity fail, last-lap ceremony.\n\n"
+            "DOCTRINE: never 'build me this game'. M0 = one ship, one camera, one track "
+            "segment, fail state, visible boost pad. Plan with a strong model; implement cheap. "
+            "Hero meshes: sketch→image gen→Tripo/Meshy/Hunyuan GLB, remesh <15k tris. "
+            "Architecture: procedural CSG/instances (photogrammetry is mushy at speed). "
+            "SFX: layer 2–3 stock one-shots. Music: Suno instrumental. Fun gate: wayfinding "
+            "from distance, fail, readable pickups, risk on the gas. Cul-de-sac (same error "
+            "3×) → change approach. Web first for browser; Godot for desktop 2D; "
+            "Unity for store/AAA pipeline.\n"
+            "See daedalus/arcade_craft.py and daedalus/studio_shelf.py."
+        ),
+    },
+    {
+        "id": "skill:gamedev:three-webgpu-tsl",
+        "title": "Three.js WebGPU + TSL — 3D browser arcade",
+        "category": "gamedev",
+        "text": (
+            "⚠️ WEB (vite) for 3D arcade / racers. Not Phaser.\n"
+            "npm three. Prefer WebGPURenderer with TSL materials (Fn, If, Loop, BRDF). "
+            "Keep a WebGL fallback if navigator.gpu is missing. Game loop: rAF + dt cap. "
+            "Tracks: CatmullRomCurve3 → tubular/ribbon mesh + chevrons as children along t. "
+            "Vehicles: separate VehicleFactory (mass, accel, grip) — not one generic mesh. "
+            "Quality tiers: shadows, post-FX, particles, scenery density as real knobs. "
+            "Load GLB via GLTFLoader; run gltfpack before ship. HDRI from Polyhaven CC0."
+        ),
+    },
+    {
+        "id": "skill:gamedev:godot-4",
+        "title": "Godot 4.3 — GDScript + text scenes",
+        "category": "gamedev",
+        "text": (
+            "⚠️ LOCAL Editor (kind godot). Cloud writes .tscn/.gd only.\n"
+            "2D: project.godot + scenes/main.tscn + scripts/player.gd + autoload Game. "
+            "3D M0: CharacterBody3D room + plate puzzle + SpringArm camera + studio/scene_index.json. "
+            "Headless: godot --headless --path . --quit-after 180 -- --probe. "
+            "One scene or script per stage. NavigationAgent2D for 2D NPC. "
+            "Hero GLB from daedalus.blender_jobs (pivot + collision_hint), not vertex dumps. "
+            "Do not vendor CrewAI or five Godot MCP bridges."
+        ),
+    },
+    {
+        "id": "skill:gamedev:blender-jobs",
+        "title": "Blender jobs — emit bpy, export GLB",
+        "category": "gamedev",
+        "text": (
+            "Daedalus cannot import bpy in the cloud. Emit tools/blender/<job>.py "
+            "(clear_scene, create_primitive, modify_mesh, add_modifier, add_light, "
+            "apply_material_pbr, create_rig, parent_armature, set_pivot, collision_hint, "
+            "render_preview, export_glb/fbx with export_yup, batch_export). Owner: blender -b --python …. "
+            "MCP: python -m daedalus.blender_mcp. Mixamo for cinematic humanoid clips."
         ),
     },
     {
