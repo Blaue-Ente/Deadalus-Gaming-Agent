@@ -1,7 +1,7 @@
-"""GameAgentBench is gated. Do not run a vendor bake-off before the harness is honest.
+"""GameAgentBench is a gate list. This repo does not ship a vendor bake-off.
 
-Steps 1–4 of the kernel plan must land first. Remaining gates are listed so
-nobody claims a win against another coding agent on skip-as-success evidence.
+The flags record whether the harness is honest enough to *allow* a comparison.
+They do not run one. Public docs still name only Daedalus.
 """
 from __future__ import annotations
 
@@ -14,14 +14,14 @@ GATES: dict[str, bool] = {
     "atomic_model_router": True,
     "durable_run_log": True,
     "skip_is_not_ok": True,
-    "one_builder_pipeline": False,
-    "quality_gate_default_on": False,
-    "playwright_gameplay": False,
-    "godot_headless_required": False,
-    "unity_runner": False,
+    "one_builder_pipeline": True,
+    "quality_gate_default_on": True,
+    "playwright_gameplay": True,
+    "godot_headless_required": True,
+    "unity_runner": True,
     "asset_pipeline": True,
     "ci_ruff": True,
-    "uv_lock": False,
+    "uv_lock": True,
 }
 
 
@@ -41,7 +41,7 @@ def status() -> dict[str, Any]:
         "missing": missing,
         "gates": dict(GATES),
         "note": (
-            "Do not compare Daedalus to other coding agents until missing is empty. "
+            "Gates are wired. This repo still does not ship a vendor bake-off. "
             "A skipped browser check is not a playtest."
         ),
     }

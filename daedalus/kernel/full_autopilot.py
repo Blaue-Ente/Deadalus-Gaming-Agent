@@ -132,7 +132,7 @@ async def _browser_verify(backend: BuilderBackend) -> dict[str, Any]:
     fn = getattr(backend, "browser_verify", None)
     if callable(fn):
         return await fn()
-    return {"ok": True, "skipped": True}
+    return {"ok": False, "skipped": True, "summary": "browser verify unavailable — not evidence"}
 
 
 async def run_full_autopilot(
@@ -245,6 +245,11 @@ async def run_full_autopilot(
         if result.get("ok"):
             state.test_ok = True
             break
+        if result.get("skipped"):
+            err = (result.get("error") or result.get("summary") or "smoke skipped — not evidence")[:500]
+            await backend.emit("log", {"line": f"⚠ Тест skipped — not evidence: {err[:120]}", "level": "warn"})
+            state.errors.append(err)
+            break
         err = (result.get("error") or "")[:2500]
         logs = "\n".join((result.get("logs") or [])[-35:])
         await backend.emit("log", {"line": f"⚠ Тест {attempt}/{max_repair_rounds}: {err[:120]}", "level": "warn"})
@@ -267,10 +272,13 @@ async def run_full_autopilot(
     state.set_agent_status(AgentRole.TESTER, "done" if state.test_ok else "blocked")
 
     # ── BROWSER VERIFY (visual kinds) ────────────────────────────────────
-    from daedalus.game_build_contract import quality_enabled, skip_is_not_ok, verified
+    from daedalus.game_build_contract import skip_is_not_ok, verified
+    from daedalus.quality_gate import critic_counts_as_pass, maybe_critic
 
     browser_ok = True
-    if state.test_ok and kind in VISUAL_KINDS:
+    bresult: dict[str, Any] = {}
+    visual = kind in VISUAL_KINDS
+    if state.test_ok and visual:
         await backend.emit("phase", {"n": 4, "label": "Browser verify"})
         bresult = skip_is_not_ok(await _browser_verify(backend))
         browser_ok = verified(bresult)
@@ -282,19 +290,60 @@ async def run_full_autopilot(
             state.errors.append(err)
         else:
             await backend.emit("log", {"line": "✓ Browser verify OK", "level": "info"})
-        if quality_enabled():
+
+    # ── PLAYWRIGHT GAMEPLAY (interaction, not screenshot-only) ───────────
+    gameplay_ok = True
+    if state.test_ok and visual and browser_ok:
+        await backend.emit("phase", {"n": 4, "label": "Gameplay"})
+        try:
+            from daedalus.engine_runners import gameplay_for_kind
+            gp = await gameplay_for_kind(state.slug, kind)
+            gameplay_ok = verified(gp)
+            if not gameplay_ok:
+                err = (gp.get("summary") or "gameplay verify failed")[:500]
+                await backend.emit("log", {"line": f"⚠ Gameplay: {err}", "level": "warn"})
+                state.errors.append(err)
+            else:
+                await backend.emit("log", {"line": "✓ Gameplay interaction OK", "level": "info"})
+        except Exception as exc:
+            gameplay_ok = False
+            state.errors.append(f"gameplay verify error: {exc}"[:200])
+            await backend.emit("log", {"line": f"⚠ Gameplay: {exc}", "level": "warn"})
+
+    # ── QUALITY CRITIC (default on; unparsed is not a pass) ──────────────
+    quality_ok = True
+    if state.test_ok and visual and browser_ok:
+        critic = await maybe_critic(
+            slug=state.slug,
+            kind=kind,
+            description=state.description,
+            plan=state.plan,
+            bv=bresult,
+            visual=True,
+        )
+        if critic.get("na"):
+            quality_ok = True
+        else:
+            quality_ok = critic_counts_as_pass(critic)
+            score = critic.get("overall")
             await backend.emit(
                 "log",
                 {
-                    "line": "DAEDALUS_QUALITY=1 — critic is optional; skip is still not OK",
-                    "level": "info",
+                    "line": (
+                        f"Quality critic overall={score} parsed={critic.get('parsed')} "
+                        f"passed={quality_ok}"
+                    ),
+                    "level": "info" if quality_ok else "warn",
                 },
             )
+            if not quality_ok:
+                err = critic.get("error") or critic.get("summary") or "quality critic did not pass"
+                state.errors.append(str(err)[:300])
 
-    # ── PLAYTEST (MatrAIx-style personas, visual kinds) ──────────────────
+    # ── PLAYTEST personas (extra signal, not a substitute for Playwright) ─
     playtest_block = ""
-    if kind in VISUAL_KINDS:
-        await backend.emit("phase", {"n": 4, "label": "Playtest"})
+    if visual:
+        await backend.emit("phase", {"n": 4, "label": "Playtest personas"})
         try:
             from daedalus.playtest import format_for_prompt, run_playtest
 
@@ -310,20 +359,27 @@ async def run_full_autopilot(
                 for b in (report.get("blockers") or [])[:4]:
                     state.errors.append(str(b)[:200])
         except Exception as exc:
-            log.debug("playtest skipped: %s", exc)
-            await backend.emit("log", {"line": f"playtest skipped: {exc}", "level": "dim"})
+            log.debug("persona playtest skipped: %s", exc)
+            await backend.emit("log", {"line": f"persona playtest skipped: {exc}", "level": "dim"})
 
     # ── REVIEW ───────────────────────────────────────────────────────────
     await backend.emit("phase", {"n": 5, "label": "Review"})
     state.set_agent_status(AgentRole.REVIEWER, "running")
     review = await backend.llm(
         AgentRole.REVIEWER,
-        f"Review build for {state.slug} ({kind}). test_ok={state.test_ok} browser_ok={browser_ok}. "
+        f"Review build for {state.slug} ({kind}). test_ok={state.test_ok} "
+        f"browser_ok={browser_ok} gameplay_ok={gameplay_ok} quality_ok={quality_ok}. "
         f"Files: {[c.path for c in state.changes]}. Reply APPROVED or list blockers."
         + (f"\n\n{playtest_block}" if playtest_block else ""),
-        system="Code reviewer. APPROVED only if shippable.",
+        system="Code reviewer. APPROVED only if shippable. Skip/screenshot is not a playtest.",
     )
-    state.review_ok = "APPROVED" in review.upper() and state.test_ok and browser_ok
+    state.review_ok = (
+        "APPROVED" in review.upper()
+        and state.test_ok
+        and browser_ok
+        and gameplay_ok
+        and quality_ok
+    )
     state.set_agent_status(AgentRole.REVIEWER, "done" if state.review_ok else "blocked")
 
     # ── DELIVERABLE ──────────────────────────────────────────────────────

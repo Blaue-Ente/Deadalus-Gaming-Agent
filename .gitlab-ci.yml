@@ -6,8 +6,26 @@ ruff:
   image: python:3.12-slim
   script:
     - pip install --no-cache-dir ruff
-    - ruff check daedalus/tool_protocol.py daedalus/model_router.py daedalus/run_engine.py daedalus/need_scan.py daedalus/game_build_contract.py daedalus/game_agent_bench.py tests/test_harness_kernel.py
+    - ruff check daedalus/tool_protocol.py daedalus/model_router.py daedalus/run_engine.py daedalus/need_scan.py daedalus/game_build_contract.py daedalus/game_agent_bench.py daedalus/engine_runners.py daedalus/quality_gate.py tests/test_harness_kernel.py
     - ruff check --select E9,F63,F7,F82 --exclude daedalus/agent.py daedalus app tests
+  rules:
+    - if: $CI_COMMIT_BRANCH
+
+mypy:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - pip install --no-cache-dir mypy
+    - python3 -m mypy daedalus/game_build_contract.py daedalus/game_agent_bench.py daedalus/engine_runners.py daedalus/quality_gate.py daedalus/model_router.py daedalus/run_engine.py daedalus/tool_protocol.py
+  rules:
+    - if: $CI_COMMIT_BRANCH
+
+uv-lock:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - pip install --no-cache-dir uv
+    - python3 -m uv lock --check
   rules:
     - if: $CI_COMMIT_BRANCH
 
@@ -16,7 +34,7 @@ pytest:
   image: python:3.12-slim
   script:
     - pip install --no-cache-dir -e ".[dev]"
-    - python3 -m pytest tests -q
+    - python3 -m pytest tests -q --cov=daedalus --cov-report=term-missing --cov-fail-under=0
   rules:
     - if: $CI_COMMIT_BRANCH
 

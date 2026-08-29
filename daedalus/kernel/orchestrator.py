@@ -1,9 +1,8 @@
-"""Portable builder orchestration — shared by ADN and standalone Workshop.
+"""Portable builder orchestration — shared by the host adapter and standalone Workshop.
 
-Defines the autonomous coding pipeline contract:
-  plan → code → test → repair → review → preview → publish
-
-Implementations supply a BuilderBackend (LLM, filesystem, test runner).
+Product path for standalone is ``daedalus.kernel.full_autopilot.run_full_autopilot``.
+``run_builder_pipeline`` below is a leftover single-shot helper, not a second
+Studio product loop.
 """
 from __future__ import annotations
 
