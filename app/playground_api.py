@@ -23,6 +23,14 @@ class AutopilotStart(BaseModel):
     description: str = Field(..., min_length=1, max_length=8000)
     mode: str = Field(default="full", max_length=20)
     effort: str = Field(default="auto", max_length=16)
+    resume: bool = False
+
+
+class AssetGenerate(BaseModel):
+    path: str = Field(default="assets/sprite.png", max_length=300)
+    prompt: str = Field(..., min_length=1, max_length=2000)
+    size: str = Field(default="", max_length=32)
+    model: str = Field(default="", max_length=80)
 
 
 def _jsonable(row: dict[str, Any]) -> dict[str, Any]:
@@ -125,17 +133,19 @@ async def start_autopilot(slug: str, body: AutopilotStart) -> dict:
     dec = classify(desc, requested=body.effort)
     if dec.get("world_kit"):
         write_world(project_dir(slug), name=proj.get("name") or slug, slug=slug, description=desc)
-    job = await start_builder_run_async(slug, desc, mode=body.mode or "full")
+    job = await start_builder_run_async(slug, desc, mode=body.mode or "full", resume=body.resume)
     return {"ok": True, "job": job.snapshot()}
 
 
 @router.get("/projects/{slug}/autopilot")
 async def autopilot_status(slug: str) -> dict:
     from daedalus.builder_runtime import get_active_job
+    from daedalus.run_engine import checkpoint_for_slug
     job = get_active_job(slug)
+    ckpt = checkpoint_for_slug(slug)
     if not job:
-        return {"ok": True, "job": None}
-    return {"ok": True, "job": job.snapshot(), "events": job.events[-80:]}
+        return {"ok": True, "job": None, "checkpoint": ckpt}
+    return {"ok": True, "job": job.snapshot(), "events": job.events[-80:], "checkpoint": ckpt}
 
 
 @router.get("/projects/{slug}/capsule")
@@ -206,3 +216,26 @@ async def autopilot_stream(slug: str, offset: int = 0) -> StreamingResponse:
             yield f"event: {ev.get('event')}\ndata: {json.dumps(ev.get('data') or {}, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(gen(), media_type="text/event-stream")
+
+
+@router.post("/projects/{slug}/assets/generate")
+async def generate_project_asset(slug: str, body: AssetGenerate) -> dict:
+    from daedalus import playground as pg
+    from daedalus import playground_assets as pa
+
+    proj = await pg.get_project(slug)
+    if not proj:
+        raise HTTPException(status_code=404, detail="project not found")
+    try:
+        result = await pa.generate_asset(
+            slug,
+            path=body.path or "assets/sprite.png",
+            prompt=(body.prompt or "").strip(),
+            size=body.size or pa.DEFAULT_SIZE_SPRITE,
+            model=body.model or pa.DEFAULT_MODEL,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)[:400]) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)[:400]) from exc
+    return {"ok": True, **result}
