@@ -68,6 +68,11 @@ _METRICS: dict[str, dict[str, float]] = {
     "glm-5-turbo":                                  {"cin": .080,"cout": .300,"lat": 3.0, "ctx": 128, "q": 76, "r": 58, "c": 74},
     "gpt-5.4":                                      {"cin": 5.00,"cout": 20.0, "lat": 5.0, "ctx": 128, "q": 94, "r": 88, "c": 88},
     "poolside/laguna-m.1":                          {"cin": .000,"cout": .000,"lat": 8.0, "ctx": 262, "q": 86, "r": 78, "c": 94},
+    "poolside/laguna-s-2.1:free":                   {"cin": .000,"cout": .000,"lat": 5.0, "ctx": 262, "q": 82, "r": 70, "c": 90},
+    "poolside/laguna-xs-2.1:free":                  {"cin": .000,"cout": .000,"lat": 3.0, "ctx": 262, "q": 70, "r": 55, "c": 80},
+    "openrouter/free":                              {"cin": .000,"cout": .000,"lat": 4.0, "ctx": 200, "q": 68, "r": 50, "c": 70},
+    "google/gemma-4-31b-it:free":                   {"cin": .000,"cout": .000,"lat": 4.0, "ctx": 262, "q": 74, "r": 58, "c": 72},
+    "z-ai/glm-5.2:free":                            {"cin": .000,"cout": .000,"lat": 5.0, "ctx": 256, "q": 80, "r": 72, "c": 82},
     "qwen3.6-flash":                                {"cin": .050,"cout": .200,"lat": 3.0, "ctx": 128, "q": 76, "r": 70, "c": 76},
     "kimi-k2.6":                                    {"cin": .500,"cout": 2.000,"lat": 9.0, "ctx": 262, "q": 87, "r": 82, "c": 86},
     "gemini-3-flash-preview":                       {"cin": .100,"cout": .400,"lat": 2.0, "ctx": 1000,"q": 76, "r": 45, "c": 70},
@@ -93,13 +98,16 @@ _DEFAULT_METRIC = {"cin": .30, "cout": 1.0, "lat": 6, "ctx": 64, "q": 70, "r": 6
 
 # Curated subset shown in the library + "what it's best for" (BG).
 CHOSEN_IDS = [
-    "balanced", "eco", "premium", "code", "speed", "hybrid", "or_china_mix",
+    "balanced", "eco", "or_free", "nvidia_free", "premium", "code", "speed",
+    "hybrid", "or_china_mix",
     "at_nano", "at_gems", "at_coder", "at_frontier",
 ]
 
 BEST_FOR: dict[str, str] = {
     "balanced":     "Ежедневна работа — баланс ум/цена. Добрият избор по подразбиране.",
     "eco":          "Масови batch задачи и discovery loops — максимална икономия.",
+    "or_free":      "OpenRouter :free — $0 live тест / собственик без кредит. Rate-limited.",
+    "nvidia_free":  "NVIDIA NIM free preview — $0, отделен NVIDIA_API_KEY.",
     "premium":      "Критични задачи където качеството е над всичко (Claude).",
     "code":         "Кодиране и игри в Playground — специализирани coder модели.",
     "speed":        "Интерактивни сесии — минимална латентност (flash модели).",

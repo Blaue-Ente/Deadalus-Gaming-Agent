@@ -258,6 +258,8 @@ export DAEDALUS_MODEL=qwen2.5-coder:7b
 
 `python -m app.cli models` prints the machine class and what to pull.
 
+OpenRouter **without** a chosen model still defaults to paid Claude Sonnet. For a $0 run, apply Studio preset **OpenRouter Free** (`or_free`) — models whose ids end in `:free` — or set `DAEDALUS_PROVIDER=openrouter` and `DAEDALUS_MODEL=poolside/laguna-s-2.1:free`. The `:free` pool is rate-limited; some ids return 429 or empty completions.
+
 ---
 
 ## Playground and Game Studio

@@ -15,6 +15,15 @@ At least **one** of:
 
 Without them you need a local provider (Ollama and so on).
 
+OpenRouter **without** an explicit model falls back to **paid** Claude Sonnet. For $0 use Studio preset `or_free` or:
+
+```
+DAEDALUS_PROVIDER=openrouter
+DAEDALUS_MODEL=poolside/laguna-s-2.1:free
+```
+
+Optional: `OPENROUTER_HTTP_REFERER`, `OPENROUTER_APP_TITLE` (sent on OpenRouter requests).
+
 ## Process
 
 | Variable | Default | Meaning |
