@@ -18,6 +18,8 @@ services:
         value: 0.0.0.0
       - key: PORT
         value: "8787"
+      - key: DAEDALUS_TOKEN
+        generateValue: true
       - key: ALLTOKEN_API_KEY
         sync: false
       - key: IYVERIS_MESH_KEY

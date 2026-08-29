@@ -6,7 +6,7 @@ import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -19,6 +19,7 @@ from daedalus.playground_router import router as published_apps_router
 from daedalus.paths import product_root, repo_root, chroma_dir
 from daedalus.identity_standalone import DAEDALUS_STANDALONE_PREAMBLE
 from daedalus.identity import build_persona
+from daedalus.owner_auth import OwnerAuthMiddleware, client_is_loopback_scope
 
 log = logging.getLogger("app.main")
 _STATIC = Path(__file__).resolve().parent / "static"
@@ -29,18 +30,26 @@ def _mesh_key() -> str:
     return os.environ.get("IYVERIS_MESH_KEY", "").strip()
 
 
-def _check_mesh(x_iyveris_mesh_key: str | None) -> None:
+def _check_mesh(x_iyveris_mesh_key: str | None, *, loopback: bool) -> None:
     expected = _mesh_key()
-    if not expected:
-        return  # open in local dev
-    if x_iyveris_mesh_key != expected:
-        raise HTTPException(status_code=401, detail="invalid mesh key")
+    if expected:
+        if x_iyveris_mesh_key != expected:
+            raise HTTPException(status_code=401, detail="invalid mesh key")
+        return
+    if not loopback:
+        raise HTTPException(status_code=401, detail="mesh key required for non-loopback")
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     load_env_file()
     # DAEDALUS_STANDALONE is set by CLI/Docker, not here — never flip it inside ADN.
+    try:
+        from daedalus.owner_auth import get_or_create_token, token_path
+        get_or_create_token()
+        log.info("owner token ready at %s", token_path())
+    except Exception:
+        log.exception("owner token bootstrap failed (non-fatal)")
     try:
         from daedalus.host import standalone_mode
         if standalone_mode():
@@ -66,7 +75,7 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(
     title="Daedalus",
     description="Independent coding agent — games, apps, self-improvement.",
-    version="0.3.4",
+    version="0.3.5",
     lifespan=lifespan,
 )
 app.include_router(playground_router)
@@ -77,6 +86,7 @@ if _UI_STATIC.is_dir():
     app.mount("/admin/static", StaticFiles(directory=_UI_STATIC), name="admin-static")
 if _STATIC.is_dir():
     app.mount("/static", StaticFiles(directory=_STATIC), name="static")
+app.add_middleware(OwnerAuthMiddleware)
 
 
 class ChatBody(BaseModel):
@@ -134,6 +144,7 @@ async def capabilities() -> dict:
             "offline-kit", "llm-wardrobe", "addons", "capsule",
             "evolution", "windows-desktop", "windows-gui", "live-publish",
             "effort-routing", "world-kit", "long-horizon",
+            "owner-token",
         ],
         "mesh_endpoint": "/api/iyveris",
         "studio": "/",
@@ -156,12 +167,26 @@ async def llm_status() -> dict:
         return {"ok": False, "error": str(exc)[:200]}
 
 
+@app.get("/api/v1/auth/bootstrap")
+async def auth_bootstrap(request: Request) -> dict:
+    from daedalus.owner_auth import get_or_create_token
+    if not client_is_loopback_scope(request.scope):
+        raise HTTPException(status_code=403, detail="bootstrap only from loopback")
+    return {
+        "ok": True,
+        "token": get_or_create_token(),
+        "header": "Authorization",
+        "scheme": "Bearer",
+    }
+
+
 @app.post("/api/iyveris")
 async def iyveris_mesh(
+    request: Request,
     body: MeshBody,
     x_iyveris_mesh_key: str | None = Header(default=None, alias="X-Iyveris-Mesh-Key"),
 ) -> dict:
-    _check_mesh(x_iyveris_mesh_key)
+    _check_mesh(x_iyveris_mesh_key, loopback=client_is_loopback_scope(request.scope))
     action = (body.action or "ping").strip().lower()
     if action in ("ping", "health"):
         return {"ok": True, "result": {"service": "daedalus", "status": "ok"}, "error": None}

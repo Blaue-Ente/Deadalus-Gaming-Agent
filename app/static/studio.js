@@ -474,7 +474,10 @@
 
   $("pcapsule").onclick = () => {
     if (!state.slug) return;
-    window.location = "/api/v1/playground/projects/" + state.slug + "/capsule";
+    const href = "/api/v1/playground/projects/" + state.slug + "/capsule";
+    window.location = (window.DaedalusAuth && DaedalusAuth.url)
+      ? DaedalusAuth.url(href)
+      : href;
   };
   $("ppub").onclick = async () => {
     if (!state.slug) return;

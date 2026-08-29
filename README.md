@@ -159,6 +159,8 @@ export DAEDALUS_STANDALONE=1
 python -m app.cli serve --port 8787
 ```
 
+Binds `127.0.0.1` by default. Docker/VPS (`HOST=0.0.0.0`) needs `DAEDALUS_TOKEN` — see [SECURITY.md](SECURITY.md).
+
 Equivalent after `pip install -e .`:
 
 ```bash
@@ -203,6 +205,7 @@ If Python 3.11+ is not on PATH, a **private** CPython is installed under the app
 ```bash
 cp .env.example .env
 # fill ALLTOKEN_API_KEY or OPENROUTER_API_KEY (or another key)
+# Docker binds 0.0.0.0 — also set DAEDALUS_TOKEN
 docker compose up --build
 ```
 
@@ -330,7 +333,7 @@ After `pip install -e .` the command is `daedalus` (same as `python -m app.cli`)
 
 | Command | What it does |
 |---|---|
-| `daedalus serve [--host] [--port] [--reload]` | HTTP Studio + API |
+| `daedalus serve [--host] [--port] [--reload]` | HTTP Studio + API (default bind `127.0.0.1`) |
 | `daedalus ping [--message …]` | One LLM call, no UI |
 | `daedalus models` | Effective provider + probe of local backends |
 | `daedalus desktop [--ui auto\|webview\|tk\|browser\|none]` | Window + local server |
