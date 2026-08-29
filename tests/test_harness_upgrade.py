@@ -92,6 +92,12 @@ def test_ollama_selection_is_normal_provider_route(harness_tmp, monkeypatch):
     assert cfg["model"] == "qwen2.5-coder:14b"
     assert cfg["source"] == "db_local"
     assert cfg["api_key"]
+    resources = client.get(
+        "/api/v1/llm/resources?probe_local=false",
+        headers={"Authorization": f"Bearer {get_or_create_token()}"},
+    ).json()["resources"]
+    ollama = next(row for row in resources if row["id"] == "ollama")
+    assert next(model for model in ollama["models"] if model["id"] == cfg["model"])["selected"] is True
     page = client.get("/admin/llm-router")
     assert page.status_code == 200
     assert "Ollama работи като нормален provider" in page.text
@@ -133,6 +139,23 @@ def test_changing_model_preserves_saved_provider_key(harness_tmp):
         set_config(model="first", api_key="saved-key", provider="custom", base_url="https://llm.example/v1")
         set_config(model="second", api_key="", provider="custom", base_url="https://llm.example/v1")
     assert get_config()["api_key"] == "saved-key"
+
+
+def test_keyless_custom_openai_compatible_route(harness_tmp):
+    from daedalus.llm_config import get_config, set_config
+    from daedalus.llm_router_config import router_write_context
+
+    with router_write_context():
+        set_config(
+            model="private-model",
+            api_key="",
+            provider="custom",
+            base_url="http://llm.internal/v1",
+        )
+    cfg = get_config()
+    assert cfg["provider"] == "custom"
+    assert cfg["api_key"] == "custom-no-key"
+    assert cfg["source"] == "db"
 
 
 def test_shell_echo_and_block_sudo(harness_tmp):

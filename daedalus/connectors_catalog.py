@@ -51,6 +51,15 @@ def _base_status(definition: ConnectorDefinition) -> dict[str, Any]:
         "ok": configured if definition.env_keys else False,
         "status": "ready" if configured else "not_configured",
         "detail": "",
+        "testable": definition.id in {
+            "github",
+            "gitlab",
+            "netlify",
+            "supabase",
+            "discord",
+            "mirofish",
+            "reach",
+        },
     }
 
 
@@ -82,12 +91,17 @@ async def _status_for(definition: ConnectorDefinition, *, probe: bool) -> dict[s
         row["detail"] = "Netlify CLI ready" if row["ok"] else "Requires token and npx"
     elif connector_id == "cloudflare":
         row["configured"] = _has_any("CLOUDFLARE_API_TOKEN")
-        row["ok"] = row["configured"] and bool(shutil.which("wrangler") or shutil.which("npx"))
+        row["ok"] = False
+        row["testable"] = False
         row["detail"] = "Token configured; deploy adapter is not enabled yet"
     elif connector_id == "itch":
         row["configured"] = _has_any("ITCHIO_API_KEY")
         row["ok"] = row["configured"] and bool(shutil.which("butler"))
         row["detail"] = "Ready" if row["ok"] else "Requires ITCHIO_API_KEY and butler"
+        row["testable"] = False
+    elif connector_id == "sentry":
+        row["detail"] = "Configuration detection; project SDK injection is not enabled yet"
+        row["testable"] = False
     elif connector_id == "object-storage":
         from .connectors_config import storage_status
 

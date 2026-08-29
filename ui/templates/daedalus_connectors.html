@@ -222,7 +222,7 @@ function connectorCard(row) {
     env.textContent = row.env_keys.join(' + ');
     card.appendChild(env);
   }
-  if (row.configured) {
+  if (row.configured && row.testable) {
     const test = document.createElement('button');
     test.type = 'button';
     test.className = 'mt-3 px-3 py-1.5 rounded border border-argos-border text-xs text-argos-accent';

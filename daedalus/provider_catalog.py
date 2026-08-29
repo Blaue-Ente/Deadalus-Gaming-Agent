@@ -5,7 +5,7 @@ from dataclasses import asdict, dataclass
 from typing import Any, Literal
 
 ProviderKind = Literal["local", "cloud", "gateway", "custom"]
-AuthKind = Literal["none", "api_key"]
+AuthKind = Literal["none", "optional", "api_key"]
 
 
 @dataclass(frozen=True)
@@ -33,7 +33,7 @@ PROVIDERS: tuple[ProviderDefinition, ...] = (
     ProviderDefinition("poolside", "Poolside", "cloud", "api_key", "openai"),
     ProviderDefinition("replit_openai", "Replit OpenAI", "cloud", "api_key", "openai"),
     ProviderDefinition("replit_gemini", "Replit Gemini", "cloud", "api_key", "openai"),
-    ProviderDefinition("custom", "Custom OpenAI-compatible", "custom", "api_key", "openai"),
+    ProviderDefinition("custom", "Custom OpenAI-compatible", "custom", "optional", "openai"),
 )
 
 
@@ -77,7 +77,10 @@ def _model_rows(provider_id: str, discovered: list[str], current_model: str) -> 
             "source": "selected",
             "tier": None,
         }
-    return list(merged.values())
+    rows = list(merged.values())
+    for row in rows:
+        row["selected"] = row["id"] == current_model
+    return rows
 
 
 def resources(*, probe_local: bool = True) -> list[dict[str, Any]]:
@@ -116,7 +119,7 @@ def resources(*, probe_local: bool = True) -> list[dict[str, Any]]:
                 (selected_provider == provider_id and db_cfg.get("api_key"))
                 or resolve_provider_api_key(provider_id)
             )
-            configured = bool(base_url and (has_key or definition.auth == "none"))
+            configured = bool(base_url and (has_key or definition.auth in ("none", "optional")))
             status = "ready" if configured else ("missing_url" if not base_url else "missing_key")
             discovered = []
         current_model = selected_model if selected_provider == provider_id else ""

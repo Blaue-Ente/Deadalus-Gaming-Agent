@@ -46,7 +46,7 @@
         throw new Error(data.detail || data.error || "Provider selection failed");
       }
       showMessage(`Активен модел: ${resource.label} · ${model}`, true);
-      await loadResources(false);
+      await loadResources(true);
     } catch (error) {
       showMessage(error.message || String(error));
     } finally {
@@ -70,6 +70,8 @@
     const models = resource.models || [];
     models.forEach((model) => modelSelect.appendChild(option(model.id, model.label || model.id)));
     modelSelect.appendChild(option("__custom__", "Друг Model ID…"));
+    const selectedModel = models.find((model) => model.selected);
+    if (selectedModel) modelSelect.value = selectedModel.id;
 
     const customWrap = card.querySelector(".provider-model-custom");
     const customInput = card.querySelector(".provider-model-input");
@@ -89,6 +91,9 @@
 
     const keyWrap = card.querySelector(".provider-key-wrap");
     if (resource.auth === "none") keyWrap.classList.add("hidden");
+    if (resource.auth === "optional") {
+      card.querySelector(".provider-key-note").textContent = "(опционален)";
+    }
 
     card.querySelector(".provider-select").addEventListener(
       "click",
