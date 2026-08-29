@@ -251,3 +251,17 @@ def test_studio_js_attaches_auth_helpers(auth_tmp):
     assert "owner-auth.js" in html
     assert "DaedalusAuth" in js
     assert "owner-auth.js" in nav
+
+
+def test_canonical_shell_pages_are_public_but_their_apis_are_protected(auth_tmp):
+    from daedalus.owner_auth import is_public_request
+
+    for path in (
+        "/admin/daedalus/projects",
+        "/admin/daedalus/projects/game-studio",
+        "/admin/daedalus/agent",
+        "/admin/daedalus/review",
+        "/admin/daedalus/settings",
+    ):
+        assert is_public_request("GET", path)
+    assert not is_public_request("GET", "/admin/daedalus/playground/api/projects")

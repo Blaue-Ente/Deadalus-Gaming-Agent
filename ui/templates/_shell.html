@@ -30,57 +30,45 @@
     <nav class="text-sm flex-1">
       {% set page = page|default('daedalus_hub') %}
 
-      <div class="cc-nav-label px-3 pt-1 pb-1.5 text-[9px] uppercase tracking-[0.22em] font-mono select-none">Продукт</div>
-      <div class="space-y-0.5 mb-3">
+      <div class="cc-nav-label px-3 pt-1 pb-1.5 text-[9px] uppercase tracking-[0.22em] font-mono select-none">Работно пространство</div>
+      <div class="space-y-0.5 mb-5">
         <a href="/" onclick="closeSidebar()" class="cc-nav-link flex items-center gap-2 px-3 py-2 rounded border">
           <span class="cc-nav-dot w-1.5 h-1.5 rounded-full shrink-0"></span>
           Studio
         </a>
-      </div>
-
-      <div class="cc-nav-label px-3 pt-1 pb-1.5 text-[9px] uppercase tracking-[0.22em] font-mono select-none">Дедал</div>
-      <div class="space-y-0.5 mb-3">
-        <a href="/admin/daedalus/hub" onclick="closeSidebar()" class="cc-nav-link flex items-center gap-2 px-3 py-2 rounded border {% if page == 'daedalus_hub' %}is-on{% endif %}">
+        <a href="/admin/daedalus/projects" onclick="closeSidebar()" {% if page in ('app_builder', 'game_studio') %}aria-current="page"{% endif %} class="cc-nav-link flex items-center gap-2 px-3 py-2 rounded border {% if page in ('app_builder', 'game_studio') %}is-on{% endif %}">
           <span class="cc-nav-dot w-1.5 h-1.5 rounded-full shrink-0"></span>
-          Hub
+          Проекти
         </a>
-        <a href="/admin/daedalus" onclick="closeSidebar()" class="cc-nav-link flex items-center gap-2 px-3 py-2 rounded border {% if page == 'daedalus' %}is-on{% endif %}">
+        <a href="/admin/daedalus/agent" onclick="closeSidebar()" {% if page == 'daedalus' %}aria-current="page"{% endif %} class="cc-nav-link flex items-center gap-2 px-3 py-2 rounded border {% if page == 'daedalus' %}is-on{% endif %}">
           <span class="cc-nav-dot w-1.5 h-1.5 rounded-full shrink-0"></span>
-          Chat
+          Агент
         </a>
-        <a href="/admin/daedalus/playground" onclick="closeSidebar()" class="cc-nav-link flex items-center gap-2 px-3 py-2 rounded border {% if page == 'app_builder' %}is-on{% endif %}">
+        <a href="/admin/daedalus/review" onclick="closeSidebar()" {% if page == 'proposals' %}aria-current="page"{% endif %} class="cc-nav-link flex items-center gap-2 px-3 py-2 rounded border {% if page == 'proposals' %}is-on{% endif %}">
           <span class="cc-nav-dot w-1.5 h-1.5 rounded-full shrink-0"></span>
-          Playground
+          Преглед
         </a>
-        <a href="/admin/daedalus/game-studio" onclick="closeSidebar()" class="cc-nav-link flex items-center gap-2 px-3 py-2 rounded border {% if page == 'game_studio' %}is-on{% endif %}">
+        <a href="/admin/daedalus/settings" onclick="closeSidebar()" {% if page in ('settings', 'skills', 'daedalus_connectors', 'bundles', 'llm_router') %}aria-current="page"{% endif %} class="cc-nav-link flex items-center gap-2 px-3 py-2 rounded border {% if page in ('settings', 'skills', 'daedalus_connectors', 'bundles', 'llm_router') %}is-on{% endif %}">
           <span class="cc-nav-dot w-1.5 h-1.5 rounded-full shrink-0"></span>
-          Game Studio
-        </a>
-        <a href="/admin/daedalus/proposals" onclick="closeSidebar()" class="cc-nav-link flex items-center gap-2 px-3 py-2 rounded border {% if page == 'proposals' %}is-on{% endif %}">
-          <span class="cc-nav-dot w-1.5 h-1.5 rounded-full shrink-0"></span>
-          Proposals
-        </a>
-        <a href="/admin/daedalus/skills" onclick="closeSidebar()" class="cc-nav-link flex items-center gap-2 px-3 py-2 rounded border {% if page == 'skills' %}is-on{% endif %}">
-          <span class="cc-nav-dot w-1.5 h-1.5 rounded-full shrink-0"></span>
-          Skills
-        </a>
-        <a href="/admin/daedalus/connectors" onclick="closeSidebar()" class="cc-nav-link flex items-center gap-2 px-3 py-2 rounded border {% if page == 'daedalus_connectors' %}is-on{% endif %}">
-          <span class="cc-nav-dot w-1.5 h-1.5 rounded-full shrink-0"></span>
-          Connectors
-        </a>
-        <a href="/admin/daedalus/bundles" onclick="closeSidebar()" class="cc-nav-link flex items-center gap-2 px-3 py-2 rounded border {% if page == 'bundles' %}is-on{% endif %}">
-          <span class="cc-nav-dot w-1.5 h-1.5 rounded-full shrink-0"></span>
-          Bundles
+          Настройки
         </a>
       </div>
 
-      <div class="cc-nav-label px-3 pt-1 pb-1.5 text-[9px] uppercase tracking-[0.22em] font-mono select-none">LLM</div>
-      <div class="space-y-0.5 mb-3">
-        <a href="/admin/llm-router" onclick="closeSidebar()" class="cc-nav-link flex items-center gap-2 px-3 py-2 rounded border {% if page == 'llm_router' %}is-on{% endif %}">
-          <span class="cc-nav-dot w-1.5 h-1.5 rounded-full shrink-0"></span>
-          LLM
-        </a>
+      {% if page in ('app_builder', 'game_studio') %}
+      <div class="cc-nav-label px-3 pb-1.5 text-[9px] uppercase tracking-[0.22em] font-mono select-none">Проектни инструменти</div>
+      <div class="space-y-0.5">
+        <a href="/admin/daedalus/projects" class="cc-subnav {% if page == 'app_builder' %}is-on{% endif %}">Workspace</a>
+        <a href="/admin/daedalus/projects/game-studio" class="cc-subnav {% if page == 'game_studio' %}is-on{% endif %}">Game Studio</a>
       </div>
+      {% elif page in ('settings', 'skills', 'daedalus_connectors', 'bundles', 'llm_router') %}
+      <div class="cc-nav-label px-3 pb-1.5 text-[9px] uppercase tracking-[0.22em] font-mono select-none">Настройки</div>
+      <div class="space-y-0.5">
+        <a href="/admin/llm-router" class="cc-subnav">LLM</a>
+        <a href="/admin/daedalus/connectors" class="cc-subnav">Connectors</a>
+        <a href="/admin/daedalus/skills" class="cc-subnav">Skills и права</a>
+        <a href="/admin/daedalus/bundles" class="cc-subnav">Bundles</a>
+      </div>
+      {% endif %}
     </nav>
 
     <div class="mt-auto pt-4 text-[10px] font-mono uppercase tracking-wider" style="color:var(--faint)">
@@ -106,7 +94,11 @@
       </div>
     </header>
 
-    <main class="flex-1 px-4 md:px-10 py-5 md:py-8 max-w-7xl w-full">
+    <main id="main-content" class="flex-1 px-4 md:px-10 py-5 md:py-8 max-w-7xl w-full">
+      <div id="shell-error" class="cc-error-banner hidden" role="alert" aria-live="assertive">
+        <span id="shell-error-message">Възникна грешка.</span>
+        <button type="button" onclick="hideShellError()" aria-label="Затвори съобщението">×</button>
+      </div>
       <header class="hidden md:flex items-center justify-between mb-8">
         <div>
           <div class="cc-kicker">{% block eyebrow %}Coding agent{% endblock %}</div>
@@ -140,5 +132,19 @@ function closeSidebar() {
   document.body.style.overflow = '';
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeSidebar(); });
+function showShellError(message) {
+  const box = document.getElementById('shell-error');
+  const text = document.getElementById('shell-error-message');
+  if (!box || !text) return;
+  text.textContent = message || 'Възникна неочаквана грешка.';
+  box.classList.remove('hidden');
+}
+function hideShellError() {
+  document.getElementById('shell-error')?.classList.add('hidden');
+}
+window.addEventListener('unhandledrejection', event => {
+  const reason = event.reason;
+  showShellError(reason?.message || String(reason || 'Заявката не можа да бъде изпълнена.'));
+});
 </script>
 {% endblock %}

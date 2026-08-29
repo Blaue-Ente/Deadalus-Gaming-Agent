@@ -26,7 +26,12 @@
       p === "/admin/daedalus" || p === "/admin/daedalus/" ||
       p === "/admin/daedalus/hub" ||
       p === "/admin/daedalus/playground" ||
+      p === "/admin/daedalus/projects" ||
       p === "/admin/daedalus/game-studio" ||
+      p === "/admin/daedalus/projects/game-studio" ||
+      p === "/admin/daedalus/agent" ||
+      p === "/admin/daedalus/review" ||
+      p === "/admin/daedalus/settings" ||
       p === "/admin/daedalus/connectors" ||
       p === "/admin/daedalus/proposals" ||
       p === "/admin/daedalus/skills" ||

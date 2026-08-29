@@ -1,6 +1,5 @@
 {% extends "_shell.html" %}
 {% set page = 'skills' %}
-{% set daedalus_tab = 'skills' %}
 {% block eyebrow %}Daedalus · Access{% endblock %}
 {% block heading %}Tool Access — Skills{% endblock %}
 {% block mob_title %}Access{% endblock %}
@@ -8,7 +7,6 @@
 {% block heading_mob %}Access{% endblock %}
 
 {% block content %}
-{% include "_daedalus_nav.html" %}
 <div class="space-y-6">
 
   <div class="bg-purple-500/5 border border-purple-500/30 rounded-lg p-5">
@@ -26,7 +24,7 @@
         </p>
         <p class="text-[12px] text-argos-dim">
           Никога нищо не се прилага автоматично — patch-овете чакат Approve в
-          <a href="/admin/daedalus/proposals" class="text-purple-300 hover:text-white underline">Proposals</a>.
+          <a href="/admin/daedalus/review" class="text-purple-300 hover:text-white underline">Преглед</a>.
         </p>
       </div>
     </div>

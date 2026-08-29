@@ -357,9 +357,9 @@ def test_studio_asset_generate_route(isolated, monkeypatch):
 def test_command_center_uses_studio_tokens(isolated):
     from app.main import app
     client = TestClient(app)
-    hub = client.get("/admin/daedalus/hub")
-    assert hub.status_code == 200
-    text = hub.text
+    projects = client.get("/admin/daedalus/projects")
+    assert projects.status_code == 200
+    text = projects.text
     assert "daedalus-tokens.css" in text
     assert "command-center.css" in text
     assert "daedalus-mark.png" in text

@@ -270,9 +270,83 @@ def _milestone_code_files(job: GuidedJob) -> list[str]:
     ]
 
 
+async def _verify_guided_delivery(job: GuidedJob) -> dict[str, Any]:
+    """Run the same fail-closed delivery gates before a guided job can finish."""
+    if job.milestone_scope:
+        from .game_studio_verify import run_milestone_verify
+
+        async def on_log(line: str, level: str = "info") -> None:
+            await job.append_event("log", {"line": line, "level": level})
+
+        return await run_milestone_verify(
+            job.slug,
+            job.milestone_scope,
+            on_log=on_log,
+        )
+
+    from . import playground_browser as browser
+    from . import playground_gameplay_verify as gameplay
+    from . import playground_runner as runner
+    from .game_build_contract import verified
+    from .quality_gate import critic_counts_as_pass, maybe_critic
+
+    await job.append_event("log", {"line": "🔍 Проверка на готовия build…", "level": "info"})
+    smoke = await runner.smoke_test(job.slug)
+    static_skip = job.kind == "static" and smoke.get("skipped") and smoke.get("ok")
+    runtime_ok = bool(smoke.get("ok") and (not smoke.get("skipped") or static_skip))
+
+    browser_result: dict[str, Any] = {
+        "ok": False,
+        "skipped": True,
+        "summary": "browser verify skipped — runtime failed",
+    }
+    if runtime_ok:
+        browser_result = await browser.verify_app(job.slug, job.kind)
+    browser_ok = bool(browser_result.get("na") or verified(browser_result))
+
+    gameplay_result: dict[str, Any] = {
+        "ok": False,
+        "skipped": True,
+        "summary": "gameplay verify skipped — browser failed",
+    }
+    if runtime_ok and browser_ok:
+        gameplay_result = await gameplay.gameplay_verify_app(job.slug, job.kind)
+    gameplay_ok = bool(gameplay_result.get("na") or verified(gameplay_result))
+
+    critic = await maybe_critic(
+        slug=job.slug,
+        kind=job.kind,
+        description=job.description,
+        plan=job.plan,
+        bv=gameplay_result if gameplay_result.get("screenshot_path") else browser_result,
+        visual=job.kind in browser.VISUAL_KINDS,
+    )
+    quality_ok = bool(critic.get("na") or critic_counts_as_pass(critic))
+    result = {
+        "ok": runtime_ok and browser_ok and gameplay_ok and quality_ok,
+        "runtime_ok": runtime_ok,
+        "browser_ok": browser_ok,
+        "gameplay_ok": gameplay_ok,
+        "quality_ok": quality_ok,
+        "smoke": smoke,
+        "browser": browser_result,
+        "gameplay": gameplay_result,
+        "quality": critic,
+    }
+    await job.append_event(
+        "verification",
+        {
+            key: value
+            for key, value in result.items()
+            if key in ("ok", "runtime_ok", "browser_ok", "gameplay_ok", "quality_ok")
+        },
+    )
+    return result
+
+
 async def _finish_guided(job: GuidedJob, *, log_line: str) -> None:
-    """Unified guided terminal — always milestone_done for scoped runs; fail if no code files."""
-    await job.append_event("log", {"line": log_line, "level": "ok"})
+    """Verify a guided delivery before publishing terminal success events."""
+    await job.append_event("log", {"line": log_line, "level": "info"})
     if job.milestone_scope:
         if not _milestone_code_files(job):
             await job.fail(
@@ -280,8 +354,30 @@ async def _finish_guided(job: GuidedJob, *, log_line: str) -> None:
                 "Провери LLM Router ключовете и пусни Guided отново."
             )
             return
-        await job.append_event("milestone_done", {"milestone_id": job.milestone_scope})
-    await job.append_event("done", {"files": job.files, "assets": job.assets_built})
+    try:
+        verification = await _verify_guided_delivery(job)
+    except Exception as exc:
+        log.exception("guided delivery verification failed")
+        await job.fail(f"Build verification could not complete: {exc}")
+        return
+    if not verification.get("ok"):
+        failed = [
+            name
+            for name in ("runtime", "browser", "gameplay", "quality")
+            if not verification.get(f"{name}_ok")
+        ]
+        await job.fail(f"Build verification failed: {', '.join(failed) or 'unknown gate'}")
+        return
+    await job.append_event("log", {"line": "✅ Build и проверките са завършени", "level": "ok"})
+    if job.milestone_scope:
+        await job.append_event(
+            "milestone_done",
+            {"milestone_id": job.milestone_scope, "verified": True},
+        )
+    await job.append_event(
+        "done",
+        {"files": job.files, "assets": job.assets_built, "verified": True},
+    )
     await job.complete()
 
 
@@ -833,22 +929,12 @@ async def continue_job(
                 job.checkpoint_data = {}
                 job.updated = _now()
                 job.cond.notify_all()
-            if not _milestone_code_files(job):
-                await job.fail(
-                    f"Milestone {job.milestone_scope}: няма записани файлове след одобрение. "
-                    "Провери LLM Router и пусни отново."
+            job.task = asyncio.create_task(
+                _finish_guided(
+                    job,
+                    log_line=f"Milestone {job.milestone_scope}: build завършен, пускам Verify",
                 )
-                return {"ok": False, "error": job.error or "no files written"}
-            async with job.cond:
-                job.status = "done"
-                job.updated = _now()
-                job.cond.notify_all()
-            await job.append_event("log", {
-                "line": f"✅ Milestone {job.milestone_scope} завършен",
-                "level": "ok",
-            })
-            await job.append_event("milestone_done", {"milestone_id": job.milestone_scope})
-            await job.append_event("done", {"files": job.files, "assets": job.assets_built})
+            )
             return {"ok": True, "action": action, "milestone_complete": True}
 
     async with job.cond:

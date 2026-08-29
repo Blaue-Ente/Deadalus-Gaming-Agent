@@ -1,0 +1,33 @@
+{% extends "_shell.html" %}
+{% set page = "settings" %}
+{% block title %}Дедал · Настройки{% endblock %}
+{% block mob_title %}Настройки{% endblock %}
+{% block eyebrow %}Система{% endblock %}
+{% block heading %}Настройки и интеграции{% endblock %}
+{% block eyebrow_mob %}Система{% endblock %}
+{% block heading_mob %}Настройки{% endblock %}
+
+{% block content %}
+<section class="grid gap-4 md:grid-cols-2 xl:grid-cols-3" aria-label="Настройки">
+  <a class="cc-card block rounded-xl border p-5" href="/admin/llm-router">
+    <div class="cc-kicker">Модели</div>
+    <h2 class="cc-heading mt-2 text-lg">LLM</h2>
+    <p class="mt-2 text-sm text-argos-dim">Provider ключове, model registry и избор на роли.</p>
+  </a>
+  <a class="cc-card block rounded-xl border p-5" href="/admin/daedalus/connectors">
+    <div class="cc-kicker">Интеграции</div>
+    <h2 class="cc-heading mt-2 text-lg">Connectors</h2>
+    <p class="mt-2 text-sm text-argos-dim">GitHub, GitLab и външни услуги.</p>
+  </a>
+  <a class="cc-card block rounded-xl border p-5" href="/admin/daedalus/skills">
+    <div class="cc-kicker">Поведение</div>
+    <h2 class="cc-heading mt-2 text-lg">Skills и права</h2>
+    <p class="mt-2 text-sm text-argos-dim">Постоянни инструкции, gates и разрешения.</p>
+  </a>
+  <a class="cc-card block rounded-xl border p-5" href="/admin/daedalus/bundles">
+    <div class="cc-kicker">Конфигурация</div>
+    <h2 class="cc-heading mt-2 text-lg">Bundles</h2>
+    <p class="mt-2 text-sm text-argos-dim">Пакети от умения и предварително зададени настройки.</p>
+  </a>
+</section>
+{% endblock %}
