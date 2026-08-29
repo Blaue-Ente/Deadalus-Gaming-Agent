@@ -92,6 +92,11 @@ def test_ollama_selection_is_normal_provider_route(harness_tmp, monkeypatch):
     assert cfg["model"] == "qwen2.5-coder:14b"
     assert cfg["source"] == "db_local"
     assert cfg["api_key"]
+    page = client.get("/admin/llm-router")
+    assert page.status_code == 200
+    assert "Ollama работи като нормален provider" in page.text
+    assert "/admin/static/llm-picker.js" in page.text
+    assert client.get("/admin/static/llm-picker.js").status_code == 200
 
 
 def test_saved_cloud_route_wins_over_active_wardrobe(harness_tmp, monkeypatch):
@@ -118,6 +123,16 @@ def test_saved_cloud_route_wins_over_active_wardrobe(harness_tmp, monkeypatch):
     cfg = get_config()
     assert cfg["provider"] == "openrouter"
     assert cfg["source"] == "db"
+
+
+def test_changing_model_preserves_saved_provider_key(harness_tmp):
+    from daedalus.llm_config import get_config, set_config
+    from daedalus.llm_router_config import router_write_context
+
+    with router_write_context():
+        set_config(model="first", api_key="saved-key", provider="custom", base_url="https://llm.example/v1")
+        set_config(model="second", api_key="", provider="custom", base_url="https://llm.example/v1")
+    assert get_config()["api_key"] == "saved-key"
 
 
 def test_shell_echo_and_block_sudo(harness_tmp):

@@ -1,22 +1,77 @@
 {% extends "_shell.html" %}
 {% set page = 'llm_router' %}
 {% block title %}LLM — Дедал{% endblock %}
-{% block eyebrow %}Standalone · Direct LLM{% endblock %}
-{% block heading %}LLM status{% endblock %}
+{% block eyebrow %}AI ресурси{% endblock %}
+{% block heading %}Модели и providers{% endblock %}
 {% block mob_title %}LLM{% endblock %}
 
 {% block content %}
-<div class="bg-argos-panel border border-argos-border rounded-lg p-5 space-y-3 max-w-xl">
-  <p class="text-sm text-argos-dim">
-    Standalone Daedalus talks to the provider directly (AllToken / OpenRouter / Novita / NVIDIA).
-    Set keys in <code class="text-argos-accent">.env</code> or switch models from Studio → LLM.
-  </p>
-  <dl class="text-sm font-mono space-y-2">
-    <div class="flex justify-between gap-4"><dt class="text-argos-dim">provider</dt><dd class="text-white">{{ provider or "—" }}</dd></div>
-    <div class="flex justify-between gap-4"><dt class="text-argos-dim">model</dt><dd class="text-white">{{ model or "—" }}</dd></div>
-    <div class="flex justify-between gap-4"><dt class="text-argos-dim">source</dt><dd class="text-white">{{ source or "—" }}</dd></div>
-    <div class="flex justify-between gap-4"><dt class="text-argos-dim">key</dt><dd class="text-white">{% if has_key %}set{% else %}missing{% endif %}</dd></div>
-  </dl>
-  <p class="text-xs text-argos-dim">Set <code>ALLTOKEN_API_KEY</code> or another provider key in <code>.env</code>.</p>
+<div class="space-y-5 max-w-6xl">
+  <section class="cc-card border rounded-xl p-5 flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <div class="cc-kicker">Активен маршрут</div>
+      <div id="llm-active" class="cc-heading text-lg mt-2">{{ provider or "—" }} · {{ model or "—" }}</div>
+      <div id="llm-source" class="text-xs text-argos-dim mt-1">source: {{ source or "—" }}</div>
+    </div>
+    <button id="llm-refresh" type="button" class="cc-btn-primary border rounded-lg px-4 py-2">Опресни</button>
+  </section>
+
+  <div id="llm-message" class="hidden cc-error-banner" role="status" aria-live="polite"></div>
+
+  <section>
+    <div class="flex items-end justify-between gap-4 mb-3">
+      <div>
+        <div class="cc-kicker">На тази машина</div>
+        <h2 class="cc-heading text-xl mt-1">Local</h2>
+      </div>
+      <span class="text-xs text-argos-dim">Ollama работи като нормален provider; Offline е отделна policy.</span>
+    </div>
+    <div id="llm-local" class="grid gap-3 md:grid-cols-2"></div>
+  </section>
+
+  <section>
+    <div class="cc-kicker">Конфигурирани акаунти</div>
+    <h2 class="cc-heading text-xl mt-1 mb-3">Cloud</h2>
+    <div id="llm-cloud-ready" class="grid gap-3 md:grid-cols-2"></div>
+  </section>
+
+  <details class="cc-card border rounded-xl p-4">
+    <summary class="cursor-pointer cc-heading">Добави provider</summary>
+    <p class="text-sm text-argos-dim mt-2">
+      Избери познат provider или използвай Custom за всеки OpenAI-compatible endpoint.
+    </p>
+    <div id="llm-cloud-missing" class="grid gap-3 md:grid-cols-2 mt-4"></div>
+  </details>
 </div>
+
+<template id="llm-provider-template">
+  <article class="llm-provider cc-card border rounded-xl p-4">
+    <div class="flex items-start justify-between gap-3">
+      <div>
+        <h3 class="provider-label cc-heading text-base"></h3>
+        <div class="provider-meta text-xs text-argos-dim mt-1"></div>
+      </div>
+      <span class="provider-status text-[10px] font-mono uppercase border rounded-full px-2 py-1"></span>
+    </div>
+    <label class="block text-xs text-argos-dim mt-4">
+      Модел
+      <select class="provider-model mt-1 w-full rounded-lg border p-2"></select>
+    </label>
+    <label class="provider-model-custom hidden block text-xs text-argos-dim mt-3">
+      Model ID
+      <input class="provider-model-input mt-1 w-full rounded-lg border p-2" placeholder="organization/model" />
+    </label>
+    <label class="provider-url-wrap hidden block text-xs text-argos-dim mt-3">
+      OpenAI-compatible base URL
+      <input class="provider-url mt-1 w-full rounded-lg border p-2" placeholder="https://provider.example/v1" />
+    </label>
+    <label class="provider-key-wrap block text-xs text-argos-dim mt-3">
+      API key <span class="provider-key-note">(остави празно за env)</span>
+      <input class="provider-key mt-1 w-full rounded-lg border p-2" type="password" autocomplete="new-password" />
+    </label>
+    <button type="button" class="provider-select cc-btn-primary border rounded-lg px-3 py-2 mt-4 w-full">Използвай</button>
+  </article>
+</template>
+
+<script src="/admin/static/llm-picker.js"></script>
 {% endblock %}

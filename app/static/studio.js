@@ -413,6 +413,9 @@
     await fetch("/api/v1/llm/wardrobe/cloud", { method: "POST" });
     refreshHealth();
   };
+  $("llmmanage").onclick = () => {
+    window.location.href = "/admin/llm-router";
+  };
 
   async function refreshEvolution() {
     try {

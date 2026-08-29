@@ -569,6 +569,8 @@ def set_config(
     }
     if (api_key or "").strip():
         cfg["api_key"] = api_key.strip()
+    elif prev.get("provider") == provider and prev.get("api_key"):
+        cfg["api_key"] = prev["api_key"]
     if persona_via_master is not None:
         cfg["persona_via_master"] = bool(persona_via_master)
     elif "persona_via_master" in prev:
