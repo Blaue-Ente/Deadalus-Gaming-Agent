@@ -112,6 +112,15 @@ def _parse_fenced_files(text: str) -> dict[str, str]:
         if not body.strip():
             continue
         token = (info.split()[0] if info else "").strip().lstrip("./")
+        first_line, _, rest = body.partition("\n")
+        fl = first_line.strip()
+        # ```html\nindex.html\n<!DOCTYPE ...  — :free models often put the path inside
+        if rest and not fl.startswith("<") and (
+            "/" in fl or fl.endswith((".html", ".htm", ".js", ".css", ".jsx", ".json", ".py"))
+        ):
+            if not token or token.lower() in _FENCE_LANG_PATH:
+                token = fl.lstrip("./")
+            body = rest
         path = ""
         low = token.lower()
         if "/" in token or any(low.endswith(ext) for ext in (".html", ".htm", ".js", ".css", ".jsx", ".json", ".py")):

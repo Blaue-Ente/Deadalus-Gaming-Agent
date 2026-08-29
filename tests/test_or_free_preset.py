@@ -110,6 +110,10 @@ def test_extract_coder_files_accepts_html_fence():
     assert "index.html" in files
     assert "<canvas>" in files["index.html"]
 
+    nested = "```html\nindex.html\n<!DOCTYPE html>\n<html><canvas></canvas></html>\n```"
+    files = extract_coder_files(nested, "demo")
+    assert files["index.html"].lstrip().startswith("<!DOCTYPE html")
+
     named = "```index.html\n<html><canvas id='g'></canvas></html>\n```"
     files = extract_coder_files(named, "demo")
     assert "<canvas id='g'>" in files["index.html"]
