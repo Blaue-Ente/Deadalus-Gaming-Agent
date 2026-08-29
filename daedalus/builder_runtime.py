@@ -139,7 +139,7 @@ def start_builder_run(
     if mode == "light":
         return _start_light_builder_run(slug, description)
     if not _use_adn_admin_pipeline():
-        return _start_full_kernel_run(slug, description)
+        return _start_full_kernel_run(slug, description, resume=resume)
     from argos_data_nexus.admin import start_playground_autopilot_job
 
     import asyncio
@@ -166,14 +166,14 @@ async def start_builder_run_async(
     if mode == "light":
         return _start_light_builder_run(slug, description)
     if not _use_adn_admin_pipeline():
-        return _start_full_kernel_run(slug, description)
+        return _start_full_kernel_run(slug, description, resume=resume)
     from argos_data_nexus.admin import start_playground_autopilot_job
 
     return await start_playground_autopilot_job(slug, description, resume=resume)
 
 
-def _start_full_kernel_run(slug: str, description: str) -> aj.AutopilotJob:
-    """Hermes-class staged loop without touching ADN admin.py."""
+def _start_full_kernel_run(slug: str, description: str, *, resume: bool = False) -> aj.AutopilotJob:
+    """Staged full-autopilot loop for standalone Studio (no host admin pipeline)."""
     from .kernel.full_autopilot import run_full_autopilot
     from .kernel.orchestrator import PipelineState
 
@@ -184,7 +184,28 @@ def _start_full_kernel_run(slug: str, description: str) -> aj.AutopilotJob:
         backend = _ADNBuilderBackend(slug, job)
         state = PipelineState(slug=slug, description=description)
         try:
-            await run_full_autopilot(backend, state)
+            resume_from_stage = 0
+            saved_plan = None
+            if resume and job:
+                from .run_engine import checkpoint_for_slug, load_checkpoint
+                ckpt = load_checkpoint(job.id) or checkpoint_for_slug(slug)
+                if ckpt:
+                    resume_from_stage = int(ckpt.get("stage") or 0)
+                    plan = ckpt.get("plan")
+                    saved_plan = plan if isinstance(plan, dict) else None
+                    yield (
+                        "log",
+                        {
+                            "line": f"Resume from checkpoint stage={resume_from_stage}",
+                            "level": "info",
+                        },
+                    )
+            await run_full_autopilot(
+                backend,
+                state,
+                resume_from_stage=resume_from_stage,
+                saved_plan=saved_plan,
+            )
             files = [c.path for c in state.changes]
             if state.test_ok and state.review_ok:
                 yield (
@@ -224,13 +245,27 @@ def _start_light_builder_run(slug: str, description: str) -> aj.AutopilotJob:
                 from . import playground_browser as pb
 
                 if kind in VISUAL_KINDS:
+                    from .game_build_contract import quality_enabled, skip_is_not_ok, verified
                     yield ("phase", {"n": 4, "label": "Browser verify"})
-                    bresult = await pb.verify_app(slug, kind)
-                    if not bresult.get("ok") and not bresult.get("skipped"):
+                    bresult = skip_is_not_ok(await pb.verify_app(slug, kind))
+                    if not verified(bresult):
                         state.review_ok = False
-                        state.errors.append(pb.format_errors_for_fix(bresult)[:800])
-                    elif not bresult.get("skipped"):
+                        if bresult.get("skipped"):
+                            msg = "browser verify skipped — not evidence"
+                            state.errors.append(msg)
+                            yield ("log", {"line": "Browser verify skipped — not evidence of a playable game", "level": "warn"})
+                        else:
+                            state.errors.append(pb.format_errors_for_fix(bresult)[:800])
+                    else:
                         yield ("log", {"line": "✓ Browser verify OK", "level": "info"})
+                    if quality_enabled():
+                        yield (
+                            "log",
+                            {
+                                "line": "DAEDALUS_QUALITY=1 — critic is optional; skip is still not OK",
+                                "level": "info",
+                            },
+                        )
             if state.test_ok and state.review_ok:
                 preview = await backend.preview_url()
                 yield (
