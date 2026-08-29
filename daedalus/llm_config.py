@@ -399,10 +399,11 @@ def _resolve_llm_config() -> dict:
                 return local
         pd = PROVIDER_DEFAULTS.get(provider, PROVIDER_DEFAULTS["openai"])
         api_key = db_cfg.get("api_key") or resolve_provider_api_key(provider)
-        if provider == "custom" and db_cfg.get("base_url") and not api_key:
+        keyless_custom = bool(provider == "custom" and db_cfg.get("base_url") and not api_key)
+        if keyless_custom:
             api_key = "custom-no-key"
         source = "db"
-        if api_key and not db_cfg.get("api_key"):
+        if api_key and not db_cfg.get("api_key") and not keyless_custom:
             source = "db+env_key"
         if not api_key:
             source = "db_incomplete"
