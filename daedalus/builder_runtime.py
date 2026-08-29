@@ -23,6 +23,36 @@ from . import playground as pg
 from . import playground_runner as pgr
 from .workers import call_workers_parallel
 
+
+def builder_slot_for_role(role: AgentRole) -> str:
+    """Map pipeline roles to worker slots.
+
+    ``deep`` / ``analysis`` / ``claude`` need an explicit owner permission.
+    Autopilot must still write games without that grant, so we fall back to
+    ``coder`` / ``reviewer`` / ``balanced`` (which presets like or_free pin).
+    """
+    preferred = {
+        AgentRole.PLANNER: "balanced",
+        AgentRole.CODER: "deep",
+        AgentRole.UI: "balanced",
+        AgentRole.GAME_LOGIC: "deep",
+        AgentRole.TESTER: "fast",
+        AgentRole.REVIEWER: "reviewer",
+        AgentRole.PUBLISHER: "fast",
+    }.get(role, "balanced")
+    try:
+        from .outbox import WORKER_SLOT_PERMISSIONS, check_permission
+    except Exception:
+        return preferred
+    perm = WORKER_SLOT_PERMISSIONS.get(preferred)
+    if perm and not check_permission(perm):
+        return {
+            "deep": "coder",
+            "analysis": "balanced",
+            "claude": "reviewer",
+        }.get(preferred, "balanced")
+    return preferred
+
 _KIND_MAP = {
     "static": "static",
     "vite-react": "vite-react",
@@ -72,15 +102,7 @@ class _ADNBuilderBackend(BuilderBackend):
             await self.job.append_event(event, data)
 
     async def llm(self, role: AgentRole, prompt: str, *, system: str = "") -> str:
-        slot = {
-            AgentRole.PLANNER: "balanced",
-            AgentRole.CODER: "deep",
-            AgentRole.UI: "balanced",
-            AgentRole.GAME_LOGIC: "deep",
-            AgentRole.TESTER: "fast",
-            AgentRole.REVIEWER: "deep",
-            AgentRole.PUBLISHER: "fast",
-        }.get(role, "balanced")
+        slot = builder_slot_for_role(role)
 
         task = prompt if not system else f"{system}\n\n---\n\n{prompt}"
         results = await call_workers_parallel([{"slot": slot, "task": task}])

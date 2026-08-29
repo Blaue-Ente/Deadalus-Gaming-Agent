@@ -64,7 +64,28 @@ def test_apply_or_free_pins_pipeline_slots_off_paid_defaults(harness_tmp):
     assert openai_compat_headers("novita") == {}
 
 
-def test_rate_limited_detects_openrouter_429():
+def test_builder_coder_falls_back_when_deep_ungranted(harness_tmp):
+    from daedalus.builder_runtime import builder_slot_for_role
+    from daedalus.kernel.orchestrator import AgentRole
+    from daedalus.outbox import WORKER_SLOT_PERMISSIONS
+
+    assert builder_slot_for_role(AgentRole.CODER) == "coder"
+    assert builder_slot_for_role(AgentRole.GAME_LOGIC) == "coder"
+    assert builder_slot_for_role(AgentRole.REVIEWER) == "reviewer"
+    assert builder_slot_for_role(AgentRole.PLANNER) == "balanced"
+    assert "coder" not in WORKER_SLOT_PERMISSIONS
+    assert "reviewer" not in WORKER_SLOT_PERMISSIONS
+
+
+def test_static_scaffold_escapes_canvas_in_description(harness_tmp, tmp_path):
+    from daedalus.playground import _write_scaffold
+
+    dest = tmp_path / "esc"
+    dest.mkdir()
+    _write_scaffold(dest, "static", "X", "x", "Must have a <canvas> element.")
+    html = (dest / "index.html").read_text(encoding="utf-8")
+    assert "<canvas>" not in html.lower()
+    assert "&lt;canvas&gt;" in html.lower()
     from daedalus.workers import _is_rate_limited
 
     class Fake:

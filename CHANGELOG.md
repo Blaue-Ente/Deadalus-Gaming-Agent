@@ -8,7 +8,7 @@ The version in `pyproject.toml` is the source of truth for the package.
 ### LLM
 
 - **OpenRouter Free** preset (`or_free`) — all slots on `$0` OpenRouter ids (`poolside/laguna-s-2.1:free` + `openrouter/free`). Applying any preset now also pins planner/coder/reviewer/analysis/claude to that preset’s core models, so an eco/free mix cannot silently call paid Claude defaults.
-- OpenRouter OpenAI-compat calls send `HTTP-Referer` / `X-Title` (helps the `:free` pool). Workers retry 429 with backoff (4 tries). Unconfigured `OPENROUTER_API_KEY` still defaults to paid Claude Sonnet — Studio warns; apply `or_free` or set `DAEDALUS_MODEL`.
+- Autopilot coder/reviewer no longer stall on ungated `deep_worker` permission: they fall back to `coder` / `reviewer`. Static HTML scaffolds escape the project description so a brief that mentions `<canvas>` cannot fake a game element.
 
 ## [0.3.8] — 2026-08-29
 

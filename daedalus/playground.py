@@ -20,6 +20,7 @@ Standalone apps, които Дедал строи / клонира от GitHub, 
 """
 from __future__ import annotations
 
+import html
 import json as _json_pg
 import logging
 import re
@@ -408,17 +409,23 @@ def _write_scaffold(pdir: Path, kind: str, name: str, slug: str, description: st
             return
     templates = _SCAFFOLD.get(kind, _SCAFFOLD["static"])
     ctx = {"name": name, "slug": slug, "description": description or f"Проект: {name}"}
+    html_ctx = {
+        "name": html.escape(name or "", quote=True),
+        "slug": html.escape(slug or "", quote=True),
+        "description": html.escape(ctx["description"], quote=True),
+    }
     from .playground_expo_scaffold import _apply_template_ctx as _expo_ctx
     for rel_path, content in templates.items():
         target = pdir / rel_path
         if target.exists():
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
+        fmt_ctx = html_ctx if rel_path.endswith((".html", ".htm")) else ctx
         try:
             if kind == "expo" and not rel_path.endswith(".json"):
                 text = _expo_ctx(content, name, slug, ctx["description"])
             else:
-                text = content.format(**ctx)
+                text = content.format(**fmt_ctx)
         except (KeyError, ValueError):
             if kind == "expo":
                 text = _expo_ctx(content, name, slug, ctx["description"])
