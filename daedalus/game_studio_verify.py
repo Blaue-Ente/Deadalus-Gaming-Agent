@@ -10,6 +10,7 @@ from . import playground_browser as pbrowser
 from . import playground_runner as runner
 from . import playground_verify_fix as pvf
 from . import playground_gameplay_verify as pgplay
+from .game_build_contract import skip_is_not_ok
 from .game_studio_build import milestone_progress, resolve_current_milestone
 from .playground_browser import VISUAL_KINDS
 from .playground_runtime import verify_unity_scaffold, local_only_kind_message
@@ -126,10 +127,21 @@ async def _runtime_verify_with_fix(
         except Exception as exc:
             last_smoke = {"ok": False, "error": str(exc), "logs": []}
 
-        if last_smoke.get("ok") or last_smoke.get("skipped"):
+        if last_smoke.get("ok"):
             if on_log:
                 await _emit(on_log, "✅ Runtime smoke мина", "ok")
             return True, last_smoke, attempts
+
+        # skip ≠ ok: missing Godot/Unity binary is not a compile error to LLM-repair.
+        if last_smoke.get("skipped"):
+            err = (
+                last_smoke.get("error")
+                or last_smoke.get("summary")
+                or "runtime skipped — not evidence"
+            )
+            if on_log:
+                await _emit(on_log, f"❌ Runtime skipped — not evidence: {str(err)[:160]}", "err")
+            return False, last_smoke, attempts
 
         err = (
             last_smoke.get("error")
@@ -180,7 +192,12 @@ async def _browser_verify_with_fix(
     on_log: Callable[[str, str], Awaitable[None] | None] | None = None,
 ) -> tuple[bool, dict[str, Any], int]:
     if kind not in VISUAL_KINDS:
-        return True, {"ok": True, "skipped": True, "summary": f"browser skip ({kind})"}, 0
+        return True, {
+            "ok": True,
+            "skipped": False,
+            "na": True,
+            "summary": f"browser N/A ({kind})",
+        }, 0
 
     last_bv: dict[str, Any] = {}
     attempts = 0
@@ -329,12 +346,20 @@ async def _gameplay_verify_with_fix(
         if last_gp.get("skipped") and last_gp.get("unity_local_required"):
             if on_log:
                 await _emit(on_log, f"📦 {last_gp.get('summary', '')[:160]}", "warn")
-            return bool(last_gp.get("ok")), last_gp, attempts
+            return False, skip_is_not_ok(last_gp), attempts
 
         if last_gp.get("skipped"):
+            if kind not in VISUAL_KINDS:
+                if on_log:
+                    await _emit(on_log, f"Gameplay N/A for {kind}", "dim")
+                return True, last_gp, attempts
             if on_log:
-                await _emit(on_log, f"⏭️ Gameplay: {last_gp.get('summary', 'skip')[:120]}", "dim")
-            return True, last_gp, attempts
+                await _emit(
+                    on_log,
+                    f"❌ Gameplay skipped — not evidence: {last_gp.get('summary', 'skip')[:120]}",
+                    "err",
+                )
+            return False, skip_is_not_ok(last_gp), attempts
 
         if last_gp.get("proof_incomplete"):
             if on_log:
@@ -505,16 +530,20 @@ async def run_milestone_verify(
         if gameplay.get("proof_incomplete"):
             proof_incomplete = True
     elif kind == "unity" and browser.get("unity_local_required"):
-        gameplay_ok = bool(runtime_ok and browser.get("unity_scaffold_ok"))
-        gameplay = {
-            "ok": gameplay_ok,
+        gameplay_ok = False
+        gameplay = skip_is_not_ok({
+            "ok": False,
             "skipped": True,
             "unity_local_required": True,
-            "summary": browser.get("summary", ""),
-        }
+            "summary": browser.get("summary") or "Unity local Editor required — scaffold is not a playtest",
+        })
     else:
-        gameplay_ok = browser_ok and not proof_incomplete
-        gameplay = {"ok": gameplay_ok, "skipped": True, "summary": "gameplay skipped"}
+        gameplay_ok = False
+        gameplay = skip_is_not_ok({
+            "ok": False,
+            "skipped": True,
+            "summary": "gameplay skipped — not evidence",
+        })
 
     overall_ok = runtime_ok and browser_ok and gameplay_ok and not proof_incomplete
     screenshot = (

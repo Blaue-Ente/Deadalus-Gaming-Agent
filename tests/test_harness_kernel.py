@@ -148,18 +148,18 @@ def test_skip_is_not_ok():
     assert verified({"ok": True, "skipped": True}) is False
     assert verified({"ok": True, "skipped": False}) is True
     assert verified({"ok": False}) is False
+    assert verified({"ok": True, "na": True, "skipped": False}) is True
 
 
-def test_game_agent_bench_not_allowed():
+def test_game_agent_bench_gates():
     from daedalus.game_agent_bench import allowed, missing_gates, status
     st = status()
-    assert st["allowed"] is False
-    assert allowed() is False
-    missing = missing_gates()
-    assert "one_builder_pipeline" in missing
-    assert "playwright_gameplay" in missing
-    assert "uv_lock" in missing
-    assert "owner_token" not in missing
+    assert missing_gates() == []
+    assert st["allowed"] is True
+    assert allowed() is True
+    assert "one_builder_pipeline" in st["gates"]
+    assert st["gates"]["uv_lock"] is True
+    assert "playtest" in st["note"].lower()
 
 
 def test_wiring_in_source():
@@ -172,6 +172,8 @@ def test_wiring_in_source():
     assert "or bresult.get(\"skipped\")" not in kernel
     assert "skip_is_not_ok" in kernel
     assert "resume_from_stage" in kernel
+    assert "gameplay_for_kind" in kernel
+    assert "maybe_critic" in kernel
     js = (ROOT / "daedalus" / "playground_game_scaffold.py").read_text(encoding="utf-8")
     assert "/api/v1/playground/projects/${slug}/assets/generate" in js
     ci = (ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8")
@@ -179,14 +181,134 @@ def test_wiring_in_source():
     jobs = (ROOT / "daedalus" / "autopilot_jobs.py").read_text(encoding="utf-8")
     assert "започни наново" not in jobs
     assert "checkpoint" in jobs
+    runtime = (ROOT / "daedalus" / "builder_runtime.py").read_text(encoding="utf-8")
+    assert "_start_light_builder_run" not in runtime
+    assert "maps to full kernel pipeline" in runtime
+    verify = (ROOT / "daedalus" / "game_studio_verify.py").read_text(encoding="utf-8")
+    assert 'last_smoke.get("ok") or last_smoke.get("skipped")' not in verify
 
 
-def test_quality_off_by_default(monkeypatch):
+def test_quality_on_by_default(monkeypatch):
     monkeypatch.delenv("DAEDALUS_QUALITY", raising=False)
     from daedalus.game_build_contract import quality_enabled
-    assert quality_enabled() is False
-    monkeypatch.setenv("DAEDALUS_QUALITY", "1")
     assert quality_enabled() is True
+    monkeypatch.setenv("DAEDALUS_QUALITY", "0")
+    assert quality_enabled() is False
+
+
+def test_critic_unparsed_is_not_pass():
+    from daedalus.quality_gate import critic_counts_as_pass
+    assert critic_counts_as_pass({"parsed": False, "passed": True}) is False
+    assert critic_counts_as_pass({"parsed": True, "passed": True}) is True
+    assert critic_counts_as_pass({"parsed": True, "passed": False}) is False
+    assert critic_counts_as_pass({"skipped": True, "parsed": True, "passed": True}) is False
+
+
+def test_unity_missing_editor_is_not_ok(isolated, monkeypatch):
+    monkeypatch.delenv("UNITY_PATH", raising=False)
+    monkeypatch.delenv("UNITY_EDITOR", raising=False)
+    monkeypatch.setattr("daedalus.engine_runners.unity_bin", lambda: "")
+    from app.main import app
+    client = TestClient(app)
+    created = client.post(
+        "/api/v1/playground/projects",
+        json={"name": "Hub", "kind": "unity", "description": "unity"},
+    )
+    assert created.status_code == 200
+    slug = created.json()["project"]["slug"]
+    from daedalus.engine_runners import run_unity
+    from daedalus.game_build_contract import verified
+    out = run_unity(slug)
+    assert out.get("unity_local_required") or out.get("skipped") or not out.get("ok")
+    assert verified(out) is False
+
+
+def test_godot_missing_binary_is_not_ok(isolated, monkeypatch):
+    monkeypatch.setattr("daedalus.godot_runtime_probe.godot_bin", lambda: "")
+    from app.main import app
+    client = TestClient(app)
+    created = client.post(
+        "/api/v1/playground/projects",
+        json={"name": "Veins", "kind": "godot", "description": "godot dungeon"},
+    )
+    assert created.status_code == 200
+    slug = created.json()["project"]["slug"]
+    from daedalus.engine_runners import run_godot
+    from daedalus.game_build_contract import verified
+    out = run_godot(slug)
+    assert verified(out) is False
+    assert out.get("skipped") or not out.get("ok")
+
+
+def test_engine_gameplay_is_na_not_skip_pass():
+    import asyncio
+    from daedalus.engine_runners import gameplay_for_kind
+    from daedalus.game_build_contract import verified
+
+    godot = asyncio.run(gameplay_for_kind("demo", "godot"))
+    assert godot.get("na") is True
+    assert godot.get("skipped") is not True
+    assert verified(godot) is True
+    unity = asyncio.run(gameplay_for_kind("demo", "unity"))
+    assert unity.get("na") is True
+    assert verified(unity) is True
+
+
+def test_maybe_critic_na_when_quality_off(monkeypatch):
+    import asyncio
+    monkeypatch.setenv("DAEDALUS_QUALITY", "0")
+    from daedalus.quality_gate import maybe_critic
+
+    out = asyncio.run(
+        maybe_critic(
+            slug="demo",
+            kind="static",
+            description="",
+            plan=None,
+            bv={},
+            visual=True,
+        )
+    )
+    assert out.get("na") is True
+    assert out.get("ok") is True
+
+
+def test_static_smoke_ok_is_process_na(isolated):
+    import asyncio
+    from app.main import app
+    from daedalus.playground_runner import smoke_test
+
+    client = TestClient(app)
+    created = client.post(
+        "/api/v1/playground/projects",
+        json={"name": "HtmlGame", "kind": "static", "description": "html"},
+    )
+    assert created.status_code == 200
+    slug = created.json()["project"]["slug"]
+    out = asyncio.run(smoke_test(slug))
+    assert out.get("ok") is True
+    assert out.get("skipped") is True
+
+
+def test_unity_smoke_missing_editor_fail_closed(isolated, monkeypatch):
+    import asyncio
+    monkeypatch.delenv("UNITY_PATH", raising=False)
+    monkeypatch.delenv("UNITY_EDITOR", raising=False)
+    monkeypatch.setattr("daedalus.engine_runners.unity_bin", lambda: "")
+    from app.main import app
+    from daedalus.game_build_contract import verified
+    from daedalus.playground_runner import smoke_test
+
+    client = TestClient(app)
+    created = client.post(
+        "/api/v1/playground/projects",
+        json={"name": "HubSmoke", "kind": "unity", "description": "unity"},
+    )
+    assert created.status_code == 200
+    slug = created.json()["project"]["slug"]
+    out = asyncio.run(smoke_test(slug))
+    assert out.get("ok") is False
+    assert verified(out) is False
 
 
 def test_studio_asset_generate_route(isolated, monkeypatch):
@@ -220,6 +342,9 @@ def test_studio_asset_generate_route(isolated, monkeypatch):
     assert "typed-tools" in names
     assert "atomic-router" in names
     assert "durable-runs" in names
+    assert "one-builder" in names
+    assert "quality-gate" in names
+    assert "engine-runners" in names
     auto = client.get(f"/api/v1/playground/projects/{slug}/autopilot")
     assert auto.status_code == 200
     assert "checkpoint" in auto.json()

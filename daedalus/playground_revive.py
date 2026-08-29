@@ -222,7 +222,7 @@ async def onboard_project(
         "repair_files": [],
     }
 
-    if result["ok"] or smoke.get("skipped"):
+    if result["ok"]:
         await pg.update_project(slug, status="idle")
         return result
 
@@ -256,7 +256,7 @@ async def onboard_project(
         result["repaired"] = bool(written)
         smoke2 = await runner.smoke_test(slug)
         result["smoke_after_repair"] = smoke2
-        result["ok"] = bool(smoke2.get("ok") or smoke2.get("skipped"))
+        result["ok"] = bool(smoke2.get("ok"))
         if not result["ok"]:
             result["error"] = smoke2.get("error") or "repair did not fix smoke test"
     else:

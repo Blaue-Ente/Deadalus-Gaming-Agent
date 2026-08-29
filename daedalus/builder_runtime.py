@@ -1,7 +1,7 @@
-"""Adapter for the in-package builder orchestrator.
+"""Adapter for the standalone builder.
 
-Wires MeshRouter LLM + playground workspace + smoke_test into
-``daedalus.kernel.orchestrator``.
+Wires workers + playground workspace + smoke_test into
+``daedalus.kernel.full_autopilot``.
 """
 from __future__ import annotations
 
@@ -16,7 +16,6 @@ from .kernel.orchestrator import (
     BuilderBackend,
     FileChange,
     PipelineState,
-    run_builder_pipeline,
 )
 
 from . import autopilot_jobs as aj
@@ -133,12 +132,13 @@ def start_builder_run(
 ) -> aj.AutopilotJob:
     """Detached autonomous build — survives client disconnect.
 
-    mode=full  → ADN admin autopilot when hosted by ADN; kernel full-autopilot standalone
-    mode=light → portable orchestrator only (fast smoke path)
+    Standalone always uses ``run_full_autopilot`` (one pipeline). ``mode=light``
+    is accepted for compatibility and maps to the same path. ADN host still
+    uses its own admin autopilot when not standalone.
     """
-    if mode == "light":
-        return _start_light_builder_run(slug, description)
     if not _use_adn_admin_pipeline():
+        if mode == "light":
+            log.info("builder mode=light maps to full kernel pipeline (%s)", slug)
         return _start_full_kernel_run(slug, description, resume=resume)
     from argos_data_nexus.admin import start_playground_autopilot_job
 
@@ -163,9 +163,9 @@ async def start_builder_run_async(
     mode: str = "full",
     resume: bool = False,
 ) -> aj.AutopilotJob:
-    if mode == "light":
-        return _start_light_builder_run(slug, description)
     if not _use_adn_admin_pipeline():
+        if mode == "light":
+            log.info("builder mode=light maps to full kernel pipeline (%s)", slug)
         return _start_full_kernel_run(slug, description, resume=resume)
     from argos_data_nexus.admin import start_playground_autopilot_job
 
@@ -224,66 +224,6 @@ def _start_full_kernel_run(slug: str, description: str, *, resume: bool = False)
                 )
         except Exception as exc:
             log.exception("full kernel autopilot failed (%s)", slug)
-            yield ("error", {"message": str(exc)[:300]})
-
-    return aj.start_autopilot(slug, description, _gen)
-
-
-def _start_light_builder_run(slug: str, description: str) -> aj.AutopilotJob:
-    async def _gen():
-        yield ("phase", {"n": 0, "label": "builder-pipeline"})
-        yield ("log", {"line": f"Starting light builder for {slug}", "level": "info"})
-        job = aj.get_active(slug)
-        backend = _ADNBuilderBackend(slug, job)
-        state = PipelineState(slug=slug, description=description)
-        try:
-            await run_builder_pipeline(backend, state)
-            if state.test_ok:
-                proj = await pg.get_project(slug)
-                kind = (proj or {}).get("kind", "static")
-                from .playground_runtime import VISUAL_KINDS
-                from . import playground_browser as pb
-
-                if kind in VISUAL_KINDS:
-                    from .game_build_contract import quality_enabled, skip_is_not_ok, verified
-                    yield ("phase", {"n": 4, "label": "Browser verify"})
-                    bresult = skip_is_not_ok(await pb.verify_app(slug, kind))
-                    if not verified(bresult):
-                        state.review_ok = False
-                        if bresult.get("skipped"):
-                            msg = "browser verify skipped — not evidence"
-                            state.errors.append(msg)
-                            yield ("log", {"line": "Browser verify skipped — not evidence of a playable game", "level": "warn"})
-                        else:
-                            state.errors.append(pb.format_errors_for_fix(bresult)[:800])
-                    else:
-                        yield ("log", {"line": "✓ Browser verify OK", "level": "info"})
-                    if quality_enabled():
-                        yield (
-                            "log",
-                            {
-                                "line": "DAEDALUS_QUALITY=1 — critic is optional; skip is still not OK",
-                                "level": "info",
-                            },
-                        )
-            if state.test_ok and state.review_ok:
-                preview = await backend.preview_url()
-                yield (
-                    "done",
-                    {
-                        "files": [c.path for c in state.changes],
-                        "assets": [],
-                        "preview_url": preview,
-                        "verified": state.test_ok,
-                    },
-                )
-            else:
-                yield (
-                    "error",
-                    {"message": "; ".join(state.errors) or "pipeline blocked at test/review"},
-                )
-        except Exception as exc:
-            log.exception("builder pipeline failed (%s)", slug)
             yield ("error", {"message": str(exc)[:300]})
 
     return aj.start_autopilot(slug, description, _gen)

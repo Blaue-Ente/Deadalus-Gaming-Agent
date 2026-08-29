@@ -24,7 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from . import playground as pg
-from .playground_runtime import PlaygroundRuntime, is_local_only_kind, local_only_kind_message, verify_unity_scaffold
+from .playground_runtime import PlaygroundRuntime, is_local_only_kind, local_only_kind_message
 
 log = logging.getLogger(__name__)
 
@@ -436,35 +436,14 @@ async def smoke_test(slug: str, *, settle: float = 3.5) -> dict[str, Any]:
             "export_ok": gate.get("export_ok"),
         }
 
-    # ── Unity: scaffold gate only (Editor runs locally in Unity Hub) ─────
+    # ── Unity: Editor batchmode required (scaffold is not a playtest) ─────
     if kind == "unity":
-        uv = verify_unity_scaffold(slug)
-        ok = bool(uv.get("ok"))
-        return {
-            "ok": ok,
-            "skipped": False,
-            "healthy": ok,
-            "exited": False,
-            "install_ok": True,
-            "logs": [f"[unity] scaffold check: {uv.get('file_count', 0)} files, {uv.get('cs_count', 0)} .cs"],
-            "error": "" if ok else (uv.get("error") or "Unity scaffold непълен"),
-            "local_only": True,
-        }
+        from .engine_runners import run_unity
+        return run_unity(slug)
 
     if kind == "godot":
-        from .playground_godot_scaffold import verify_godot_scaffold
-        gv = verify_godot_scaffold(slug)
-        ok = bool(gv.get("ok"))
-        return {
-            "ok": ok,
-            "skipped": False,
-            "healthy": ok,
-            "exited": False,
-            "install_ok": True,
-            "logs": [f"[godot] scaffold check: {gv.get('file_count', 0)} files, {gv.get('gd_count', 0)} .gd"],
-            "error": "" if ok else (gv.get("error") or "Godot scaffold непълен"),
-            "local_only": True,
-        }
+        from .engine_runners import run_godot
+        return run_godot(slug)
 
     # ── Vite kinds: compile gate (no long-lived dev server) ──────────────
     if kind in ("vite", "vite-react"):

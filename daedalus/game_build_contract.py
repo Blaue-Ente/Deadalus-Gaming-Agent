@@ -1,8 +1,8 @@
-"""Game build contract — skip is not success; quality is optional and explicit.
+"""Game build contract — skip is not success; quality is on unless opted out.
 
-Visual kinds need a real browser (or Godot headless) result. ``skipped=True``
-must never flip ``ok`` to true. ``playground_quality`` stays off unless
-``DAEDALUS_QUALITY=1``.
+Visual kinds need a real browser (or Godot headless / Unity batchmode) result.
+``skipped=True`` must never flip ``ok`` to true. The visual critic runs unless
+``DAEDALUS_QUALITY=0``. An unparsed critic is not a pass.
 """
 from __future__ import annotations
 
@@ -23,13 +23,16 @@ def skip_is_not_ok(result: dict[str, Any] | None) -> dict[str, Any]:
 
 def verified(result: dict[str, Any] | None) -> bool:
     row = skip_is_not_ok(result)
+    if row.get("na"):
+        return bool(row.get("ok", True))
     return bool(row.get("ok")) and not row.get("skipped")
 
 
 def quality_enabled() -> bool:
-    return (os.environ.get("DAEDALUS_QUALITY") or "").strip().lower() in (
-        "1", "true", "yes", "on",
-    )
+    flag = (os.environ.get("DAEDALUS_QUALITY") or "").strip().lower()
+    if flag in ("0", "false", "no", "off"):
+        return False
+    return True
 
 
 def evaluate_build(
