@@ -21,6 +21,17 @@ class PrefBody(BaseModel):
     kind: str = Field(default="preference", max_length=40)
 
 
+class ModelSelectionBody(BaseModel):
+    provider: str = Field(..., min_length=1, max_length=60)
+    model: str = Field(..., min_length=1, max_length=180)
+    base_url: str = Field(default="", max_length=500)
+    api_key: str = Field(default="", max_length=1000)
+
+
+class RoutingProfileBody(BaseModel):
+    id: str = Field(..., min_length=1, max_length=40)
+
+
 @router.get("/api/v1/llm/local")
 async def llm_local() -> dict[str, Any]:
     from daedalus.local_llm import probe_all, resolve_local_config, local_requested
@@ -47,6 +58,78 @@ async def llm_local() -> dict[str, Any]:
 async def llm_local_models() -> dict[str, Any]:
     from daedalus.local_llm import probe_all
     return {"ok": True, "backends": probe_all()}
+
+
+@router.get("/api/v1/llm/resources")
+async def llm_resources(probe_local: bool = True) -> dict[str, Any]:
+    from daedalus.provider_catalog import snapshot
+
+    return snapshot(probe_local=probe_local)
+
+
+@router.post("/admin/llm-router/api/selection")
+async def llm_select(body: ModelSelectionBody) -> dict[str, Any]:
+    from daedalus.llm_config import PROVIDER_DEFAULTS, set_config
+    from daedalus.llm_router_config import router_write_context
+    from daedalus.local_llm import is_local_provider
+    from daedalus.model_registry import clear_active_mix
+    from daedalus.provider_catalog import provider_definition, snapshot
+
+    definition = provider_definition(body.provider)
+    provider = definition.id
+    if provider not in PROVIDER_DEFAULTS and provider != "custom":
+        raise HTTPException(status_code=400, detail=f"unknown provider: {provider}")
+    base_url = body.base_url.strip()
+    if provider == "custom" and not base_url:
+        raise HTTPException(status_code=400, detail="custom provider requires base_url")
+    if base_url and not base_url.startswith(("http://", "https://")):
+        raise HTTPException(status_code=400, detail="base_url must use http:// or https://")
+    with router_write_context():
+        saved = set_config(
+            model=body.model.strip(),
+            api_key=body.api_key.strip(),
+            provider=provider,
+            base_url=base_url,
+            use_cache=provider == "anthropic",
+        )
+        clear_active_mix()
+    return {
+        "ok": True,
+        "selection": {key: value for key, value in saved.items() if key != "api_key"},
+        "local": is_local_provider(provider),
+        "resources": snapshot(probe_local=False),
+    }
+
+
+@router.post("/admin/llm-router/api/profile")
+async def llm_apply_profile(body: RoutingProfileBody) -> dict[str, Any]:
+    from daedalus.llm_config import get_config
+    from daedalus.llm_router_config import apply_profile, get_llm_profile, router_write_context
+    from daedalus.provider_catalog import resources
+    from daedalus.routing_profiles import profile_by_id
+
+    provider_rows = resources(probe_local=True)
+    profile = profile_by_id(body.id, provider_rows)
+    if not profile:
+        raise HTTPException(status_code=404, detail=f"unknown routing profile: {body.id}")
+    if not profile.get("available"):
+        raise HTTPException(status_code=409, detail=profile.get("reason") or "profile unavailable")
+    current = get_config()
+    master = profile["slots"]["master"]
+    master_key = (
+        str(current.get("api_key") or "")
+        if current.get("provider") == master.get("provider")
+        else ""
+    )
+    with router_write_context():
+        applied = apply_profile(
+            profile["slots"],
+            source_id=profile["id"],
+            source_label=profile["label"],
+            source_kind="resource-profile",
+            master_api_key=master_key,
+        )
+    return {"ok": True, "applied": applied, "profile": get_llm_profile()}
 
 
 @router.post("/api/v1/daedalus/shell")
@@ -131,6 +214,10 @@ class BrowserBody(BaseModel):
     slug: str = Field(default="", max_length=80)
 
 
+class ConnectorTestBody(BaseModel):
+    confirm: bool = False
+
+
 @router.get("/api/v1/daedalus/reach")
 async def reach_doctor() -> dict[str, Any]:
     from daedalus.reach import reach_status
@@ -209,19 +296,31 @@ async def browser_action(body: BrowserBody) -> dict[str, Any]:
 
 
 @router.get("/api/v1/daedalus/connectors")
-async def connectors() -> dict[str, Any]:
+async def connectors(probe: bool = False) -> dict[str, Any]:
     from daedalus.addons import catalog
+    from daedalus.connectors_catalog import catalog as connector_catalog
     from daedalus.mcp_client import status as mcp_status_fn
     from daedalus.mirofish_client import ping as mf_ping
     from daedalus.reach import reach_status
     mf = await mf_ping()
     return {
         "ok": True,
+        "connectors": await connector_catalog(probe=probe),
         "reach": reach_status(),
         "mirofish": mf,
         "mcp": mcp_status_fn(),
         "addons": catalog(),
     }
+
+
+@router.post("/api/v1/daedalus/connectors/{connector_id}/test")
+async def connector_test(connector_id: str, body: ConnectorTestBody) -> dict[str, Any]:
+    from daedalus.connectors_catalog import test_connector
+
+    result = await test_connector(connector_id, confirm=body.confirm)
+    if not result.get("ok") and not result.get("needs_confirm"):
+        raise HTTPException(status_code=400, detail=result.get("error") or "connector test failed")
+    return result
 
 
 class WardrobeActivate(BaseModel):

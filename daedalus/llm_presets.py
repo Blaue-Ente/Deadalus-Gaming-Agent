@@ -511,6 +511,7 @@ def apply_mix_config(
     match the MIX panel.
     """
     from .llm_config import set_config, provider_env_hint, resolve_provider_api_key, provider_default_base_url
+    from .local_llm import default_base_url as local_base_url, dummy_api_key, is_local_provider
     from .workers import WORKER_SLOTS, set_worker_slot
     from . import model_registry as mr
 
@@ -525,6 +526,9 @@ def apply_mix_config(
             raise ValueError("master slot requires provider")
         master_key = (master_api_key or "").strip() or resolve_provider_api_key(master_provider)
         master_base_url = provider_default_base_url(master_provider)
+        if is_local_provider(master_provider):
+            master_key = master_key or dummy_api_key(master_provider)
+            master_base_url = local_base_url(master_provider)
         if not master_key:
             raise ValueError(
                 f"Няма API ключ за master provider '{master_provider}' — "
@@ -551,9 +555,15 @@ def apply_mix_config(
         if master_model and slot_provider == master_provider and master_model:
             slot_key = (master_api_key or "").strip() or resolve_provider_api_key(master_provider)
             slot_base_url = provider_default_base_url(master_provider)
+            if is_local_provider(slot_provider):
+                slot_key = slot_key or dummy_api_key(slot_provider)
+                slot_base_url = local_base_url(slot_provider)
         else:
             slot_key = (sc.get("api_key") or "").strip() or resolve_provider_api_key(slot_provider)
             slot_base_url = (sc.get("base_url") or "").strip() or provider_default_base_url(slot_provider)
+            if is_local_provider(slot_provider):
+                slot_key = slot_key or dummy_api_key(slot_provider)
+                slot_base_url = (sc.get("base_url") or "").strip() or local_base_url(slot_provider)
             if not slot_key:
                 warnings.append(
                     f"Worker '{slot}' ({slot_provider}/{model}) няма API ключ — "

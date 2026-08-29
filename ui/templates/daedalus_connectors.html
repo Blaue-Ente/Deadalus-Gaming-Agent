@@ -49,6 +49,23 @@
     </div>
   </section>
 
+  <section class="bg-argos-panel border border-argos-border rounded-xl p-5">
+    <div class="flex items-start justify-between gap-4 mb-4">
+      <div>
+        <h2 class="text-sm font-semibold text-white">Интеграции</h2>
+        <p class="text-xs text-argos-dim mt-1">
+          Deploy, backend, notifications, observability и външни инструменти.
+          Тайните остават в <code>.env</code>; Daedalus показва само статус и capabilities.
+        </p>
+      </div>
+      <button type="button" onclick="loadConnectorCatalog(true)"
+        class="px-3 py-1.5 rounded-lg text-xs bg-argos-accent text-black">Провери</button>
+    </div>
+    <div id="connector-catalog" class="grid gap-3 sm:grid-cols-2">
+      <p class="text-sm text-argos-dim">Зареждане…</p>
+    </div>
+  </section>
+
   <!-- Preferences -->
   <section class="bg-argos-panel border border-argos-border rounded-xl p-5">
     <h2 class="text-sm font-semibold text-white mb-4">⚙️ Предпочитания</h2>
@@ -176,6 +193,74 @@ async function loadDurability() {
     </div>`).join('') || '<p class="text-gray-500">Няма проекти</p>';
 }
 
+function connectorCard(row) {
+  const card = document.createElement('article');
+  card.className = 'cc-card border rounded-lg p-3';
+  const top = document.createElement('div');
+  top.className = 'flex items-start justify-between gap-3';
+  const title = document.createElement('strong');
+  title.className = 'text-sm text-white';
+  title.textContent = row.label;
+  const status = document.createElement('span');
+  status.className = 'text-[10px] font-mono uppercase ' + (row.ok ? 'text-emerald-400' : 'text-argos-dim');
+  status.textContent = row.status || (row.ok ? 'ready' : 'not configured');
+  top.append(title, status);
+  card.appendChild(top);
+  const caps = document.createElement('p');
+  caps.className = 'text-xs text-argos-dim mt-2';
+  caps.textContent = (row.capabilities || []).join(' · ');
+  card.appendChild(caps);
+  if (row.detail || row.error) {
+    const detail = document.createElement('p');
+    detail.className = 'text-[11px] text-argos-dim mt-2';
+    detail.textContent = row.error || row.detail;
+    card.appendChild(detail);
+  }
+  if (row.env_keys && row.env_keys.length && !row.configured) {
+    const env = document.createElement('code');
+    env.className = 'block text-[10px] text-argos-accent mt-2 break-all';
+    env.textContent = row.env_keys.join(' + ');
+    card.appendChild(env);
+  }
+  if (row.configured && row.testable) {
+    const test = document.createElement('button');
+    test.type = 'button';
+    test.className = 'mt-3 px-3 py-1.5 rounded border border-argos-border text-xs text-argos-accent';
+    test.textContent = 'Тест';
+    test.onclick = () => testCatalogConnector(row.id, test);
+    card.appendChild(test);
+  }
+  return card;
+}
+
+async function loadConnectorCatalog(probe = false) {
+  const box = $('connector-catalog');
+  const d = await api('/api/v1/daedalus/connectors?probe=' + (probe ? 'true' : 'false'));
+  box.replaceChildren();
+  (d.connectors || []).forEach(row => box.appendChild(connectorCard(row)));
+}
+
+async function testCatalogConnector(id, button) {
+  const confirmSend = id === 'discord'
+    ? confirm('Да изпратя тестово съобщение към Discord webhook?')
+    : false;
+  button.disabled = true;
+  button.textContent = 'Проверявам…';
+  try {
+    const r = await fetch(`/api/v1/daedalus/connectors/${encodeURIComponent(id)}/test`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({confirm: confirmSend}),
+    });
+    const data = await r.json();
+    alert(r.ok && data.ok ? '✅ Връзката работи' : '❌ ' + (data.detail || data.error || 'Тестът не мина'));
+    await loadConnectorCatalog(false);
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Тест';
+  }
+}
+
 async function testGithub() {
   const btn = $('btn-test-gh');
   btn.disabled = true; btn.textContent = '⏳…';
@@ -204,5 +289,6 @@ async function savePrefs() {
 function $(id) { return document.getElementById(id); }
 loadStatus();
 loadDurability();
+loadConnectorCatalog(false);
 </script>
 {% endblock %}

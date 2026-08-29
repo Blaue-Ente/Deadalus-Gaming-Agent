@@ -359,6 +359,7 @@ def get_worker_config() -> dict:
         is_nvidia_free_only,
         resolve_provider_api_key,
     )
+    from .local_llm import default_base_url as local_base_url, dummy_api_key, is_local_provider
 
     master = get_config()
     db_cfg = _read_worker_db()
@@ -413,6 +414,9 @@ def get_worker_config() -> dict:
                     or master.get("api_key", "")
                 )
                 base_url = saved.get("base_url") or pd["base_url"]
+                if is_local_provider(provider):
+                    api_key = saved.get("api_key") or dummy_api_key(provider)
+                    base_url = saved.get("base_url") or local_base_url(provider)
             result[slot] = {
                 "model":    saved["model"],
                 "provider": provider,
@@ -459,10 +463,14 @@ def set_worker_slot(slot: str, *, model: str, provider: str,
     """Persist a single worker slot config to Replit DB."""
     from .llm_router_config import require_llm_write_permission
     from .llm_config import PROVIDER_DEFAULTS
+    from .local_llm import default_base_url as local_base_url, dummy_api_key, is_local_provider
 
     require_llm_write_permission()
     cfg = _read_worker_db()
     pd = PROVIDER_DEFAULTS.get(provider, PROVIDER_DEFAULTS["anthropic"])
+    if is_local_provider(provider):
+        api_key = api_key or dummy_api_key(provider)
+        base_url = base_url or local_base_url(provider)
     cfg[slot] = {
         "model":    model,
         "provider": provider,

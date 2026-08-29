@@ -19,7 +19,8 @@ def _as_openai_response(text: str, *, provider: str, model: str) -> dict[str, An
     }
 
 
-async def complete(
+async def _complete_route(
+    cfg: dict[str, Any],
     *,
     system: str = "",
     user: str = "",
@@ -27,19 +28,13 @@ async def complete(
     client_id: str = "daedalus/standalone",
     max_tokens: int = 4096,
     temperature: float | None = None,
-    model: str | None = None,
-    use_cache: bool = True,
     json_mode: bool = False,
 ) -> dict[str, Any]:
-    """Call the configured OpenAI-compatible (or Anthropic) provider directly."""
-    from .llm_config import get_config
-
-    cfg = get_config()
     provider = cfg.get("provider") or "openai"
     api_key = cfg.get("api_key") or ""
     base_url = cfg.get("base_url") or ""
     sdk = cfg.get("sdk") or "openai"
-    used_model = model or cfg.get("model") or ""
+    used_model = cfg.get("model") or ""
     if not api_key:
         from .local_llm import dummy_api_key, is_local_provider
         if is_local_provider(provider) or cfg.get("local"):
@@ -94,3 +89,67 @@ async def complete(
         provider, used_model, intent, client_id, len(text),
     )
     return _as_openai_response(text, provider=provider, model=used_model)
+
+
+async def complete(
+    *,
+    system: str = "",
+    user: str = "",
+    intent: str = "chat",
+    client_id: str = "daedalus/standalone",
+    max_tokens: int = 4096,
+    temperature: float | None = None,
+    model: str | None = None,
+    use_cache: bool = True,
+    json_mode: bool = False,
+) -> dict[str, Any]:
+    """Call the configured provider, then a policy-safe fallback if transiently unavailable."""
+    from .llm_config import get_config
+    from .model_router import fallback_routes, is_retryable_provider_error
+
+    cfg = get_config()
+    if model:
+        cfg = {**cfg, "model": model}
+
+    async def invoke(route_cfg: dict[str, Any]) -> dict[str, Any]:
+        return await _complete_route(
+            route_cfg,
+            system=system,
+            user=user,
+            intent=intent,
+            client_id=client_id,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            json_mode=json_mode,
+        )
+
+    try:
+        return await invoke(cfg)
+    except Exception as primary_error:
+        if model or not is_retryable_provider_error(primary_error):
+            raise
+        for route in fallback_routes(cfg):
+            try:
+                result = await invoke(route.as_dict())
+                result["fallback"] = {
+                    "from_provider": cfg.get("provider"),
+                    "from_model": cfg.get("model"),
+                    "reason": type(primary_error).__name__,
+                }
+                log.warning(
+                    "standalone LLM fallback %s/%s -> %s/%s after %s",
+                    cfg.get("provider"),
+                    cfg.get("model"),
+                    route.provider,
+                    route.model,
+                    type(primary_error).__name__,
+                )
+                return result
+            except Exception as fallback_error:
+                log.warning(
+                    "standalone LLM fallback %s/%s failed: %s",
+                    route.provider,
+                    route.model,
+                    fallback_error,
+                )
+        raise
