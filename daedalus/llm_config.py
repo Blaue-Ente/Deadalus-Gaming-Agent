@@ -350,11 +350,9 @@ def get_config() -> dict:
         extra = applied_model()
     except Exception:
         extra = None
-    if extra and extra.get("model") and isinstance(cfg, dict):
-        cfg = dict(cfg)
-        cfg["model"] = extra["model"]
-        cfg["effort"] = extra.get("tier")
-        cfg["effort_source"] = extra.get("model_source")
+    if extra and isinstance(cfg, dict):
+        from .model_router import overlay_effort
+        cfg = overlay_effort(cfg, extra)
     return cfg
 
 

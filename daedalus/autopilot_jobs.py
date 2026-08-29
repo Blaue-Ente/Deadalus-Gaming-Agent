@@ -42,6 +42,10 @@ _PERSIST_EVERY = 3.0     # min seconds between Replit DB snapshots while running
 _JOB_TTL       = 7200.0  # keep finished jobs in memory this long (2 h)
 _MAX_EVENTS    = 4000    # hard cap on buffered events (safety)
 _TERMINAL      = ("done", "error")
+_ORPHAN_MSG = (
+    "Сървърът рестартира по време на Автопилот. "
+    "Има event log и checkpoint под data/runs — продължи с resume, не започвай от нула."
+)
 
 _AP_JOBS:   dict[str, "AutopilotJob"] = {}
 _AP_ACTIVE: dict[str, str] = {}   # slug → job_id
@@ -117,6 +121,25 @@ class AutopilotJob:
             self.updated = _now()
             self.cond.notify_all()
         self._persist()
+        self._durable(event, data if isinstance(data, dict) else {})
+
+    def _durable(self, event: str, data: dict) -> None:
+        try:
+            from .run_engine import record
+            phase = data.get("n") if isinstance(data.get("n"), int) else data.get("label")
+            ckpt = {
+                "status": self.status,
+                "slug": self.slug,
+                "phase": phase,
+                "error": self.error,
+                "event": event,
+            }
+            if event in ("phase", "done", "error", "file", "interrupted"):
+                record(self.id, event, data, slug=self.slug, checkpoint=ckpt)
+            else:
+                record(self.id, event, data, slug=self.slug)
+        except Exception:
+            log.debug("durable run log skipped", exc_info=True)
 
     async def complete(self, files: list[str], assets: list[str]) -> None:
         async with self.cond:
@@ -127,6 +150,7 @@ class AutopilotJob:
             self.updated = _now()
             self.cond.notify_all()
         self._persist(force=True)
+        self._durable("done", {"files": files, "assets": assets})
 
     async def fail(self, error: str) -> None:
         async with self.cond:
@@ -140,6 +164,7 @@ class AutopilotJob:
             self.updated = _now()
             self.cond.notify_all()
         self._persist(force=True)
+        self._durable("error", {"message": error})
 
     async def mark_interrupted(self, reason: str) -> None:
         async with self.cond:
@@ -151,6 +176,7 @@ class AutopilotJob:
             self.updated = _now()
             self.cond.notify_all()
         self._persist(force=True)
+        self._durable("interrupted", {"message": reason})
 
     async def pause(self) -> bool:
         async with self.cond:
@@ -389,7 +415,7 @@ def _restore(payload: dict) -> "AutopilotJob":
     if status == "running":
         # Server restarted mid-run — the in-memory task is gone.
         status    = "interrupted"
-        job.error = "Сървърът рестартира по време на Автопилот — започни наново."
+        job.error = _ORPHAN_MSG
     job.status = status
     return job
 
@@ -421,7 +447,7 @@ def recover_orphaned_jobs() -> int:
                 continue
             # Orphan found — mark interrupted directly in DB (sync, no asyncio needed)
             snap["status"]  = "interrupted"
-            snap["error"]   = "Сървърът рестартира по време на Автопилот — започни наново."
+            snap["error"]   = _ORPHAN_MSG
             snap["updated"] = _now()
             payload["snapshot"] = snap
             _rdb[k] = json.dumps(payload, ensure_ascii=False)

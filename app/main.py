@@ -144,7 +144,7 @@ async def capabilities() -> dict:
             "offline-kit", "llm-wardrobe", "addons", "capsule",
             "evolution", "windows-desktop", "windows-gui", "live-publish",
             "effort-routing", "world-kit", "long-horizon",
-            "owner-token",
+            "owner-token", "typed-tools", "atomic-router", "durable-runs",
         ],
         "mesh_endpoint": "/api/iyveris",
         "studio": "/",

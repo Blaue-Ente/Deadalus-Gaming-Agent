@@ -114,7 +114,7 @@ def resolve_model(decision: dict[str, Any]) -> dict[str, Any]:
             roles = dict(data.get("roles") or {})
             pinned = roles.get(role)
             if pinned:
-                return {"model": pinned, "model_source": "wardrobe-role"}
+                return {"model": pinned, "provider": "ollama", "model_source": "wardrobe-role"}
             picked = None
             for row in CATALOG:
                 if row["role"] != role:
@@ -124,9 +124,9 @@ def resolve_model(decision: dict[str, Any]) -> dict[str, Any]:
                 if have:
                     picked = name
             if picked:
-                return {"model": picked, "model_source": "wardrobe-installed"}
+                return {"model": picked, "provider": "ollama", "model_source": "wardrobe-installed"}
             if data.get("active"):
-                return {"model": data["active"], "model_source": "wardrobe-active"}
+                return {"model": data["active"], "provider": "ollama", "model_source": "wardrobe-active"}
     except Exception:
         pass
     if tier == "whisper":
@@ -141,7 +141,11 @@ def resolve_model(decision: dict[str, Any]) -> dict[str, Any]:
             )
             mid = (entry or {}).get("model_id")
             if mid:
-                return {"model": mid, "model_source": "registry"}
+                out = {"model": mid, "model_source": "registry"}
+                prov = str((entry or {}).get("provider") or "").strip()
+                if prov:
+                    out["provider"] = prov
+                return out
         except Exception:
             pass
     return {"model": None, "model_source": "owner-default"}

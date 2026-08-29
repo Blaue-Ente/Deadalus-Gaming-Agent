@@ -81,10 +81,10 @@ from .batch_verify import (
     execute_batch, execute_verify,
     BATCH_BLOCK_RE, VERIFY_BLOCK_RE,
 )
-from .tool_parser import get_parser as get_tool_parser
 from .context_compaction import maybe_compact_session_context, track_files_from_text
 from .edit_diff import extract_edit_markers, process_need_edit
 from .native_tools import native_tools_enabled, run_native_discovery_pass
+from .need_scan import scan_need_markers
 from .session_branching import build_branch_context_block, branch_session as _branch_session_fn
 from .steering_queue import pop_steering_messages
 
@@ -1644,7 +1644,9 @@ class Daedalus:
                        "мислиш ли", "какво смяташ", "не ми харесва", "защо е така",
                        "общоприети", "как се настройва", "поговорим")
         )
-        if not _is_conversational:
+        # Native tools are the discovery path. NEED_BATCH planning is leftover
+        # text encoding — skip it when the typed protocol is on.
+        if not _is_conversational and not native_tools_enabled():
             try:
                 _set_live(session_id, "thinking", 0, "Планиране на инструменти…")
                 planning_raw = await _call_claude_primary(
@@ -1664,7 +1666,8 @@ class Daedalus:
             except Exception as _pe:
                 log.warning("daedalus planning-turn failed (non-fatal): %s", _pe)
 
-        # Phase 2 — native tool API discovery (alternative to NEED_BATCH planning)
+        # Phase 2 — native tool API discovery (canonical; NEED_* is fallback)
+        _native_log: list[dict[str, Any]] = []
         if (
             not _planning_succeeded
             and not _is_conversational
@@ -1680,7 +1683,7 @@ class Daedalus:
                     memory=self.memory,
                     session_id=session_id or "",
                     read_file_fn=_read_file_tool,
-                    max_rounds=3,
+                    max_rounds=8,
                 )
                 if _native_text:
                     user_content = user_content + "\n\n" + _native_text
@@ -1690,6 +1693,7 @@ class Daedalus:
                     )
             except Exception as _nt_exc:
                 log.warning("native tools preflight failed (non-fatal): %s", _nt_exc)
+                _native_log = []
 
         if not _planning_succeeded:
             # Normal path: full-persona initial call
@@ -1706,6 +1710,8 @@ class Daedalus:
         # Must be handled BEFORE the general tool re-roll because it may issue
         # multiple LLM sub-calls internally (debug loop).
         tool_calls_used: list[dict[str, Any]] = []
+        if _native_log:
+            tool_calls_used.extend(_native_log)
         propose_result_text = ""
         propose_block = _extract_propose_block(raw)
         if propose_block:
@@ -1729,238 +1735,90 @@ class Daedalus:
         _promise_guard_count = 0  # no-silent-stall guard: max 3 re-rolls per session
         for _tool_iter in range(MAX_TOOL_ITERATIONS):
             # Tool re-roll: if Claude emitted any NEED_* marker, execute tools and re-call.
-            search_q     = _extract_marker(raw, "NEED_SEARCH")
-            web_q        = _extract_marker(raw, "NEED_WEB")
-            fetch_url    = _extract_marker(raw, "NEED_WEB_FETCH")
-            screenshot_u = _extract_marker(raw, "NEED_WEB_SCREENSHOT")
-            gh_q         = _extract_marker(raw, "NEED_GITHUB")
-            mesh_marker = _extract_mesh_marker(raw)
-            skill_q   = _extract_marker(raw, "NEED_SKILL")
-            doc_q     = _extract_marker(raw, "NEED_DOCUMENT")
-            pg_q      = _extract_marker(raw, "NEED_PG")
-            backup_q  = _extract_marker(raw, "NEED_BACKUP")
-            gh_repo_q = _extract_marker(raw, "NEED_GH_REPO")
-            gh_issue_q   = _extract_marker(raw, "NEED_GH_ISSUE")
-            pypi_q       = _extract_marker(raw, "NEED_PYPI")
-            npm_q        = _extract_marker(raw, "NEED_NPM")
-            docs_url     = _extract_marker(raw, "NEED_DOCS")
-            dep_q        = _extract_marker(raw, "NEED_DEP")
-            git_log_q    = _extract_marker(raw, "NEED_GIT_LOG")
-            git_diff_q   = _extract_marker(raw, "NEED_GIT_DIFF")
-            sandbox_code = _extract_sandbox_code(raw)
-            batch_block  = extract_batch_block(raw)
-            verify_block = extract_verify_block(raw)
-            edit_markers = extract_edit_markers(raw) if raw and "NEED_EDIT" in raw else []
-            # Phase 0 — tool_parser position-ordered scan (for logging / future dispatch)
-            _parsed_calls = get_tool_parser().extract_all(raw) if raw else []
+            hit = scan_need_markers(raw)
+            search_q = hit.search_q
+            web_q = hit.web_q
+            fetch_url = hit.fetch_url
+            screenshot_u = hit.screenshot_u
+            gh_q = hit.gh_q
+            mesh_marker = hit.mesh_marker
+            skill_q = hit.skill_q
+            doc_q = hit.doc_q
+            pg_q = hit.pg_q
+            backup_q = hit.backup_q
+            gh_repo_q = hit.gh_repo_q
+            gh_issue_q = hit.gh_issue_q
+            pypi_q = hit.pypi_q
+            npm_q = hit.npm_q
+            docs_url = hit.docs_url
+            dep_q = hit.dep_q
+            git_log_q = hit.git_log_q
+            git_diff_q = hit.git_diff_q
+            sandbox_code = hit.sandbox_code
+            batch_block = hit.batch_block
+            verify_block = hit.verify_block
+            edit_markers = hit.edit_markers
+            _parsed_calls = hit.parsed_calls
             if _parsed_calls and _tool_iter == 0:
                 log.debug(
                     "tool_parser: %d markers at positions %s",
                     len(_parsed_calls),
                     [c.name for c in _parsed_calls[:8]],
                 )
-            # Self-awareness markers
-            endpoints_q  = _extract_marker(raw, "NEED_ENDPOINTS")
-            modules_q    = _extract_marker(raw, "NEED_MODULES")
-            db_schema_q  = _extract_marker(raw, "NEED_DB_SCHEMA")
+            endpoints_q = hit.endpoints_q
+            modules_q = hit.modules_q
+            db_schema_q = hit.db_schema_q
             if db_schema_q:
-                # Parse comma-separated table list (e.g. "trading_concepts, signal_criteria")
                 _tables = [t.strip() for t in re.split(r"[,\s]+", db_schema_q) if t.strip()]
-                try: mark_schema_read(session_id, _tables)
-                except Exception: pass
-            code_search_q = _extract_marker(raw, "NEED_CODE_SEARCH")
-            capability_q  = _extract_marker(raw, "NEED_CAPABILITY")
-            ai_digest_q        = _extract_marker(raw, "NEED_AI_DIGEST")
-            skill_catalog_q    = _extract_marker(raw, "NEED_SKILL_CATALOG")
-            lint_q             = _extract_marker(raw, "NEED_LINT")
-            # TDD loop marker — <NEED_TDD: file_path | test_code | initial_code>
-            from .tdd_loop import parse_tdd_marker as _parse_tdd
-            tdd_m = _parse_tdd(raw) if raw and "NEED_TDD" in raw else None
-            # Playground markers (build → test → publish standalone apps)
-            pg_new_m = re.search(
-                r"<NEED_PLAYGROUND_NEW:\s*([^|>]{1,80})(?:\|([^|>]{1,30}))?(?:\|([^>]{1,300}))?\s*>",
-                raw or "", re.DOTALL
-            ) if raw and "NEED_PLAYGROUND_NEW" in raw else None
-            # NEED_PLAYGROUND_WRITE uses >>> as end delimiter so HTML/JS content
-            # with > characters works correctly. Supports multiple markers per response.
-            pg_write_matches = re.findall(
-                r"<NEED_PLAYGROUND_WRITE:\s*([^|\n]{1,80})\s*\|\s*([^|\n]{1,300})\s*\|\s*([\s\S]*?)>>>",
-                raw or "",
-            ) if raw and "NEED_PLAYGROUND_WRITE" in raw else []
-            pg_write_m = None  # kept for compatibility — handlers use pg_write_matches
-            pg_run_q   = _extract_marker(raw, "NEED_PLAYGROUND_RUN")
-            pg_pub_m = re.search(
-                r"<NEED_PLAYGROUND_PUBLISH:\s*([^|>]{1,80})(?:\|([^>]{1,30}))?\s*>",
-                raw or "", re.DOTALL
-            ) if raw and "NEED_PLAYGROUND_PUBLISH" in raw else None
-            pg_clone_m = re.search(
-                r"<NEED_PLAYGROUND_CLONE:\s*([^|>]{1,300})(?:\|([^>]{1,80}))?\s*>",
-                raw or "", re.DOTALL
-            ) if raw and "NEED_PLAYGROUND_CLONE" in raw else None
-            pg_push_m = re.search(
-                r"<NEED_PLAYGROUND_PUSH:\s*([^|>]{1,80})(?:\|([^>|]{1,80}))?(?:\|([^>]{1,20}))?\s*>",
-                raw or "", re.DOTALL
-            ) if raw and "NEED_PLAYGROUND_PUSH" in raw else None
-            pg_read_m = re.search(
-                r"<NEED_PLAYGROUND_READ:\s*([^|>]{1,80})(?:\|([^>]{1,200}))?\s*>",
-                raw or "", re.DOTALL
-            ) if raw and "NEED_PLAYGROUND_READ" in raw else None
-            # NEED_PLAYGROUND_EDIT — surgical search/replace on ONE existing file.
-            # Uses >>> end delimiter (like WRITE) so search/replace blocks may contain
-            # > chars. Format: <NEED_PLAYGROUND_EDIT: slug | file | search ||| replace >>>
-            # The ||| separates the exact text to find from the text to put in its place.
-            pg_edit_matches = re.findall(
-                r"<NEED_PLAYGROUND_EDIT:\s*([^|\n]{1,80})\s*\|\s*([^|\n]{1,300})\s*\|\s*([\s\S]*?)\|\|\|([\s\S]*?)>>>",
-                raw or "",
-            ) if raw and "NEED_PLAYGROUND_EDIT" in raw else []
-            pg_db_m = re.search(
-                r"<NEED_PLAYGROUND_DB:\s*([^|>]{1,80})\|([^|>]{1,20})(?:\|([^|>]{1,200}))?(?:\|([\s\S]{0,65536}))?\s*>",
-                raw or "", re.DOTALL
-            ) if raw and "NEED_PLAYGROUND_DB" in raw else None
-            # NEED_PLAYGROUND_MANIFEST — Contract-Driven Development: declare the
-            # architectural contract for a project (file ownership, forbidden files,
-            # public_api, rules). Persisted per-slug; enforced at WRITE time.
-            # Format: <NEED_PLAYGROUND_MANIFEST: slug | {json}>
-            pg_manifest_m = re.search(
-                r"<NEED_PLAYGROUND_MANIFEST:\s*([^|\n]{1,80})\s*\|\s*([\s\S]*?)>>>",
-                raw or "", re.DOTALL
-            ) if raw and "NEED_PLAYGROUND_MANIFEST" in raw else None
-            # DRP (DeutschesRechtsPortal) markers
-            drp_law_q    = _extract_marker(raw, "NEED_DRP_LAW")
-            drp_cases_q  = _extract_marker(raw, "NEED_DRP_CASES")
-            drp_search_q = _extract_marker(raw, "NEED_DRP_SEARCH")
-            # NEED_INBOX_MSG: <NEED_INBOX_MSG: Subject | Body | priority>
-            inbox_msg_m = re.search(
-                r"<NEED_INBOX_MSG:\s*([^|>]{1,200})\|([^|>]{1,2000})(?:\|(\d))?\s*>",
-                raw or "", re.DOTALL
-            ) if raw and "NEED_INBOX_MSG" in raw else None
-            # NEED_PROJECT_PLAN: <NEED_PROJECT_PLAN: goal_description>
-            # Big task → auto-plan to multi-step plan with deps + per-step Дедал runs.
-            # Use when task is too large for a single tool loop (e.g. "вмъкни цялата SMC
-            # теория", "анализирай цялата кодова база", "създай 20 концепта"). The plan
-            # runs autonomously via background planner scheduler, one step per fresh chat.
-            project_plan_m = re.search(
-                r"<NEED_PROJECT_PLAN:\s*([^>]{10,2000})\s*>",
-                raw or "", re.DOTALL
-            ) if raw and "NEED_PROJECT_PLAN" in raw else None
-            # NEED_DATA_PROPOSAL: <NEED_DATA_PROPOSAL: category | title | json_payload>
-            # Use for trading_concepts / signal_criteria batch inserts — NO code sandbox.
-            # Stored in outbox; Николай approves with one click in admin panel.
-            data_prop_m = re.search(
-                r"<NEED_DATA_PROPOSAL:\s*([^|>]{1,80})\|([^|>]{1,200})\|([^>]{1,30000})\s*>",
-                raw or "", re.DOTALL
-            ) if raw and "NEED_DATA_PROPOSAL" in raw else None
-            # Cut-off detection: deterministic per-marker parse. Walk every
-            # `<NEED_DATA_PROPOSAL:` opening; if there is NO `>` between it and
-            # the next opening (or end of string), this marker is truncated.
-            # NEED_DATA_PROPOSAL is self-closing — no `</...>` exists.
-            _data_prop_truncated = False
-            if raw and "<NEED_DATA_PROPOSAL:" in raw:
-                _opens = [m.start() for m in re.finditer(r"<NEED_DATA_PROPOSAL:", raw)]
-                for _i, _pos in enumerate(_opens):
-                    _next_open = _opens[_i + 1] if _i + 1 < len(_opens) else len(raw)
-                    _segment = raw[_pos:_next_open]
-                    if ">" not in _segment:
-                        _data_prop_truncated = True
-                        break
-            # NEED_PROGRESS: <NEED_PROGRESS: task_name | pct | message>
-            # pct is 0.0–1.0 (e.g. 0.25 = 25%). Updates live progress bar in admin panel.
-            progress_m = re.search(
-                r"<NEED_PROGRESS:\s*([^|>]{1,80})\|([0-9.]{1,6})\|([^>]{1,200})\s*>",
-                raw or "", re.DOTALL
-            ) if raw and "NEED_PROGRESS" in raw else None
-            # Phase 16 — NEED_JOURNAL_WRITE: <NEED_JOURNAL_WRITE: step | summary | data>
-            # Дедал записва частичен резултат в scratch journal-а на тази сесия.
-            journal_m = re.search(
-                r"<NEED_JOURNAL_WRITE:\s*([^|>]{1,80})\|([^|>]{1,1000})(?:\|([^>]{0,8000}))?\s*>",
-                raw or "", re.DOTALL
-            ) if raw and "NEED_JOURNAL_WRITE" in raw else None
-            # Phase 17B — NEED_TASK_STATE: <NEED_TASK_STATE: goal | phase | remaining>
-            # Дедал записва/обновява persistent task state (cross-session).
-            task_state_m = re.search(
-                r"<NEED_TASK_STATE:\s*([^|>]{1,200})\|([^|>]{1,100})(?:\|([^>]{0,500}))?\s*>",
-                raw or "", re.DOTALL
-            ) if raw and "NEED_TASK_STATE" in raw else None
-            # Phase 17C — NEED_PLAYBOOK: <NEED_PLAYBOOK: query_or_name>
-            # Дедал търси playbook с процедурни стъпки за задачата.
-            playbook_m = re.search(
-                r"<NEED_PLAYBOOK:\s*([^>]{1,200})\s*>",
-                raw or "", re.DOTALL
-            ) if raw and "NEED_PLAYBOOK" in raw else None
-            # Phase 17C — NEED_PLAN_LOCK: <NEED_PLAN_LOCK: plan_id | action>
-            # action: acquire | release | check | extend
-            plan_lock_m = re.search(
-                r"<NEED_PLAN_LOCK:\s*([^|>]{1,100})\|([^>]{1,20})\s*>",
-                raw or "", re.DOTALL
-            ) if raw and "NEED_PLAN_LOCK" in raw else None
-            # NEED_CHECK_PERM: <NEED_CHECK_PERM: perm_class>
-            # Returns GRANTED or DENIED so Дедал knows whether to proceed or ask Николай.
-            check_perm_m = re.search(
-                r"<NEED_CHECK_PERM:\s*([a-zA-Z0-9_]{1,80})\s*>",
-                raw or ""
-            ) if raw and "NEED_CHECK_PERM" in raw else None
-            # [P4] NEED_BLOCKED: <NEED_BLOCKED: reason | tried | next_steps>
-            # Дедал емитира когато е напълно блокиран — записва в Replit DB + UI панел.
-            blocked_m = re.search(
-                r"<NEED_BLOCKED:\s*([^|>]{1,500})\|([^|>]{1,1000})\|([^>]{1,500})\s*>",
-                raw or "", re.DOTALL
-            ) if raw and "NEED_BLOCKED" in raw else None
-            # NEED_PLAN_STEP: <NEED_PLAN_STEP: plan_id | Step Title | Description>
-            plan_step_m = re.search(
-                r"<NEED_PLAN_STEP:\s*([^|>]{1,100})\|([^|>]{1,200})(?:\|([^>]{1,500}))?\s*>",
-                raw or "", re.DOTALL
-            ) if raw and "NEED_PLAN_STEP" in raw else None
-            # NEED_READ_FILE
-            read_file_m  = _READ_FILE_RE.search(raw) if raw and "NEED_READ_FILE" in raw else None
-            read_file_path  = read_file_m.group(1).strip() if read_file_m else None
-            read_file_start = int(read_file_m.group(2)) if read_file_m and read_file_m.group(2) else None
-            read_file_end   = int(read_file_m.group(3)) if read_file_m and read_file_m.group(3) else None
-            # NEED_LOGS
-            logs_m = _LOGS_RE.search(raw) if raw and "NEED_LOGS" in raw else None
-            logs_n = int(logs_m.group(1)) if logs_m else None
-            logs_grep = logs_m.group(2).strip() if logs_m and logs_m.group(2) else None
-            # NEED_WORKER: <NEED_WORKER: slot | task>  — multiple allowed, run in parallel
-            worker_calls = parse_worker_markers(raw)
-            try:
-                from .subagents import parse_subagent_markers
-                subagent_calls = parse_subagent_markers(raw)
-            except Exception:
-                subagent_calls = []
-            # NEED_STAGE / NEED_BUNDLE_START / NEED_BUNDLE_COMMIT  (staged bundle system)
-            try:
-                from .bundle import (
-                    extract_bundle_start, extract_all_stage_blocks, extract_bundle_commit,
-                )
-                _bundle_start_title = extract_bundle_start(raw) if raw and "NEED_BUNDLE_START" in raw else None
-                _stage_blocks       = extract_all_stage_blocks(raw) if raw and "NEED_STAGE" in raw else []
-                _bundle_commit      = extract_bundle_commit(raw) if raw and "NEED_BUNDLE_COMMIT" in raw else None
-            except Exception as _bnd_import_exc:
-                log.debug("bundle import failed (non-fatal): %s", _bnd_import_exc)
-                _bundle_start_title = None
-                _stage_blocks = []
-                _bundle_commit = None
-            has_markers = bool(
-                propose_result_text or web_q or gh_q or mesh_marker or skill_q or doc_q
-                or pg_q or backup_q or gh_repo_q or gh_issue_q
-                or pypi_q or npm_q or docs_url or dep_q
-                or git_log_q or git_diff_q or sandbox_code
-                or read_file_path or logs_n
-                or inbox_msg_m or plan_step_m
-                or endpoints_q or modules_q or db_schema_q or code_search_q or capability_q or ai_digest_q or skill_catalog_q
-                or pg_new_m or pg_write_matches or pg_edit_matches or pg_run_q or pg_pub_m or pg_clone_m
-                or pg_push_m or pg_read_m
-                or drp_law_q or drp_cases_q or drp_search_q
-                or data_prop_m or progress_m or check_perm_m
-                or blocked_m or worker_calls or subagent_calls or project_plan_m
-                or journal_m or task_state_m
-                or playbook_m or plan_lock_m
-                or batch_block or verify_block
-                or edit_markers
-                or _bundle_start_title or _stage_blocks or _bundle_commit
-                or lint_q
-                or tdd_m
-                or pg_manifest_m or pg_db_m
-            )
+                try:
+                    mark_schema_read(session_id, _tables)
+                except Exception:
+                    pass
+            code_search_q = hit.code_search_q
+            capability_q = hit.capability_q
+            ai_digest_q = hit.ai_digest_q
+            skill_catalog_q = hit.skill_catalog_q
+            lint_q = hit.lint_q
+            tdd_m = hit.tdd_m
+            pg_new_m = hit.pg_new_m
+            pg_write_matches = hit.pg_write_matches
+            pg_write_m = hit.pg_write_m
+            pg_run_q = hit.pg_run_q
+            pg_pub_m = hit.pg_pub_m
+            pg_clone_m = hit.pg_clone_m
+            pg_push_m = hit.pg_push_m
+            pg_read_m = hit.pg_read_m
+            pg_edit_matches = hit.pg_edit_matches
+            pg_db_m = hit.pg_db_m
+            pg_manifest_m = hit.pg_manifest_m
+            drp_law_q = hit.drp_law_q
+            drp_cases_q = hit.drp_cases_q
+            drp_search_q = hit.drp_search_q
+            inbox_msg_m = hit.inbox_msg_m
+            project_plan_m = hit.project_plan_m
+            data_prop_m = hit.data_prop_m
+            _data_prop_truncated = hit.data_prop_truncated
+            progress_m = hit.progress_m
+            journal_m = hit.journal_m
+            task_state_m = hit.task_state_m
+            playbook_m = hit.playbook_m
+            plan_lock_m = hit.plan_lock_m
+            check_perm_m = hit.check_perm_m
+            blocked_m = hit.blocked_m
+            plan_step_m = hit.plan_step_m
+            read_file_m = hit.read_file_m
+            read_file_path = hit.read_file_path
+            read_file_start = hit.read_file_start
+            read_file_end = hit.read_file_end
+            logs_m = hit.logs_m
+            logs_n = hit.logs_n
+            logs_grep = hit.logs_grep
+            worker_calls = hit.worker_calls
+            subagent_calls = hit.subagent_calls
+            _bundle_start_title = hit.bundle_start_title
+            _stage_blocks = hit.stage_blocks
+            _bundle_commit = hit.bundle_commit
+            has_markers = bool(propose_result_text) or hit.has_markers
             if not has_markers:
                 # ── Promise-without-marker guard (no-silent-stall) ──
                 # До 3 re-roll-а с нарастваща принуда — моделите да emit-нат

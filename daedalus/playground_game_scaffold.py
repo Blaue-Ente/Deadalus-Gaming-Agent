@@ -17,10 +17,10 @@ log = logging.getLogger(__name__)
 _GENERATE_ASSET_JS = """\
 #!/usr/bin/env node
 /**
- * Generate a PNG asset via ADN Playground API (Vibra-style CLI).
+ * Generate a PNG asset via the Daedalus Studio API.
  * Usage: node scripts/generate-asset.js --prompt "pixel hero" --output assets/player.png
  *
- * Requires ADN admin session cookie or PLAYGROUND_ASSET_TOKEN env (future).
+ * Auth: DAEDALUS_TOKEN (Bearer) or a Studio session cookie.
  * During autopilot, assets are generated server-side — this script is for manual/agent use.
  */
 import { parseArgs } from 'node:util';
@@ -55,13 +55,17 @@ if (!base || !slug) {
   process.exit(1);
 }
 
-const url = `${base}/daedalus/playground/api/projects/${slug}/assets/generate`;
-const res = await fetch(url, {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  credentials: 'include',
-  body: JSON.stringify({ path: rel, prompt, size: values.size }),
-});
+const headers = { 'Content-Type': 'application/json' };
+const token = process.env.DAEDALUS_TOKEN || '';
+if (token) headers.Authorization = `Bearer ${token}`;
+const body = JSON.stringify({ path: rel, prompt, size: values.size });
+const studio = `${base}/api/v1/playground/projects/${slug}/assets/generate`;
+const compat = `${base}/daedalus/playground/api/projects/${slug}/assets/generate`;
+
+let res = await fetch(studio, { method: 'POST', headers, credentials: 'include', body });
+if (res.status === 404) {
+  res = await fetch(compat, { method: 'POST', headers, credentials: 'include', body });
+}
 
 if (!res.ok) {
   const err = await res.text();

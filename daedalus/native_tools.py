@@ -627,7 +627,7 @@ async def run_native_discovery_pass(
     memory: Any,
     session_id: str,
     read_file_fn: Callable[..., dict],
-    max_rounds: int = 6,
+    max_rounds: int = 8,
 ) -> tuple[str | None, list[dict[str, Any]]]:
     """Run native tool rounds. Returns (result_text, tool_log).
 

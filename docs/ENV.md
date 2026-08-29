@@ -46,6 +46,7 @@ Studio → LLM (wardrobe) can switch models without editing `.env` (`wardrobe.js
 | Variable | Meaning |
 |---|---|
 | `DAEDALUS_NATIVE_TOOLS` | `0` = NEED_* markers only; native tools are on by default |
+| `DAEDALUS_QUALITY` | `1` turns the optional playground critic on (default off). A skipped browser check is still not a pass. |
 | `DAEDALUS_EVOLUTION` | `1` turns the gardener on at boot; `0` is a kill switch |
 | `DAEDALUS_EVOLUTION_LLM` | `1` allows a short chat during a cycle |
 

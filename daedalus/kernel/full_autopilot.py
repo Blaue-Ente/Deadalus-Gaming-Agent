@@ -100,6 +100,34 @@ async def _get_kind(backend: BuilderBackend) -> str:
     return "vite-react"
 
 
+def _run_id(backend: BuilderBackend) -> str:
+    job = getattr(backend, "job", None)
+    return str(getattr(job, "id", "") or "")
+
+
+def _save_stage_checkpoint(backend: BuilderBackend, state: PipelineState, *, kind: str, stage: int) -> None:
+    run_id = _run_id(backend)
+    if not run_id:
+        return
+    try:
+        from daedalus.run_engine import record
+        record(
+            run_id,
+            "stage",
+            {"i": stage, "slug": state.slug},
+            slug=state.slug,
+            checkpoint={
+                "stage": stage,
+                "slug": state.slug,
+                "kind": kind,
+                "phase": "build",
+                "plan": state.plan,
+            },
+        )
+    except Exception:
+        log.debug("stage checkpoint skipped", exc_info=True)
+
+
 async def _browser_verify(backend: BuilderBackend) -> dict[str, Any]:
     fn = getattr(backend, "browser_verify", None)
     if callable(fn):
@@ -113,6 +141,8 @@ async def run_full_autopilot(
     *,
     max_repair_rounds: int = 3,
     max_stages: int = 8,
+    resume_from_stage: int = 0,
+    saved_plan: dict[str, Any] | None = None,
 ) -> PipelineState:
     """Staged full pipeline for standalone (and portable) backends."""
     kind = await _get_kind(backend)
@@ -132,27 +162,37 @@ async def run_full_autopilot(
     await backend.emit("phase", {"n": 1, "label": "Планиране"})
     state.set_agent_status(AgentRole.PLANNER, "running")
 
-    plan_sys = (
-        "Ти си строителен плановик. Връщаш САМО валиден JSON.\n"
-        f"ПЛАТФОРМА: {kind}\n{kind_rules}\n\n"
-        'ФОРМАТ: {"title":"...","stages":[{"id":1,"title":"...","goal":"...",'
-        '"instructions":"...","files":["src/App.jsx"]}]}\n'
-        "3-8 етапа, всеки с 1-3 файла в 'files'."
-        + (f"\n\n{lessons}" if lessons else "")
-    )
-    plan_raw = await backend.llm(
-        AgentRole.PLANNER,
-        f"Проект: {state.description}\n\nСъздай строителен план.",
-        system=plan_sys,
-    )
-    plan = _extract_json(plan_raw) or {}
-    stages = plan.get("stages") if isinstance(plan.get("stages"), list) else []
-    if not stages:
-        stages = [{"id": 1, "title": "MVP", "goal": "Working app", "instructions": state.description, "files": []}]
-    stages = stages[:max_stages]
-    state.plan = {"title": plan.get("title", state.slug), "stages": stages, "kind": kind}
+    if saved_plan:
+        stages = saved_plan.get("stages") if isinstance(saved_plan.get("stages"), list) else []
+        if not stages:
+            stages = [{"id": 1, "title": "MVP", "goal": "Working app", "instructions": state.description, "files": []}]
+        stages = stages[:max_stages]
+        state.plan = saved_plan
+        await backend.emit("log", {"line": f"План от checkpoint: {len(stages)} етапа", "level": "info"})
+    else:
+        plan_sys = (
+            "Ти си строителен плановик. Връщаш САМО валиден JSON.\n"
+            f"ПЛАТФОРМА: {kind}\n{kind_rules}\n\n"
+            'ФОРМАТ: {"title":"...","stages":[{"id":1,"title":"...","goal":"...",'
+            '"instructions":"...","files":["src/App.jsx"]}]}\n'
+            "3-8 етапа, всеки с 1-3 файла в 'files'."
+            + (f"\n\n{lessons}" if lessons else "")
+        )
+        plan_raw = await backend.llm(
+            AgentRole.PLANNER,
+            f"Проект: {state.description}\n\nСъздай строителен план.",
+            system=plan_sys,
+        )
+        plan = _extract_json(plan_raw) or {}
+        stages = plan.get("stages") if isinstance(plan.get("stages"), list) else []
+        if not stages:
+            stages = [{"id": 1, "title": "MVP", "goal": "Working app", "instructions": state.description, "files": []}]
+        stages = stages[:max_stages]
+        state.plan = {"title": plan.get("title", state.slug), "stages": stages, "kind": kind}
+        await backend.emit("log", {"line": f"План: {len(stages)} етапа — {plan.get('title', state.slug)}", "level": "info"})
     state.set_agent_status(AgentRole.PLANNER, "done")
-    await backend.emit("log", {"line": f"План: {len(stages)} етапа — {plan.get('title', state.slug)}", "level": "info"})
+    if resume_from_stage <= 0:
+        _save_stage_checkpoint(backend, state, kind=kind, stage=0)
 
     # ── STAGED BUILD ─────────────────────────────────────────────────────
     await backend.emit("phase", {"n": 2, "label": "Строене"})
@@ -166,6 +206,9 @@ async def run_full_autopilot(
 
     for i, stage in enumerate(stages, 1):
         title = stage.get("title", f"Stage {i}")
+        if i <= resume_from_stage:
+            await backend.emit("log", {"line": f"⏭ Етап {i}/{len(stages)} вече е в checkpoint — пропускам", "level": "dim"})
+            continue
         await backend.emit("log", {"line": f"▶ Етап {i}/{len(stages)}: {title}", "level": "info"})
         stage_files = stage.get("files") or []
         prompt = (
@@ -189,6 +232,7 @@ async def run_full_autopilot(
             for c in changes:
                 _upsert_change(state, c)
             await backend.emit("log", {"line": f"  ✓ {n} файл(а)", "level": "dim"})
+        _save_stage_checkpoint(backend, state, kind=kind, stage=i)
 
     state.set_agent_status(AgentRole.CODER, "done")
 
@@ -223,17 +267,29 @@ async def run_full_autopilot(
     state.set_agent_status(AgentRole.TESTER, "done" if state.test_ok else "blocked")
 
     # ── BROWSER VERIFY (visual kinds) ────────────────────────────────────
+    from daedalus.game_build_contract import quality_enabled, skip_is_not_ok, verified
+
     browser_ok = True
     if state.test_ok and kind in VISUAL_KINDS:
         await backend.emit("phase", {"n": 4, "label": "Browser verify"})
-        bresult = await _browser_verify(backend)
-        browser_ok = bool(bresult.get("ok", True) or bresult.get("skipped"))
+        bresult = skip_is_not_ok(await _browser_verify(backend))
+        browser_ok = verified(bresult)
         if not browser_ok:
             err = (bresult.get("summary") or "browser verify failed")[:500]
+            if bresult.get("skipped"):
+                err = "browser verify skipped — not evidence"
             await backend.emit("log", {"line": f"⚠ Browser: {err}", "level": "warn"})
             state.errors.append(err)
-        elif not bresult.get("skipped"):
+        else:
             await backend.emit("log", {"line": "✓ Browser verify OK", "level": "info"})
+        if quality_enabled():
+            await backend.emit(
+                "log",
+                {
+                    "line": "DAEDALUS_QUALITY=1 — critic is optional; skip is still not OK",
+                    "level": "info",
+                },
+            )
 
     # ── PLAYTEST (MatrAIx-style personas, visual kinds) ──────────────────
     playtest_block = ""
