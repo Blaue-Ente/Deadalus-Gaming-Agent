@@ -58,6 +58,8 @@ async def shell_run(body: ShellBody) -> dict[str, Any]:
         slug=body.slug,
         timeout=body.timeout,
     )
+    if result.get("disabled"):
+        raise HTTPException(status_code=403, detail=result.get("error") or "shell disabled")
     return {"ok": bool(result.get("ok")), **result}
 
 

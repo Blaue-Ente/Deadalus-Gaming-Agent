@@ -101,6 +101,7 @@ def run_desktop(
     os.environ["DAEDALUS_STANDALONE"] = "1"
     os.environ["HOST"] = host
     os.environ["PORT"] = str(port)
+    os.environ["DAEDALUS_BIND_HOST"] = host
 
     import uvicorn
 

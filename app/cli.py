@@ -30,7 +30,11 @@ def main(argv: list[str] | None = None) -> None:
     sub = parser.add_subparsers(dest="cmd")
 
     serve = sub.add_parser("serve", help="Run the standalone HTTP service")
-    serve.add_argument("--host", default=os.environ.get("HOST", "0.0.0.0"))
+    serve.add_argument(
+        "--host",
+        default=os.environ.get("HOST", "127.0.0.1"),
+        help="Bind address (default 127.0.0.1). Public bind requires DAEDALUS_TOKEN.",
+    )
     serve.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8787")))
     serve.add_argument("--reload", action="store_true")
 
@@ -166,9 +170,12 @@ def main(argv: list[str] | None = None) -> None:
     if args.cmd in (None, "serve"):
         os.environ.setdefault("DAEDALUS_STANDALONE", "1")
         import uvicorn
-        host = getattr(args, "host", os.environ.get("HOST", "0.0.0.0"))
+        from daedalus.owner_auth import assert_bind_allowed, default_serve_host
+        host = getattr(args, "host", default_serve_host())
         port = getattr(args, "port", int(os.environ.get("PORT", "8787")))
         reload = bool(getattr(args, "reload", False))
+        os.environ["DAEDALUS_BIND_HOST"] = str(host)
+        assert_bind_allowed(str(host))
         uvicorn.run("app.main:app", host=host, port=port, reload=reload)
         return
     parser.print_help()

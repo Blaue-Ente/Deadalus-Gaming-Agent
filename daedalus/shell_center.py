@@ -1,7 +1,10 @@
-"""Sandboxed shell for the Studio command center and native ``run_command`` tool.
+"""Command runner for the Studio command center and native ``run_command`` tool.
 
-Commands run in a cwd jail (product / playground / data). Secrets are stripped
-from the child environment. Destructive host-wide patterns are refused.
+Default is argv-first (``shlex.split`` + ``subprocess.run(..., shell=False)``).
+Cwd is jailed to product / playground / data. Secrets are stripped from the
+child environment. This is **not** a container: a child ``python`` can still
+open host paths. Public bind disables the runner unless
+``DAEDALUS_SHELL_ISOLATION=1``.
 """
 from __future__ import annotations
 
@@ -9,6 +12,7 @@ import json
 import logging
 import os
 import re
+import shlex
 import subprocess
 import time
 from pathlib import Path
@@ -38,6 +42,7 @@ _BLOCKED = (
 )
 
 _SECRET_ENV = re.compile(r"(API_KEY|SECRET|TOKEN|PASSWORD|PRIVATE_KEY|CREDENTIAL)$", re.I)
+_META = re.compile(r"[|;&`$<>\n]")
 
 _SAFE_ENV = {
     "PATH", "HOME", "LANG", "LC_ALL", "TERM", "TZ", "USER", "TMPDIR",
@@ -90,6 +95,28 @@ def resolve_cwd(cwd: str | None = None, *, slug: str = "") -> Path:
     return product_root()
 
 
+def isolation_enabled() -> bool:
+    return (os.environ.get("DAEDALUS_SHELL_ISOLATION") or "").strip().lower() in (
+        "1", "true", "yes", "on", "container",
+    )
+
+
+def legacy_shell_enabled() -> bool:
+    return (os.environ.get("DAEDALUS_SHELL_LEGACY") or "").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
+
+
+def shell_enabled() -> bool:
+    flag = (os.environ.get("DAEDALUS_SHELL") or "1").strip().lower()
+    if flag in ("0", "false", "no", "off"):
+        return False
+    if isolation_enabled():
+        return True
+    from daedalus.owner_auth import bind_is_loopback
+    return bind_is_loopback()
+
+
 def _blocked(command: str) -> str | None:
     text = command.strip()
     if not text:
@@ -97,6 +124,12 @@ def _blocked(command: str) -> str | None:
     for pat in _BLOCKED:
         if pat.search(text):
             return f"blocked by safety policy ({pat.pattern})"
+    if _META.search(text) and not legacy_shell_enabled():
+        return (
+            "shell metacharacters refused "
+            "(pipes, redirection, and $ expansion need DAEDALUS_SHELL_LEGACY=1; "
+            "this is still not a container)"
+        )
     return None
 
 
@@ -147,6 +180,28 @@ def history(limit: int = 40) -> list[dict[str, Any]]:
     return rows
 
 
+def _fail(
+    command: str,
+    reason: str,
+    *,
+    cwd: str = "",
+    disabled: bool = False,
+    elapsed_ms: int = 0,
+) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "blocked": True,
+        "disabled": disabled,
+        "error": reason,
+        "command": command,
+        "stdout": "",
+        "stderr": "",
+        "exit_code": 126,
+        "cwd": cwd,
+        "elapsed_ms": elapsed_ms,
+    }
+
+
 def run_command(
     command: str,
     *,
@@ -154,42 +209,37 @@ def run_command(
     slug: str = "",
     timeout: int | None = None,
 ) -> dict[str, Any]:
-    """Run ``command`` via the system shell inside the cwd jail."""
+    """Run ``command`` as argv (or legacy shell if opted in) inside the cwd jail."""
     t0 = time.perf_counter()
+    if not shell_enabled():
+        return _fail(
+            command,
+            "shell disabled: public bind requires DAEDALUS_SHELL_ISOLATION=1",
+            disabled=True,
+        )
     reason = _blocked(command)
     if reason:
-        return {
-            "ok": False,
-            "blocked": True,
-            "error": reason,
-            "command": command,
-            "stdout": "",
-            "stderr": "",
-            "exit_code": 126,
-            "cwd": "",
-            "elapsed_ms": 0,
-        }
+        return _fail(command, reason)
     try:
         workdir = resolve_cwd(cwd, slug=slug)
     except ValueError as exc:
-        return {
-            "ok": False,
-            "blocked": True,
-            "error": str(exc),
-            "command": command,
-            "stdout": "",
-            "stderr": "",
-            "exit_code": 126,
-            "cwd": cwd or "",
-            "elapsed_ms": 0,
-        }
+        return _fail(command, str(exc), cwd=cwd or "")
 
     timeout_s = DEFAULT_TIMEOUT_S if timeout is None else int(timeout)
     timeout_s = max(1, min(timeout_s, MAX_TIMEOUT_S))
+    use_shell = legacy_shell_enabled()
+    argv: list[str] | None = None
+    if not use_shell:
+        try:
+            argv = shlex.split(command, posix=True)
+        except ValueError as exc:
+            return _fail(command, f"could not parse command: {exc}", cwd=str(workdir))
+        if not argv:
+            return _fail(command, "empty command", cwd=str(workdir))
     try:
         proc = subprocess.run(
-            command,
-            shell=True,
+            command if use_shell else argv,
+            shell=use_shell,
             cwd=str(workdir),
             env=_child_env(),
             capture_output=True,
@@ -201,6 +251,7 @@ def run_command(
         row = {
             "ok": proc.returncode == 0,
             "blocked": False,
+            "disabled": False,
             "error": "" if proc.returncode == 0 else f"exit {proc.returncode}",
             "command": command,
             "stdout": stdout,
@@ -213,6 +264,7 @@ def run_command(
         row = {
             "ok": False,
             "blocked": False,
+            "disabled": False,
             "error": f"timeout after {timeout_s}s",
             "command": command,
             "stdout": "",
@@ -225,6 +277,7 @@ def run_command(
         row = {
             "ok": False,
             "blocked": False,
+            "disabled": False,
             "error": str(exc)[:300],
             "command": command,
             "stdout": "",
