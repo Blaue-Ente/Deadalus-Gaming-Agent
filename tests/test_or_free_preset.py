@@ -86,6 +86,9 @@ def test_static_scaffold_escapes_canvas_in_description(harness_tmp, tmp_path):
     html = (dest / "index.html").read_text(encoding="utf-8")
     assert "<canvas>" not in html.lower()
     assert "&lt;canvas&gt;" in html.lower()
+
+
+def test_rate_limited_detects_openrouter_429():
     from daedalus.workers import _is_rate_limited
 
     class Fake:
@@ -97,6 +100,23 @@ def test_static_scaffold_escapes_canvas_in_description(harness_tmp, tmp_path):
     assert _is_rate_limited(Fake())
     assert _is_rate_limited(RuntimeError("HTTP Error 429: Too Many Requests"))
     assert not _is_rate_limited(RuntimeError("timeout"))
+
+
+def test_extract_coder_files_accepts_html_fence():
+    from daedalus.kernel.full_autopilot import extract_coder_files
+
+    raw = "Here you go:\n```html\n<!DOCTYPE html>\n<html><body><canvas></canvas></body></html>\n```\n"
+    files = extract_coder_files(raw, "demo")
+    assert "index.html" in files
+    assert "<canvas>" in files["index.html"]
+
+    named = "```index.html\n<html><canvas id='g'></canvas></html>\n```"
+    files = extract_coder_files(named, "demo")
+    assert "<canvas id='g'>" in files["index.html"]
+
+    blocks = "===FILE: index.html===\n<html>ok</html>\n===END==="
+    files = extract_coder_files(blocks, "demo")
+    assert files["index.html"] == "<html>ok</html>"
 
 
 def test_or_free_in_preset_library():
