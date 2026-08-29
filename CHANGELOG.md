@@ -20,6 +20,7 @@ The version in `pyproject.toml` is the source of truth for the package.
 - Command Center (Hub, Playground, Game Studio, LLM, settings) uses the same gold / warm surface as Studio: shared `daedalus-tokens.css`, mark, serif brand. Tailwind palettes that were cyan/emerald map onto that surface.
 - Public builder API is mounted at `/api/v1/daedalus/builder` (same `run_full_autopilot` path). Owner token still required.
 - World pane: Reach search (уеб / Reddit) and A/B playtest slug.
+- Telegram bot (BotFather token): same `agent.chat` as Studio, pairing / allowlist, Studio → Свят approve. Not a personal Telegram login.
 
 ## [0.3.7] — 2026-08-29
 

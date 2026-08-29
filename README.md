@@ -4,53 +4,81 @@
   <img src="assets/logo/daedalus.svg" width="128" height="128" alt="Daedalus mark: labyrinth and compass-bird" />
 </p>
 
-Independent coding agent. **Games first**, apps second, verify is part of building.
+<p align="center">
+  <strong>The coding agent that builds playable games — then checks that they actually run.</strong><br />
+  Games first. Apps second. Verify is part of building.
+</p>
 
-[![pipeline status](https://gitlab.com/Blaue-Ente/deadalus-agent-0/badges/main/pipeline.svg)](https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/pipelines)
-[![Latest Release](https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/badges/release.svg)](https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/releases)
+<p align="center">
+  <a href="https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/pipelines"><img src="https://gitlab.com/Blaue-Ente/deadalus-agent-0/badges/main/pipeline.svg" alt="pipeline status" /></a>
+  <a href="https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/releases"><img src="https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/badges/release.svg" alt="Latest Release" /></a>
+</p>
 
-Daedalus writes real files, runs a shell, builds games and apps, then **checks** that they work — smoke, browser, playtest. It is not an advice chatbot. It runs on a laptop, Docker, or a VPS, with SQLite and a direct LLM (cloud or local Ollama).
+Daedalus writes real files, runs a jailed shell, builds games and apps, then **proves** they work — smoke, browser, playtest. It is not an advice chatbot. Run it on a laptop, Docker, or a VPS (SQLite + a cloud LLM or local Ollama). Talk from **Studio in the browser** or from **Telegram** on your phone while the same process keeps working — even when Studio is only on `127.0.0.1`.
+
+Use any model you want — AllToken, OpenRouter, Novita, NVIDIA, or Ollama / LM Studio / llama.cpp / vLLM. Switch in Studio → LLM. No lock-in.
 
 | | |
 |---|---|
-| Repository | https://gitlab.com/Blaue-Ente/deadalus-agent-0 |
-| License | [MIT](LICENSE) |
-| Python | 3.11+ |
-| Studio | http://127.0.0.1:8787 |
-| Package | `daedalus` · CLI `daedalus` |
-| Mark | [assets/logo](assets/logo/README.md) |
+| **Studio** | Chat, Playground, shell, wardrobe, verify. One process, port 8787. |
+| **Lives where you do** | Browser Studio, Windows Start Menu, Telegram bot (pairing, not a userbot). |
+| **Closed loop, not silent** | Memory, learned skills, idle gardener. Harness patches wait for **Approve**. |
+| **Games, judged** | Phaser / canvas / Vite + Three.js; Godot 4; Unity scaffold. Playtest personas + A/B. |
+| **Delegates** | Worker slots and `spawn_subagent` (files + shell, jailed). |
+| **Runs anywhere** | Loopback laptop, Docker volume, VPS. Telegram polls out — no public 8787 required for chat. |
 
 ---
 
-## Get Daedalus on your PC
+## Quick start
 
-The GitLab tree **is** the product. Copy the whole repo (ZIP or `git clone`). Git is optional.
+The GitLab tree **is** the product. Copy the whole repo (ZIP or `git clone`). Git is optional. There is no `curl | bash` installer on purpose.
 
 | How | Windows | Linux / macOS |
 |---|---|---|
-| Extra `.exe` option | `install.ps1` or `Daedalus-Setup.exe` → Start Menu **Daedalus.exe**. Private CPython is fetched if you have none. Not a PyInstaller one-file freeze. | — |
+| Start Menu app | `install.ps1` or `Daedalus-Setup.exe` → **Daedalus.exe**. Private CPython if PATH has none. Not a PyInstaller freeze. | — |
 | Developer | Python 3.11+ venv (below) | Python 3.11+ venv (below) |
 | Docker | `docker compose up --build` | same |
 
 **ZIP (no git):** [deadalus-agent-0-main.zip](https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/archive/main/deadalus-agent-0-main.zip) or **Code → Download source code**. Unzip, then:
 
 ```powershell
-# Windows — Start Menu + Daedalus.exe (downloads CPython if PATH has no 3.11+)
+# Windows — Start Menu + Daedalus.exe
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 .\packaging\windows\install.ps1 -DesktopShortcut
 ```
 
-Build the wizard installer on a Windows PC: `.\packaging\windows\build-setup.ps1` → `dist\Daedalus-Setup.exe`.
+```bash
+# Linux / macOS
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e .
+cp .env.example .env          # at least one LLM key, or use Ollama
+export DAEDALUS_STANDALONE=1
+daedalus serve --port 8787    # http://127.0.0.1:8787
+```
 
-Step-by-step: [docs/INSTALL.md](docs/INSTALL.md) · [packaging/windows/README.md](packaging/windows/README.md).
+After install: `daedalus` (Studio), `daedalus models` (what to pull), `daedalus gateway` (Telegram). Full steps: [docs/INSTALL.md](docs/INSTALL.md) · Telegram: [docs/MESSAGING.md](docs/MESSAGING.md).
 
-GitLab project avatar (not set by git): **Settings → General → Project avatar** ← `assets/logo/daedalus-avatar.png`.
+GitLab project avatar: **Settings → General → Project avatar** ← `assets/logo/daedalus-avatar.png`.
+
+---
+
+## Studio vs Telegram
+
+| Action | Studio / CLI | Telegram |
+|---|---|---|
+| Start | `daedalus serve` or Start Menu **Daedalus** | BotFather token in `.env`, then DM the bot |
+| Chat | type in Studio | send a message (after pairing) |
+| Fresh session | new chat / effort | `/new` |
+| Status | World pane, `/health` | `/status` |
+| Stop a turn | (new message in Studio) | `/stop` |
+| Pair a new phone | — | bot gives a code → `daedalus gateway pair CODE` or Studio → Свят → Одобри |
 
 ---
 
 ## Contents
 
-- [Get Daedalus on your PC](#get-daedalus-on-your-pc)
+- [Quick start](#quick-start)
+- [Studio vs Telegram](#studio-vs-telegram)
 - [What Daedalus is](#what-daedalus-is)
 - [What it can do](#what-it-can-do)
 - [Requirements](#requirements)
@@ -73,6 +101,7 @@ GitLab project avatar (not set by git): **Settings → General → Project avata
 
 ---
 
+
 ## What Daedalus is
 
 Daedalus is **one process**: FastAPI + Studio UI + the agent loop (plan → code → test → verify).
@@ -90,10 +119,11 @@ Data lives under `$DAEDALUS_DATA` (default `data/daedalus/` on the machine, `%LO
 
 | Capability | Where |
 |---|---|
-| Chat (Bulgarian / English) | Studio `/` · `POST /api/v1/daedalus/chat` |
+| Chat (Bulgarian / English) | Studio `/` · Telegram DM · `POST /api/v1/daedalus/chat` |
 | Files and projects | Playground `playground/projects/{slug}` |
 | Shell | Studio Shell · `POST /api/v1/daedalus/shell` (jail, secrets stripped from env) |
 | Native tools | `read_file`, `write_file`, `run_command`, `web_search`, `web_fetch`, `web_read`, `generate_image`, `remember`, `code_search`, `browser`, `mcp_call`, `spawn_subagent`, `playtest` |
+| Telegram | Bot from @BotFather. Pairing / allowlist. Same `agent.chat`. [docs/MESSAGING.md](docs/MESSAGING.md) |
 | Local LLM | Studio **wardrobe** — hardware profile + Ollama pull; or `DAEDALUS_PROVIDER=ollama` |
 | Offline kit | `DAEDALUS_OFFLINE=1` / Studio toggle — no search/images; local model + capsules still work |
 | Sub-agents | worker slots **and** `spawn_subagent` (files + shell, jailed) |
@@ -111,7 +141,7 @@ Data lives under `$DAEDALUS_DATA` (default `data/daedalus/` on the machine, `%LO
 | Windows app | Start Menu **Daedalus** (WebView2 / Tk) |
 | Evolution | optional idle gardener; patches still wait for Approve |
 
-Studio tab **World** shows Reach / playtest / MCP status.
+Studio tab **World** shows Reach / Telegram / playtest / MCP status.
 
 ---
 
@@ -133,6 +163,7 @@ Studio tab **World** shows Reach / playtest / MCP status.
 | Blender jobs | [Blender 4.x](https://www.blender.org/download/) locally — Daedalus only **emits** a script |
 | Docker | Docker Engine + Compose |
 | Live publish | `NETLIFY_AUTH_TOKEN` and/or `GITLAB_TOKEN`, or Node (`npx`) for a 1-hour preview |
+| Telegram | Bot token from [@BotFather](https://t.me/BotFather) — [docs/MESSAGING.md](docs/MESSAGING.md) |
 
 Daedalus does **not** ship 7 GB of weights. The wardrobe recommends a Qwen/coder size from RAM/VRAM; you pull the model.
 
@@ -333,7 +364,8 @@ After `pip install -e .` the command is `daedalus` (same as `python -m app.cli`)
 
 | Command | What it does |
 |---|---|
-| `daedalus serve [--host] [--port] [--reload]` | HTTP Studio + API (default bind `127.0.0.1`) |
+| `daedalus serve [--host] [--port] [--reload] [--no-gateway]` | HTTP Studio + API (default bind `127.0.0.1`). Polls Telegram if a bot token is set. |
+| `daedalus gateway [status\|pair\|list\|revoke\|say\|start]` | Telegram pairing and optional foreground poller |
 | `daedalus ping [--message …]` | One LLM call, no UI |
 | `daedalus models` | Effective provider + probe of local backends |
 | `daedalus desktop [--ui auto\|webview\|tk\|browser\|none]` | Window + local server |
@@ -384,6 +416,7 @@ deadalus-agent-0/
 | [ARCHITECTURE.md](ARCHITECTURE.md) | Layers, paths, game doctrine |
 | [DEPLOY.md](DEPLOY.md) | PC, Docker, Windows, fly.io, Render |
 | [docs/INSTALL.md](docs/INSTALL.md) | Copy the repo, Windows `.exe` option, venv, Docker |
+| [docs/MESSAGING.md](docs/MESSAGING.md) | Telegram bot, pairing, channel posts |
 | [docs/ENV.md](docs/ENV.md) | Environment variables |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | How to contribute |
 | [SECURITY.md](SECURITY.md) | How to report issues |

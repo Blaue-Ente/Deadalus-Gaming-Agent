@@ -71,6 +71,7 @@ Data (projects, SQLite, Chroma) lives in volume `daedalus-data` at `/var/lib/dae
 - Persist the volume. It holds Playground workspaces + SQLite.
 - Put a reverse proxy (Caddy/nginx) in front for HTTPS.
 - Before exposing the port: set `DAEDALUS_TOKEN`, change the peer secret in `.env` (see [docs/ENV.md](docs/ENV.md)), and listen through TLS, not bare `0.0.0.0` without a reverse proxy.
+- Telegram commands do **not** need a public 8787. The container/VM polls `api.telegram.org`. See [docs/MESSAGING.md](docs/MESSAGING.md).
 
 ### fly.io
 

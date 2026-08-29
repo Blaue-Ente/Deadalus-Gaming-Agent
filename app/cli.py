@@ -80,6 +80,25 @@ def main(argv: list[str] | None = None) -> None:
         help="Start the server only (same as --no-gui)",
     )
 
+    serve.add_argument(
+        "--no-gateway",
+        action="store_true",
+        help="Do not poll Telegram (DAEDALUS_GATEWAY=0)",
+    )
+
+    gw = sub.add_parser("gateway", help="Telegram (and later chat) into the same agent as Studio")
+    gw_sub = gw.add_subparsers(dest="gateway_cmd")
+    gw_sub.add_parser("status", help="Bot, pairing, poller")
+    gw_sub.add_parser("start", help="Foreground poller without Studio HTTP")
+    gw_pair = gw_sub.add_parser("pair", help="Approve a pairing code")
+    gw_pair.add_argument("code")
+    gw_sub.add_parser("list", help="Paired and pending users")
+    gw_rev = gw_sub.add_parser("revoke", help="Drop a paired user")
+    gw_rev.add_argument("platform", nargs="?", default="telegram")
+    gw_rev.add_argument("user_id")
+    gw_say = gw_sub.add_parser("say", help="Post to DAEDALUS_TELEGRAM_CHANNEL_ID")
+    gw_say.add_argument("text", nargs="+")
+
     args = parser.parse_args(argv)
     if args.cmd == "publish":
         import subprocess
@@ -167,8 +186,51 @@ def main(argv: list[str] | None = None) -> None:
             open_browser=_desktop_open_browser(args),
             ui=_desktop_ui(args),
         ))
+    if args.cmd == "gateway":
+        os.environ.setdefault("DAEDALUS_STANDALONE", "1")
+        action = getattr(args, "gateway_cmd", None) or "status"
+        from daedalus import messaging
+        if action == "start":
+            os.environ.pop("DAEDALUS_GATEWAY", None)
+            import asyncio
+            from daedalus.telegram_gateway import run_forever
+            raise SystemExit(asyncio.run(run_forever()))
+        if action == "pair":
+            out = messaging.approve(args.code)
+            print(out.get("error") or f"paired {out.get('paired')}")
+            raise SystemExit(0 if out.get("ok") else 1)
+        if action == "revoke":
+            out = messaging.revoke(args.platform, args.user_id)
+            print("revoked" if out.get("revoked") else "not paired")
+            return
+        if action == "say":
+            import asyncio
+            from daedalus.telegram_gateway import notify_channel
+            text = " ".join(args.text)
+            out = asyncio.run(notify_channel(text))
+            print(out.get("error") or "sent")
+            raise SystemExit(0 if out.get("ok") else 1)
+        snap = messaging.snapshot()
+        if action == "list":
+            for row in snap.get("paired") or []:
+                print("paired", row.get("key"), row.get("username") or "")
+            for row in snap.get("pending") or []:
+                print("pending", row.get("code"), row.get("user_id"), row.get("username") or "")
+            if not (snap.get("paired") or snap.get("pending")):
+                print("(empty)")
+            return
+        bot = snap.get("bot") or {}
+        print(
+            f"configured={snap.get('configured')} polling={snap.get('polling')} "
+            f"bot=@{bot.get('username') or '-'} pairing={snap.get('pairing')}"
+        )
+        print(f"allowlist={len(snap.get('allowlist') or [])} paired={len(snap.get('paired') or [])} pending={len(snap.get('pending') or [])}")
+        print(snap.get("help"))
+        return
     if args.cmd in (None, "serve"):
         os.environ.setdefault("DAEDALUS_STANDALONE", "1")
+        if getattr(args, "no_gateway", False):
+            os.environ["DAEDALUS_GATEWAY"] = "0"
         import uvicorn
         from daedalus.owner_auth import assert_bind_allowed, default_serve_host
         host = getattr(args, "host", default_serve_host())
