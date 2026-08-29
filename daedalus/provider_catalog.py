@@ -110,11 +110,18 @@ def resources(*, probe_local: bool = True) -> list[dict[str, Any]]:
             status = "ready" if configured else "unreachable"
             discovered = list(local_probe.get("models") or [])
         else:
-            base_url = str(
-                db_cfg.get("base_url")
-                if selected_provider == provider_id and db_cfg.get("base_url")
-                else defaults.get("base_url") or ""
-            )
+            if definition.kind == "custom":
+                base_url = str(
+                    db_cfg.get("base_url")
+                    if selected_provider == provider_id and db_cfg.get("base_url")
+                    else ""
+                )
+            else:
+                base_url = str(
+                    db_cfg.get("base_url")
+                    if selected_provider == provider_id and db_cfg.get("base_url")
+                    else defaults.get("base_url") or ""
+                )
             has_key = bool(
                 (selected_provider == provider_id and db_cfg.get("api_key"))
                 or resolve_provider_api_key(provider_id)

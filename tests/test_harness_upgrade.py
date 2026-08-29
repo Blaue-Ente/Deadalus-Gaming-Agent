@@ -57,6 +57,8 @@ def test_provider_resources_group_available_ai(harness_tmp, monkeypatch):
     resources = {row["id"]: row for row in data["resources"]}
     assert resources["openrouter"]["configured"] is True
     assert resources["ollama"]["kind"] == "local"
+    assert resources["custom"]["configured"] is False
+    assert resources["custom"]["base_url"] == ""
     assert "qwen2.5-coder:7b" in {
         model["id"] for model in resources["ollama"]["models"]
     }
