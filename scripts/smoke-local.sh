@@ -39,14 +39,22 @@ print("health", h.get("service"), "sqlite", h.get("sqlite"), "chroma", h.get("ch
 PY
 curl -fsS -o /tmp/daedalus-studio.html "http://127.0.0.1:${PORT}/"
 curl -fsS -o /tmp/daedalus-cc.html "http://127.0.0.1:${PORT}/admin/daedalus"
-curl -fsS -o /tmp/daedalus-plans.json "http://127.0.0.1:${PORT}/admin/daedalus/planner/plans"
-curl -fsS -o /tmp/daedalus-radar.json "http://127.0.0.1:${PORT}/admin/daedalus/radar/sources"
+curl -fsS -o /tmp/daedalus-bootstrap.json "http://127.0.0.1:${PORT}/api/v1/auth/bootstrap"
+TOKEN="$(python3 - <<'PY'
+import json
+print(json.load(open("/tmp/daedalus-bootstrap.json"))["token"])
+PY
+)"
+AUTH=( -H "Authorization: Bearer ${TOKEN}" )
+curl -fsS "${AUTH[@]}" -o /tmp/daedalus-plans.json "http://127.0.0.1:${PORT}/admin/daedalus/planner/plans"
+curl -fsS "${AUTH[@]}" -o /tmp/daedalus-radar.json "http://127.0.0.1:${PORT}/admin/daedalus/radar/sources"
 grep -q "Дедал" /tmp/daedalus-studio.html
+grep -q "owner-auth.js" /tmp/daedalus-studio.html
 grep -q "Дедал" /tmp/daedalus-cc.html
 grep -q '"plans"' /tmp/daedalus-plans.json
 grep -q '"sources"' /tmp/daedalus-radar.json
 curl -fsS -o /tmp/daedalus-apps.json "http://127.0.0.1:${PORT}/apps/menu.json"
-curl -fsS -o /tmp/daedalus-mode.json "http://127.0.0.1:${PORT}/admin/daedalus/mode"
+curl -fsS "${AUTH[@]}" -o /tmp/daedalus-mode.json "http://127.0.0.1:${PORT}/admin/daedalus/mode"
 python3 - << PY
 import json
 apps=json.load(open("/tmp/daedalus-apps.json"))

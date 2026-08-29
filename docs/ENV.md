@@ -20,8 +20,11 @@ Without them you need a local provider (Ollama and so on).
 | Variable | Default | Meaning |
 |---|---|---|
 | `DAEDALUS_STANDALONE` | `1` in Docker/CLI | SQLite + direct LLM. Leave it on in this repo. |
-| `HOST` | `127.0.0.1` (desktop) / `0.0.0.0` (Docker) | Bind address |
+| `HOST` | `127.0.0.1` (CLI default; Docker `0.0.0.0`) | Bind address. Public bind requires `DAEDALUS_TOKEN`. |
 | `PORT` | `8787` | HTTP port |
+| `DAEDALUS_TOKEN` | (generated on loopback) | Owner secret for Studio/API. File: `$DAEDALUS_DATA/owner.token` |
+| `DAEDALUS_SHELL_ISOLATION` | — | `1` allows `run_command` when not on loopback |
+| `DAEDALUS_SHELL_LEGACY` | — | `1` opts in to shell metacharacters (still not a container) |
 | `DAEDALUS_DATA` | `data/daedalus/` | SQLite, Chroma, proposals, evolution |
 | `DAEDALUS_PLAYGROUND` | `playground/projects` | Working projects |
 | `DAEDALUS_WINDOWS_APP` | — | Set by the Windows installer; data goes to `%LOCALAPPDATA%\Daedalus` |
@@ -61,4 +64,4 @@ Studio → LLM (wardrobe) can switch models without editing `.env` (`wardrobe.js
 
 ## Peer HTTP
 
-`.env.example` includes a shared secret for the optional HTTP peer ping. Change it before a public bind. Do not commit it.
+`.env.example` includes a shared secret for the optional HTTP peer ping. Change it before a public bind. Do not commit it. A public bind also needs `DAEDALUS_TOKEN` — the peer secret is not a substitute.

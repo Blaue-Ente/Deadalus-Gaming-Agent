@@ -96,11 +96,11 @@ Check the LLM without the UI: `python -m app.cli ping` and `python -m app.cli mo
 
 ```bash
 cp .env.example .env
-# fill a key
+# fill an LLM key and, for Docker, DAEDALUS_TOKEN
 docker compose up --build
 ```
 
-Studio is still http://127.0.0.1:8787. Data lives in volume `daedalus-data`.
+Studio is still http://127.0.0.1:8787. Data lives in volume `daedalus-data`. Compose publishes `0.0.0.0` inside the container, so set `DAEDALUS_TOKEN` in `.env` first.
 
 ---
 

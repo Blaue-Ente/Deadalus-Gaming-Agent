@@ -1,4 +1,5 @@
 # Дедал — Studio на /   Command Center на /admin/daedalus
+# HOST=0.0.0.0 requires DAEDALUS_TOKEN in .env (python3 -c "import secrets; print(secrets.token_urlsafe(32))")
 services:
   daedalus:
     build: .
@@ -10,6 +11,7 @@ services:
       DAEDALUS_PLAYGROUND: /var/lib/daedalus/playground
       HOST: 0.0.0.0
       PORT: "8787"
+      DAEDALUS_TOKEN: ${DAEDALUS_TOKEN:-}
       ALLTOKEN_API_KEY: ${ALLTOKEN_API_KEY:-}
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       NOVITA_API_KEY: ${NOVITA_API_KEY:-}
