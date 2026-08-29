@@ -239,7 +239,13 @@ def test_project_actions_and_canonical_navigation_are_wired(standalone_tmp):
     assert "/admin/daedalus/agent" in projects.text
     assert "/admin/daedalus/review" in projects.text
     assert "/admin/daedalus/settings" in projects.text
+    assert "/admin/static/tailwind.css" in projects.text
+    assert "cdn.tailwindcss.com" not in projects.text
+    assert "/admin/static/daedalus-playground.js" in projects.text
     assert '_daedalus_nav.html' not in projects.text
+    assert client.get("/admin/static/tailwind.css").status_code == 200
+    assert client.get("/admin/static/daedalus-playground.js").status_code == 200
+    assert client.get("/admin/daedalus/settings").status_code == 200
 
     legacy = client.get("/admin/daedalus/playground", follow_redirects=False)
     assert legacy.status_code == 307

@@ -14,3 +14,4 @@ build/
 packaging/windows/redist/*.nupkg
 packaging/windows/runtime/
 .coverage
+node_modules/

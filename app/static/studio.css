@@ -9,6 +9,17 @@ body {
   font-size: 14px;
   line-height: 1.45;
 }
+.skip-link {
+  position: fixed;
+  left: 1rem;
+  top: -4rem;
+  z-index: 100;
+  padding: 0.6rem 0.85rem;
+  color: #1a1408;
+  background: var(--gold-2);
+  border-radius: var(--radius);
+}
+.skip-link:focus { top: 1rem; }
 
 button, input, select, textarea {
   font: inherit;
@@ -36,6 +47,15 @@ button.primary {
 }
 button.primary:hover:not(:disabled) { background: var(--gold-2); }
 input, select, textarea { width: 100%; padding: 0.5rem 0.65rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
 .shell {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr) 360px;
