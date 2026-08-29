@@ -77,3 +77,26 @@ async def maybe_critic(
     )
     critic["ok"] = critic_counts_as_pass(critic)
     return critic
+
+
+def polish_prompt(
+    *,
+    slug: str,
+    kind: str,
+    description: str,
+    critic: dict[str, Any],
+) -> str:
+    """Holistic polish prompt from the last critic result."""
+    from . import playground as pg
+    from .playground_quality import build_polish_prompt
+    from .playground_verify_fix import _is_sensitive
+
+    return build_polish_prompt(
+        description=description or "",
+        kind=kind,
+        critic=critic,
+        slug=slug,
+        read_tree_fn=pg.read_tree,
+        read_file_fn=lambda s, p, max_bytes=90000: pg.read_file(s, p, max_bytes=max_bytes),
+        is_sensitive_fn=_is_sensitive,
+    )

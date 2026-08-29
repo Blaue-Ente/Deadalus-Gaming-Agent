@@ -15,6 +15,7 @@ from app.admin_compat import router as admin_compat_router
 from app.envload import load_env_file
 from app.playground_api import router as playground_router
 from app.harness_api import router as harness_router
+from daedalus.builder_router import router as builder_router
 from daedalus.playground_router import router as published_apps_router
 from daedalus.paths import product_root, repo_root, chroma_dir
 from daedalus.identity_standalone import DAEDALUS_STANDALONE_PREAMBLE
@@ -75,13 +76,14 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(
     title="Daedalus",
     description="Independent coding agent — games, apps, self-improvement.",
-    version="0.3.5",
+    version="0.3.8",
     lifespan=lifespan,
 )
 app.include_router(playground_router)
 app.include_router(published_apps_router)
 app.include_router(admin_compat_router)
 app.include_router(harness_router)
+app.include_router(builder_router)
 if _UI_STATIC.is_dir():
     app.mount("/admin/static", StaticFiles(directory=_UI_STATIC), name="admin-static")
 if _STATIC.is_dir():
@@ -145,7 +147,7 @@ async def capabilities() -> dict:
             "evolution", "windows-desktop", "windows-gui", "live-publish",
             "effort-routing", "world-kit", "long-horizon",
             "owner-token", "typed-tools", "atomic-router", "durable-runs",
-            "one-builder", "quality-gate", "engine-runners",
+            "one-builder", "quality-gate", "engine-runners", "studio-shell",
         ],
         "mesh_endpoint": "/api/iyveris",
         "studio": "/",

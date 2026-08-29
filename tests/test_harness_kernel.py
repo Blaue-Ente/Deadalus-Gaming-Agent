@@ -158,6 +158,7 @@ def test_game_agent_bench_gates():
     assert st["allowed"] is True
     assert allowed() is True
     assert "one_builder_pipeline" in st["gates"]
+    assert "quality_polish_loop" in st["gates"]
     assert st["gates"]["uv_lock"] is True
     assert "playtest" in st["note"].lower()
 
@@ -174,6 +175,8 @@ def test_wiring_in_source():
     assert "resume_from_stage" in kernel
     assert "gameplay_for_kind" in kernel
     assert "maybe_critic" in kernel
+    assert "polish_prompt" in kernel
+    assert "max_polish_passes" in kernel
     js = (ROOT / "daedalus" / "playground_game_scaffold.py").read_text(encoding="utf-8")
     assert "/api/v1/playground/projects/${slug}/assets/generate" in js
     ci = (ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8")
@@ -345,6 +348,39 @@ def test_studio_asset_generate_route(isolated, monkeypatch):
     assert "one-builder" in names
     assert "quality-gate" in names
     assert "engine-runners" in names
+    assert "studio-shell" in names
     auto = client.get(f"/api/v1/playground/projects/{slug}/autopilot")
     assert auto.status_code == 200
     assert "checkpoint" in auto.json()
+
+
+def test_command_center_uses_studio_tokens(isolated):
+    from app.main import app
+    client = TestClient(app)
+    hub = client.get("/admin/daedalus/hub")
+    assert hub.status_code == 200
+    text = hub.text
+    assert "daedalus-tokens.css" in text
+    assert "command-center.css" in text
+    assert "daedalus-mark.png" in text
+    assert "ArgosDataNexus" not in text
+    tokens = client.get("/static/daedalus-tokens.css")
+    assert tokens.status_code == 200
+    assert "#c9a227" in tokens.text
+    cc = client.get("/admin/static/command-center.css")
+    assert cc.status_code == 200
+    assert "var(--gold)" in cc.text
+    llm = client.get("/admin/llm-router")
+    assert llm.status_code == 200
+    assert "MeshRouter" not in llm.text
+    listed = client.get("/api/v1/daedalus/builder/projects")
+    assert listed.status_code == 200
+    assert listed.json().get("ok") is True
+
+
+def test_expo_metro_skip_is_not_ok_in_source():
+    browser = (ROOT / "daedalus" / "playground_browser.py").read_text(encoding="utf-8")
+    assert "Expo Metro не стартира — not evidence" in browser
+    assert 'ok": True, "skipped": True, "summary": "Expo Metro' not in browser
+    gp = (ROOT / "daedalus" / "playground_gameplay_verify.py").read_text(encoding="utf-8")
+    assert "gameplay skip — not evidence" in gp

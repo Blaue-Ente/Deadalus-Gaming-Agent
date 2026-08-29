@@ -22,6 +22,7 @@ GATES: dict[str, bool] = {
     "asset_pipeline": True,
     "ci_ruff": True,
     "uv_lock": True,
+    "quality_polish_loop": True,
 }
 
 

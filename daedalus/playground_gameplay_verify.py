@@ -5,6 +5,7 @@ import logging
 from typing import Any
 
 from . import playground as pg
+from .game_build_contract import skip_is_not_ok
 from .playground_browser import VISUAL_KINDS, _find_chrome, _serve_static
 from .playground_runtime import verify_unity_scaffold
 
@@ -289,8 +290,8 @@ async def gameplay_verify_app(
             finally:
                 stop()
         uv = verify_unity_scaffold(slug)
-        return {
-            "ok": bool(uv.get("ok")),
+        return skip_is_not_ok({
+            "ok": False,
             "skipped": True,
             "summary": (
                 "Unity: няма studio/preview — scaffold "
@@ -299,11 +300,11 @@ async def gameplay_verify_app(
             ),
             "checks": [{"id": "unity_scaffold", "ok": bool(uv.get("ok")), "detail": uv.get("error") or "ok"}],
             "unity_local_required": True,
-            "proof_incomplete": not uv.get("ok"),
-        }
+            "proof_incomplete": True,
+        })
 
     if kind not in VISUAL_KINDS:
-        return {"ok": True, "skipped": True, "summary": f"gameplay skip ({kind})", "checks": []}
+        return {"ok": True, "skipped": False, "na": True, "summary": f"gameplay N/A ({kind})", "checks": []}
 
     root = pg.project_dir(slug)
 
@@ -336,7 +337,7 @@ async def gameplay_verify_app(
             rec = await runner.start(slug, install_deps=True)
             port = rec.get("port")
             if not port:
-                return {"ok": False, "skipped": True, "summary": "Expo не стартира", "checks": []}
+                return skip_is_not_ok({"ok": False, "skipped": True, "summary": "Expo не стартира", "checks": []})
             return await _run_gameplay_on_url(
                 slug, f"http://127.0.0.1:{port}/", kind=kind, milestone_id=milestone_id,
             )
@@ -346,7 +347,7 @@ async def gameplay_verify_app(
             except Exception:
                 pass
 
-    return {"ok": True, "skipped": True, "summary": "gameplay skip", "checks": []}
+    return skip_is_not_ok({"ok": False, "skipped": True, "summary": "gameplay skip — not evidence", "checks": []})
 
 
 def format_gameplay_for_fix(result: dict[str, Any]) -> str:

@@ -26,6 +26,9 @@ async def require_builder_auth(
         return "mesh"
     if x_argos_key and _adn_keys().verify(x_argos_key) is not None:
         return "api"
+    from .host import standalone_mode
+    if standalone_mode():
+        return "owner"
     if not mesh_expected:
         return "dev"
     raise HTTPException(status_code=401, detail="Missing or invalid builder auth.")

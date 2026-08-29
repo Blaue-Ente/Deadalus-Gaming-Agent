@@ -9,7 +9,7 @@
 <div class="max-w-6xl mx-auto">
 {% include "_daedalus_nav.html" %}
 
-  <p class="text-gray-400 text-sm mb-4">Строй · тествай в sandbox · публикувай като ADN раздел · push към GitHub</p>
+  <p class="text-gray-400 text-sm mb-4">Строй · тествай в sandbox · публикувай · push към GitHub</p>
 
   <!-- GitHub / connectors status -->
   <div id="gh-status" class="mb-4 text-xs font-mono px-3 py-2 rounded border border-gray-700 bg-gray-900 text-gray-400 flex flex-wrap items-center justify-between gap-2">
@@ -3373,7 +3373,7 @@ function githubPushSetupMessage(gh) {
     '1. github.com/settings/tokens → Generate new token (classic)\n' +
     '2. Отметни: repo (пълен достъп)\n' +
     '3. Replit → Secrets → GITHUB_TOKEN = новият токен\n' +
-    '4. Redeploy на ADN\n' +
+    '4. Redeploy на Daedalus\n' +
     '5. Playground → ⬆ GitHub (без да пишеш нищо)\n\n' +
     (gh?.hint || 'Отвори /admin/daedalus/connectors за детайли.')
   );
@@ -3623,11 +3623,11 @@ function closeLogs() { $('logs-modal').classList.add('hidden'); if (_logTimer) c
 // ── Kind note ──────────────────────────────────────────────────
 const KIND_INFO = {
   auto:      { pub: true,  note: '🧠 Дедал анализира описанието и избира оптималната платформа автоматично. Натисни <b>✨ Генерирай</b> за препоръка преди старт.', cls: 'text-indigo-400 bg-indigo-900/30 border border-indigo-700/40' },
-  static:    { pub: true,  note: '✅ Публикуем — ще живее на <b>/apps/{slug}</b> в ADN', cls: 'text-emerald-400 bg-emerald-900/30 border border-emerald-700/40' },
+  static:    { pub: true,  note: '✅ Публикуем — ще живее на <b>/apps/{slug}</b>', cls: 'text-emerald-400 bg-emerald-900/30 border border-emerald-700/40' },
   fastapi:   { pub: false, note: '⚙️ Dev test само — публикуване: Push GitHub → свържи с <b>Railway / Render</b>', cls: 'text-yellow-400 bg-yellow-900/20 border border-yellow-700/30' },
   streamlit: { pub: false, note: '⚙️ Dev test само — Push GitHub → <b>Streamlit Community Cloud</b> (безплатно)', cls: 'text-yellow-400 bg-yellow-900/20 border border-yellow-700/30' },
-  vite:        { pub: true,  note: '✅ Публикуем — <b>🔨 Build &amp; Publish</b> ще build-не dist/ и го запише в ADN на <b>/apps/{slug}</b>', cls: 'text-emerald-400 bg-emerald-900/30 border border-emerald-700/40' },
-  'vite-react':{ pub: true,  note: '✅ Публикуем — React 18 + JSX. <b>🔨 Build &amp; Publish</b> ще build-не dist/ и го запише в ADN на <b>/apps/{slug}</b>', cls: 'text-cyan-400 bg-cyan-900/30 border border-cyan-700/40' },
+  vite:        { pub: true,  note: '✅ Публикуем — <b>🔨 Build &amp; Publish</b> ще build-не dist/ и го запише на <b>/apps/{slug}</b>', cls: 'text-emerald-400 bg-emerald-900/30 border border-emerald-700/40' },
+  'vite-react':{ pub: true,  note: '✅ Публикуем — React 18 + JSX. <b>🔨 Build &amp; Publish</b> ще build-не dist/ и го запише на <b>/apps/{slug}</b>', cls: 'text-cyan-400 bg-cyan-900/30 border border-cyan-700/40' },
   node:        { pub: false, note: '⚙️ Dev test само — Push GitHub → <b>Railway / Render</b> (Node.js, безплатно)', cls: 'text-yellow-400 bg-yellow-900/20 border border-yellow-700/30' },
   expo:        { pub: true,  note: '📱 React Native / Expo. Dev preview = Expo Web в браузъра. <b>🔨 Build &amp; Publish</b> = <code>expo export --platform web</code> → /apps/{slug}. ⚠️ Първа инсталация ~5 мин.', cls: 'text-pink-400 bg-pink-900/30 border border-pink-700/40' },
   unity:       { pub: false, note: '🎮 Unity C# — не се пуска в cloud. Scaffold + Git → Unity Hub локално.', cls: 'text-amber-400 bg-amber-900/20 border border-amber-700/30' },
@@ -3944,7 +3944,7 @@ async function autoPackAssets() {
   finally { if (btn) { btn.disabled = false; btn.textContent = '📦 Auto-pack от описание'; } }
 }
 
-// ── Netlify deploy (за static проекти вече публикувани в ADN) ──
+// ── Netlify deploy (за static проекти вече публикувани) ──
 async function netlifyDeploy(slug) {
   const token = prompt(
     'Netlify Personal Access Token (от app.netlify.com → User settings → OAuth):\n' +
