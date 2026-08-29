@@ -177,6 +177,10 @@ class BrowserBody(BaseModel):
     slug: str = Field(default="", max_length=80)
 
 
+class ConnectorTestBody(BaseModel):
+    confirm: bool = False
+
+
 @router.get("/api/v1/daedalus/reach")
 async def reach_doctor() -> dict[str, Any]:
     from daedalus.reach import reach_status
@@ -255,19 +259,31 @@ async def browser_action(body: BrowserBody) -> dict[str, Any]:
 
 
 @router.get("/api/v1/daedalus/connectors")
-async def connectors() -> dict[str, Any]:
+async def connectors(probe: bool = False) -> dict[str, Any]:
     from daedalus.addons import catalog
+    from daedalus.connectors_catalog import catalog as connector_catalog
     from daedalus.mcp_client import status as mcp_status_fn
     from daedalus.mirofish_client import ping as mf_ping
     from daedalus.reach import reach_status
     mf = await mf_ping()
     return {
         "ok": True,
+        "connectors": await connector_catalog(probe=probe),
         "reach": reach_status(),
         "mirofish": mf,
         "mcp": mcp_status_fn(),
         "addons": catalog(),
     }
+
+
+@router.post("/api/v1/daedalus/connectors/{connector_id}/test")
+async def connector_test(connector_id: str, body: ConnectorTestBody) -> dict[str, Any]:
+    from daedalus.connectors_catalog import test_connector
+
+    result = await test_connector(connector_id, confirm=body.confirm)
+    if not result.get("ok") and not result.get("needs_confirm"):
+        raise HTTPException(status_code=400, detail=result.get("error") or "connector test failed")
+    return result
 
 
 class WardrobeActivate(BaseModel):
