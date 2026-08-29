@@ -117,6 +117,26 @@ class PlaytestBody(BaseModel):
     with_llm: bool = False
 
 
+class LabCreateBody(BaseModel):
+    title: str = Field(default="", max_length=120)
+    source: str = Field(default="", max_length=500)
+
+
+class LabInstallBody(BaseModel):
+    path: str = Field(..., min_length=1, max_length=500)
+
+
+class DissectBody(BaseModel):
+    source: str = Field(default="", max_length=500)
+    slug: str = Field(default="", max_length=80)
+    lab_id: str = Field(default="", max_length=80)
+    path: str = Field(default="", max_length=500)
+    create_lab: bool = True
+    live: bool = True
+    description: str = Field(default="", max_length=4000)
+    name: str = Field(default="", max_length=120)
+
+
 class MirofishSubmitBody(BaseModel):
     text: str = Field(..., min_length=20, max_length=80000)
     requirement: str = Field(default="", max_length=4000)
@@ -169,6 +189,79 @@ async def playtest_run(body: PlaytestBody) -> dict[str, Any]:
         use_browser=body.use_browser,
         llm_fn=llm_fn,
     )
+
+
+@router.get("/api/v1/daedalus/labs/status")
+async def labs_host_status() -> dict[str, Any]:
+    from daedalus.play_lab import probe_host
+    return probe_host()
+
+
+@router.get("/api/v1/daedalus/labs")
+async def labs_list() -> dict[str, Any]:
+    from daedalus.play_lab import list_labs, probe_host
+    return {"ok": True, "labs": list_labs(), "host": probe_host()}
+
+
+@router.post("/api/v1/daedalus/labs")
+async def labs_create(body: LabCreateBody) -> dict[str, Any]:
+    from daedalus.play_lab import create_lab
+    row = create_lab(title=body.title, source=body.source)
+    return {"ok": True, **row}
+
+
+@router.post("/api/v1/daedalus/labs/{lab_id}/install")
+async def labs_install(lab_id: str, body: LabInstallBody) -> dict[str, Any]:
+    from daedalus.play_lab import install_into_lab
+    try:
+        return install_into_lab(lab_id, body.path)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/api/v1/daedalus/labs/{lab_id}/start")
+async def labs_start(lab_id: str) -> dict[str, Any]:
+    from daedalus.play_lab import start_vm
+    try:
+        return start_vm(lab_id)
+    except ValueError as extra:
+        raise HTTPException(status_code=400, detail=str(extra)) from extra
+
+
+@router.post("/api/v1/daedalus/labs/{lab_id}/stop")
+async def labs_stop(lab_id: str) -> dict[str, Any]:
+    from daedalus.play_lab import stop_vm
+    return stop_vm(lab_id)
+
+
+@router.delete("/api/v1/daedalus/labs/{lab_id}")
+async def labs_destroy(lab_id: str) -> dict[str, Any]:
+    from daedalus.play_lab import destroy_lab
+    return destroy_lab(lab_id)
+
+
+@router.post("/api/v1/daedalus/dissect")
+async def dissect_run(body: DissectBody) -> dict[str, Any]:
+    from daedalus.agent import get_daedalus
+    from daedalus.dissection import dissect
+    try:
+        memory = get_daedalus().memory
+    except Exception:
+        memory = None
+    try:
+        return await dissect(
+            body.source,
+            slug=body.slug or None,
+            lab_id=body.lab_id or None,
+            install_path=body.path,
+            create_lab=body.create_lab,
+            live=body.live,
+            project_name=body.name or body.slug,
+            description=body.description,
+            memory=memory,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/api/v1/daedalus/mirofish")

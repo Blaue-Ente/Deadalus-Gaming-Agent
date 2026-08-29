@@ -413,6 +413,13 @@ async def _run_guided_step(job: GuidedJob) -> None:
         kind = proj.get("kind", "static")
         coding_mode = proj.get("coding_mode", "lite")
         combined_sys = build_combined_sys(kind, coding_mode)
+        try:
+            from .dissection import prompt_block_for_slug
+            specimen = prompt_block_for_slug(job.slug)
+            if specimen:
+                combined_sys = f"{combined_sys}\n{specimen}"
+        except Exception:
+            pass
         if job.studio and job.context_files:
             from .playground_studio_mode import studio_combined_sys
             combined_sys = studio_combined_sys(combined_sys, job.context_files)

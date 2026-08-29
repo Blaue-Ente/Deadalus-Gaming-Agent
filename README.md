@@ -93,7 +93,7 @@ Data lives under `$DAEDALUS_DATA` (default `data/daedalus/` on the machine, `%LO
 | Chat (Bulgarian / English) | Studio `/` · `POST /api/v1/daedalus/chat` |
 | Files and projects | Playground `playground/projects/{slug}` |
 | Shell | Studio Shell · `POST /api/v1/daedalus/shell` (jail, secrets stripped from env) |
-| Native tools | `read_file`, `write_file`, `run_command`, `web_search`, `web_fetch`, `web_read`, `generate_image`, `remember`, `code_search`, `browser`, `mcp_call`, `spawn_subagent`, `playtest` |
+| Native tools | `read_file`, `write_file`, `run_command`, `web_search`, `web_fetch`, `web_read`, `generate_image`, `remember`, `code_search`, `browser`, `mcp_call`, `spawn_subagent`, `playtest`, `play_lab`, `dissect_game` |
 | Local LLM | Studio **wardrobe** — hardware profile + Ollama pull; or `DAEDALUS_PROVIDER=ollama` |
 | Offline kit | `DAEDALUS_OFFLINE=1` / Studio toggle — no search/images; local model + capsules still work |
 | Sub-agents | worker slots **and** `spawn_subagent` (files + shell, jailed) |
@@ -105,13 +105,15 @@ Data lives under `$DAEDALUS_DATA` (default `data/daedalus/` on the machine, `%LO
 | Cloud LLM | AllToken / OpenRouter / Novita / NVIDIA |
 | Games — browser | Phaser, canvas, Vite; 3D arcade / racing → Vite + Three.js WebGPU (`src/racer/`) |
 | Games — Godot 4 | kind `godot`: `.tscn` + GDScript; 2D scaffold or 3D greybox room |
+| Dissection | name / URL / git / Play Lab install → specimen used as a **мостра** (loop, feel, stack — not a clone) |
+| Play Lab | virtual computer for specimens: `$DAEDALUS_DATA/labs/{id}/` + local HTTP; optional Docker |
 | Meshes | `python -m daedalus.blender_mcp` or `blender_jobs.emit_job` (no `bpy` in the cloud) |
 | Live publish | local `/apps/{slug}/` + Netlify / GitLab Pages / 1-hour preview |
 | Capsule | zip for USB — `GET /api/v1/playground/projects/{slug}/capsule` |
 | Windows app | Start Menu **Daedalus** (WebView2 / Tk) |
 | Evolution | optional idle gardener; patches still wait for Approve |
 
-Studio tab **World** shows Reach / playtest / MCP status.
+Studio tab **World** shows Reach / playtest / MCP / dissection.
 
 ---
 

@@ -80,8 +80,16 @@
               <option value="cross_platform">Cross-platform</option>
             </select>
           </div>
-          <input id="gs-references" placeholder="Референции (опционално)"
+          <input id="gs-references" placeholder="Референции (име или URL за дисекция)"
             class="w-full px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700">
+          <div class="flex gap-2">
+            <button type="button" onclick="gsDissectReferences()" id="gs-dissect-btn"
+              class="px-3 py-2 rounded text-xs font-medium bg-cyan-800 hover:bg-cyan-700 text-white">🔬 Дисекция</button>
+            <button type="button" onclick="gsEnsureLab()" id="gs-lab-btn"
+              class="px-3 py-2 rounded text-xs bg-gray-800 hover:bg-gray-700 text-gray-200">🖥 Лаборатория</button>
+          </div>
+          <p class="text-[10px] text-gray-500">Дисекцията анализира игра (линк / име / инсталация в лабораторията) и я ползва като мостра — не като клонинг.</p>
+          <div id="gs-dissection-panel" class="hidden p-3 rounded-lg border border-cyan-800/50 bg-cyan-950/30 text-xs text-cyan-100 space-y-1"></div>
           <div id="gs-brainstorm-hints" class="hidden p-3 rounded-lg border border-purple-800/50 bg-purple-950/30 text-xs text-purple-200"></div>
         </div>
         <div id="gs-pane-2" class="hidden space-y-3">
@@ -153,6 +161,16 @@
         <section class="bg-gray-900 border border-gray-800 rounded-xl p-4">
           <h3 class="text-sm font-semibold text-white mb-2">📄 GDD Lite</h3>
           <pre id="gs-ws-gdd" class="text-xs text-gray-300 font-mono whitespace-pre-wrap max-h-64 overflow-auto"></pre>
+        </section>
+        <section class="bg-gray-900 border border-cyan-800/40 rounded-xl p-4">
+          <div class="flex items-center justify-between gap-2 mb-2">
+            <h3 class="text-sm font-semibold text-white">🔬 Дисекция (мостра)</h3>
+            <button onclick="gsWsDissect()" id="gs-ws-dissect-btn"
+              class="px-3 py-1 rounded bg-cyan-800 hover:bg-cyan-700 text-white text-[10px]">Анализирай</button>
+          </div>
+          <input id="gs-ws-dissect-src" placeholder="Име, URL, git или път към инсталация"
+            class="w-full px-3 py-2 rounded bg-gray-800 text-white text-xs border border-gray-700 mb-2">
+          <pre id="gs-ws-dissection" class="text-[10px] text-cyan-200/80 font-mono whitespace-pre-wrap max-h-40 overflow-auto hidden"></pre>
         </section>
         <section class="bg-gray-900 border border-gray-800 rounded-xl p-4">
           <h3 class="text-sm font-semibold text-white mb-2">🗺️ Studio план</h3>
@@ -264,6 +282,7 @@ let _gsGuidedMilestoneScope = '';
 let _gsGuidedRunning = false;
 let _gsGuidedStreaming = false;
 let _gsFullAuto = false;
+let _gsDissection = null;
 const GS_GUIDED_KEY = 'gsActiveGuided';
 const GS_FULL_AUTO_KEY = 'gsFullAutoActive';
 
@@ -359,6 +378,102 @@ function gsBrainstormPayload() {
     platform_hint: $('gs-platform-hint')?.value || 'web',
     reference_games: ($('gs-references')?.value || '').trim(),
   };
+}
+
+function renderGsDissectionPanel(el, data) {
+  if (!el || !data) return;
+  const mech = (data.mechanics || []).map(m => `<li>${escHtml(String(m))}</li>`).join('');
+  const stack = data.stack || {};
+  el.innerHTML =
+    `<div class="font-semibold text-cyan-300">${escHtml(data.title || data.source || 'Дисекция')}</div>` +
+    `<div>${escHtml(data.summary || '')}</div>` +
+    (stack.engine || stack.renderer ? `<div class="text-gray-400">Стек: ${escHtml([stack.engine, stack.renderer].filter(Boolean).join(' · '))}</div>` : '') +
+    (mech ? `<ul class="list-disc list-inside">${mech}</ul>` : '') +
+    (data.lab_id ? `<div class="text-[10px] text-gray-500">Лаборатория: ${escHtml(data.lab_id)}</div>` : '');
+  el.classList.remove('hidden');
+}
+
+async function gsDissectReferences() {
+  const source = ($('gs-references')?.value || '').trim();
+  if (!source) { $('gs-references')?.focus(); return; }
+  const btn = $('gs-dissect-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳…'; }
+  try {
+    const r = await api('/admin/daedalus/playground/api/dissect', {
+      method: 'POST',
+      body: JSON.stringify({
+        source,
+        name: ($('gs-title')?.value || '').trim(),
+        description: ($('gs-idea')?.value || '').trim(),
+        live: true,
+      }),
+    });
+    if (!r.ok) { alert(r.error || r.detail || 'дисекцията не мина'); return; }
+    _gsDissection = r;
+    renderGsDissectionPanel($('gs-dissection-panel'), r);
+  } catch (e) {
+    alert('Дисекция: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔬 Дисекция'; }
+  }
+}
+
+async function gsEnsureLab() {
+  const btn = $('gs-lab-btn');
+  if (btn) { btn.disabled = true; }
+  try {
+    const r = await api('/admin/daedalus/playground/api/labs', {
+      method: 'POST',
+      body: JSON.stringify({
+        title: ($('gs-title')?.value || 'specimen').trim(),
+        source: ($('gs-references')?.value || '').trim(),
+      }),
+    });
+    if (!r.ok) { alert(r.error || 'лабораторията не се създаде'); return; }
+    const panel = $('gs-dissection-panel');
+    if (panel) {
+      panel.classList.remove('hidden');
+      panel.innerHTML = `<div class="text-cyan-300">🖥 Лаборатория <span class="font-mono">${escHtml(r.id)}</span></div>
+        <div class="text-gray-400">Инсталирай HTML5 / zip / git clone в <code>$DAEDALUS_DATA/labs/${escHtml(r.id)}/install</code>, после Дисекция.</div>`;
+    }
+  } catch (e) {
+    alert('Лаборатория: ' + e.message);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function renderGsDissection(data) {
+  const el = $('gs-ws-dissection');
+  const inp = $('gs-ws-dissect-src');
+  if (!el) return;
+  if (!data) {
+    el.classList.add('hidden');
+    el.textContent = '';
+    return;
+  }
+  if (inp && !inp.value.trim()) inp.value = data.source || data.playable_url || '';
+  el.textContent = data.specimen_block || data.summary || JSON.stringify(data, null, 2);
+  el.classList.remove('hidden');
+}
+
+async function gsWsDissect() {
+  const source = ($('gs-ws-dissect-src')?.value || '').trim();
+  if (!source || !_gsWorkspaceSlug) { alert('Въведи източник'); return; }
+  const btn = $('gs-ws-dissect-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+  try {
+    const r = await api('/admin/daedalus/playground/api/projects/' + encodeURIComponent(_gsWorkspaceSlug) + '/dissect', {
+      method: 'POST',
+      body: JSON.stringify({ source, live: true }),
+    });
+    if (!r.ok) { alert(r.error || r.detail || 'дисекцията не мина'); return; }
+    renderGsDissection(r);
+  } catch (e) {
+    alert('Дисекция: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Анализирай'; }
+  }
 }
 
 function paintGsStep() {
@@ -473,6 +588,7 @@ async function gsStart() {
         studio_preset: $('gs-preset')?.value || '',
         kind: $('gs-kind')?.value || '',
         build_mode: mode,
+        dissection: _gsDissection || undefined,
       }),
     });
     if (!r.ok) { alert(r.error || 'start failed'); return; }
@@ -613,6 +729,7 @@ function renderGsWorkspace(ctx) {
   $('gs-ws-title').textContent = p.name || p.slug;
   $('gs-ws-badge').textContent = (ctx.studio_preset || 'custom') + ' · ' + (p.kind || '');
   $('gs-ws-gdd').textContent = ctx.gdd || '(GDD липсва)';
+  renderGsDissection(ctx.dissection);
   const msSum = ctx.milestone_summary || {};
   const curEl = $('gs-ws-ms-current');
   if (curEl) {

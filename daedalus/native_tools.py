@@ -34,6 +34,8 @@ PERM_MAP: dict[str, str | None] = {
     "spawn_subagent": None,
     "playtest": None,
     "mirofish": None,
+    "play_lab": None,
+    "dissect_game": None,
 }
 
 NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
@@ -276,6 +278,47 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
                 "project_name": {"type": "string"},
             },
             "required": ["action"],
+        },
+    },
+    {
+        "name": "play_lab",
+        "description": (
+            "Daedalus virtual computer for specimen games. "
+            "Create/list/install/start/stop a Play Lab (jailed HTML5/git/zip). "
+            "Docker is optional; local HTTP always works. Not Steam/.exe."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "status | create | list | install | start | stop | destroy",
+                },
+                "title": {"type": "string"},
+                "source": {"type": "string"},
+                "lab_id": {"type": "string"},
+                "path": {"type": "string", "description": "Folder, HTML, or zip to install"},
+            },
+            "required": ["action"],
+        },
+    },
+    {
+        "name": "dissect_game",
+        "description": (
+            "Dissect a reference game (name, URL, git, path, or existing lab) into a specimen "
+            "used as a мостра when building the owner's game. Inspire loop/feel/stack; never clone assets."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "source": {"type": "string", "description": "Game name, URL, git, or path"},
+                "slug": {"type": "string", "description": "Playground project to attach the specimen to"},
+                "lab_id": {"type": "string"},
+                "path": {"type": "string"},
+                "create_lab": {"type": "boolean"},
+                "live": {"type": "boolean", "description": "Chromium probe when possible"},
+                "description": {"type": "string", "description": "What the owner wants to build"},
+            },
         },
     },
 ]
@@ -535,6 +578,60 @@ async def execute_native_tool(
                 use_browser=bool(args.get("use_browser")),
             )
             return "── playtest ──\n" + format_for_prompt(r)
+
+        if name == "play_lab":
+            from . import play_lab as pl
+            action = str(args.get("action") or "status").lower().strip()
+            if action == "list":
+                r = {"ok": True, "labs": pl.list_labs(), "host": pl.probe_host()}
+            elif action == "create":
+                r = pl.create_lab(
+                    title=str(args.get("title") or ""),
+                    source=str(args.get("source") or ""),
+                )
+                r = {"ok": True, **r}
+            elif action == "install":
+                r = pl.install_into_lab(str(args.get("lab_id") or ""), str(args.get("path") or ""))
+            elif action == "start":
+                r = pl.start_vm(str(args.get("lab_id") or ""))
+            elif action == "stop":
+                r = pl.stop_vm(str(args.get("lab_id") or ""))
+            elif action == "destroy":
+                r = pl.destroy_lab(str(args.get("lab_id") or ""))
+            else:
+                r = pl.probe_host()
+                lab_id = str(args.get("lab_id") or "")
+                if lab_id:
+                    r["lab"] = pl.load_lab(lab_id)
+            return f"── play_lab {action} ──\n{json.dumps(r, ensure_ascii=False, default=str)[:5000]}"
+
+        if name == "dissect_game":
+            from .dissection import dissect, format_specimen_block
+            r = await dissect(
+                str(args.get("source") or ""),
+                slug=str(args.get("slug") or "") or None,
+                lab_id=str(args.get("lab_id") or "") or None,
+                install_path=str(args.get("path") or ""),
+                create_lab=args.get("create_lab", True) is not False,
+                live=args.get("live", True) is not False,
+                project_name=str(args.get("slug") or ""),
+                description=str(args.get("description") or ""),
+                memory=memory,
+            )
+            block = r.get("specimen_block") or format_specimen_block(r)
+            compact = {
+                "ok": r.get("ok"),
+                "title": r.get("title"),
+                "source_kind": r.get("source_kind"),
+                "lab_id": r.get("lab_id"),
+                "stack": r.get("stack"),
+                "playable_url": r.get("playable_url"),
+                "error": r.get("error"),
+            }
+            return (
+                f"── dissect_game ──\n{json.dumps(compact, ensure_ascii=False, default=str)[:2500]}\n\n"
+                f"{block}"
+            )
 
         if name == "mirofish":
             from . import mirofish_client as mf

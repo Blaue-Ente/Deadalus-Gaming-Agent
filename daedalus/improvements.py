@@ -689,6 +689,8 @@ def select_skills(user_message: str, intent: str, hint: str = "") -> list[str]:
         "godot": ["godot", "gdscript", "metroidvania", ".tscn", "tscn", "puzzle room", "characterbody3d"],
         "blender_jobs": ["blender", "bpy", "gltf", "glb export", "armature"],
         "playtest": ["playtest", "тествай играта", "готови ли сме"],
+        "dissection": ["дисекция", "dissect", "мостра", "play lab",
+                       "лаборатория", "разглоби играта", "specimen game"],
     }
     for name in _SKILLS_CACHE:
         kws = keywords.get(name, [name.split("_")[0]])

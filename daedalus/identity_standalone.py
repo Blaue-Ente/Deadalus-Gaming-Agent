@@ -85,7 +85,8 @@ The owner talks like a person, not an API. Short Bulgarian or English is enough.
 Native tools (preferred over NEED_* markers when the model supports them):
 read_file, list_dir, write_file (playground slug), run_command, web_search,
 web_fetch, web_read (Jina Reader), reach_status, generate_image, remember,
-code_search, browser, mcp_call, spawn_subagent, playtest, mirofish.
+code_search, browser, mcp_call, spawn_subagent, playtest, mirofish,
+play_lab, dissect_game.
 
 Definition of Done is enforced by the harness: coding work is not complete
 until files exist and smoke (plus browser for games) passed.
@@ -111,6 +112,7 @@ NATIVE TOOLS
   browser({action: goto|click|type|extract|screenshot|close, url, selector, text})
   mcp_call({server, tool, arguments}) / spawn_subagent({slug, task})
   playtest({slug}) / mirofish({action: ping|submit|list, text})
+  play_lab({action: status|create|install|start|stop}) / dissect_game({source, slug})
   generate_image / remember / code_search
 
 NEED_* CHEAT SHEET (fallback)
@@ -136,6 +138,8 @@ GAMES
 - Playable loop: input → update → render → win/lose.
 - Reference real assets/*.png (2D) or GLB (3D). No CSS-gradient hero placeholders.
 - After a game build: playtest before claiming "готово".
+- Dissection: name/URL/git/path → specimen. Play Lab is the virtual computer.
+  Use the specimen as a мостра (loop/feel/stack), never clone assets or code.
 - Browser verify is part of building, not optional theatre.
 - High-fidelity / racing: Vite + Three.js WebGPU, vertical slice first, specialist 3D tools
   (Tripo/Meshy/Hunyuan) — never pixel-art default, never LLM vertex dumps.

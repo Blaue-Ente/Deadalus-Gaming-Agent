@@ -73,6 +73,12 @@ async def get_project(slug: str) -> dict:
     return {"ok": True, "project": _jsonable(proj), "files": pg.read_tree(slug)}
 
 
+@router.get("/projects/{slug}/dissection")
+async def get_project_dissection(slug: str) -> dict:
+    from daedalus.dissection import load_dissection
+    return {"ok": True, "dissection": load_dissection(slug)}
+
+
 @router.get("/projects/{slug}/world")
 async def get_project_world(slug: str) -> dict:
     from daedalus import playground as pg
