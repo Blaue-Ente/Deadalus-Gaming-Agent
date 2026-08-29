@@ -32,7 +32,7 @@ async def complete(
     json_mode: bool = False,
 ) -> dict[str, Any]:
     """Call the configured OpenAI-compatible (or Anthropic) provider directly."""
-    from .llm_config import get_config
+    from .llm_config import get_config, openai_compat_headers
 
     cfg = get_config()
     provider = cfg.get("provider") or "openai"
@@ -75,7 +75,13 @@ async def complete(
     else:
         from openai import AsyncOpenAI
 
-        client = AsyncOpenAI(api_key=api_key, base_url=base_url or None, max_retries=1)
+        extra = openai_compat_headers(provider)
+        client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=base_url or None,
+            max_retries=1,
+            default_headers=extra or None,
+        )
         body: dict[str, Any] = {
             "model": used_model,
             "messages": messages,

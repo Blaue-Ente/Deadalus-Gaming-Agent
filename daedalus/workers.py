@@ -586,9 +586,14 @@ async def _call_worker_single(slot: str, task: str, slot_cfg: dict) -> dict:
             result_text = response.content[0].text if response.content else ""
         else:
             from openai import AsyncOpenAI
-            from .llm_config import PROVIDER_DEFAULTS
+            from .llm_config import PROVIDER_DEFAULTS, openai_compat_headers
             pd = PROVIDER_DEFAULTS.get(provider, PROVIDER_DEFAULTS["openai"])
-            client = AsyncOpenAI(api_key=api_key, base_url=base_url or pd["base_url"])
+            extra = openai_compat_headers(provider)
+            client = AsyncOpenAI(
+                api_key=api_key,
+                base_url=base_url or pd["base_url"],
+                default_headers=extra or None,
+            )
             # Reasoning models need extra budget for chain-of-thought before final answer
             _is_reasoning = (model.startswith("gpt-5") or model.startswith("o4") or
                              model.startswith("o3") or "r1" in model.lower() or
