@@ -117,7 +117,10 @@ async def _status_for(definition: ConnectorDefinition, *, probe: bool) -> dict[s
     elif connector_id == "blender":
         from .addons import catalog
 
-        addon = next((item for item in catalog() if item["id"] == "blender-mcp"), {})
+        addon: dict[str, Any] = next(
+            (item for item in catalog() if item["id"] == "blender-mcp"),
+            {},
+        )
         row.update({"configured": bool(addon.get("enabled")), "ok": bool(addon.get("enabled"))})
     row["status"] = (
         "ready" if row.get("ok")
