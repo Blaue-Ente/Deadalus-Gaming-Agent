@@ -7,8 +7,6 @@
 {% block mob_title %}App Builder{% endblock %}
 {% block content %}
 <div class="max-w-6xl mx-auto">
-{% include "_daedalus_nav.html" %}
-
   <p class="text-gray-400 text-sm mb-4">Строй · тествай в sandbox · публикувай · push към GitHub</p>
 
   <!-- GitHub / connectors status -->
@@ -21,7 +19,7 @@
   <div class="flex flex-wrap items-center gap-2 mb-6">
     <button onclick="openCreateWizard()" class="px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white">+ Нов проект</button>
     <button onclick="openReviveModal()" class="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white">⬇ Съживи от GitHub</button>
-    <a href="/admin/daedalus/game-studio" class="px-4 py-2 rounded-lg text-sm font-medium bg-purple-600 hover:bg-purple-500 text-white">🎮 Game Studio</a>
+    <a href="/admin/daedalus/projects/game-studio" class="px-4 py-2 rounded-lg text-sm font-medium bg-purple-600 hover:bg-purple-500 text-white">🎮 Game Studio</a>
     <button onclick="openSkillCreator()" class="px-4 py-2 rounded-lg text-sm font-medium bg-amber-600 hover:bg-amber-500 text-white">📝 Skill Creator</button>
     <button onclick="loadProjects()" class="px-3 py-2 rounded-lg text-sm font-medium bg-gray-700 hover:bg-gray-600 text-gray-200" title="Обнови списъка">↻</button>
     <div class="relative ml-auto">
@@ -33,7 +31,7 @@
         <button onclick="hidePgMenu(); openSkillCreator();" class="block w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-800">📝 Skill Creator</button>
         <button onclick="hidePgMenu(); showPublishedPanel();" class="block w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-800">📋 Публикувани /apps</button>
         <a href="/apps/" target="_blank" class="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-800">↗ /apps</a>
-        <a href="/admin/daedalus" class="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-800">💬 Дедал Chat</a>
+        <a href="/admin/daedalus/agent" class="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-800">💬 Дедал Chat</a>
       </div>
     </div>
   </div>
@@ -1132,7 +1130,6 @@ function projectOverflowMenu(p, isStatic, isPublishable, running) {
   if (p.source === 'revived' || p.upstream_url) {
     items.push(`<button onclick="revivePipeline('${p.slug}')" class="pg-menu-item">📦 Verify & Publish</button>`);
     items.push(`<button onclick="showUpstreamDiff('${p.slug}')" class="pg-menu-item">↔ Upstream diff</button>`);
-    items.push(`<button onclick="createUpstreamPr('${p.slug}')" class="pg-menu-item">🔀 PR към upstream</button>`);
   }
   if (isPublishable) {
     const pubLabel = p.kind === 'expo' ? '📦 Export' : (p.kind === 'vite' || p.kind === 'vite-react' ? '🔨 Build & Pub' : '🚀 Публикувай');
@@ -1141,7 +1138,6 @@ function projectOverflowMenu(p, isStatic, isPublishable, running) {
   if (p.kind === 'expo') {
     items.push(`<button onclick="runExpoTunnel('${p.slug}')" class="pg-menu-item">📱 Tunnel+QR</button>`);
     items.push(`<button onclick="showQr('${p.slug}')" class="pg-menu-item">🔳 QR</button>`);
-    items.push(`<button onclick="easBuild('${p.slug}','android')" class="pg-menu-item">☁ EAS Android</button>`);
   }
   items.push(`<button onclick="backupWorkspace('${p.slug}')" class="pg-menu-item">💾 Backup workspace</button>`);
   items.push(`<button onclick="openDb('${p.slug}')" class="pg-menu-item">🗄 DB</button>`);
@@ -3161,15 +3157,6 @@ async function showUpstreamDiff(slug) {
   alert(`Upstream diff (${r.upstream_sha?.slice(0,8) || '?'})\n\n${r.diff_stat || ''}\n\nФайлове:\n  ${files}`);
 }
 
-async function createUpstreamPr(slug) {
-  if (!confirm('Push branch + PR към оригиналния repo?')) return;
-  const r = await api(`/admin/daedalus/playground/api/projects/${slug}/create-upstream-pr`, {
-    method: 'POST', body: JSON.stringify({}),
-  });
-  if (r.ok && r.pr) alert('✅ PR създаден: ' + r.pr.url);
-  else alert('Грешка: ' + (r.error || 'неуспешно'));
-}
-
 async function runProj(slug, kind) {
   if (kind === 'unity') {
     alert('Unity Editor не може да се пусне в cloud.\n\nКачи проекта с ⬆ GitHub и го отвори в Unity Hub на локална машина.');
@@ -3263,24 +3250,6 @@ async function showQr(slug) {
   } catch(e) { alert('Грешка при зареждане на QR: ' + e.message); }
 }
 
-// ── EAS Cloud Build ─────────────────────────────────────────────
-async function easBuild(slug, platform) {
-  const msg = platform === 'android'
-    ? 'Ще стартирам EAS Build за Android (APK/AAB).\nИзисква EXPO_TOKEN env var + expo.dev акаунт.\nBuild-ът се прави в Expo cloud (~10-20 мин).\nПродължаваш?'
-    : 'Ще стартирам EAS Build за iOS (IPA).\nИзисква EXPO_TOKEN + Apple Developer акаунт.\nПродължаваш?';
-  if (!confirm(msg)) return;
-  const btn = event.target;
-  btn.textContent = '⏳ EAS…'; btn.disabled = true;
-  try {
-    const r = await api(`/admin/daedalus/playground/api/projects/${slug}/eas-build`, {
-      method:'POST', body: JSON.stringify({platform})});
-    if (r.ok) {
-      alert(`✅ EAS Build стартиран (${platform})!\n\nИзход:\n${r.output}\n\nСледи статуса на expo.dev/accounts/[username]/projects/[slug]/builds`);
-    } else {
-      alert('❌ EAS Build грешка:\n' + r.error + (r.output ? '\n\n' + r.output : ''));
-    }
-  } finally { btn.textContent = platform === 'android' ? '☁ EAS Android' : '☁ EAS iOS'; btn.disabled = false; }
-}
 async function delProj(slug) {
   const proj = (await api('/admin/daedalus/playground/api/projects')).projects?.find(p => p.slug === slug);
   const isPublished = proj && proj.status === 'published';

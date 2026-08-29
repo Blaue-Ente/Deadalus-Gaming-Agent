@@ -442,11 +442,13 @@ async def run_milestone_verify(
         raise ValueError("project not found")
 
     cfg = load_config_from_root(pg.project_dir(slug)) or {}
-    plan = None
+    plan: dict[str, Any] = {}
     try:
-        plan = await pg.load_autopilot_plan(slug)
+        loaded_plan = await pg.load_autopilot_plan(slug)
+        if isinstance(loaded_plan, dict):
+            plan = loaded_plan
     except Exception:
-        plan = None
+        pass
 
     mid = (milestone_id or cfg.get("current_milestone") or resolve_current_milestone(cfg, plan)).strip()
     if not mid:

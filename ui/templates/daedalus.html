@@ -9,8 +9,6 @@
 {% block heading_mob %}Дедал{% endblock %}
 
 {% block content %}
-{% include "_daedalus_nav.html" %}
-
 <!-- ── Layout wrapper ─────────────────────────────────────── -->
 <div class="flex gap-3 relative daedalus-layout" style="min-height:calc(100vh - 200px)">
 
@@ -543,7 +541,7 @@
           <span class="w-2 h-2 rounded-full bg-emerald-400 shrink-0"></span>
           <h2 class="text-sm font-semibold text-white uppercase tracking-wider">🎮 Playground</h2>
         </div>
-        <a href="/admin/daedalus/playground" target="_blank" class="text-[10px] text-emerald-400 hover:text-emerald-300 font-mono uppercase tracking-wider border border-emerald-500/30 px-2 py-0.5 rounded hover:bg-emerald-500/10 transition">↗ Отвори</a>
+        <a href="/admin/daedalus/projects" target="_blank" class="text-[10px] text-emerald-400 hover:text-emerald-300 font-mono uppercase tracking-wider border border-emerald-500/30 px-2 py-0.5 rounded hover:bg-emerald-500/10 transition">↗ Отвори</a>
       </div>
       <p class="text-[11px] text-argos-dim leading-relaxed">Строй · тествай · публикувай · GitHub clone/push.</p>
       <a href="/apps/" target="_blank" class="inline-block mt-2 text-[10px] text-argos-dim hover:text-argos-accent font-mono uppercase tracking-wider">↗ /apps (публикувани)</a>
@@ -3262,7 +3260,7 @@
             <button data-pid="${pid}" class="pp-reject px-2 py-1.5 bg-argos-danger/10 hover:bg-argos-danger/20 border border-argos-danger/40 text-argos-danger text-[11px] font-semibold rounded uppercase tracking-wider transition">
               ✗
             </button>
-            <a href="/admin/daedalus/proposals" target="_blank" class="px-2 py-1.5 border border-argos-border text-argos-dim hover:text-white text-[11px] rounded uppercase tracking-wider">
+            <a href="/admin/daedalus/review" target="_blank" class="px-2 py-1.5 border border-argos-border text-argos-dim hover:text-white text-[11px] rounded uppercase tracking-wider">
               Diff ↗
             </a>` : `<span class="text-[10px] uppercase tracking-wider font-mono ${status === 'applied' ? 'text-green-400' : 'text-argos-danger'}">${status}</span>`}
           </div>

@@ -188,3 +188,59 @@ def test_github_repos_and_skill_creator_are_wired(standalone_tmp, monkeypatch):
     sc._sessions.clear()
     loaded = get_session("skill-lab")
     assert loaded and loaded["id"] == "skill-lab"
+
+
+def test_project_actions_and_canonical_navigation_are_wired(standalone_tmp):
+    from app.main import app
+
+    client = TestClient(app)
+    created = client.post(
+        "/admin/daedalus/playground/api/projects",
+        json={"name": "Published Maze", "kind": "static"},
+    )
+    assert created.status_code == 200
+    slug = created.json()["project"]["slug"]
+
+    from daedalus import playground as pg
+
+    pg.write_file(slug, "index.html", "<main>maze</main>")
+    pg.write_file(slug, "assets/mark.svg", "<svg xmlns='http://www.w3.org/2000/svg'/>")
+
+    asset = client.get(
+        f"/admin/daedalus/playground/api/projects/{slug}/assets/raw",
+        params={"path": "assets/mark.svg"},
+    )
+    assert asset.status_code == 200
+    escaped = client.get(
+        f"/admin/daedalus/playground/api/projects/{slug}/assets/raw",
+        params={"path": "../pyproject.toml"},
+    )
+    assert escaped.status_code == 400
+
+    upstream = client.get(
+        f"/admin/daedalus/playground/api/projects/{slug}/upstream-diff"
+    )
+    assert upstream.status_code == 200
+    assert upstream.json()["has_upstream"] is False
+
+    published = client.post(
+        f"/admin/daedalus/playground/api/projects/{slug}/publish",
+        json={"icon": "🎮"},
+    )
+    assert published.status_code == 200
+    assert published.json()["url"] == f"/apps/{slug}/"
+    unpublish = client.post(
+        f"/admin/daedalus/playground/api/projects/{slug}/unpublish"
+    )
+    assert unpublish.status_code == 200
+
+    projects = client.get("/admin/daedalus/projects")
+    assert projects.status_code == 200
+    assert "/admin/daedalus/agent" in projects.text
+    assert "/admin/daedalus/review" in projects.text
+    assert "/admin/daedalus/settings" in projects.text
+    assert '_daedalus_nav.html' not in projects.text
+
+    legacy = client.get("/admin/daedalus/playground", follow_redirects=False)
+    assert legacy.status_code == 307
+    assert legacy.headers["location"] == "/admin/daedalus/projects"

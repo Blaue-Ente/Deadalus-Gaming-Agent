@@ -69,6 +69,20 @@ body {
 .cc-nav-link.is-on .cc-nav-dot {
   background: var(--gold) !important;
 }
+.cc-subnav {
+  display: block;
+  margin-left: 0.75rem;
+  padding: 0.4rem 0.75rem;
+  border-left: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-decoration: none;
+}
+.cc-subnav:hover,
+.cc-subnav.is-on {
+  color: var(--gold-2);
+  border-left-color: var(--gold);
+}
 
 .cc-top {
   background: var(--bg-raise);
