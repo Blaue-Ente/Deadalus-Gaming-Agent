@@ -302,3 +302,60 @@ def format_for_prompt(report: dict[str, Any]) -> str:
     for f in (report.get("fixes") or [])[:4]:
         lines.append(f"  fix: {f}")
     return "\n".join(lines)
+
+
+def _playable_score(report: dict[str, Any]) -> float:
+    """Higher is more playable. Heuristic pairwise idea from Design Arena."""
+    signals = ((report.get("heuristic") or {}).get("signals") or {})
+    good = sum(1 for v in signals.values() if v is True)
+    blockers = len(report.get("blockers") or [])
+    ship = 2.0 if report.get("ship_ready") else 0.0
+    return good + ship - (0.75 * blockers)
+
+
+def _compact_report(report: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "slug": report.get("slug"),
+        "ship_ready": report.get("ship_ready"),
+        "blockers": list(report.get("blockers") or [])[:8],
+        "signals": ((report.get("heuristic") or {}).get("signals") or {}),
+        "summary": report.get("summary"),
+        "score": round(_playable_score(report), 2),
+    }
+
+
+async def compare_playtests(
+    slug_a: str,
+    slug_b: str,
+    *,
+    kind: str = "static",
+    n: int = 4,
+    use_browser: bool = False,
+    llm_fn: LlmFn | None = None,
+) -> dict[str, Any]:
+    """A/B two Playground builds. Winner is the more playable artifact, not Elo."""
+    a_slug = (slug_a or "").strip()
+    b_slug = (slug_b or "").strip()
+    if not a_slug or not b_slug:
+        return {"ok": False, "error": "slug_a and slug_b required"}
+    if a_slug == b_slug:
+        return {"ok": False, "error": "compare two different slugs"}
+    left = await run_playtest(a_slug, kind=kind, n=n, use_browser=use_browser, llm_fn=llm_fn)
+    right = await run_playtest(b_slug, kind=kind, n=n, use_browser=use_browser, llm_fn=llm_fn)
+    sa, sb = _playable_score(left), _playable_score(right)
+    if sa > sb + 0.15:
+        winner, reason = a_slug, f"{a_slug} has a clearer playable loop (score {sa:.1f} vs {sb:.1f})"
+    elif sb > sa + 0.15:
+        winner, reason = b_slug, f"{b_slug} has a clearer playable loop (score {sb:.1f} vs {sa:.1f})"
+    else:
+        winner, reason = "tie", f"close ({sa:.1f} vs {sb:.1f}) — play both, pick by feel"
+    return {
+        "ok": True,
+        "source": "https://designarena.ai",
+        "method": "heuristic pairwise (no Elo, identities are the slugs)",
+        "a": _compact_report(left),
+        "b": _compact_report(right),
+        "winner": winner,
+        "reason": reason,
+        "summary": f"A/B {a_slug} vs {b_slug}: winner={winner}. {reason}",
+    }

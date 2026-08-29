@@ -14,6 +14,7 @@ NETWORK_TOOLS = frozenset({
     "web_search",
     "web_fetch",
     "web_read",
+    "reach_search",
     "generate_image",
     "mirofish",
 })

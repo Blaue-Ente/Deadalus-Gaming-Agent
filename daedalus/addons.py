@@ -51,10 +51,10 @@ CATALOG: list[dict[str, Any]] = [
     {
         "id": "reach",
         "kind": "native",
-        "label": "Agent Reach (Jina)",
-        "blurb": "Вече вградено: native web_read. Няма какво да инсталираш.",
+        "label": "Agent Reach (Jina + търсене + Reddit)",
+        "blurb": "Вградено: web_read, reach_search (уеб + Reddit през DuckDuckGo). rdt-cli / бисквитка са опция.",
         "offline_ok": False,
-        "native": "web_read",
+        "native": "reach_search",
     },
     {
         "id": "playtest",

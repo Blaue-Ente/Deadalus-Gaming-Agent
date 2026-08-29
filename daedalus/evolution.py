@@ -2,9 +2,10 @@
 
 When the owner turns **Еволюция** on in Studio, a background loop uses spare
 machine headroom (even with no open chat) to hunt LLM / coding / memory
-innovations, study public GitHub repos, and journal notes. Harness patches
-still go through ``self_improve`` as **pending** proposals. Nothing is
-silent-applied to ``daedalus/*.py``.
+innovations, study public GitHub repos, and journal notes. Reach searches
+(web + Reddit) rotate alongside radar. Harness patches still go through
+``self_improve`` as **pending** proposals. Nothing is silent-applied to
+``daedalus/*.py``.
 
 Safety:
   - Default OFF (``settings.json`` → ``evolution_enabled``).
@@ -19,6 +20,7 @@ Safety:
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 import os
@@ -444,6 +446,69 @@ def github_urls_from_radar(radar: dict[str, Any]) -> list[str]:
     return urls
 
 
+def github_urls_from_reach(rows: list[dict[str, Any]]) -> list[str]:
+    urls: list[str] = []
+    seen: set[str] = set()
+    for row in rows:
+        for raw in row.get("urls") or []:
+            if parse_github_url(str(raw)) and raw not in seen:
+                seen.add(raw)
+                urls.append(str(raw))
+    return urls
+
+
+async def _await_maybe(value: Any) -> Any:
+    if inspect.isawaitable(value):
+        return await value
+    return value
+
+
+async def _scan_reach(
+    reach_fn: Callable[..., Any] | None,
+    spec: dict[str, str],
+) -> dict[str, Any]:
+    from .reach import reach_search as default_search
+
+    scan = reach_fn or default_search
+    query = spec.get("query") or ""
+    channel = spec.get("channel") or "web"
+    subreddit = spec.get("subreddit") or ""
+    try:
+        hit = await _await_maybe(
+            scan(query, channel=channel, subreddit=subreddit, limit=5)
+        )
+    except TypeError:
+        try:
+            hit = await _await_maybe(scan(query))
+        except Exception as extra:
+            hit = {"ok": False, "error": str(extra)[:240], "results": []}
+    except Exception as extra:
+        log.warning("evolution: reach search failed: %s", extra)
+        hit = {"ok": False, "error": str(extra)[:240], "results": []}
+    if not isinstance(hit, dict):
+        hit = {"ok": False, "error": "bad reach payload", "results": []}
+    titles = [
+        str(row.get("title") or "")[:80]
+        for row in (hit.get("results") or [])[:3]
+        if isinstance(row, dict) and row.get("title")
+    ]
+    urls = [
+        str(row.get("url") or "")
+        for row in (hit.get("results") or [])[:8]
+        if isinstance(row, dict) and row.get("url")
+    ]
+    return {
+        "channel": hit.get("channel") or channel,
+        "backend": hit.get("backend"),
+        "query": query,
+        "ok": bool(hit.get("ok")),
+        "n": len(hit.get("results") or []),
+        "titles": titles,
+        "urls": urls,
+        "error": hit.get("error"),
+    }
+
+
 async def _ask_agent(daedalus: Any, studied: dict[str, Any]) -> dict[str, Any] | None:
     if daedalus is None or not hasattr(daedalus, "chat"):
         return None
@@ -506,6 +571,7 @@ async def run_cycle(
     daedalus: Any = None,
     radar_fn: Callable[..., Any] | None = None,
     study_fn: Callable[..., dict[str, Any]] | None = None,
+    reach_fn: Callable[..., Any] | None = None,
 ) -> dict[str, Any]:
     """One gardener tick. Network work is skipped when offline."""
     reason = skip_reason(force=force)
@@ -518,9 +584,14 @@ async def run_cycle(
 
     state = _load_state()
     from .radar import rotate_source_ids, run_radar_scan
+    from .reach import rotate_garden_queries
 
     picked, next_cursor = rotate_source_ids(
         int(state.get("source_cursor") or 0),
+        SOURCES_PER_TICK,
+    )
+    reach_specs, next_reach = rotate_garden_queries(
+        int(state.get("reach_cursor") or 0),
         SOURCES_PER_TICK,
     )
     agent = daedalus
@@ -541,9 +612,14 @@ async def run_cycle(
         log.warning("evolution: radar failed: %s", extra)
         radar = {"ok": False, "error": str(extra)[:240], "sources": []}
 
+    reach_rows: list[dict[str, Any]] = []
+    for spec in reach_specs:
+        reach_rows.append(await _scan_reach(reach_fn, spec))
+
     studied: dict[str, Any] | None = None
     seen = list(state.get("seen_urls") or [])
-    for url in github_urls_from_radar(radar):
+    candidates = github_urls_from_radar(radar) + github_urls_from_reach(reach_rows)
+    for url in candidates:
         if url in seen:
             continue
         try:
@@ -559,9 +635,14 @@ async def run_cycle(
         llm_reply = await _ask_agent(agent, studied)
 
     state["source_cursor"] = next_cursor
+    state["reach_cursor"] = next_reach
     state["seen_urls"] = seen[-80:]
     state["last_cycle"] = time.time()
     state["cycle_count"] = int(state.get("cycle_count") or 0) + 1
+    reach_summary = [
+        {k: v for k, v in row.items() if k != "urls"}
+        for row in reach_rows
+    ]
     summary = {
         "sources": picked,
         "radar_found": radar.get("total_found") or radar.get("result_count") or 0,
@@ -570,6 +651,7 @@ async def run_cycle(
         "clone": (studied or {}).get("clone") if studied else None,
         "asked_llm": bool(llm_reply),
         "force": force,
+        "reach": reach_summary,
     }
     state["last_summary"] = summary
     state["last_skip"] = None
@@ -585,6 +667,7 @@ async def run_cycle(
             "new_discoveries": summary["new_discoveries"],
             "error": radar.get("error"),
         },
+        "reach": reach_summary,
         "studied": studied,
         "asked_llm": bool(llm_reply),
         "cycle_count": state["cycle_count"],

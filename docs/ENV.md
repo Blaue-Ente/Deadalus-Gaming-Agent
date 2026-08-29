@@ -48,6 +48,8 @@ Studio → LLM (wardrobe) can switch models without editing `.env` (`wardrobe.js
 | `DAEDALUS_NATIVE_TOOLS` | `0` = NEED_* markers only; native tools are on by default |
 | `DAEDALUS_QUALITY` | `0` turns the visual critic off (default on). Unparsed critic / skipped browser is not a pass. |
 | `DAEDALUS_EVOLUTION` | `1` turns the gardener on at boot; `0` is a kill switch |
+| `DAEDALUS_REDDIT_COOKIE` | optional `reddit_session` value. Stays on this machine. Unlocks native Reddit JSON; without it, Reach uses DuckDuckGo `site:reddit.com` |
+| `DAEDALUS_REDDIT_USER_AGENT` | optional User-Agent for Reddit JSON |
 | `GODOT_BIN` | Path to Godot 4. Missing binary fails Godot kinds (headless probe). |
 | `UNITY_PATH` | Path to the Unity Editor. Missing Editor fails Unity kinds (batchmode). |
 
