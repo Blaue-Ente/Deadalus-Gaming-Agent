@@ -4639,7 +4639,7 @@ class Daedalus:
             pass
 
     async def chat(self, message: str, session_id: str | None = None,
-                   for_self: bool = False) -> dict[str, Any]:
+                   for_self: bool = False, effort: str = "auto") -> dict[str, Any]:
         """Free-form conversation with Daedalus (no JSON contract).
 
         ``for_self=True`` marks the turn as "searching for improvements to
@@ -4651,6 +4651,8 @@ class Daedalus:
         session_id = session_id or f"chat-{uuid.uuid4().hex[:10]}"
         started = datetime.now(timezone.utc)
         msg = message.strip()
+        from .task_effort import bind as bind_effort, briefing as effort_briefing, classify as classify_effort
+        effort_dec = classify_effort(msg, requested=effort)
         if for_self:
             msg = (
                 "[SELF-IMPROVEMENT MODE — improvements you find here are for "
@@ -4688,12 +4690,17 @@ class Daedalus:
             log.info("phase_resume injected: session=%s pct=%d%% task=%s",
                      session_id, pct_pct, phase_ctx.get("task_name", "?"))
 
-        raw, summary = await self._build_context_and_call(
-            user_message=msg,
-            session_id=session_id,
-            expect_json=False,
-            for_self=for_self,
-        )
+        brief = effort_briefing(effort_dec)
+        if brief:
+            msg = brief + "\n\n" + msg
+
+        with bind_effort(effort_dec):
+            raw, summary = await self._build_context_and_call(
+                user_message=msg,
+                session_id=session_id,
+                expect_json=False,
+                for_self=for_self,
+            )
         # Process task markers — execute side-effects, strip from reply
         raw, task_events = process_task_markers(raw, session_id)
 
@@ -4813,6 +4820,11 @@ class Daedalus:
             "pending_proposal": pending_proposal,
             "task_events": task_events,
             "model": get_config().get("model", _MODEL),
+            "effort": {
+                k: effort_dec.get(k)
+                for k in ("tier", "label", "role", "budget", "note", "world_kit",
+                          "source", "model", "model_source")
+            },
             "elapsed_seconds": round(elapsed, 2),
             "timestamp": started.isoformat(),
             "complete": None if dod is None else dod.complete,

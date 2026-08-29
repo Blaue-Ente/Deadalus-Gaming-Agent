@@ -40,6 +40,13 @@ VALID_KINDS = {"static", "fastapi", "streamlit", "vite", "vite-react", "node", "
 VALID_SOURCES = {"built", "cloned", "imported", "revived"}
 
 _SLUG_RE = re.compile(r"[^a-z0-9-]+")
+_CYR = {
+    "а": "a", "б": "b", "в": "v", "г": "g", "д": "d", "е": "e",
+    "ж": "zh", "з": "z", "и": "i", "й": "y", "к": "k", "л": "l",
+    "м": "m", "н": "n", "о": "o", "п": "p", "р": "r", "с": "s",
+    "т": "t", "у": "u", "ф": "f", "х": "h", "ц": "ts", "ч": "ch",
+    "ш": "sh", "щ": "sht", "ъ": "a", "ь": "", "ю": "yu", "я": "ya",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -56,8 +63,13 @@ async def _pool():
 # ---------------------------------------------------------------------------
 
 def slugify(name: str) -> str:
-    """Convert a human name to a safe url/dir slug."""
+    """Convert a human name to a safe url/dir slug.
+
+    Bulgarian letters become Latin so ``Северна сага`` is ``severna-saga``,
+    not ``app-ab12cd``.
+    """
     s = (name or "").strip().lower()
+    s = "".join(_CYR.get(ch, ch) for ch in s)
     s = s.replace(" ", "-").replace("_", "-")
     s = _SLUG_RE.sub("", s)
     s = re.sub(r"-+", "-", s).strip("-")
@@ -424,6 +436,7 @@ async def create_project(
     slug: str = "",
     github_repo: str = "",
     coding_mode: str = "lite",
+    effort: str = "auto",
 ) -> dict[str, Any]:
     """Create a project row + workspace dir with scaffold files."""
     slug = slugify(slug or name)
@@ -449,6 +462,13 @@ async def create_project(
         _write_scaffold(pdir, kind, name, slug, description)
         # Re-detect after scaffold (picks up run_cmd / entry from real files)
         kind, run_cmd, entry = detect_kind(pdir)
+    if source == "built":
+        try:
+            from .world_kit import needed as world_needed, write as write_world
+            if world_needed(description, effort=effort):
+                write_world(pdir, name=name, slug=slug, description=description)
+        except Exception:
+            log.debug("world kit skipped", exc_info=True)
 
     # Always ensure assets/ scaffold exists for built/cloned projects
     if source in ("built", "cloned", "imported"):

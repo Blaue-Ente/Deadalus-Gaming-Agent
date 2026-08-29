@@ -468,7 +468,7 @@ async def playground_create(request: Request):
         proj = await pg.create_project(
             name, kind=body.get("kind", ""), source=body.get("source", "built"),
             description=body.get("description", ""), slug=body.get("slug", ""),
-            coding_mode=coding_mode,
+            coding_mode=coding_mode, effort=body.get("effort", "auto"),
         )
         files = body.get("files") or {}
         if files:
@@ -773,7 +773,7 @@ async def playground_plan_create(slug: str, request: Request):
             description=description,
             project_name=proj.get("name") or slug,
         )
-    plan = enrich_plan(plan, kind_key)
+    plan = enrich_plan(plan, kind_key, description)
     await pg.save_autopilot_plan(slug, plan)
     return JSONResponse({"ok": True, "plan": plan, "slug": slug})
 
@@ -1400,7 +1400,7 @@ async def guided_start(slug: str, request: Request):
     if not proj:
         return JSONResponse({"ok": False, "error": "project not found"}, status_code=404)
     kind = proj.get("kind", "static")
-    plan = enrich_plan(plan, kind)
+    plan = enrich_plan(plan, kind, description)
     for i, s in enumerate(plan.get("stages") or []):
         s.setdefault("id", i + 1)
         s.setdefault("status", "pending")
