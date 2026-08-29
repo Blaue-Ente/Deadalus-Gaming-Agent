@@ -153,6 +153,12 @@ async def run_full_autopilot(
         lessons = format_block(f"{kind} {state.description}", limit=2)
     except Exception:
         lessons = ""
+    specimen = ""
+    try:
+        from daedalus.dissection import prompt_block_for_slug
+        specimen = prompt_block_for_slug(state.slug)
+    except Exception:
+        specimen = ""
 
     state.seed_agents()
     await backend.emit("phase", {"n": 0, "label": "Чете задачата"})
@@ -177,6 +183,7 @@ async def run_full_autopilot(
             '"instructions":"...","files":["src/App.jsx"]}]}\n'
             "3-8 етапа, всеки с 1-3 файла в 'files'."
             + (f"\n\n{lessons}" if lessons else "")
+            + (f"\n\n{specimen}" if specimen else "")
         )
         plan_raw = await backend.llm(
             AgentRole.PLANNER,
@@ -202,6 +209,7 @@ async def run_full_autopilot(
         "Връщай или JSON {\"files\": {\"path\": \"content\"}} "
         "или блокове ===FILE: path===\\n...\\n===END===.\n"
         "Пълни, синтактично коректни файлове."
+        + (f"\n\n{specimen}" if specimen else "")
     )
 
     for i, stage in enumerate(stages, 1):

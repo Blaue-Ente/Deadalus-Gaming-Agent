@@ -740,6 +740,7 @@ async def playground_plan_create(slug: str, request: Request):
         studio=studio,
         studio_preset=studio_preset,
         description=f"{proj.get('name', '')} {description}",
+        slug=slug,
     )
     plan: dict[str, Any] | None = None
     try:
@@ -1062,6 +1063,7 @@ async def game_studio_start(request: Request):
             kind=(body.get("kind") or "").strip(),
             build_mode=(body.get("build_mode") or "guided").strip(),
             slug=(body.get("slug") or "").strip(),
+            dissection=body.get("dissection") if isinstance(body.get("dissection"), dict) else None,
         )
         return JSONResponse({
             "ok": True,
@@ -1204,6 +1206,7 @@ async def playground_ai_gen_desc(request: Request):
     name = (body.get("name") or "").strip()
     kind = (body.get("kind") or "static").strip()
     criteria = (body.get("criteria") or "").strip()
+    reference = (body.get("reference") or "").strip()
     if not name:
         return JSONResponse({"ok": False, "error": "name required"}, status_code=400)
     brief = (
@@ -1211,11 +1214,26 @@ async def playground_ai_gen_desc(request: Request):
         f"{criteria or 'Make it playable and visually complete.'}\n"
         "Use real assets, not CSS-gradient placeholders. Games first."
     )
+    specimen = ""
+    if reference:
+        try:
+            from daedalus.agent import get_daedalus
+            from daedalus.reference_scout import scout_reference
+            scouted = await scout_reference(
+                reference, project_name=name, description=criteria,
+                memory=get_daedalus().memory,
+            )
+            specimen = scouted.get("brief_block") or ""
+        except Exception as exc:
+            log.debug("ai-gen-desc scout skipped: %s", exc)
     try:
         from daedalus.llm_client import complete
+        user = f"Name: {name}\nKind: {kind}\nCriteria: {criteria}"
+        if specimen:
+            user += f"\n\n{specimen}"
         result = await complete(
-            system="You write a ready-to-build product brief. Reply in Bulgarian. No markdown fences.",
-            user=f"Name: {name}\nKind: {kind}\nCriteria: {criteria}",
+            system="You write a ready-to-build product brief. Reply in Bulgarian. No markdown fences. If a specimen is present, treat it as inspiration, never a clone.",
+            user=user,
             max_tokens=800,
         )
         text = (result.get("reply") or "").strip() if isinstance(result, dict) else ""
@@ -1771,6 +1789,56 @@ async def project_reference_scout(slug: str, request: Request):
         ))
     except Exception as exc:
         return JSONResponse({"ok": False, "error": str(exc)[:400]}, status_code=400)
+
+
+@router.get("/daedalus/playground/api/projects/{slug}/dissection")
+async def project_dissection(slug: str):
+    from daedalus.dissection import load_dissection
+    return JSONResponse({"ok": True, "dissection": load_dissection(slug)})
+
+
+@router.post("/daedalus/playground/api/dissect")
+@router.post("/daedalus/playground/api/projects/{slug}/dissect")
+async def playground_dissect(request: Request, slug: str | None = None):
+    from daedalus.agent import get_daedalus
+    from daedalus.dissection import dissect
+    body = await _body(request)
+    source = (body.get("source") or body.get("reference") or "").strip()
+    try:
+        memory = get_daedalus().memory
+    except Exception:
+        memory = None
+    try:
+        result = await dissect(
+            source,
+            slug=(slug or body.get("slug") or "").strip() or None,
+            lab_id=(body.get("lab_id") or "").strip() or None,
+            install_path=(body.get("path") or "").strip(),
+            create_lab=body.get("create_lab", True) is not False,
+            live=body.get("live", True) is not False,
+            project_name=(body.get("name") or slug or "").strip(),
+            description=(body.get("description") or "").strip(),
+            memory=memory,
+        )
+        return JSONResponse(result)
+    except ValueError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    except Exception as extra:
+        return JSONResponse({"ok": False, "error": str(extra)[:400]}, status_code=400)
+
+
+@router.get("/daedalus/playground/api/labs")
+async def playground_labs():
+    from daedalus.play_lab import list_labs, probe_host
+    return JSONResponse({"ok": True, "labs": list_labs(), "host": probe_host()})
+
+
+@router.post("/daedalus/playground/api/labs")
+async def playground_labs_create(request: Request):
+    from daedalus.play_lab import create_lab
+    body = await _body(request)
+    row = create_lab(title=(body.get("title") or "").strip(), source=(body.get("source") or "").strip())
+    return JSONResponse({"ok": True, **row})
 
 
 @router.post("/daedalus/playground/api/skill-creator/start")

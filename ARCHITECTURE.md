@@ -37,6 +37,7 @@ Daedalus is **one product**: coding agent + Studio + Playground. One FastAPI pro
 | DoD | `job_contract.py` | Code without evidence is not done |
 | Reach | `reach.py` | Jina Reader + optional CLIs |
 | Playtest | `playtest.py` | Judge personas; no 1M dataset |
+| Dissection | `dissection.py` + `play_lab.py` | Specimen from name/URL/git/install; Play Lab is the VM |
 | MiroFish | `mirofish_client.py` | HTTP-only to a sidecar — never vendor |
 | MCP | `mcp_client.py` | JSON-RPC stdio/HTTP from `mcp.json` |
 | Browser | `playground_browser.py`, `browser_session.py` | Smoke + interactive session |
@@ -70,6 +71,8 @@ Defaults:
 - Verify: smoke + browser render-and-see + playtest + quality critic.
 - Unity is scaffold + Git, not an in-cloud Editor.
 - Arcade craft (`arcade_craft.py` + `studio_shelf.py` + `playground_racer_scaffold.py`): 3D arcade uses Vite + Three.js WebGPU/TSL. A racing brief boots a playable M0 in `src/racer/` (not Phaser).
+- Dissection: analyze a reference (link, name, git, or files in Play Lab) and inject a specimen into GDD/planner/builder. Do not copy proprietary assets or code.
+- Play Lab (`$DAEDALUS_DATA/labs/{id}/`): jailed install tree + local HTTP. Optional Docker. Not QEMU Windows and not Steam.
 - Godot 4 (`playground_godot_scaffold.py`, `playground_godot3d_scaffold.py`, `godot_tools.py`): text `.tscn`/GDScript, local Editor. 3D M0 is a greybox room with a plate and a door.
 - Blender jobs (`blender_jobs.py`, `python -m daedalus.blender_mcp`) **emit** a bpy script — they do not import `bpy` in the Daedalus process.
 - Not: own engine, own 3D foundation model, five parallel Godot MCP servers, silent self-editing, “one sentence → finished game”.

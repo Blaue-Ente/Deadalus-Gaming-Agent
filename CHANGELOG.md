@@ -3,6 +3,14 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).  
 The version in `pyproject.toml` is the source of truth for the package.
 
+## [0.3.8] — 2026-08-29
+
+### Games
+
+- **Dissection** — a specimen pipeline for “make it like this game”. Give Daedalus a name, a URL, a git repo, or files in a Play Lab. It fingerprints the stack, optionally probes with Chromium, and writes `assets/_dissection.json` + `design/dissection.md` onto the project being built. GDD, planner, guided build, and autopilot read that specimen. Inspiration only — not a clone of code or assets.
+- **Play Lab** — Daedalus’s virtual computer for those specimens. Always a jailed tree under `$DAEDALUS_DATA/labs/{id}/` plus local HTTP on 127.0.0.1. Optional Docker HTTP VM if the image is already local (`DAEDALUS_LAB_PULL=1` to pull). Native `.exe`/`.msi`/`.dmg` installers are refused.
+- Native tools: `dissect_game`, `play_lab`. Studio **Свят**, Game Studio, and Playground expose the same flow.
+
 ## [0.3.7] — 2026-08-29
 
 ### Autopilot

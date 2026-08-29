@@ -154,3 +154,4 @@ def test_studio_and_harness_http(harness_tmp):
     assert "local-llm" in caps.json()["capabilities"]
     assert "shell-center" in caps.json()["capabilities"]
     assert "playtest" in caps.json()["capabilities"]
+    assert "dissection" in caps.json()["capabilities"]

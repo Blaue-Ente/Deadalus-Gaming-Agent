@@ -38,6 +38,10 @@ Without them you need a local provider (Ollama and so on).
 | `DAEDALUS_LOCAL_LLM` | `1` |
 | `OLLAMA_HOST` | `127.0.0.1:11434` |
 | `DAEDALUS_OFFLINE` | `1` — refuse search / Jina / images |
+| `DAEDALUS_LAB_IMAGE` | Docker image for Play Lab VM (default `python:3.12-alpine`) |
+| `DAEDALUS_LAB_PULL` | `1` — allow `docker pull` for the lab image (off by default) |
+| `DAEDALUS_LAB_DOCKER` | `0` — never start a Docker lab; local HTTP only |
+| `DAEDALUS_LAB_INSTALL_ROOT` | extra allowed root for `play_lab` install paths |
 
 Studio → LLM (wardrobe) can switch models without editing `.env` (`wardrobe.json` under the data dir).
 

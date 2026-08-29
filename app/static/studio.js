@@ -67,7 +67,7 @@
       refreshProjects();
     };
     const locked = !state.slug;
-    ["pcapsule", "ppub", "plive", "build", "ptest"].forEach((id) => {
+    ["pcapsule", "ppub", "plive", "build", "ptest", "dissectbtn"].forEach((id) => {
       const n = $(id);
       if (n) n.disabled = locked;
     });
@@ -516,6 +516,40 @@
       add("bot", data.summary || "playtest готов", data.ship_ready ? "ship?" : "blockers");
     } catch (e) {
       text($("worldbox"), "playtest: " + e);
+    }
+  };
+  $("dissectbtn").onclick = async () => {
+    if (!state.slug) return;
+    const source = ($("dissectsrc").value || "").trim();
+    if (!source) { $("dissectsrc").focus(); return; }
+    document.querySelector('[data-pane="world"]').click();
+    text($("worldbox"), "дисекция " + source + "…");
+    try {
+      const data = await (await fetch("/api/v1/daedalus/dissect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ source, slug: state.slug, live: true }),
+      })).json();
+      text($("worldbox"), data.specimen_block || data.summary || JSON.stringify(data, null, 2));
+      add("bot", data.ok ? ("Мостра: " + (data.title || source)) : (data.detail || data.error || "дисекцията не мина"));
+    } catch (e) {
+      text($("worldbox"), "дисекция: " + e);
+    }
+  };
+  $("labbtn").onclick = async () => {
+    document.querySelector('[data-pane="world"]').click();
+    text($("worldbox"), "лаборатория…");
+    try {
+      const data = await (await fetch("/api/v1/daedalus/labs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: (selectedProject() && selectedProject().name) || "specimen" }),
+      })).json();
+      const host = await (await fetch("/api/v1/daedalus/labs/status")).json();
+      text($("worldbox"), JSON.stringify({ lab: data, host }, null, 2));
+      add("bot", data.ok ? ("Лаборатория " + data.id + " — инсталирай HTML5/zip в нея, после дисекция.") : (data.detail || "лабораторията не се създаде"));
+    } catch (e) {
+      text($("worldbox"), "лаборатория: " + e);
     }
   };
 
