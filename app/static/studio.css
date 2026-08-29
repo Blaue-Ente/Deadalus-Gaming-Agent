@@ -1,22 +1,4 @@
-:root {
-  --bg: #12100c;
-  --bg-raise: #1a1611;
-  --bg-input: #211b14;
-  --ink: #f2eadc;
-  --muted: #8f816c;
-  --faint: #6e6354;
-  --line: rgba(201, 162, 39, 0.18);
-  --gold: #c9a227;
-  --gold-2: #e4c56a;
-  --ok: #7dba6a;
-  --err: #d26a4a;
-  --warn: #d4a24a;
-  --radius: 8px;
-  --font: "Segoe UI", "Helvetica Neue", system-ui, sans-serif;
-  --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, Consolas, monospace;
-  --serif: "Palatino Linotype", Palatino, "Iowan Old Style", Georgia, serif;
-  --header: 64px;
-}
+@import url("daedalus-tokens.css");
 
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }

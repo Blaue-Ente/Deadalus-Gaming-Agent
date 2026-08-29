@@ -3,6 +3,18 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).  
 The version in `pyproject.toml` is the source of truth for the package.
 
+## [0.3.8] — 2026-08-29
+
+### Autopilot
+
+- After a failing visual critic, the kernel runs up to `DAEDALUS_QUALITY_MAX` polish passes (full files, then browser + critic again). Unparsed critic still does not pass.
+- Expo Metro / Streamlit that fail to start are skipped-fail, not skipped-pass. Non-visual kinds return N/A instead of a fake skip-ok.
+
+### Studio
+
+- Command Center (Hub, Playground, Game Studio, LLM, settings) uses the same gold / warm surface as Studio: shared `daedalus-tokens.css`, mark, serif brand. Tailwind palettes that were cyan/emerald map onto that surface.
+- Public builder API is mounted at `/api/v1/daedalus/builder` (same `run_full_autopilot` path). Owner token still required.
+
 ## [0.3.7] — 2026-08-29
 
 ### Autopilot

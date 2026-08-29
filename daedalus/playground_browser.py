@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any
 
 from . import playground as pg
+from .game_build_contract import skip_is_not_ok
 from .playground_runtime import VISUAL_KINDS
 
 log = logging.getLogger("argos.daedalus.playground_browser")
@@ -330,10 +331,15 @@ async def verify_app(slug: str, kind: str) -> dict[str, Any]:
     Non-visual kinds return a skipped result.
     """
     if kind not in VISUAL_KINDS:
-        return {"ok": True, "skipped": True, "summary": f"Render-and-See пропуснат за {kind}",
-                "console_errors": [], "page_errors": [], "failed_requests": [],
-                "blank_screen": False, "reachable": True, "dom_text_len": 0,
-                "has_canvas": False, "screenshot_path": None}
+        return {
+            "ok": True,
+            "skipped": False,
+            "na": True,
+            "summary": f"browser N/A ({kind})",
+            "console_errors": [], "page_errors": [], "failed_requests": [],
+            "blank_screen": False, "reachable": True, "dom_text_len": 0,
+            "has_canvas": False, "screenshot_path": None,
+        }
 
     root = pg.project_dir(slug)
 
@@ -359,10 +365,13 @@ async def verify_app(slug: str, kind: str) -> dict[str, Any]:
             rec = await runner.start(slug, install_deps=True)
             port = rec.get("port")
             if not port:
-                return {"ok": True, "skipped": True, "summary": "Streamlit не стартира — verify пропуснат",
-                        "console_errors": [], "page_errors": [], "failed_requests": [],
-                        "blank_screen": False, "reachable": False, "dom_text_len": 0,
-                        "has_canvas": False, "screenshot_path": None}
+                return skip_is_not_ok({
+                    "ok": False, "skipped": True,
+                    "summary": "Streamlit не стартира — not evidence",
+                    "console_errors": [], "page_errors": [], "failed_requests": [],
+                    "blank_screen": False, "reachable": False, "dom_text_len": 0,
+                    "has_canvas": False, "screenshot_path": None,
+                })
             return await browser_verify(slug, f"http://127.0.0.1:{port}/",
                                         kind=kind, settle_ms=4500, nav_timeout_ms=30000)
         finally:
@@ -384,10 +393,13 @@ async def verify_app(slug: str, kind: str) -> dict[str, Any]:
             rec = await runner.start(slug, install_deps=True)
             port = rec.get("port")
             if not port:
-                return {"ok": True, "skipped": True, "summary": "Expo Metro не стартира — verify пропуснат",
-                        "console_errors": [], "page_errors": [], "failed_requests": [],
-                        "blank_screen": False, "reachable": False, "dom_text_len": 0,
-                        "has_canvas": False, "screenshot_path": None}
+                return skip_is_not_ok({
+                    "ok": False, "skipped": True,
+                    "summary": "Expo Metro не стартира — not evidence",
+                    "console_errors": [], "page_errors": [], "failed_requests": [],
+                    "blank_screen": False, "reachable": False, "dom_text_len": 0,
+                    "has_canvas": False, "screenshot_path": None,
+                })
             return await browser_verify(slug, f"http://127.0.0.1:{port}/",
                                         kind=kind, settle_ms=5000, nav_timeout_ms=35000)
         finally:
@@ -396,10 +408,12 @@ async def verify_app(slug: str, kind: str) -> dict[str, Any]:
             except Exception:
                 pass
 
-    return {"ok": True, "skipped": True, "summary": "skip",
-            "console_errors": [], "page_errors": [], "failed_requests": [],
-            "blank_screen": False, "reachable": True, "dom_text_len": 0,
-            "has_canvas": False, "screenshot_path": None}
+    return skip_is_not_ok({
+        "ok": False, "skipped": True, "summary": "browser skip — not evidence",
+        "console_errors": [], "page_errors": [], "failed_requests": [],
+        "blank_screen": False, "reachable": False, "dom_text_len": 0,
+        "has_canvas": False, "screenshot_path": None,
+    })
 
 
 def format_errors_for_fix(result: dict[str, Any]) -> str:

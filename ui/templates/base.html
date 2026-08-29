@@ -4,33 +4,88 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{% block title %}Дедал · Daedalus{% endblock %}</title>
+  <link rel="icon" href="/static/favicon.ico" sizes="any" />
+  <link rel="icon" href="/static/daedalus-mark.png" type="image/png" />
+  <link rel="stylesheet" href="/static/daedalus-tokens.css" />
   <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <script>
     tailwind.config = {
       theme: {
         extend: {
           fontFamily: {
-            sans: ['Inter', 'system-ui', 'sans-serif'],
-            mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+            sans: ['Segoe UI', 'Helvetica Neue', 'system-ui', 'sans-serif'],
+            mono: ['ui-monospace', 'Cascadia Mono', 'SF Mono', 'Menlo', 'Consolas', 'monospace'],
+            serif: ['Palatino Linotype', 'Palatino', 'Iowan Old Style', 'Georgia', 'serif'],
           },
           colors: {
             argos: {
-              bg: '#05070d',
-              panel: '#0b1220',
-              panel2: '#111a2e',
-              border: '#1e2a44',
-              accent: '#22d3ee',
-              accent2: '#34d399',
-              danger: '#f43f5e',
-              warn: '#facc15',
-              dim: '#64748b',
+              bg: '#12100c',
+              panel: '#1a1611',
+              panel2: '#211b14',
+              border: 'rgba(201, 162, 39, 0.18)',
+              accent: '#c9a227',
+              accent2: '#e4c56a',
+              danger: '#d26a4a',
+              warn: '#d4a24a',
+              dim: '#8f816c',
             },
-          },
-          boxShadow: {
-            glow: '0 0 0 1px rgba(34,211,238,0.25), 0 0 24px rgba(34,211,238,0.15)',
+            emerald: {
+              50: '#f7f0d8', 100: '#f2eadc', 200: '#e4c56a', 300: '#e4c56a',
+              400: '#e4c56a', 500: '#c9a227', 600: '#c9a227', 700: '#8f7318',
+              800: '#5c4a12', 900: '#3a2e0c', 950: '#211b14',
+            },
+            cyan: {
+              50: '#f7f0d8', 100: '#f2eadc', 200: '#e4c56a', 300: '#e4c56a',
+              400: '#e4c56a', 500: '#c9a227', 600: '#c9a227', 700: '#8f7318',
+              800: '#5c4a12', 900: '#3a2e0c', 950: '#211b14',
+            },
+            indigo: {
+              50: '#f7f0d8', 100: '#f2eadc', 200: '#e4c56a', 300: '#e4c56a',
+              400: '#e4c56a', 500: '#c9a227', 600: '#c9a227', 700: '#8f7318',
+              800: '#5c4a12', 900: '#3a2e0c', 950: '#211b14',
+            },
+            purple: {
+              50: '#f7f0d8', 100: '#f2eadc', 200: '#e4c56a', 300: '#e4c56a',
+              400: '#e4c56a', 500: '#c9a227', 600: '#c9a227', 700: '#8f7318',
+              800: '#5c4a12', 900: '#3a2e0c', 950: '#211b14',
+            },
+            sky: {
+              300: '#e4c56a', 400: '#e4c56a', 500: '#c9a227', 600: '#c9a227', 700: '#8f7318',
+            },
+            teal: {
+              300: '#e4c56a', 400: '#e4c56a', 500: '#c9a227', 600: '#c9a227', 700: '#8f7318',
+            },
+            slate: {
+              200: '#f2eadc', 300: '#f2eadc', 400: '#8f816c', 500: '#8f816c',
+              600: '#6e6354', 700: '#211b14', 800: '#1a1611', 900: '#12100c',
+            },
+            gray: {
+              400: '#8f816c', 500: '#6e6354', 600: '#3a342c', 700: '#211b14',
+              800: '#1a1611', 900: '#12100c',
+            },
+            zinc: {
+              400: '#8f816c', 700: '#211b14', 800: '#1a1611', 900: '#12100c',
+            },
+            stone: {
+              400: '#8f816c', 700: '#211b14', 800: '#1a1611', 900: '#12100c',
+            },
+            amber: {
+              300: '#d4a24a', 400: '#d4a24a', 500: '#d4a24a',
+              700: '#8a6a28', 800: '#5c4a12', 900: '#3a2e0c',
+            },
+            yellow: {
+              300: '#d4a24a', 400: '#d4a24a', 900: '#3a2e0c',
+            },
+            red: {
+              300: '#d26a4a', 400: '#d26a4a', 500: '#d26a4a',
+              700: '#9a4a34', 900: '#4a2418',
+            },
+            green: {
+              400: '#7dba6a', 500: '#7dba6a',
+            },
+            blue: {
+              300: '#e4c56a', 900: '#3a2e0c',
+            },
           },
         },
       },
@@ -39,20 +94,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Daedalus" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <style>
-    body {
-      background-image:
-        radial-gradient(1000px 500px at 80% -10%, rgba(34,211,238,0.08), transparent 60%),
-        radial-gradient(800px 400px at -10% 30%, rgba(52,211,153,0.06), transparent 60%);
-      background-color: #05070d;
-    }
-    .grid-bg {
-      background-image:
-        linear-gradient(rgba(30,42,68,0.35) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(30,42,68,0.35) 1px, transparent 1px);
-      background-size: 32px 32px;
-    }
-  </style>
+  <link rel="stylesheet" href="/admin/static/command-center.css" />
   {% block extra_head %}{% endblock %}
 </head>
 <body class="min-h-screen text-slate-200 font-sans antialiased">

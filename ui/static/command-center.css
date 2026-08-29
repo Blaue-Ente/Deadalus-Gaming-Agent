@@ -1,0 +1,144 @@
+/* Command Center — same surface as Studio (tokens from daedalus-tokens.css). */
+
+html { background: var(--bg); }
+body {
+  color: var(--ink) !important;
+  font-family: var(--font);
+  background: var(--bg) !important;
+  background-image: none !important;
+}
+
+#sidebar {
+  background: var(--bg-raise) !important;
+  border-color: var(--line) !important;
+  backdrop-filter: none !important;
+}
+
+.cc-brand-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 7px;
+  display: block;
+}
+
+.cc-brand h1,
+.cc-heading {
+  font-family: var(--serif);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+}
+.cc-brand h1 em {
+  color: var(--gold);
+  font-style: italic;
+  font-weight: 500;
+}
+.cc-brand .sub,
+.cc-kicker {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.cc-kicker {
+  font-family: var(--mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.cc-nav-label {
+  color: var(--faint) !important;
+}
+
+.cc-nav-link {
+  color: var(--muted) !important;
+  border-color: transparent !important;
+}
+.cc-nav-link:hover {
+  background: rgba(201, 162, 39, 0.08) !important;
+  color: var(--ink) !important;
+}
+.cc-nav-link.is-on {
+  background: rgba(201, 162, 39, 0.12) !important;
+  color: var(--gold-2) !important;
+  border-color: var(--line) !important;
+}
+.cc-nav-dot {
+  background: var(--faint) !important;
+}
+.cc-nav-link.is-on .cc-nav-dot {
+  background: var(--gold) !important;
+}
+
+.cc-top {
+  background: var(--bg-raise);
+  border-bottom: 1px solid var(--line);
+}
+.cc-online {
+  color: var(--gold-2);
+  font-family: var(--mono);
+  font-size: 0.68rem;
+}
+.cc-online-dot {
+  background: var(--ok) !important;
+}
+
+.adn-section-nav .adn-nav-row {
+  border-bottom-color: var(--line) !important;
+}
+.adn-nav-link,
+.adn-nav-tab {
+  color: var(--muted);
+  font-family: var(--mono);
+}
+.adn-nav-link:hover,
+.adn-nav-tab:hover {
+  color: var(--ink);
+}
+.dx-nav-tab.adn-nav-active,
+.llm-nav-tab.adn-nav-active,
+.adn-nav-link.adn-nav-active {
+  border-bottom-color: var(--gold) !important;
+  color: var(--gold-2) !important;
+}
+.adn-nav-dropdown-menu {
+  background: var(--bg-raise) !important;
+  border-color: var(--line) !important;
+}
+.adn-nav-dropdown-item {
+  color: var(--muted) !important;
+}
+.adn-nav-dropdown-item:hover {
+  color: var(--ink) !important;
+  background: rgba(201, 162, 39, 0.08) !important;
+}
+
+button.primary,
+.cc-btn-primary {
+  background: var(--gold) !important;
+  color: #1a1408 !important;
+  border-color: var(--gold) !important;
+  font-weight: 600;
+}
+
+.dx-profile-card {
+  border-color: var(--line) !important;
+  background: var(--bg-input) !important;
+}
+.dx-profile-card.active {
+  border-color: var(--gold) !important;
+  background: rgba(201, 162, 39, 0.12) !important;
+}
+.dx-toast--success { border-color: var(--ok) !important; }
+.dx-toast--error { border-color: var(--err) !important; }
+.dx-toast--warn { border-color: var(--warn) !important; }
+.dx-toast--info { border-color: var(--gold) !important; }
+.mp-chip-active {
+  color: var(--gold-2) !important;
+  border-color: var(--gold) !important;
+  background: rgba(201, 162, 39, 0.12) !important;
+}
+.mp-trigger:hover,
+.mp-search:focus {
+  border-color: var(--gold) !important;
+}
