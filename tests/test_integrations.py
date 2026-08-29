@@ -137,7 +137,7 @@ def test_browser_close_without_session():
 def test_native_tool_catalog_includes_integrations():
     from daedalus.native_tools import NATIVE_TOOL_SPECS, openai_tool_specs
     names = {t["name"] for t in NATIVE_TOOL_SPECS}
-    for n in ("web_read", "reach_status", "browser", "mcp_call", "spawn_subagent", "playtest", "mirofish"):
+    for n in ("web_read", "reach_search", "reach_status", "browser", "mcp_call", "spawn_subagent", "playtest", "design_brief", "mirofish"):
         assert n in names
     oa_names = {s["function"]["name"] for s in openai_tool_specs()}
     assert "web_read" in oa_names
@@ -152,6 +152,7 @@ def test_connectors_and_playtest_http(harness_tmp):
     reach = client.get("/api/v1/daedalus/reach")
     assert reach.status_code == 200
     assert reach.json()["channels"]["web"]["ready"] is True
+    assert reach.json()["channels"]["reddit"]["ready"] is True
 
     personas = client.get("/api/v1/daedalus/playtest/personas")
     assert len(personas.json()["personas"]) >= 4
@@ -167,6 +168,7 @@ def test_connectors_and_playtest_http(harness_tmp):
     body = caps.json()["capabilities"]
     assert "agent-reach" in body
     assert "playtest" in body
+    assert "design-arena-practices" in body
     assert "mirofish-sidecar" in body
     assert "mcp" in body
 

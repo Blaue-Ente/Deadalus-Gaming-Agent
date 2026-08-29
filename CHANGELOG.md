@@ -10,10 +10,16 @@ The version in `pyproject.toml` is the source of truth for the package.
 - After a failing visual critic, the kernel runs up to `DAEDALUS_QUALITY_MAX` polish passes (full files, then browser + critic again). Unparsed critic still does not pass.
 - Expo Metro / Streamlit that fail to start are skipped-fail, not skipped-pass. Non-visual kinds return N/A instead of a fake skip-ok.
 
+### Agent
+
+- Native `reach_search`: DuckDuckGo web, Reddit via `site:reddit.com` (optional `rdt` / `DAEDALUS_REDDIT_COOKIE`). Evolution gardener ticks Reach. Offline denies the tool.
+- Design Arena as practices, not a dump: `design_brief` before files; pairwise playtest A/B. Agent Runner is not vendored.
+
 ### Studio
 
 - Command Center (Hub, Playground, Game Studio, LLM, settings) uses the same gold / warm surface as Studio: shared `daedalus-tokens.css`, mark, serif brand. Tailwind palettes that were cyan/emerald map onto that surface.
 - Public builder API is mounted at `/api/v1/daedalus/builder` (same `run_full_autopilot` path). Owner token still required.
+- World pane: Reach search (уеб / Reddit) and A/B playtest slug.
 
 ## [0.3.7] — 2026-08-29
 

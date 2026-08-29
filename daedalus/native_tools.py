@@ -20,6 +20,7 @@ PERM_MAP: dict[str, str | None] = {
     "web_search": "web_search",
     "web_fetch": "web_search",
     "web_read": "web_search",
+    "reach_search": "web_search",
     "reach_status": None,
     "postgres_query": "postgres_query",
     "code_search": None,
@@ -33,6 +34,7 @@ PERM_MAP: dict[str, str | None] = {
     "mcp_call": None,
     "spawn_subagent": None,
     "playtest": None,
+    "design_brief": None,
     "mirofish": None,
 }
 
@@ -190,8 +192,29 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "reach_search",
+        "description": (
+            "Search the live web or Reddit via the Reach layer. "
+            "channel=web uses DuckDuckGo; channel=reddit finds public threads "
+            "(DuckDuckGo site:reddit.com, or rdt-cli / owner cookie if present)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "channel": {
+                    "type": "string",
+                    "description": "auto | web | reddit",
+                },
+                "subreddit": {"type": "string"},
+                "limit": {"type": "integer"},
+            },
+            "required": ["query"],
+        },
+    },
+    {
         "name": "reach_status",
-        "description": "Probe internet backends (Jina, yt-dlp, gh, agent-reach doctor).",
+        "description": "Probe internet backends (Jina, DuckDuckGo, Reddit, yt-dlp, gh).",
         "input_schema": {"type": "object", "properties": {}},
     },
     {
@@ -248,17 +271,36 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
         "name": "playtest",
         "description": (
             "MatrAIx-style simulated players critique a Playground game "
-            "(loop, controls, first 30s, win/lose)."
+            "(loop, controls, first 30s, win/lose). Pass slug_b to A/B two builds."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "slug": {"type": "string"},
+                "slug_b": {
+                    "type": "string",
+                    "description": "Optional second slug — pairwise compare",
+                },
                 "kind": {"type": "string"},
                 "n": {"type": "integer"},
                 "use_browser": {"type": "boolean"},
             },
             "required": ["slug"],
+        },
+    },
+    {
+        "name": "design_brief",
+        "description": (
+            "Expand a one-line game/app prompt into a playable brief "
+            "(loop, controls, win/lose, art, M0 feasibility) before writing files."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "prompt": {"type": "string"},
+                "kind": {"type": "string"},
+            },
+            "required": ["prompt"],
         },
     },
     {
@@ -473,6 +515,30 @@ async def execute_native_tool(
                 return f"── web_read [{r.get('backend')}] {r.get('jina_url') or url} ──\n{r.get('text')}"
             return f"── web_read FAILED: {r.get('error')} ──"
 
+        if name == "reach_search":
+            from .reach import reach_search
+            r = await reach_search(
+                str(args.get("query") or ""),
+                channel=str(args.get("channel") or "auto"),
+                subreddit=str(args.get("subreddit") or ""),
+                limit=int(args.get("limit") or 6),
+            )
+            lines = [
+                f"── reach_search {r.get('channel') or ''} {r.get('backend') or ''} ──",
+                str(r.get("query") or ""),
+            ]
+            if r.get("note"):
+                lines.append(str(r["note"]))
+            if r.get("error") and not r.get("results"):
+                lines.append("error: " + str(r["error"]))
+            for hit in r.get("results") or []:
+                lines.append("• " + str(hit.get("title") or "") + (
+                    f"  r/{hit.get('subreddit')}" if hit.get("subreddit") else ""
+                ))
+                if hit.get("url"):
+                    lines.append("  " + str(hit["url"]))
+            return "\n".join(lines)
+
         if name == "reach_status":
             from .reach import reach_status
             st = reach_status()
@@ -527,14 +593,45 @@ async def execute_native_tool(
             return f"── spawn_subagent {status} {r.get('slug')} ──\n{r.get('summary') or r.get('error')}"
 
         if name == "playtest":
+            slug_b = str(args.get("slug_b") or "").strip()
+            kind = str(args.get("kind") or "static")
+            n = int(args.get("n") or 4)
+            use_browser = bool(args.get("use_browser"))
+            if slug_b:
+                from .playtest import compare_playtests
+                r = await compare_playtests(
+                    str(args.get("slug") or ""),
+                    slug_b,
+                    kind=kind,
+                    n=n,
+                    use_browser=use_browser,
+                )
+                if not r.get("ok"):
+                    return f"── playtest A/B FAILED: {r.get('error')} ──"
+                return (
+                    f"── playtest A/B winner={r.get('winner')} ──\n"
+                    f"{r.get('summary')}\n"
+                    f"A blockers: {r.get('a', {}).get('blockers')}\n"
+                    f"B blockers: {r.get('b', {}).get('blockers')}"
+                )
             from .playtest import format_for_prompt, run_playtest
             r = await run_playtest(
                 str(args.get("slug") or ""),
-                kind=str(args.get("kind") or "static"),
-                n=int(args.get("n") or 4),
-                use_browser=bool(args.get("use_browser")),
+                kind=kind,
+                n=n,
+                use_browser=use_browser,
             )
             return "── playtest ──\n" + format_for_prompt(r)
+
+        if name == "design_brief":
+            from .design_arena import expand_brief
+            r = expand_brief(
+                str(args.get("prompt") or ""),
+                kind=str(args.get("kind") or ""),
+            )
+            if not r.get("ok"):
+                return f"── design_brief FAILED: {r.get('error')} ──"
+            return "── design_brief ──\n" + (r.get("prompt_block") or "")
 
         if name == "mirofish":
             from . import mirofish_client as mf
