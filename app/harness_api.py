@@ -72,6 +72,7 @@ async def llm_select(body: ModelSelectionBody) -> dict[str, Any]:
     from daedalus.llm_config import PROVIDER_DEFAULTS, set_config
     from daedalus.llm_router_config import router_write_context
     from daedalus.local_llm import is_local_provider
+    from daedalus.model_registry import clear_active_mix
     from daedalus.provider_catalog import provider_definition, snapshot
 
     definition = provider_definition(body.provider)
@@ -91,6 +92,7 @@ async def llm_select(body: ModelSelectionBody) -> dict[str, Any]:
             base_url=base_url,
             use_cache=provider == "anthropic",
         )
+        clear_active_mix()
     return {
         "ok": True,
         "selection": {key: value for key, value in saved.items() if key != "api_key"},

@@ -107,6 +107,23 @@ def test_ollama_selection_is_normal_provider_route(harness_tmp, monkeypatch):
         "balanced",
         "maximum-quality",
     }
+    monkeypatch.setattr(
+        "daedalus.local_llm.probe_endpoint",
+        lambda base_url, timeout=1.6: {
+            "ok": True,
+            "base_url": base_url,
+            "models": ["installed-local"],
+            "error": "",
+        },
+    )
+    applied = client.post(
+        "/admin/llm-router/api/profile",
+        json={"id": "private"},
+        headers={"Authorization": f"Bearer {get_or_create_token()}"},
+    )
+    assert applied.status_code == 200
+    assert applied.json()["profile"]["active_mix"]["source_id"] == "private"
+    assert applied.json()["profile"]["extra_workers"]["coder"]["model"] == "installed-local"
     page = client.get("/admin/llm-router")
     assert page.status_code == 200
     assert "Ollama работи като нормален provider" in page.text
