@@ -145,6 +145,7 @@ async def capabilities() -> dict:
             "evolution", "windows-desktop", "windows-gui", "live-publish",
             "effort-routing", "world-kit", "long-horizon",
             "owner-token", "typed-tools", "atomic-router", "durable-runs",
+            "one-builder", "quality-gate", "engine-runners",
         ],
         "mesh_endpoint": "/api/iyveris",
         "studio": "/",

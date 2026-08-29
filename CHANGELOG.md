@@ -3,6 +3,21 @@
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).  
 The version in `pyproject.toml` is the source of truth for the package.
 
+## [0.3.7] — 2026-08-29
+
+### Autopilot
+
+- One builder pipeline on standalone: Studio, API, and `mode=light` all run `run_full_autopilot`. The host admin adapter stays for ADN-hosted installs.
+- Visual critic is **on by default** (`DAEDALUS_QUALITY=0` to opt out). `playground_quality.evaluate` is actually called; an unparsed critic is not a pass.
+- Playwright gameplay (click / canvas / keyboard) is required for visual web kinds. A screenshot or persona playtest is not a substitute. Skipped Chromium fails closed.
+- Godot kinds must pass a headless probe (`GODOT_BIN`). Unity kinds must run Editor `-batchmode` (`UNITY_PATH`). Missing binaries fail; scaffold is not a playtest.
+- Studio verify and playground revive treat skipped runtime smoke as a fail, not a pass. Missing engine binaries are not LLM-repaired.
+
+### Delivery
+
+- GitLab CI: mypy on the new kernel modules; pytest prints coverage (no percentage gate).
+- `uv.lock` is committed; CI runs `uv lock --check`. GameAgentBench stays a gate list — this repo does not ship a vendor bake-off.
+
 ## [0.3.6] — 2026-08-29
 
 ### Agent
