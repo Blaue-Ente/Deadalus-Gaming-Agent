@@ -1,7 +1,7 @@
 {% extends "_shell.html" %}
 {% set page = 'daedalus' %}
 {% set daedalus_tab = 'chat' %}
-{% block title %}ArgosDataNexus · Дедал{% endblock %}
+{% block title %}Дедал · Chat{% endblock %}
 {% block mob_title %}Дедал{% endblock %}
 {% block eyebrow %}Персистентен агент-инженер{% endblock %}
 {% block heading %}Дедал — Команден център{% endblock %}
@@ -425,7 +425,7 @@
         </div>
         <div class="flex items-center gap-2">
           <button onclick="loadOutbox()" class="text-[10px] text-argos-dim hover:text-argos-accent uppercase tracking-wider">↺</button>
-          <button id="upgrade-pool-scan-btn" onclick="runUpgradePoolScan()" title="Дедал оценява Upgrade Pool кандидатите за ADN" class="text-[10px] font-mono uppercase tracking-wider text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded hover:bg-cyan-500/10 transition">📦 Pool</button>
+          <button id="upgrade-pool-scan-btn" onclick="runUpgradePoolScan()" title="Дедал оценява Upgrade Pool кандидатите" class="text-[10px] font-mono uppercase tracking-wider text-cyan-400 border border-cyan-500/30 px-2 py-0.5 rounded hover:bg-cyan-500/10 transition">📦 Pool</button>
           <button onclick="showBgTaskModal()" class="text-[10px] font-mono uppercase tracking-wider text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded hover:bg-emerald-500/10 transition">▶ Задача</button>
         </div>
       </div>
@@ -545,7 +545,7 @@
         </div>
         <a href="/admin/daedalus/playground" target="_blank" class="text-[10px] text-emerald-400 hover:text-emerald-300 font-mono uppercase tracking-wider border border-emerald-500/30 px-2 py-0.5 rounded hover:bg-emerald-500/10 transition">↗ Отвори</a>
       </div>
-      <p class="text-[11px] text-argos-dim leading-relaxed">Строй · тествай · публикувай като ADN раздел · GitHub clone/push.</p>
+      <p class="text-[11px] text-argos-dim leading-relaxed">Строй · тествай · публикувай · GitHub clone/push.</p>
       <a href="/apps/" target="_blank" class="inline-block mt-2 text-[10px] text-argos-dim hover:text-argos-accent font-mono uppercase tracking-wider">↗ /apps (публикувани)</a>
 
       <!-- Kernel GitHub Sync -->
@@ -3283,7 +3283,7 @@
               });
               const j2 = await res.json();
               if (j2.ok) {
-                msg.textContent = '✓ Приложено! ADN се рестартира…';
+                msg.textContent = '✓ Приложено! Дедал се рестартира…';
                 msg.className = msg.className.replace('text-argos-dim', 'text-green-400');
                 setTimeout(() => loadProposalsPanel(), 3000);
               } else {
@@ -3815,7 +3815,7 @@
       });
       const d = await r.json();
       if (d.candidates === 0) {
-        showToast('📦 Няма нови ADN кандидати в Upgrade Pool', 3000);
+        showToast('📦 Няма нови кандидати в Upgrade Pool', 3000);
       } else {
         showToast(`📦 Стартиран scan на ${d.candidates} кандидата → виж Outbox`, 4000);
         setTimeout(() => loadOutbox(), 1500);

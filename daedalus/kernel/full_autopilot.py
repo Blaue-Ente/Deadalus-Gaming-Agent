@@ -337,8 +337,62 @@ async def run_full_autopilot(
                 },
             )
             if not quality_ok:
-                err = critic.get("error") or critic.get("summary") or "quality critic did not pass"
-                state.errors.append(str(err)[:300])
+                critic_err = str(
+                    critic.get("error") or critic.get("summary") or "quality critic did not pass"
+                )[:300]
+                state.errors.append(critic_err)
+                from daedalus.playground_quality import max_polish_passes
+                from daedalus.quality_gate import polish_prompt
+                for n in range(1, max_polish_passes() + 1):
+                    await backend.emit("phase", {"n": 4, "label": f"Quality polish {n}"})
+                    try:
+                        prompt = polish_prompt(
+                            slug=state.slug,
+                            kind=kind,
+                            description=state.description,
+                            critic=critic,
+                        )
+                    except Exception as exc:
+                        log.debug("polish prompt skipped: %s", exc)
+                        break
+                    raw = await backend.llm(AgentRole.CODER, prompt, system=build_sys)
+                    polish_map = _parse_file_blocks(raw) or {}
+                    if not polish_map:
+                        for c in _parse_files_json(raw, state.slug):
+                            polish_map[c.path] = c.content
+                    if polish_map:
+                        changes = [
+                            FileChange(path=p, action="update", content=c, summary=f"polish-{n}")
+                            for p, c in polish_map.items()
+                        ]
+                        await backend.write_changes(changes)
+                        for c in changes:
+                            _upsert_change(state, c)
+                    bresult = skip_is_not_ok(await _browser_verify(backend))
+                    browser_ok = verified(bresult)
+                    if not browser_ok:
+                        err = (bresult.get("summary") or "browser verify failed after polish")[:500]
+                        state.errors.append(err)
+                        break
+                    critic = await maybe_critic(
+                        slug=state.slug,
+                        kind=kind,
+                        description=state.description,
+                        plan=state.plan,
+                        bv=bresult,
+                        visual=True,
+                    )
+                    quality_ok = critic.get("na") or critic_counts_as_pass(critic)
+                    await backend.emit(
+                        "log",
+                        {
+                            "line": f"Polish {n}: overall={critic.get('overall')} passed={quality_ok}",
+                            "level": "info" if quality_ok else "warn",
+                        },
+                    )
+                    if quality_ok:
+                        state.errors = [e for e in state.errors if e != critic_err]
+                        break
 
     # ── PLAYTEST personas (extra signal, not a substitute for Playwright) ─
     playtest_block = ""
