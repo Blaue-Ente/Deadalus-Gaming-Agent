@@ -3,7 +3,7 @@
 Daedalus is **one product**: coding agent + Studio + Playground. One FastAPI process, port **8787**, SQLite, a direct OpenAI-compatible LLM.
 
 ```
-  Owner (BG / EN)
+  Owner (BG / EN)  ·  Telegram bot (paired)
            │
            ▼
   ┌─────────────────────────────────────┐
@@ -44,6 +44,7 @@ Daedalus is **one product**: coding agent + Studio + Playground. One FastAPI pro
 | Autopilot | `builder_runtime.py` + `kernel/full_autopilot.py` | Kernel loop |
 | Self-improve | `self_improve.py` | Gated skills; patches wait for Approve |
 | Evolution | `evolution.py` | Opt-in idle gardener |
+| Messaging | `messaging.py`, `telegram_gateway.py` | Telegram bot → same `agent.chat`; pairing / allowlist |
 | Kernel | `daedalus/kernel/` | plan → code → test → verify |
 | HTTP | `app/main.py` | Studio, `/admin/daedalus/*`, health, chat, playground API |
 | Windows | `app/desktop.py`, `app/windows_gui.py`, `packaging/windows/` | Start Menu; WebView2 / Tk |

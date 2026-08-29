@@ -18,13 +18,14 @@ Do not commit `.env`, tokens, or Chroma dumps with private chats.
 - The Windows app binds `127.0.0.1:8787` only.
 - Offline kit refuses search, Jina, and image-gen.
 - Published games under `/apps/` stay public (including their small KV store).
+- Telegram: unknown users never reach tools. Pairing codes expire; approve from Studio or `daedalus gateway pair`. Groups are ignored unless you opt in. This is a **bot** (`@BotFather`), not a login to a personal account.
 
 ## What you should do
 
 - On a laptop: `daedalus serve` (loopback). Do not bind `0.0.0.0` on a home PC.
 - On a VPS: HTTPS reverse proxy, `DAEDALUS_TOKEN` set to a long random value, a changed peer secret from `.env.example`, a volume only you persist.
 - Do not expose port 8787 to the internet without TLS and a token that is not the default peer secret.
-- Keep `GITLAB_TOKEN` / `NETLIFY_AUTH_TOKEN` / LLM keys out of git.
+- Keep `GITLAB_TOKEN` / `NETLIFY_AUTH_TOKEN` / LLM keys / `DAEDALUS_TELEGRAM_BOT_TOKEN` out of git.
 
 ## Supported versions
 

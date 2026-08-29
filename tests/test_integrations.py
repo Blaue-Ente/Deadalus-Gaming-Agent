@@ -169,6 +169,7 @@ def test_connectors_and_playtest_http(harness_tmp):
     assert "agent-reach" in body
     assert "playtest" in body
     assert "design-arena-practices" in body
+    assert "messaging-gateway" in body
     assert "mirofish-sidecar" in body
     assert "mcp" in body
 
@@ -189,7 +190,7 @@ def test_unified_connector_catalog_and_page(harness_tmp, monkeypatch):
     response = client.get("/api/v1/daedalus/connectors", headers=headers)
     assert response.status_code == 200
     rows = {row["id"]: row for row in response.json()["connectors"]}
-    assert {"github", "gitlab", "netlify", "supabase", "discord", "sentry", "mcp"} <= set(rows)
+    assert {"github", "gitlab", "netlify", "supabase", "discord", "telegram", "sentry", "mcp"} <= set(rows)
     assert rows["discord"]["configured"] is True
     assert rows["sentry"]["configured"] is True
     assert "deploy-notifications" in rows["discord"]["capabilities"]

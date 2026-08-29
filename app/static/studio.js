@@ -395,6 +395,14 @@
       lines.push("", "MIROFISH " + (mf.ok ? "UP" : "DOWN"));
       const mcp = (data.mcp && data.mcp.servers) || {};
       lines.push("", "MCP  " + (Object.keys(mcp).length ? Object.keys(mcp).join(", ") : "(none)"));
+      const gw = data.gateway || {};
+      const bot = gw.bot || {};
+      lines.push("", "TELEGRAM  " + (gw.polling ? "UP" : (gw.configured ? "token, no poll" : "DOWN")));
+      if (bot.username) lines.push("  @" + bot.username);
+      lines.push("  paired " + ((gw.paired || []).length) + "  pending " + ((gw.pending || []).length));
+      (gw.pending || []).slice(0, 3).forEach((p) => {
+        lines.push("  code " + p.code + "  id " + p.user_id + (p.username ? " @" + p.username : ""));
+      });
       try {
         const da = await (await fetch("/api/v1/daedalus/design-arena")).json();
         lines.push("", "DESIGN ARENA  " + (da.source || ""));
@@ -406,6 +414,33 @@
     }
   }
   $("cxrefresh").onclick = refreshConnectors;
+  $("gwapprove").onclick = async () => {
+    const code = (($("gwpair") && $("gwpair").value) || "").trim();
+    if (!code) return;
+    text($("worldbox"), "pairing… " + code);
+    try {
+      const data = await (await fetch("/api/v1/daedalus/gateway/pair", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      })).json();
+      if (data.ok) {
+        $("gwpair").value = "";
+        text($("worldbox"), "одобрен " + ((data.paired && data.paired.user_id) || code));
+        refreshConnectors();
+      } else {
+        text($("worldbox"), "pairing: " + (data.detail || data.error || JSON.stringify(data)));
+      }
+    } catch (e) {
+      text($("worldbox"), "pairing: " + e);
+    }
+  };
+  $("gwpair").addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      $("gwapprove").click();
+    }
+  });
   $("reachgo").onclick = async () => {
     const query = ($("reachq").value || "").trim();
     if (!query) return;

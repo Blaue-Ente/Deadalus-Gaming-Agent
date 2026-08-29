@@ -29,6 +29,19 @@ Without them you need a local provider (Ollama and so on).
 | `DAEDALUS_PLAYGROUND` | `playground/projects` | Working projects |
 | `DAEDALUS_WINDOWS_APP` | — | Set by the Windows installer; data goes to `%LOCALAPPDATA%\Daedalus` |
 
+## Telegram
+
+| Variable | Meaning |
+|---|---|
+| `DAEDALUS_TELEGRAM_BOT_TOKEN` | BotFather token. `daedalus serve` polls `api.telegram.org` (Studio can stay on loopback). |
+| `DAEDALUS_TELEGRAM_ALLOWLIST` | Comma-separated Telegram user ids that skip pairing |
+| `DAEDALUS_TELEGRAM_CHANNEL_ID` | Optional channel id for `daedalus gateway say` (bot must be admin) |
+| `DAEDALUS_TELEGRAM_GROUPS` | `1` — also accept group messages from allowed users (default: DMs only) |
+| `DAEDALUS_TELEGRAM_PAIRING` | `0` — strangers get no code (allowlist only). Default on. |
+| `DAEDALUS_GATEWAY` | `0` — do not poll Telegram |
+
+See [MESSAGING.md](MESSAGING.md). Unknown users never reach tools.
+
 ## Local LLM
 
 | Variable | Example |
