@@ -177,6 +177,7 @@ main {
   margin: 0 0 0.35rem;
 }
 .hint { color: var(--muted); font-size: 0.78rem; line-height: 1.4; margin: 0 0 0.55rem; }
+.pane > input { margin-top: 0.4rem; }
 .row { display: flex; gap: 0.4rem; }
 .row.tight { margin: 0.4rem 0 0.55rem; }
 .row > * { flex: 1; }

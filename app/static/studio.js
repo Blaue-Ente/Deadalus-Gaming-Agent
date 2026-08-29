@@ -388,18 +388,61 @@
       const ch = (data.reach && data.reach.channels) || {};
       lines.push("REACH");
       Object.keys(ch).forEach((k) => {
-        lines.push("  " + (ch[k].ready ? "UP  " : "DOWN") + " " + k);
+        const note = ch[k].note ? " — " + String(ch[k].note).slice(0, 80) : "";
+        lines.push("  " + (ch[k].ready ? "UP  " : "DOWN") + " " + k + note);
       });
       const mf = data.mirofish || {};
       lines.push("", "MIROFISH " + (mf.ok ? "UP" : "DOWN"));
       const mcp = (data.mcp && data.mcp.servers) || {};
       lines.push("", "MCP  " + (Object.keys(mcp).length ? Object.keys(mcp).join(", ") : "(none)"));
+      try {
+        const da = await (await fetch("/api/v1/daedalus/design-arena")).json();
+        lines.push("", "DESIGN ARENA  " + (da.source || ""));
+        (da.keep || []).slice(0, 2).forEach((k) => lines.push("  • " + k));
+      } catch (e) {}
       text($("worldbox"), lines.join("\n"));
     } catch (e) {
       text($("worldbox"), "connectors: " + e);
     }
   }
   $("cxrefresh").onclick = refreshConnectors;
+  $("reachgo").onclick = async () => {
+    const query = ($("reachq").value || "").trim();
+    if (!query) return;
+    text($("worldbox"), "търсене… " + query);
+    try {
+      const data = await (await fetch("/api/v1/daedalus/reach/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          query,
+          channel: $("reachch").value || "auto",
+          limit: 6,
+        }),
+      })).json();
+      const lines = [
+        "REACH SEARCH  " + (data.channel || "") + "  " + (data.backend || ""),
+        data.query || query,
+      ];
+      if (data.note) lines.push(data.note);
+      if (data.error && !(data.results || []).length) lines.push("грешка: " + data.error);
+      (data.results || []).forEach((r) => {
+        lines.push("• " + (r.title || "") + (r.subreddit ? "  r/" + r.subreddit : ""));
+        if (r.url) lines.push("  " + r.url);
+        if (r.snippet) lines.push("  " + String(r.snippet).slice(0, 160));
+      });
+      if (!(data.results || []).length && !data.error) lines.push("(няма резултати)");
+      text($("worldbox"), lines.join("\n"));
+    } catch (e) {
+      text($("worldbox"), "reach search: " + e);
+    }
+  };
+  $("reachq").addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      $("reachgo").click();
+    }
+  });
   $("offon").onclick = async () => {
     const cur = ($("offon").textContent || "").indexOf("ВКЛ") >= 0;
     await fetch("/api/v1/daedalus/offline", {
@@ -432,6 +475,9 @@
       if (data.skip_reason) lines.push("сега: skip (" + data.skip_reason + ")");
       const sum = data.last_summary || {};
       if (sum.studied) lines.push("последно репо: " + sum.studied);
+      if (sum.reach && sum.reach.length) {
+        lines.push("reach: " + sum.reach.map((r) => (r.channel || "?") + "×" + (r.n || 0)).join(", "));
+      }
       text($("evobox"), lines.join("\n"));
     } catch (e) {
       text($("evobox"), "evolution: " + e);
@@ -508,15 +554,22 @@
   $("ptest").onclick = async () => {
     if (!state.slug) return;
     document.querySelector('[data-pane="world"]').click();
-    text($("worldbox"), "playtest " + state.slug + "…");
+    const other = (($("ptestb") && $("ptestb").value) || "").trim();
+    text($("worldbox"), other
+      ? "A/B " + state.slug + " vs " + other + "…"
+      : "playtest " + state.slug + "…");
     try {
-      const data = await (await fetch("/api/v1/daedalus/playtest", {
+      const url = other ? "/api/v1/daedalus/playtest/compare" : "/api/v1/daedalus/playtest";
+      const payload = other
+        ? { slug_a: state.slug, slug_b: other, n: 4, use_browser: false, with_llm: false }
+        : { slug: state.slug, n: 4, use_browser: false, with_llm: false };
+      const data = await (await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slug: state.slug, n: 4, use_browser: false, with_llm: false }),
+        body: JSON.stringify(payload),
       })).json();
       text($("worldbox"), data.summary || JSON.stringify(data, null, 2));
-      add("bot", data.summary || "playtest готов", data.ship_ready ? "ship?" : "blockers");
+      add("bot", data.summary || "playtest готов", data.winner || (data.ship_ready ? "ship?" : "blockers"));
     } catch (e) {
       text($("worldbox"), "playtest: " + e);
     }

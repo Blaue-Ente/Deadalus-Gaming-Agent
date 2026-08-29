@@ -191,6 +191,7 @@ def test_cycle_mocked(evo_tmp):
         daedalus=Dummy(),
         radar_fn=fake_radar,
         study_fn=fake_study,
+        reach_fn=lambda *a, **k: {"ok": True, "channel": "web", "results": []},
     ))
     assert out["skipped"] is False
     assert out["studied"]["slug"] == "acme/memory-kit"
@@ -234,6 +235,49 @@ def test_evolution_http_and_studio(evo_tmp, monkeypatch):
 
     home = client.get("/")
     assert "Еволюция" in home.text
-
     caps = client.get("/capabilities")
     assert "evolution" in caps.json()["capabilities"]
+
+
+def test_cycle_studies_github_from_reach(evo_tmp):
+    from daedalus.evolution import github_urls_from_reach, run_cycle, set_enabled
+
+    set_enabled(True)
+    assert github_urls_from_reach([
+        {"urls": ["https://example.com/x", "https://github.com/acme/reach-kit"]},
+    ]) == ["https://github.com/acme/reach-kit"]
+
+    async def fake_radar(agent, source_ids=None, for_self=False):
+        return {"ok": True, "total_found": 0, "new_discoveries": 0, "sources": []}
+
+    async def fake_reach(query, **kwargs):
+        return {
+            "ok": True,
+            "channel": kwargs.get("channel") or "web",
+            "query": query,
+            "results": [{"title": "kit", "url": "https://github.com/acme/reach-kit"}],
+        }
+
+    def fake_study(url, **kwargs):
+        return {
+            "ok": True,
+            "slug": "acme/reach-kit",
+            "url": url,
+            "clone": {"cloned": False, "reason": "clone_research_off"},
+        }
+
+    class Dummy:
+        memory = None
+
+        async def chat(self, *args, **kwargs):
+            return {"reply": ""}
+
+    out = asyncio.run(run_cycle(
+        force=True,
+        daedalus=Dummy(),
+        radar_fn=fake_radar,
+        study_fn=fake_study,
+        reach_fn=fake_reach,
+    ))
+    assert out["studied"]["slug"] == "acme/reach-kit"
+    assert any(row.get("ok") for row in out["reach"])
