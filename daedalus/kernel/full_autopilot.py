@@ -91,6 +91,62 @@ def _parse_file_blocks(text: str) -> dict[str, str]:
     return files
 
 
+_FENCE_LANG_PATH = {
+    "html": "index.html",
+    "htm": "index.html",
+    "css": "style.css",
+    "js": "main.js",
+    "javascript": "main.js",
+    "jsx": "src/App.jsx",
+    "json": "package.json",
+}
+
+
+def _parse_fenced_files(text: str) -> dict[str, str]:
+    """Accept markdown fences from weaker models (```html / ```index.html)."""
+    files: dict[str, str] = {}
+    pattern = re.compile(r"```([^\n`]*)\n(.*?)```", re.DOTALL)
+    for m in pattern.finditer(text or ""):
+        info = (m.group(1) or "").strip()
+        body = (m.group(2) or "").strip("\n")
+        if not body.strip():
+            continue
+        token = (info.split()[0] if info else "").strip().lstrip("./")
+        path = ""
+        low = token.lower()
+        if "/" in token or any(low.endswith(ext) for ext in (".html", ".htm", ".js", ".css", ".jsx", ".json", ".py")):
+            path = token
+        elif low in _FENCE_LANG_PATH:
+            path = _FENCE_LANG_PATH[low]
+        elif "<html" in body.lower() or "<!doctype html" in body.lower():
+            path = "index.html"
+        if path:
+            files[path.lstrip("/")] = body
+    return files
+
+
+def _parse_loose_html(text: str) -> dict[str, str]:
+    t = (text or "").strip()
+    low = t.lower()
+    if low.startswith("<!doctype html") or low.startswith("<html"):
+        return {"index.html": t}
+    return {}
+
+
+def extract_coder_files(raw: str, slug: str = "") -> dict[str, str]:
+    """FILE blocks, then JSON {files}, then markdown fences, then raw HTML."""
+    files = _parse_file_blocks(raw)
+    if files:
+        return files
+    files = {c.path: c.content for c in _parse_files_json(raw, slug)}
+    if files:
+        return files
+    files = _parse_fenced_files(raw)
+    if files:
+        return files
+    return _parse_loose_html(raw)
+
+
 async def _get_kind(backend: BuilderBackend) -> str:
     if isinstance(backend, FullAutopilotBackend):
         return await backend.project_kind()
@@ -227,10 +283,7 @@ async def run_full_autopilot(
             f"Общо описание: {state.description[:1500]}"
         )
         raw = await backend.llm(AgentRole.CODER, prompt, system=build_sys)
-        files_map = _parse_file_blocks(raw)
-        if not files_map:
-            changes = _parse_files_json(raw, state.slug)
-            files_map = {c.path: c.content for c in changes}
+        files_map = extract_coder_files(raw, state.slug)
         if files_map:
             changes = [
                 FileChange(path=p, action="create", content=c, summary=f"stage-{i}")
@@ -267,10 +320,7 @@ async def run_full_autopilot(
             f"Платформа: {kind}. Върни JSON files или ===FILE=== блокове.",
             system=build_sys,
         )
-        fix_map = _parse_file_blocks(fix_raw) or {}
-        if not fix_map:
-            for c in _parse_files_json(fix_raw, state.slug):
-                fix_map[c.path] = c.content
+        fix_map = extract_coder_files(fix_raw, state.slug)
         if fix_map:
             changes = [FileChange(path=p, action="update", content=c) for p, c in fix_map.items()]
             await backend.write_changes(changes)

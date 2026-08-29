@@ -53,6 +53,23 @@ CONFIG_PRESETS: list[dict] = [
         "deep":     {"provider": "nvidia", "model": "mistralai/mistral-large-3-675b-instruct-2512"},
     },
     {
+        "id": "or_free",
+        "label": "🆓 OpenRouter Free — $0 (:free pool)",
+        "is_default": False,
+        "description": (
+            "Всички слотове през OpenRouter :free (OPENROUTER_API_KEY). "
+            "Master/balanced/deep = Poolside Laguna S 2.1:free (coding agent). "
+            "Fast = openrouter/free (автоматичен избор между свободните модели, "
+            "ако конкретният id е 429). Rate-limited; някои :free id-та връщат "
+            "празен отговор или upstream 429 — не е Claude. Не клонира платени модели."
+        ),
+        "budget": "$0 (OpenRouter :free, rate-limited)",
+        "master":   {"provider": "openrouter", "model": "poolside/laguna-s-2.1:free"},
+        "fast":     {"provider": "openrouter", "model": "openrouter/free"},
+        "balanced": {"provider": "openrouter", "model": "poolside/laguna-s-2.1:free"},
+        "deep":     {"provider": "openrouter", "model": "poolside/laguna-s-2.1:free"},
+    },
+    {
         "id": "eco",
         "label": "🌱 Eco — Максимална икономия",
         "is_default": False,
@@ -363,6 +380,12 @@ CONFIG_PRESETS: list[dict] = [
 ]
 
 
+def is_openrouter_free_id(model: str) -> bool:
+    """True for OpenRouter $0 model ids (`:free` suffix or the free router)."""
+    m = (model or "").strip()
+    return m.endswith(":free") or m == "openrouter/free"
+
+
 def get_preset(preset_id: str) -> Optional[dict]:
     for p in CONFIG_PRESETS:
         if p["id"] == preset_id:
@@ -432,9 +455,21 @@ def apply_preset(preset_id: str, master_api_key: str = "") -> dict:
 
     # Apply workers — resolve key per-slot. If worker's provider matches master,
     # we share the master key; else we resolve from that provider's env var.
+    # Pipeline roles (planner/coder/reviewer/…) inherit the core three so an
+    # eco/free preset cannot silently fall back to paid Claude defaults.
     warnings: list[str] = []
-    for slot in ("fast", "balanced", "deep"):
-        sc = preset[slot]
+    slot_plan = {
+        "fast": "fast",
+        "balanced": "balanced",
+        "deep": "deep",
+        "planner": "balanced",
+        "coder": "deep",
+        "reviewer": "deep",
+        "analysis": "deep",
+        "claude": "deep",
+    }
+    for slot, src in slot_plan.items():
+        sc = preset[src]
         slot_provider = sc["provider"]
         if slot_provider == master_provider:
             slot_key = master_key

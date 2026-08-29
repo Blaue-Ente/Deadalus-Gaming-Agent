@@ -62,6 +62,20 @@ def provider_default_base_url(provider: str) -> str:
     return str(pd.get("base_url") or "")
 
 
+def openai_compat_headers(provider: str) -> dict[str, str]:
+    """Extra headers for OpenAI-compatible clients.
+
+    OpenRouter's :free pool is more reliable when the request names the app.
+    """
+    if (provider or "").strip().lower() != "openrouter":
+        return {}
+    referer = (os.environ.get("OPENROUTER_HTTP_REFERER") or "").strip() or (
+        "https://gitlab.com/Blaue-Ente/deadalus-agent-0"
+    )
+    title = (os.environ.get("OPENROUTER_APP_TITLE") or "").strip() or "Daedalus"
+    return {"HTTP-Referer": referer, "X-Title": title}
+
+
 PROVIDER_DEFAULTS: dict[str, dict] = {
     "anthropic": {
         "base_url": "https://api.anthropic.com",
@@ -203,6 +217,11 @@ PRESET_MODELS = [
     {"id": "anthropic/claude-opus-4",                "label": "Claude Opus 4 (OpenRouter)",         "provider": "openrouter", "tier": "power"},
     {"id": "openai/gpt-4o",                          "label": "GPT-4o (OpenRouter)",                "provider": "openrouter", "tier": "fast"},
     {"id": "meta-llama/llama-3.3-70b-instruct",      "label": "Llama 3.3 70B (OpenRouter) 🆓",     "provider": "openrouter", "tier": "cheap"},
+    {"id": "openrouter/free",                        "label": "OpenRouter Free Router 🆓",         "provider": "openrouter", "tier": "cheap"},
+    {"id": "poolside/laguna-s-2.1:free",             "label": "Poolside Laguna S 2.1 (OR free) 🆓", "provider": "openrouter", "tier": "power"},
+    {"id": "poolside/laguna-xs-2.1:free",            "label": "Poolside Laguna XS 2.1 (OR free) 🆓","provider": "openrouter", "tier": "cheap"},
+    {"id": "google/gemma-4-31b-it:free",             "label": "Gemma 4 31B (OpenRouter free) 🆓",  "provider": "openrouter", "tier": "fast"},
+    {"id": "z-ai/glm-5.2:free",                      "label": "GLM 5.2 (OpenRouter free) 🆓",      "provider": "openrouter", "tier": "fast"},
     {"id": "moonshotai/kimi-k2",                     "label": "Kimi K2 (OpenRouter) 🤖",            "provider": "openrouter", "tier": "fast"},
     {"id": "qwen/qwq-32b",                           "label": "QwQ 32B reasoning (OpenRouter) 🧠",  "provider": "openrouter", "tier": "fast"},
     # ── AllToken — 52 модела, единен ALLTOKEN_API_KEY ──────────────────────────
@@ -592,6 +611,11 @@ def describe_effective_config() -> dict:
                 warnings.append(
                     "Има запис в DB, но effective идва от env fallback — провери API ключ в Secrets."
                 )
+        if effective.get("source") == "openrouter_default":
+            warnings.append(
+                "OpenRouter без избран модел ползва платения Claude Sonnet 4.5. "
+                "За $0 приложи preset or_free (модели с :free) или задай DAEDALUS_MODEL."
+            )
         if effective.get("warning"):
             warnings.append(str(effective["warning"]))
         if effective.get("source") == "db_incomplete":
