@@ -33,6 +33,19 @@ import re
 
 log = logging.getLogger(__name__)
 
+
+def _is_rate_limited(exc: BaseException) -> bool:
+    code = getattr(exc, "status_code", None) or getattr(exc, "code", None)
+    if code == 429:
+        return True
+    msg = str(exc).lower()
+    return (
+        "429" in msg
+        or "rate-limited" in msg
+        or "rate_limit" in msg
+        or "too many requests" in msg
+    )
+
 _DB_KEY = "adn:daedalus_worker_config"
 
 # Per-slot system prompts — specialized roles that significantly improve output
@@ -574,44 +587,58 @@ async def _call_worker_single(slot: str, task: str, slot_cfg: dict) -> dict:
                 "cost_usd":     mesh_res.get("cost_usd"),
                 "provider":     mesh_res.get("provider"),
             }
-        if sdk == "anthropic":
-            from anthropic import AsyncAnthropic
-            client = AsyncAnthropic(api_key=api_key, base_url=base_url or None, max_retries=1)
-            response = await client.messages.create(
-                model=model,
-                max_tokens=max_tokens,
-                system=persona,
-                messages=[{"role": "user", "content": task}],
-            )
-            result_text = response.content[0].text if response.content else ""
-        else:
-            from openai import AsyncOpenAI
-            from .llm_config import PROVIDER_DEFAULTS, openai_compat_headers
-            pd = PROVIDER_DEFAULTS.get(provider, PROVIDER_DEFAULTS["openai"])
-            extra = openai_compat_headers(provider)
-            client = AsyncOpenAI(
-                api_key=api_key,
-                base_url=base_url or pd["base_url"],
-                default_headers=extra or None,
-            )
-            # Reasoning models need extra budget for chain-of-thought before final answer
-            _is_reasoning = (model.startswith("gpt-5") or model.startswith("o4") or
-                             model.startswith("o3") or "r1" in model.lower() or
-                             "qwq" in model.lower() or slot == "analysis")
-            kwargs: dict = {
-                "model":    model,
-                "messages": [
-                    {"role": "system", "content": persona},
-                    {"role": "user",   "content": task},
-                ],
-            }
-            if _is_reasoning:
-                # double budget — reasoning models consume hidden thinking tokens
-                kwargs["max_completion_tokens"] = max(max_tokens * 2, 2000)
-            else:
-                kwargs["max_tokens"] = max_tokens
-            response = await client.chat.completions.create(**kwargs)
-            result_text = response.choices[0].message.content or ""
+        result_text = ""
+        for attempt in range(4):
+            try:
+                if sdk == "anthropic":
+                    from anthropic import AsyncAnthropic
+                    client = AsyncAnthropic(api_key=api_key, base_url=base_url or None, max_retries=1)
+                    response = await client.messages.create(
+                        model=model,
+                        max_tokens=max_tokens,
+                        system=persona,
+                        messages=[{"role": "user", "content": task}],
+                    )
+                    result_text = response.content[0].text if response.content else ""
+                else:
+                    from openai import AsyncOpenAI
+                    from .llm_config import PROVIDER_DEFAULTS, openai_compat_headers
+                    pd = PROVIDER_DEFAULTS.get(provider, PROVIDER_DEFAULTS["openai"])
+                    extra = openai_compat_headers(provider)
+                    client = AsyncOpenAI(
+                        api_key=api_key,
+                        base_url=base_url or pd["base_url"],
+                        default_headers=extra or None,
+                    )
+                    # Reasoning models need extra budget for chain-of-thought before final answer
+                    _is_reasoning = (model.startswith("gpt-5") or model.startswith("o4") or
+                                     model.startswith("o3") or "r1" in model.lower() or
+                                     "qwq" in model.lower() or slot == "analysis")
+                    kwargs: dict = {
+                        "model":    model,
+                        "messages": [
+                            {"role": "system", "content": persona},
+                            {"role": "user",   "content": task},
+                        ],
+                    }
+                    if _is_reasoning:
+                        # double budget — reasoning models consume hidden thinking tokens
+                        kwargs["max_completion_tokens"] = max(max_tokens * 2, 2000)
+                    else:
+                        kwargs["max_tokens"] = max_tokens
+                    response = await client.chat.completions.create(**kwargs)
+                    result_text = response.choices[0].message.content or ""
+                break
+            except Exception as exc:
+                if attempt < 3 and _is_rate_limited(exc):
+                    wait = 8 * (2 ** attempt)
+                    log.warning(
+                        "Worker [%s/%s] rate-limited (try %d/4), sleep %ss: %s",
+                        slot, model, attempt + 1, wait, exc,
+                    )
+                    await asyncio.sleep(wait)
+                    continue
+                raise
 
         elapsed_ms = int((asyncio.get_event_loop().time() - _t0) * 1000)
         log.info("Worker [%s/%s] task done (%d chars, %dms)", slot, model, len(result_text), elapsed_ms)

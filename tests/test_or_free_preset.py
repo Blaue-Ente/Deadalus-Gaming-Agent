@@ -64,6 +64,20 @@ def test_apply_or_free_pins_pipeline_slots_off_paid_defaults(harness_tmp):
     assert openai_compat_headers("novita") == {}
 
 
+def test_rate_limited_detects_openrouter_429():
+    from daedalus.workers import _is_rate_limited
+
+    class Fake:
+        status_code = 429
+
+        def __str__(self):
+            return "Error"
+
+    assert _is_rate_limited(Fake())
+    assert _is_rate_limited(RuntimeError("HTTP Error 429: Too Many Requests"))
+    assert not _is_rate_limited(RuntimeError("timeout"))
+
+
 def test_or_free_in_preset_library():
     from daedalus.preset_library import CHOSEN_IDS, library
 

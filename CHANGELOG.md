@@ -8,7 +8,7 @@ The version in `pyproject.toml` is the source of truth for the package.
 ### LLM
 
 - **OpenRouter Free** preset (`or_free`) — all slots on `$0` OpenRouter ids (`poolside/laguna-s-2.1:free` + `openrouter/free`). Applying any preset now also pins planner/coder/reviewer/analysis/claude to that preset’s core models, so an eco/free mix cannot silently call paid Claude defaults.
-- OpenRouter OpenAI-compat calls send `HTTP-Referer` / `X-Title` (helps the `:free` pool). Unconfigured `OPENROUTER_API_KEY` still defaults to paid Claude Sonnet — Studio warns; apply `or_free` or set `DAEDALUS_MODEL`.
+- OpenRouter OpenAI-compat calls send `HTTP-Referer` / `X-Title` (helps the `:free` pool). Workers retry 429 with backoff (4 tries). Unconfigured `OPENROUTER_API_KEY` still defaults to paid Claude Sonnet — Studio warns; apply `or_free` or set `DAEDALUS_MODEL`.
 
 ## [0.3.8] — 2026-08-29
 
