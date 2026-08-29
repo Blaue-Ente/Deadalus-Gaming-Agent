@@ -102,3 +102,53 @@ def overlay_effort(cfg: dict[str, Any], extra: dict[str, Any] | None) -> dict[st
     out["effort_source"] = source
     out["effort_skipped"] = "model-without-provider"
     return out
+
+
+def is_retryable_provider_error(exc: Exception) -> bool:
+    """Retry only transport, throttling, and transient provider failures."""
+    status = getattr(exc, "status_code", None)
+    if isinstance(status, int):
+        return status in {408, 409, 425, 429} or status >= 500
+    name = type(exc).__name__.lower()
+    return any(token in name for token in ("connection", "timeout", "ratelimit"))
+
+
+def fallback_routes(primary: dict[str, Any], *, limit: int = 2) -> list[ModelRoute]:
+    """Resolve usable alternative routes without crossing Private/Offline policy."""
+    from .local_llm import offline_requested
+    from .provider_catalog import resources
+
+    local_only = offline_requested()
+    try:
+        from .model_registry import get_active_mix
+
+        active_mix = get_active_mix() or {}
+        local_only = local_only or active_mix.get("source_id") == "private"
+    except Exception:
+        pass
+
+    primary_provider = str(primary.get("provider") or "")
+    primary_model = str(primary.get("model") or "")
+    routes: list[ModelRoute] = []
+    for resource in resources(probe_local=True):
+        if not resource.get("configured"):
+            continue
+        if local_only and resource.get("kind") != "local":
+            continue
+        if resource.get("kind") == "custom":
+            continue
+        models = list(resource.get("models") or [])
+        if resource.get("kind") == "local":
+            models = [model for model in models if model.get("source") == "discovered"]
+        for model in models:
+            provider = str(resource.get("id") or "")
+            model_id = str(model.get("id") or "")
+            if (provider, model_id) == (primary_provider, primary_model):
+                continue
+            route = _route_for_provider(provider, model_id, source="fallback")
+            if route:
+                routes.append(route)
+                break
+        if len(routes) >= limit:
+            break
+    return routes

@@ -169,3 +169,37 @@ def test_connectors_and_playtest_http(harness_tmp):
     assert "playtest" in body
     assert "mirofish-sidecar" in body
     assert "mcp" in body
+
+
+def test_unified_connector_catalog_and_page(harness_tmp, monkeypatch):
+    monkeypatch.setenv("DISCORD_WEBHOOK_URL", "https://discord.example/webhook")
+    monkeypatch.setenv("SENTRY_DSN", "https://key@sentry.example/1")
+
+    async def fake_mirofish_ping():
+        return {"ok": False, "configured": False}
+
+    monkeypatch.setattr("daedalus.mirofish_client.ping", fake_mirofish_ping)
+    from app.main import app
+    from daedalus.owner_auth import get_or_create_token
+
+    client = TestClient(app)
+    headers = {"Authorization": f"Bearer {get_or_create_token()}"}
+    response = client.get("/api/v1/daedalus/connectors", headers=headers)
+    assert response.status_code == 200
+    rows = {row["id"]: row for row in response.json()["connectors"]}
+    assert {"github", "gitlab", "netlify", "supabase", "discord", "sentry", "mcp"} <= set(rows)
+    assert rows["discord"]["configured"] is True
+    assert rows["sentry"]["configured"] is True
+    assert "deploy-notifications" in rows["discord"]["capabilities"]
+
+    confirm = client.post(
+        "/api/v1/daedalus/connectors/discord/test",
+        json={"confirm": False},
+        headers=headers,
+    )
+    assert confirm.status_code == 200
+    assert confirm.json()["needs_confirm"] is True
+
+    page = client.get("/admin/daedalus/connectors")
+    assert page.status_code == 200
+    assert "Deploy, backend, notifications" in page.text
