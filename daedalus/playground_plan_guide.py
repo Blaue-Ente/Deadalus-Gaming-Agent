@@ -201,6 +201,7 @@ def build_planner_system_prompt(
     studio: bool = False,
     studio_preset: str = "custom",
     description: str = "",
+    slug: str = "",
 ) -> str:
     """Assemble full planner system prompt for a given kind."""
     kind_add = autopilot_plan_addendum(kind, is_game=is_game)
@@ -239,6 +240,14 @@ def build_planner_system_prompt(
         parts.extend(["", kind_add])
     if extra_addendum:
         parts.extend(["", extra_addendum.strip()])
+    if slug:
+        try:
+            from .dissection import prompt_block_for_slug
+            specimen = prompt_block_for_slug(slug)
+            if specimen:
+                parts.extend(["", specimen])
+        except Exception:
+            pass
     if is_game:
         try:
             from .arcade_craft import planner_addendum as _craft_plan

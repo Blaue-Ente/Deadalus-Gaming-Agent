@@ -306,6 +306,8 @@
                 onkeydown="if(event.key==='Enter'){event.preventDefault();scoutWizardReference();}">
               <button onclick="scoutWizardReference()" id="np-ref-scout-btn"
                 class="shrink-0 px-3 py-2 rounded text-xs font-medium bg-cyan-800 hover:bg-cyan-700 text-white whitespace-nowrap">🔍 Scout</button>
+              <button onclick="dissectWizardReference()" id="np-ref-dissect-btn"
+                class="shrink-0 px-3 py-2 rounded text-xs font-medium bg-indigo-800 hover:bg-indigo-700 text-white whitespace-nowrap">🔬 Дисекция</button>
             </div>
             <div id="np-reference-panel" class="hidden mt-2 p-2.5 rounded-lg border border-cyan-700/40 bg-cyan-950/30 text-[10px] font-mono text-cyan-100/90 space-y-1">
               <div class="text-cyan-300 font-semibold" id="np-ref-title"></div>
@@ -3768,6 +3770,27 @@ async function scoutWizardReference() {
     else renderReferencePanel($('np-reference-panel'), res);
   } catch (e) { alert('Грешка: ' + e.message); }
   finally { if (btn) { btn.disabled = false; btn.textContent = '🔍 Scout'; } }
+}
+
+async function dissectWizardReference() {
+  const source = ($('np-reference')?.value || '').trim();
+  if (!source) { $('np-reference')?.focus(); return; }
+  const btn = $('np-ref-dissect-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳…'; }
+  try {
+    const res = await api('/admin/daedalus/playground/api/dissect', {
+      method: 'POST',
+      body: JSON.stringify({
+        source,
+        name: $('np-name')?.value?.trim() || '',
+        description: $('np-desc')?.value?.trim() || '',
+        live: true,
+      }),
+    });
+    if (!res.ok) alert('Дисекция: ' + (res.error || res.detail || 'unknown'));
+    else renderReferencePanel($('np-reference-panel'), res);
+  } catch (e) { alert('Грешка: ' + e.message); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = '🔬 Дисекция'; } }
 }
 
 async function scoutAutopilotReference() {

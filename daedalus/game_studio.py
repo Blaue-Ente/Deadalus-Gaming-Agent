@@ -257,6 +257,7 @@ def generate_gdd_lite(
     *,
     studio_preset: str = "",
     kind: str = "",
+    dissection: dict[str, Any] | None = None,
 ) -> str:
     """Generate design/gdd-lite.md content (template-based)."""
     b = normalize_brainstorm(brainstorm)
@@ -288,6 +289,14 @@ def generate_gdd_lite(
     ]
     if b.get("reference_games"):
         lines.extend([f"- **Референции:** {b['reference_games']}", ""])
+    if dissection and (dissection.get("title") or dissection.get("summary") or dissection.get("specimen_block")):
+        from .dissection import format_specimen_block
+        lines.extend([
+            "## Дисекция (мостра)",
+            "",
+            dissection.get("specimen_block") or format_specimen_block(dissection),
+            "",
+        ])
 
     if b.get("unique_hook"):
         lines.extend([
@@ -430,6 +439,7 @@ async def start_game_studio_project(
     kind: str = "",
     build_mode: str = "guided",
     slug: str = "",
+    dissection: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Create Playground project + write GDD and config. Does not run plan/build."""
     from . import playground as pg
@@ -442,7 +452,9 @@ async def start_game_studio_project(
     resolved = resolve_platform_preset(b, studio_preset=studio_preset, kind=kind)
     effective_kind = resolved["kind"]
     effective_preset = resolved["studio_preset"]
-    gdd_md = generate_gdd_lite(b, studio_preset=effective_preset, kind=effective_kind)
+    gdd_md = generate_gdd_lite(
+        b, studio_preset=effective_preset, kind=effective_kind, dissection=dissection,
+    )
     config = build_config(
         b,
         studio_preset=effective_preset,
@@ -477,6 +489,12 @@ async def start_game_studio_project(
         CONFIG_PATH: json.dumps(config, ensure_ascii=False, indent=2),
     }
     pg.write_files(project_slug, files)
+    if dissection and isinstance(dissection, dict):
+        try:
+            from .dissection import save_dissection
+            save_dissection(project_slug, dissection)
+        except Exception:
+            pass
 
     # Unity / hybrid init hooks (same as create wizard)
     init_notes: list[str] = []
@@ -502,6 +520,8 @@ async def start_game_studio_project(
         f"Preset: {effective_preset}. Build mode: {build_mode}.\n\n"
         f"{_description_blob(b)}"
     )
+    if dissection and dissection.get("specimen_block"):
+        plan_description += "\n\n" + dissection["specimen_block"]
     return {
         "project": proj,
         "slug": project_slug,
@@ -647,6 +667,12 @@ async def get_workspace_context(slug: str) -> dict[str, Any]:
     current_ms = resolve_current_milestone(cfg, plan)
     ms_summary = milestone_summary(cfg, plan)
     cur_verify = verify_summary_for_milestone(cfg, current_ms)
+    dissection = None
+    try:
+        from .dissection import load_dissection
+        dissection = load_dissection(slug)
+    except Exception:
+        dissection = None
     return {
         "project": proj,
         "config": cfg,
@@ -664,6 +690,7 @@ async def get_workspace_context(slug: str) -> dict[str, Any]:
         "project_complete": project_complete(cfg, plan),
         "studio_preset": preset,
         "build_mode": cfg.get("build_mode") or "guided",
+        "dissection": dissection,
         **gate_state,
     }
 
