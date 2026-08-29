@@ -545,7 +545,31 @@ async def run_milestone_verify(
             "summary": "gameplay skipped — not evidence",
         })
 
-    overall_ok = runtime_ok and browser_ok and gameplay_ok and not proof_incomplete
+    from .playground_browser import VISUAL_KINDS
+    from .quality_gate import critic_counts_as_pass, maybe_critic
+
+    critic = await maybe_critic(
+        slug=slug,
+        kind=kind,
+        description=description,
+        plan=plan,
+        bv=gameplay if gameplay.get("screenshot_path") else browser,
+        visual=kind in VISUAL_KINDS,
+    )
+    quality_ok = bool(critic.get("na") or critic_counts_as_pass(critic))
+    if on_log:
+        if critic.get("na"):
+            await _emit(on_log, "Visual quality: N/A for this project kind", "dim")
+        else:
+            level = "ok" if quality_ok else "err"
+            await _emit(
+                on_log,
+                f"{'✅' if quality_ok else '❌'} Visual quality: "
+                f"{critic.get('overall', 'unscored')}",
+                level,
+            )
+
+    overall_ok = runtime_ok and browser_ok and gameplay_ok and quality_ok and not proof_incomplete
     screenshot = (
         gameplay.get("screenshot_path")
         or (browser.get("screenshot_path") if browser else None)
@@ -584,6 +608,12 @@ async def run_milestone_verify(
         "gameplay_attempts": gameplay_attempts,
         "gameplay_checks": (gameplay.get("checks") or [])[:12],
         "gameplay_summary": (gameplay.get("summary") or "")[:500],
+        "quality_ok": quality_ok,
+        "quality": {
+            key: critic.get(key)
+            for key in ("ok", "na", "parsed", "passed", "overall", "summary", "error")
+            if key in critic
+        },
         "proof_incomplete": proof_incomplete,
         "unity_local_required": bool(gameplay.get("unity_local_required") or browser.get("unity_local_required")),
         "unity_scaffold_ok": unity_scaffold_ok,

@@ -1132,16 +1132,15 @@ async function gsHandleGuidedEvent(ev, d) {
       }
       break;
     case 'milestone_done':
-      _gsGuidedMilestoneScope = d.milestone_id || _gsGuidedMilestoneScope;
-      gsGuidedLog(`✅ Milestone ${d.milestone_id || ''} завършен`, 'ok');
-      await gsOnGuidedFinished(`Milestone ${d.milestone_id || ''} build готов — пускам Verify…`);
-      await gsRunVerify(d.milestone_id, true);
+      _gsGuidedMilestoneScope = '';
+      gsGuidedLog(`✅ Milestone ${d.milestone_id || ''} build + Verify завършени`, 'ok');
+      await gsOnGuidedFinished(`Milestone ${d.milestone_id || ''} е построен и проверен.`);
       break;
     case 'done':
+      if (!_gsGuidedRunning) break;
       if (_gsGuidedMilestoneScope) {
         gsGuidedLog(`✅ Milestone ${_gsGuidedMilestoneScope} завършен`, 'ok');
-        await gsOnGuidedFinished(`Milestone ${_gsGuidedMilestoneScope} build готов — пускам Verify…`);
-        await gsRunVerify(_gsGuidedMilestoneScope, true);
+        await gsOnGuidedFinished(`Milestone ${_gsGuidedMilestoneScope} е построен и проверен.`);
       } else {
         await gsOnGuidedFinished(`Guided build завършен — ${(d.files || []).length} файла.`);
       }
