@@ -84,7 +84,7 @@ export DAEDALUS_STANDALONE=1
 python -m app.cli serve --host 127.0.0.1 --port 8787
 ```
 
-Open http://127.0.0.1:8787
+Open http://127.0.0.1:8787. Optional: Telegram — [MESSAGING.md](MESSAGING.md).
 
 Need Python 3.11+. On macOS: `brew install python@3.12` if the system Python is old.
 
@@ -130,4 +130,5 @@ Env vars: [ENV.md](ENV.md). Cloud / VPS: [DEPLOY.md](../DEPLOY.md).
 - `python` not found (venv path) → on Windows use `install.ps1` without `-UseSystemPython`.
 - Port 8787 busy → `python -m app.cli serve --port 8788`.
 - Chat errors about a key → `.env` with at least one `*_API_KEY`, or local Ollama.
+- Telegram: see [MESSAGING.md](MESSAGING.md). Token in `.env`, then DM the bot and approve the pairing code.
 - Windows window stays blank → run `Daedalus.cmd` and read the console.

@@ -156,6 +156,11 @@ PLAYTEST (MatrAIx-style, lightweight)
 - Critique loop, controls, first 30s, win/lose — not a 1M dataset.
 - Optional A/B of two slugs (pairwise idea; no Elo crowdsourcing).
 
+GATEWAY (Telegram)
+- Same agent as Studio. Bot from @BotFather — not a personal Telegram login.
+- Unknown users get a pairing code. Owner approves in Studio or `daedalus gateway pair`.
+- Laptop on 127.0.0.1 still works: the process polls api.telegram.org outbound.
+
 MIROFISH (optional AGPL sidecar)
 - HTTP only to MIROFISH_URL (default http://127.0.0.1:5001).
 - Never copy MiroFish source into this MIT tree. Ping or submit GDD text.

@@ -57,6 +57,14 @@ CATALOG: list[dict[str, Any]] = [
         "native": "reach_search",
     },
     {
+        "id": "telegram",
+        "kind": "native",
+        "label": "Telegram бот",
+        "blurb": "Същият агент като Studio. BotFather токен + pairing. Не е личен акаунт.",
+        "offline_ok": False,
+        "native": "telegram",
+    },
+    {
         "id": "playtest",
         "kind": "native",
         "label": "Playtest personas",

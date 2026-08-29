@@ -64,8 +64,18 @@ async def lifespan(_app: FastAPI):
     except Exception:
         log.exception("evolution gardener failed to start (non-fatal)")
     try:
+        from daedalus.telegram_gateway import start_poller
+        start_poller()
+    except Exception:
+        log.exception("telegram gateway failed to start (non-fatal)")
+    try:
         yield
     finally:
+        try:
+            from daedalus.telegram_gateway import stop_poller
+            await stop_poller()
+        except Exception:
+            log.debug("telegram gateway stop failed", exc_info=True)
         try:
             from daedalus.evolution import stop_gardener
             await stop_gardener()
@@ -145,6 +155,7 @@ async def capabilities() -> dict:
             "browser-session", "subagents",
             "offline-kit", "llm-wardrobe", "addons", "capsule",
             "evolution", "windows-desktop", "windows-gui", "live-publish",
+            "messaging-gateway",
             "effort-routing", "world-kit", "long-horizon",
             "owner-token", "typed-tools", "atomic-router", "durable-runs",
             "one-builder", "quality-gate", "engine-runners", "studio-shell",

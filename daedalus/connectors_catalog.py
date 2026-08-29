@@ -29,6 +29,14 @@ CONNECTORS: tuple[ConnectorDefinition, ...] = (
     ConnectorDefinition("supabase", "Supabase", "backend", ("database", "auth", "storage"), ("SUPABASE_URL", "SUPABASE_ANON_KEY")),
     ConnectorDefinition("sentry", "Sentry", "observability", ("error-reporting",), ("SENTRY_DSN",)),
     ConnectorDefinition("discord", "Discord webhook", "notification", ("deploy-notifications",), ("DISCORD_WEBHOOK_URL",)),
+    ConnectorDefinition(
+        "telegram",
+        "Telegram bot",
+        "notification",
+        ("owner-chat", "remote-commands"),
+        ("DAEDALUS_TELEGRAM_BOT_TOKEN",),
+        setup_hint="BotFather token. Pairing or DAEDALUS_TELEGRAM_ALLOWLIST. Not a user account.",
+    ),
     ConnectorDefinition("object-storage", "Object Storage", "storage", ("workspace-backup", "published-apps"), offline_ok=True),
     ConnectorDefinition("mcp", "MCP servers", "tool", ("external-tools",), offline_ok=True),
     ConnectorDefinition("mirofish", "MiroFish", "tool", ("simulation",), ("MIROFISH_URL",), offline_ok=True),
@@ -57,6 +65,7 @@ def _base_status(definition: ConnectorDefinition) -> dict[str, Any]:
             "netlify",
             "supabase",
             "discord",
+            "telegram",
             "mirofish",
             "reach",
         },
@@ -128,6 +137,23 @@ async def _status_for(definition: ConnectorDefinition, *, probe: bool) -> dict[s
         row.update(status)
         row["configured"] = True
         row["ok"] = bool(status.get("ok", True))
+    elif connector_id == "telegram":
+        from .messaging import configured, snapshot
+        row["configured"] = configured()
+        snap = snapshot()
+        row["ok"] = bool(snap.get("configured"))
+        row["detail"] = (
+            "Polling" if snap.get("polling")
+            else "Token set — start daedalus serve"
+            if row["configured"] else "DAEDALUS_TELEGRAM_BOT_TOKEN"
+        )
+        if probe and row["configured"]:
+            from .telegram_gateway import get_me
+            ident = await get_me()
+            row["ok"] = bool(ident.get("ok"))
+            row["bot"] = ident.get("username")
+            if ident.get("error"):
+                row["detail"] = ident["error"]
     elif connector_id == "blender":
         from .addons import catalog
 
@@ -152,6 +178,13 @@ async def test_connector(connector_id: str, *, confirm: bool = False) -> dict[st
     definition = next((item for item in CONNECTORS if item.id == connector_id), None)
     if not definition:
         return {"ok": False, "error": f"unknown connector: {connector_id}"}
+    if connector_id == "telegram":
+        from .messaging import configured
+        from .telegram_gateway import get_me
+        ident = await get_me()
+        if not ident.get("ok"):
+            return {"ok": False, "configured": configured(), "error": ident.get("error") or "getMe failed"}
+        return {"ok": True, "configured": True, "bot": ident.get("username")}
     if connector_id == "discord":
         webhook = (os.environ.get("DISCORD_WEBHOOK_URL") or "").strip()
         if not webhook:

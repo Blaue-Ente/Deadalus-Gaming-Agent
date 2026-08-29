@@ -235,6 +235,15 @@ class BrowserBody(BaseModel):
     slug: str = Field(default="", max_length=80)
 
 
+class GatewayPairBody(BaseModel):
+    code: str = Field(..., min_length=4, max_length=24)
+
+
+class GatewayRevokeBody(BaseModel):
+    platform: str = Field(default="telegram", max_length=40)
+    user_id: str = Field(..., min_length=1, max_length=80)
+
+
 class ConnectorTestBody(BaseModel):
     confirm: bool = False
 
@@ -367,7 +376,9 @@ async def connectors(probe: bool = False) -> dict[str, Any]:
     from daedalus.mcp_client import status as mcp_status_fn
     from daedalus.mirofish_client import ping as mf_ping
     from daedalus.reach import reach_status
+    from daedalus.messaging import snapshot as gateway_snapshot
     mf = await mf_ping()
+    gw = gateway_snapshot()
     return {
         "ok": True,
         "connectors": await connector_catalog(probe=probe),
@@ -375,7 +386,29 @@ async def connectors(probe: bool = False) -> dict[str, Any]:
         "mirofish": mf,
         "mcp": mcp_status_fn(),
         "addons": catalog(),
+        "gateway": gw,
     }
+
+
+@router.get("/api/v1/daedalus/gateway")
+async def gateway_status() -> dict[str, Any]:
+    from daedalus.messaging import snapshot
+    return snapshot()
+
+
+@router.post("/api/v1/daedalus/gateway/pair")
+async def gateway_pair(body: GatewayPairBody) -> dict[str, Any]:
+    from daedalus.messaging import approve
+    out = approve(body.code)
+    if not out.get("ok"):
+        raise HTTPException(status_code=400, detail=out.get("error") or "pair failed")
+    return out
+
+
+@router.post("/api/v1/daedalus/gateway/revoke")
+async def gateway_revoke(body: GatewayRevokeBody) -> dict[str, Any]:
+    from daedalus.messaging import revoke
+    return revoke(body.platform, body.user_id)
 
 
 @router.post("/api/v1/daedalus/connectors/{connector_id}/test")
