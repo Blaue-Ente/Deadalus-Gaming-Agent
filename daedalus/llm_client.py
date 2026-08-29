@@ -110,23 +110,27 @@ async def complete(
     cfg = get_config()
     if model:
         cfg = {**cfg, "model": model}
-    call_kwargs = {
-        "system": system,
-        "user": user,
-        "intent": intent,
-        "client_id": client_id,
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-        "json_mode": json_mode,
-    }
+
+    async def invoke(route_cfg: dict[str, Any]) -> dict[str, Any]:
+        return await _complete_route(
+            route_cfg,
+            system=system,
+            user=user,
+            intent=intent,
+            client_id=client_id,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            json_mode=json_mode,
+        )
+
     try:
-        return await _complete_route(cfg, **call_kwargs)
+        return await invoke(cfg)
     except Exception as primary_error:
         if model or not is_retryable_provider_error(primary_error):
             raise
         for route in fallback_routes(cfg):
             try:
-                result = await _complete_route(route.as_dict(), **call_kwargs)
+                result = await invoke(route.as_dict())
                 result["fallback"] = {
                     "from_provider": cfg.get("provider"),
                     "from_model": cfg.get("model"),
