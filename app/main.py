@@ -82,6 +82,7 @@ if _STATIC.is_dir():
 class ChatBody(BaseModel):
     message: str = Field(..., min_length=1, max_length=20000)
     session_id: str = Field(default="default", max_length=128)
+    effort: str = Field(default="auto", max_length=16)
 
 
 class MeshBody(BaseModel):
@@ -132,6 +133,7 @@ async def capabilities() -> dict:
             "browser-session", "subagents",
             "offline-kit", "llm-wardrobe", "addons", "capsule",
             "evolution", "windows-desktop", "windows-gui", "live-publish",
+            "effort-routing", "world-kit", "long-horizon",
         ],
         "mesh_endpoint": "/api/iyveris",
         "studio": "/",
@@ -178,8 +180,12 @@ async def iyveris_mesh(
 
 @app.post("/api/v1/daedalus/chat")
 async def chat(body: ChatBody) -> dict:
-    from daedalus.agent import get_daedalus
-    return await get_daedalus().chat(message=body.message, session_id=body.session_id)
+        from daedalus.agent import get_daedalus
+        return await get_daedalus().chat(
+            message=body.message,
+            session_id=body.session_id,
+            effort=body.effort,
+        )
 
 
 @app.get("/api/v1/daedalus/identity")

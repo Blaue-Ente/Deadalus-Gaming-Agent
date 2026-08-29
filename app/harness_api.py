@@ -240,6 +240,23 @@ class AddonBody(BaseModel):
     id: str = Field(..., min_length=1, max_length=40)
 
 
+class EffortBody(BaseModel):
+    text: str = Field(default="", max_length=8000)
+    effort: str = Field(default="auto", max_length=16)
+
+
+@router.get("/api/v1/daedalus/effort")
+async def effort_preview(q: str = "", effort: str = "auto") -> dict[str, Any]:
+    from daedalus.task_effort import classify
+    return classify(q, requested=effort)
+
+
+@router.post("/api/v1/daedalus/effort")
+async def effort_classify(body: EffortBody) -> dict[str, Any]:
+    from daedalus.task_effort import classify
+    return classify(body.text, requested=body.effort)
+
+
 @router.get("/api/v1/llm/wardrobe")
 async def llm_wardrobe() -> dict[str, Any]:
     from daedalus.llm_wardrobe import status

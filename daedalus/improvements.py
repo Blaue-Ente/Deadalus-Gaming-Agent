@@ -652,7 +652,7 @@ def _load_skills() -> None:
 
 
 def select_skills(user_message: str, intent: str, hint: str = "") -> list[str]:
-    """Return up to 2 skill names matching the request."""
+    """Return up to 3 skill names matching the request."""
     _load_skills()
     if not _SKILLS_CACHE:
         return []
@@ -670,6 +670,19 @@ def select_skills(user_message: str, intent: str, hint: str = "") -> list[str]:
         "planning": ["имплементирай модул", "imeplement module", "phase 5",
                      "phase 4", "multi-step plan", "конкретен план",
                      "step-by-step", "роадмап", "roadmap"],
+        "effort": ["[effort:", "усилие =", "шепот", "занаят", "епос"],
+        "world_kit": ["world/bible", "world kit", "необят", "open world",
+                      "кампания", "campaign bible", "world/map", "фракци"],
+        "long_horizon": ["продължи", "journal resume", "long-horizon",
+                         "need_progress", "across sessions"],
+        "narrative": ["сюжет", "персонаж", "диалог", "квест", "narrative",
+                      "character want", "lore dump"],
+        "campaign": ["levels/graph", "vertical slice", "актове", "различни нива",
+                     "кампания", "act-1"],
+        "save_flags": ["save system", "сейв система", "checkpoint",
+                       "inventory flag", "world flags"],
+        "dialogue": ["dialogue graph", "диалогов граф", "npc реплик",
+                     "разклонен диалог"],
         "arcade_craft": ["игра", "game", "racing", "racer", "f-zero", "wipeout",
                          "three.js", "3d", "състезан", "arcade", "phaser",
                          "formula minus", "fm1"],
@@ -683,7 +696,7 @@ def select_skills(user_message: str, intent: str, hint: str = "") -> list[str]:
         if n > 0:
             scored.append((n, name))
     scored.sort(reverse=True)
-    return [n for _, n in scored[:2]]
+    return [n for _, n in scored[:3]]
 
 
 def render_skills_block(skill_names: list[str]) -> str:

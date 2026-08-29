@@ -705,7 +705,7 @@ async def start_milestone_guided(
         raise ValueError(f"milestone {mid} has no pending stages — run Verify or advance")
 
     kind = proj.get("kind", "static")
-    plan = enrich_plan(dict(plan), kind)
+    plan = enrich_plan(dict(plan), kind, proj.get("description") or "")
     for i, s in enumerate(plan.get("stages") or []):
         s.setdefault("id", i + 1)
     preset = ctx.get("studio_preset") or "custom"
