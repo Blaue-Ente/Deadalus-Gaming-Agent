@@ -1,6 +1,8 @@
 """Availability-aware model profiles and runtime fallback policy."""
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from daedalus.model_router import ModelRoute
@@ -108,8 +110,7 @@ def test_private_fallback_never_crosses_to_cloud(monkeypatch):
     assert [route.provider for route in routes] == ["ollama"]
 
 
-@pytest.mark.asyncio
-async def test_client_uses_fallback_after_transient_failure(monkeypatch):
+def test_client_uses_fallback_after_transient_failure(monkeypatch):
     from daedalus import llm_client
 
     primary = {
@@ -137,14 +138,13 @@ async def test_client_uses_fallback_after_transient_failure(monkeypatch):
     monkeypatch.setattr("daedalus.model_router.fallback_routes", lambda cfg: [fallback])
     monkeypatch.setattr(llm_client, "_complete_route", fake_complete_route)
 
-    result = await llm_client.complete(user="hello")
+    result = asyncio.run(llm_client.complete(user="hello"))
     assert calls == ["ollama", "openrouter"]
     assert result["provider"] == "openrouter"
     assert result["fallback"]["from_provider"] == "ollama"
 
 
-@pytest.mark.asyncio
-async def test_client_does_not_fallback_on_auth_error(monkeypatch):
+def test_client_does_not_fallback_on_auth_error(monkeypatch):
     from daedalus import llm_client
 
     class AuthError(Exception):
@@ -164,4 +164,4 @@ async def test_client_does_not_fallback_on_auth_error(monkeypatch):
     monkeypatch.setattr(llm_client, "_complete_route", fail)
 
     with pytest.raises(AuthError):
-        await llm_client.complete(user="hello")
+        asyncio.run(llm_client.complete(user="hello"))
