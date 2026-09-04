@@ -226,10 +226,11 @@ def test_game_canon_list_study_allowlist(harness_tmp):
     ids = {row["id"] for row in CANON}
     assert ids == {
         "doom3-bfg", "mindustry", "game-programming-patterns", "tinyrenderer", "stb",
+        "glm", "directxmath", "tracy",
     }
     listing = run_action("list")
     assert listing["ok"] is True
-    assert len(listing["canon"]) == 5
+    assert len(listing["canon"]) == 8
     brief = run_action("study", id="doom3-bfg")
     assert "idLib" in " ".join(brief["study"])
     assert brief["do_not_copy"]
