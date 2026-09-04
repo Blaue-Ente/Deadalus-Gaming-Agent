@@ -61,7 +61,8 @@ Studio → LLM (wardrobe) can switch models without editing `.env` (`wardrobe.js
 | `DAEDALUS_NATIVE_TOOLS` | `0` = NEED_* markers only; native tools are on by default |
 | `DAEDALUS_QUALITY` | `0` turns the visual critic off (default on). Unparsed critic / skipped browser is not a pass. |
 | `DAEDALUS_EVOLUTION` | `1` turns the gardener on at boot; `0` is a kill switch |
-| `GODOT_BIN` | Path to Godot 4. Missing binary fails Godot kinds (headless probe). |
+| `GODOT_BIN` | Path to Godot 4.3. Missing binary fails Godot kinds. When set, the TCP runtime bridge (player must move) is required — static files are not a playtest. |
+| `DAEDALUS_GODOT_MCP` | Optional name of a Godot MCP server in `$DAEDALUS_DATA/mcp.json`. Headless bridge is the default; MCP is an adapter, not a second Editor. |
 | `UNITY_PATH` | Path to the Unity Editor. Missing Editor fails Unity kinds (batchmode). |
 
 ## Publishing

@@ -5,6 +5,10 @@ The version in `pyproject.toml` is the source of truth for the package.
 
 ## [Unreleased]
 
+### Games
+
+- **Godot runtime bridge** — when `GODOT_BIN` (or `godot` on PATH) exists, a Godot slice is not done on static files. Autoload `DaedalusBridge` speaks JSON-lines on 127.0.0.1 (`scene_tree`, `inspect_node`, `send_input`, `errors`, `fps_sample`, `screenshot`). Native tool `engine({action, slug})`. A `.tscn` `[connection]` whose method is missing fails DoD without a binary. PNG/GLB get `.import` sidecars; `godot --import` runs before the probe. Optional `DAEDALUS_GODOT_MCP` uses one MCP server from `mcp.json` and falls back to headless. Godot 4.3 API pin lives in `skills/godot_api.md`.
+
 ### Agent
 
 - **Hard-job slices** — playground work that is already multi-file keeps a job ledger (`original ask`, acceptance, named artifacts) under `$DAEDALUS_DATA/jobs/`. `spawn_subagent` takes `role=explorer|coder|verify` (explorer/verify cannot write), injects only the asked artifacts, and refuses `TASK_COMPLETE` that contradicts a failure. Definition of Done blocks "готово" while slices remain or the reply admits it did not finish. Whisper chat and greenfield playable slices are unchanged.

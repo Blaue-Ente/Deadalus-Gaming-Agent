@@ -690,6 +690,7 @@ def select_skills(user_message: str, intent: str, hint: str = "") -> list[str]:
                          "three.js", "3d", "състезан", "arcade", "phaser",
                          "formula minus", "fm1"],
         "godot": ["godot", "gdscript", "metroidvania", ".tscn", "tscn", "puzzle room", "characterbody3d"],
+        "godot_api": ["kinematicbody", "characterbody2d", "godot 4.3", ".import", "daedalus-bridge"],
         "blender_jobs": ["blender", "bpy", "gltf", "glb export", "armature"],
         "playtest": ["playtest", "тествай играта", "готови ли сме"],
         "dissection": ["дисекция", "dissect", "мостра", "play lab",

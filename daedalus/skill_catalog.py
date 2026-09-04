@@ -316,13 +316,14 @@ _EXTRA_DOCS: list[dict] = [
         "title": "Godot 4.3 — GDScript + text scenes",
         "category": "gamedev",
         "text": (
-            "⚠️ LOCAL Editor (kind godot). Cloud writes .tscn/.gd only.\n"
+            "⚠️ LOCAL Editor (kind godot). Cloud writes .tscn/.gd; when GODOT_BIN exists it also runs them.\n"
             "2D: project.godot + scenes/main.tscn + scripts/player.gd + autoload Game. "
-            "3D M0: CharacterBody3D room + plate puzzle + SpringArm camera + studio/scene_index.json. "
-            "Headless: godot --headless --path . --quit-after 180 -- --probe. "
-            "One scene or script per stage. NavigationAgent2D for 2D NPC. "
-            "Hero GLB from daedalus.blender_jobs (pivot + collision_hint), not vertex dumps. "
-            "Do not vendor CrewAI or five Godot MCP bridges."
+            "3D M0: CharacterBody3D room + plate puzzle + Camera3D + studio/scene_index.json. "
+            "Runtime: engine({action: run|inspect|input|errors, slug}) via DaedalusBridge "
+            "(--daedalus-bridge port). Static --probe is not enough when Godot is installed. "
+            "Godot 4.3 only — CharacterBody2D, typed .connect, .import sidecars for PNG/GLB. "
+            "One scene or script per stage. Hero GLB from daedalus.blender_jobs, not vertex dumps. "
+            "Do not vendor CrewAI or five Godot MCP servers (optional DAEDALUS_GODOT_MCP is one adapter)."
         ),
     },
     {

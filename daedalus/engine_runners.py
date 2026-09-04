@@ -42,14 +42,14 @@ def unity_bin() -> str:
 
 
 def run_godot(slug: str, *, frames: int = 180) -> dict[str, Any]:
-    """Headless Godot probe. No binary → skipped, not ok."""
+    """Headless Godot runtime DoD. No binary → skipped, not ok."""
     from . import playground as pg
-    from .godot_runtime_probe import run_probe
+    from .godot_runtime_probe import run_runtime
     from .playground_godot_scaffold import verify_godot_scaffold
 
     scaffold = verify_godot_scaffold(slug)
     root = pg.project_dir(slug)
-    probe = run_probe(root, frames=frames)
+    probe = run_runtime(root, frames=min(24, max(8, frames // 8)))
     logs = [f"[godot] scaffold: {scaffold.get('file_count', 0)} files, {scaffold.get('gd_count', 0)} .gd"]
     if probe.get("skipped"):
         logs.append(str(probe["skipped"]))
@@ -70,16 +70,27 @@ def run_godot(slug: str, *, frames: int = 180) -> dict[str, Any]:
     if not scaffold.get("ok"):
         err = scaffold.get("error") or "Godot scaffold incomplete"
     elif not probe.get("ok"):
-        err = (probe.get("error") or "; ".join(probe.get("console_flags") or []))[:400]
+        live_block = (probe.get("dod") or {}).get("blocking") or []
+        err = (
+            probe.get("error")
+            or probe.get("bridge_error")
+            or "; ".join(str(x) for x in live_block)
+            or "; ".join(probe.get("console_flags") or [])
+        )[:400]
+    logs.append(
+        f"[godot] bridge={probe.get('bridge')} ran={probe.get('ran')} "
+        f"blocking={(probe.get('dod') or {}).get('blocking')}"
+    )
     return {
         "ok": ok,
         "skipped": False,
         "healthy": ok,
         "exited": not ok,
         "install_ok": True,
-        "logs": logs + [f"[godot] headless rc={probe.get('returncode')}"],
+        "logs": logs,
         "error": err,
         "ran": bool(probe.get("ran")),
+        "bridge": bool(probe.get("bridge")),
         "dod": probe.get("dod"),
     }
 

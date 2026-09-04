@@ -14,7 +14,7 @@ _NODE_RE = re.compile(
     re.M,
 )
 _EXT_RE = re.compile(
-    r'^\[ext_resource type="([^"]+)" path="([^"]+)"',
+    r'^\[ext_resource type="([^"]+)"[^\]]*path="([^"]+)"',
     re.M,
 )
 _SIGNAL_RE = re.compile(
@@ -23,6 +23,10 @@ _SIGNAL_RE = re.compile(
 )
 _CONNECT_RE = re.compile(
     r"\.connect\(",
+)
+_TSCN_CONN_RE = re.compile(
+    r'^\[connection\s+signal="([^"]+)"\s+from="([^"]+)"\s+to="([^"]+)"\s+method="([^"]+)"',
+    re.M,
 )
 
 
@@ -56,10 +60,15 @@ def index_tscn(text: str, *, rel: str = "") -> dict[str, Any]:
     resources = [
         {"type": t, "path": p} for t, p in _EXT_RE.findall(text or "")
     ]
+    connections = [
+        {"signal": sig, "from": src, "to": dst, "method": method}
+        for sig, src, dst, method in _TSCN_CONN_RE.findall(text or "")
+    ]
     return {
         "path": rel,
         "nodes": nodes,
         "resources": resources,
+        "connections": connections,
         "node_count": len(nodes),
     }
 

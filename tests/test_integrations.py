@@ -137,7 +137,7 @@ def test_browser_close_without_session():
 def test_native_tool_catalog_includes_integrations():
     from daedalus.native_tools import NATIVE_TOOL_SPECS, openai_tool_specs
     names = {t["name"] for t in NATIVE_TOOL_SPECS}
-    for n in ("web_read", "reach_status", "browser", "mcp_call", "spawn_subagent", "playtest", "mirofish", "play_lab", "dissect_game"):
+    for n in ("web_read", "reach_status", "browser", "mcp_call", "spawn_subagent", "playtest", "mirofish", "play_lab", "dissect_game", "engine"):
         assert n in names
     oa_names = {s["function"]["name"] for s in openai_tool_specs()}
     assert "web_read" in oa_names

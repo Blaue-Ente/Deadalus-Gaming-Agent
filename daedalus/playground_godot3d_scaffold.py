@@ -27,6 +27,7 @@ config/icon="res://icon.svg"
 [autoload]
 Game="*res://scripts/autoload/game.gd"
 Probe="*res://scripts/autoload/probe.gd"
+DaedalusBridge="*res://scripts/autoload/daedalus_bridge.gd"
 
 [display]
 window/size/viewport_width=1280
@@ -449,7 +450,6 @@ _GITIGNORE = """\
 *.translation
 export.cfg
 export_presets.cfg
-*.import
 """
 
 
@@ -501,6 +501,12 @@ def write_godot3d_scaffold(pdir: Path, name: str, slug: str, description: str = 
     dod_path.write_text(json.dumps(dod_v2_static(pdir), indent=2) + "\n", encoding="utf-8")
     if "studio/dod.json" not in written:
         written.append("studio/dod.json")
+    from .godot_bridge import BRIDGE_REL, ensure_bridge, ensure_import_sidecars
+
+    ensure_bridge(pdir)
+    if BRIDGE_REL not in written:
+        written.append(BRIDGE_REL)
+    ensure_import_sidecars(pdir)
     if written:
         log.info("godot 3d scaffold: %s → %s", slug, written)
     return written
