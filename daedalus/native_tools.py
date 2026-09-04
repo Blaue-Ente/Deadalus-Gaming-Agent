@@ -320,21 +320,23 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
     {
         "name": "play_lab",
         "description": (
-            "Daedalus virtual computer for specimen games. "
+            "Daedalus virtual computer for specimen games and to watch what it builds. "
             "Create/list/install/start/stop a Play Lab (jailed HTML5/git/zip). "
-            "Docker is optional; local HTTP always works. Not Steam/.exe."
+            "Local HTTP always works. Optional SmolVM guest browser with a live viewer "
+            "(pip install smolvm). Docker optional. Not Steam/.exe/Windows."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "action": {
                     "type": "string",
-                    "description": "status | create | list | install | start | stop | destroy",
+                    "description": "status | create | list | install | start | stop | destroy | open | watch",
                 },
                 "title": {"type": "string"},
                 "source": {"type": "string"},
                 "lab_id": {"type": "string"},
                 "path": {"type": "string", "description": "Folder, HTML, or zip to install"},
+                "slug": {"type": "string", "description": "Playground project to open as a computer"},
             },
             "required": ["action"],
         },
@@ -951,6 +953,17 @@ async def execute_native_tool(
                 r = pl.stop_vm(str(args.get("lab_id") or ""))
             elif action == "destroy":
                 r = pl.destroy_lab(str(args.get("lab_id") or ""))
+            elif action in ("open", "watch", "computer"):
+                from .computer import open_project_computer
+                lab_id = str(args.get("lab_id") or "")
+                try:
+                    if lab_id:
+                        r = pl.start_vm(lab_id)
+                    else:
+                        r = open_project_computer(str(args.get("slug") or args.get("title") or ""))
+                    r = {"ok": True, **r} if isinstance(r, dict) and "ok" not in r else r
+                except ValueError as extra:
+                    r = {"ok": False, "error": str(extra)}
             else:
                 r = pl.probe_host()
                 lab_id = str(args.get("lab_id") or "")

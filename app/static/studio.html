@@ -147,11 +147,18 @@
         <p class="hint" data-i18n="studio.worldHint">Epic is a folder + runtime: save, quest, dialog, graph. Empty JSON is not a campaign. M0–M3 is a prototype — empty systems.json is not a production layer. Unity is Hub or MCP, not Editor in this cloud. Honesty is a suite on this harness, not a bake-off against other products.</p>
         <div class="list" id="worldkit"></div>
         <p class="kicker stack-mt" data-i18n="studio.channels">Channels</p>
-        <p class="hint" data-i18n="studio.channelsHint">Reach · MiroFish sidecar · MCP · playtest · dissection.</p>
+        <p class="hint" data-i18n="studio.channelsHint">Reach · MiroFish sidecar · MCP · playtest · dissection · computer.</p>
         <div class="row">
           <button id="cxrefresh" type="button" data-i18n="studio.refresh">Refresh</button>
           <button class="primary" id="ptest" type="button" disabled data-i18n="studio.playtest">Playtest</button>
         </div>
+        <p class="kicker stack-mt" data-i18n="studio.computer">Computer</p>
+        <p class="hint" data-i18n="studio.computerHint">Same lab as dissection. Local HTTP always. SmolVM (optional) is a guest browser you can watch.</p>
+        <div class="row tight">
+          <button id="pcputer" type="button" data-i18n="studio.watchBuild">Watch build</button>
+          <button id="pcputerstop" type="button" data-i18n="studio.computerStop">Stop</button>
+        </div>
+        <div id="computerbox" class="computer-box"></div>
         <p class="kicker stack-mt" data-i18n="studio.dissect">Dissection</p>
         <p class="hint" data-i18n="studio.dissectHint">Name, link, or path. The lab is Daedalus’s virtual machine for the specimen.</p>
         <input id="dissectsrc" data-i18n-placeholder="studio.dissectPh" placeholder="Flappy Bird · https://itch.io/… · path to zip" data-i18n-aria="studio.dissectAria" aria-label="Dissection source" />

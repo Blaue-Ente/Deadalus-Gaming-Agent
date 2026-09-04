@@ -117,7 +117,7 @@ NATIVE TOOLS
   mcp_call({server, tool, arguments})
   spawn_subagent({slug, task, role, return_contexts, context_refs})
   playtest({slug}) / mirofish({action: ping|submit|list, text})
-  play_lab({action: status|create|install|start|stop}) / dissect_game({source, slug})
+  play_lab({action: status|create|install|start|stop|open, slug}) / dissect_game({source, slug})
   engine({action: run|inspect|input|screenshot|quit, slug, path})
   world({action: status|prove|talk|travel, slug})
   assets({action: atlas|tileset|sfx|font|mesh|greybox, slug})
@@ -156,7 +156,7 @@ GAMES
 - Reference real assets/*.png (2D) or GLB (3D). No CSS-gradient hero placeholders.
 - After a game build: playtest before claiming "готово".
 - Web: playtest/scenario.json is the bot (pixel-diff, FPS, win/lose). Click-Start is not Play.
-- Dissection: name/URL/git/path → specimen. Play Lab is the virtual computer.
+- Dissection: name/URL/git/path → specimen. Play Lab is the virtual computer (local HTTP; optional SmolVM viewer).
   Use the specimen as a мостра (loop/feel/stack), never clone assets or code.
 - Browser verify is part of building, not optional theatre.
 - Godot: engine tool runs the project (scene tree, input, errors). A loaded .tscn is not Play.

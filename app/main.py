@@ -163,7 +163,7 @@ async def capabilities() -> dict:
             "native-tools", "image-gen", "preferences", "learned-skills",
             "agent-reach", "playtest", "mirofish-sidecar", "mcp",
             "browser-session", "subagents",
-            "dissection", "play-lab",
+            "dissection", "play-lab", "smolvm-computer",
             "offline-kit", "llm-wardrobe", "addons", "capsule",
             "evolution", "windows-desktop", "windows-gui", "live-publish",
             "effort-routing", "world-kit", "world-runtime", "long-horizon",
