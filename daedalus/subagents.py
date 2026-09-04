@@ -27,7 +27,7 @@ _SUB_RE = re.compile(
 
 MAX_PARALLEL = 3
 DEFAULT_ROUNDS = 6
-CODER_TOOLS = ("read_file", "list_dir", "write_file", "run_command", "engine", "world")
+CODER_TOOLS = ("read_file", "list_dir", "write_file", "run_command", "engine", "world", "assets")
 EXPLORER_TOOLS = ("read_file", "list_dir", "run_command", "engine", "world")
 VERIFY_TOOLS = EXPLORER_TOOLS
 
@@ -55,6 +55,8 @@ If asked to verify, check the original ask / acceptance, not a weaker proxy.
 _CODER_SYSTEM = """
 Role: coder. Implement exactly this slice — no extra features.
 Use injected artifacts instead of rediscovering the tree.
+2D kit: assets({action: atlas|sfx|font, slug}) — no paid API. 3D mesh jobs
+fail closed without FAL_KEY/TRIPO_API_KEY/MESHY_API_KEY; greybox is a cube, not a hero.
 """
 
 _VERIFY_SYSTEM = """

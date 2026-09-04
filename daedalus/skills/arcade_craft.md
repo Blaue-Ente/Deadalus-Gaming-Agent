@@ -12,8 +12,8 @@ description: Build FM1-grade (or better) games — vertical slices, specialist 3
 **How**:
 1. Plan with a strong model; implement with cheaper ones. Hundreds of tiny steps. Never "build me this game".
 2. M0 = vertical slice (one ship, one track segment, camera, fail, visible boost). City/cups/1v1 later.
-3. Start from the Vite `src/racer/` scaffold (already a playable slice). Then assets: sketch/brief → `generate_image` → Tripo/Meshy/Hunyuan GLB for heroes. Procedural CSG/splines for buildings/track. Polyhaven PBR. Compress GLB.
-4. Audio: layer 2–3 stock SFX; Suno instrumental; no AI-lyric BGM.
+3. Start from the Vite `src/racer/` scaffold (already a playable slice). Then assets: `assets({action:mesh})` only with FAL/Tripo/Meshy keys — fail closed otherwise; greybox is a cube, not a hero. Do not auto-inject a 2D atlas into the racer. Procedural CSG/splines for buildings/track. Polyhaven PBR. Compress GLB.
+4. Audio: `assets({action:sfx})` kit WAV; Suno is a file drop (`assets/music.mp3`); no AI-lyric BGM.
 5. After every playable slice: smoke + browser + `playtest/scenario.json` bot (pixel-diff, win/lose) + persona `playtest`. Fun gate = wayfinding, fail, readable pickups, risk on the gas.
 6. Cul-de-sac (same error 3×): change approach. Fresh session for new features; long session for the bug.
 7. Web first. Unity/Godot only if the owner needs a store build.

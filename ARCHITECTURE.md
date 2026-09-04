@@ -77,6 +77,7 @@ Defaults:
 - Play Lab (`$DAEDALUS_DATA/labs/{id}/`): jailed install tree + local HTTP. Optional Docker. Not QEMU Windows and not Steam.
 - Godot 4 (`playground_godot_scaffold.py`, `playground_godot3d_scaffold.py`, `godot_tools.py`, `godot_bridge.py`): text `.tscn`/GDScript. When `GODOT_BIN` exists, a TCP autoload (`DaedalusBridge`) is the playtest — scene tree, input, errors — not only file DoD. Optional `DAEDALUS_GODOT_MCP` adapter; we do not vendor an Editor.
 - World kit (`world_kit.py`, `world_runtime.py`): epic games get a save schema, quest engine, dialogue runner, and gated level graph. `world({action: prove})` must pass. Empty JSON is not a campaign.
+- Asset pipeline v2 (`atlas.py`, `sfx_kit.py`, `mesh_jobs.py`): 2D atlas/tileset/SFX/font with stdlib PNG (no Pillow). 3D jobs fail closed without keys; greybox is a cube, not a hero. Native tool `assets`.
 - Blender jobs (`blender_jobs.py`, `python -m daedalus.blender_mcp`) **emit** a bpy script — they do not import `bpy` in the Daedalus process.
 - Not: own engine, own 3D foundation model, five parallel Godot MCP servers, silent self-editing, “one sentence → finished game”.
 

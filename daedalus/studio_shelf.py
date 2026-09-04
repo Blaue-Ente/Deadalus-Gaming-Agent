@@ -71,7 +71,7 @@ SHELF: tuple[dict[str, Any], ...] = (
         "kind_hint": "vite",
         "url": "https://www.tripo3d.ai/",
         "api": True,
-        "daedalus": "Need owner key. Input: concept image, not a blank prompt. Remesh for web.",
+        "daedalus": "Need TRIPO_API_KEY. assets({action:mesh, provider:tripo}) submits; else fail closed — never a fake GLB.",
     },
     {
         "id": "meshy",
@@ -81,7 +81,7 @@ SHELF: tuple[dict[str, Any], ...] = (
         "kind_hint": "vite",
         "url": "https://www.meshy.ai/",
         "api": True,
-        "daedalus": "Rigs for characters; hover ships usually stay unskinned.",
+        "daedalus": "Need MESHY_API_KEY. assets({action:mesh, provider:meshy}) submits; else fail closed.",
     },
     {
         "id": "hunyuan3d-fal",
@@ -91,7 +91,7 @@ SHELF: tuple[dict[str, Any], ...] = (
         "kind_hint": "vite",
         "url": "https://fal.ai/models/fal-ai/hunyuan3d-v3/text-to-3d",
         "api": True,
-        "daedalus": "If FAL_KEY exists later, generate GLB into assets/. Until then: tell owner the hand-off.",
+        "daedalus": "If FAL_KEY (or FAL_API_KEY) is set, assets({action:mesh}) submits Hunyuan/Trellis; else fail closed. Greybox cube is not a hero.",
     },
     {
         "id": "trellis-fal",
@@ -151,7 +151,7 @@ SHELF: tuple[dict[str, Any], ...] = (
         "kind_hint": "vite",
         "url": "https://howlerjs.com/",
         "api": False,
-        "daedalus": "Layer 2–3 one-shots for boost. Spatial optional.",
+        "daedalus": "assets({action:sfx}) writes kit WAV (blip/hit/boost/pickup/fail/ui). Howler plays them. Layer 2–3 one-shots for boost.",
     },
     {
         "id": "suno",
@@ -161,7 +161,7 @@ SHELF: tuple[dict[str, Any], ...] = (
         "kind_hint": "any",
         "url": "https://suno.com/",
         "api": True,
-        "daedalus": "Owner generates; Daedalus wires <audio>/Howler. No fake lyrics over gameplay.",
+        "daedalus": "No Suno submit in Daedalus. Owner generates; drop assets/music.mp3. Kit SFX needs no key.",
     },
     {
         "id": "elevenlabs",

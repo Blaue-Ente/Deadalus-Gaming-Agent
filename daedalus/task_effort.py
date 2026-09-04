@@ -191,5 +191,5 @@ def briefing(decision: dict[str, Any]) -> str:
         )
     return (
         "[EFFORT: craft] Една завършена среза: input → update → render → win/lose. "
-        "Реални assets/*.png. После разширявай."
+        "Реални assets/*.png или assets({action:atlas|sfx|font}). После разширявай."
     )
