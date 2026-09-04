@@ -27,6 +27,7 @@ CATALOG: list[dict[str, Any]] = [
         "label": "Git (MCP)",
         "blurb": "Локален git status/log/diff за проекта. Мрежа само ако remote-ът е онлайн.",
         "offline_ok": True,
+        "recommend": "Полезно за log/diff. За PR/MR ползвай native git_forge, не този сървър.",
         "command": "npx",
         "args_template": ["-y", "@modelcontextprotocol/server-git", "--repository", "{playground}"],
     },
@@ -45,6 +46,7 @@ CATALOG: list[dict[str, Any]] = [
         "label": "Fetch (MCP)",
         "blurb": "HTTP fetch. В офлайн кит се отказва. Предпочитай native web_read.",
         "offline_ok": False,
+        "recommend": "Не включвай — native web_read (Jina) вече чете страници без ключ.",
         "command": "npx",
         "args_template": ["-y", "@modelcontextprotocol/server-fetch"],
     },
@@ -78,6 +80,8 @@ CATALOG: list[dict[str, Any]] = [
         "label": "Netlify MCP",
         "blurb": "Официален MCP за dashboard. Studio → Наживо вече качва native (токен или anonymous).",
         "offline_ok": False,
+        "recommend": "Токенът NETLIFY_AUTH_TOKEN в Свързаност стига за publish. MCP е за dashboard.",
+        "env_keys": ["NETLIFY_AUTH_TOKEN"],
         "command": "npx",
         "args_template": ["-y", "@netlify/mcp"],
     },
@@ -89,6 +93,31 @@ CATALOG: list[dict[str, Any]] = [
         "offline_ok": True,
         "command": "python3",
         "args_template": ["-m", "daedalus.blender_mcp"],
+    },
+    {
+        "id": "github-mcp",
+        "kind": "mcp",
+        "label": "GitHub MCP",
+        "blurb": "Официален GitHub MCP (issues, PRs, contents). Дедал вече има native git_forge — това е допълнение.",
+        "offline_ok": False,
+        "recommend": "Включи само ако native PR/issues не стигат. Ползва GITHUB_TOKEN от Свързаност.",
+        "env_keys": ["GITHUB_PERSONAL_ACCESS_TOKEN"],
+        "env_from": {"GITHUB_PERSONAL_ACCESS_TOKEN": "GITHUB_TOKEN"},
+        "docs": "https://github.com/modelcontextprotocol/servers/tree/main/src/github",
+        "command": "npx",
+        "args_template": ["-y", "@modelcontextprotocol/server-github"],
+    },
+    {
+        "id": "gitlab-mcp",
+        "kind": "mcp",
+        "label": "GitLab MCP",
+        "blurb": "GitLab MCP за issues/MR. Native git_forge вече прави clone, push и Merge Request.",
+        "offline_ok": False,
+        "recommend": "Включи само за допълнително GitLab API. Ползва GITLAB_TOKEN от Свързаност.",
+        "env_keys": ["GITLAB_PERSONAL_ACCESS_TOKEN"],
+        "env_from": {"GITLAB_PERSONAL_ACCESS_TOKEN": "GITLAB_TOKEN"},
+        "command": "npx",
+        "args_template": ["-y", "@modelcontextprotocol/server-gitlab"],
     },
     {
         "id": "godot-headless",
@@ -119,12 +148,13 @@ def catalog(*, offline: bool | None = None) -> list[dict[str, Any]]:
     return rows
 
 
-def enable(addon_id: str) -> dict[str, Any]:
+def enable(addon_id: str, extra_env: dict[str, str] | None = None) -> dict[str, Any]:
     item = next((x for x in CATALOG if x["id"] == addon_id), None)
     if not item:
         return {"ok": False, "error": f"unknown addon {addon_id}"}
     if item.get("kind") != "mcp":
         return {"ok": True, "item": item, "message": "native/sidecar — няма mcp.json ред"}
+    import os
     path = config_path()
     data: dict[str, Any] = {"servers": {}}
     if path.is_file():
@@ -134,10 +164,24 @@ def enable(addon_id: str) -> dict[str, Any]:
                 data["servers"] = {}
         except (OSError, json.JSONDecodeError):
             data = {"servers": {}}
-    data["servers"][item["id"]] = {
+    spec: dict[str, Any] = {
         "command": item["command"],
         "args": _expand(list(item.get("args_template") or [])),
     }
+    env: dict[str, str] = {}
+    for dest, src in (item.get("env_from") or {}).items():
+        val = (os.environ.get(str(src)) or os.environ.get(str(dest)) or "").strip()
+        if val:
+            env[str(dest)] = val
+    if extra_env:
+        for k, v in extra_env.items():
+            key = str(k).strip()
+            val = str(v or "").strip()
+            if key and val:
+                env[key] = val
+    if env:
+        spec["env"] = env
+    data["servers"][item["id"]] = spec
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     return {"ok": True, "item": item, "config": str(path)}

@@ -1,6 +1,8 @@
 # Environment variables
 
 Copy `.env.example` → `.env`. Daedalus reads `.env` when the CLI starts.
+Studio → **Свързаност** writes the same keys to `$DAEDALUS_DATA/secrets.env`
+(applied on boot, overwrites process env for those names). Do not commit that file.
 
 ## Required for a cloud LLM
 
@@ -86,12 +88,14 @@ Without a mesh key: `assets({action:mesh})` returns `need_key`. Greybox (`action
 | Variable | Meaning |
 |---|---|
 | `NETLIFY_AUTH_TOKEN` | Durable `*.netlify.app` |
-| `GITLAB_TOKEN` | GitLab Pages `daedalus-{slug}` + git push |
+| `GITLAB_TOKEN` | GitLab Pages `daedalus-{slug}` + git clone/push + Merge Request |
+| `GITHUB_TOKEN` | GitHub clone/push + Pull Request (classic PAT, scope `repo`) |
 | Node.js (`npx`) | 1-hour Netlify preview with no account |
 
 ## MCP and sidecar
 
-- MCP servers: `$DAEDALUS_DATA/mcp.json` (the Studio shelf writes it).
+- MCP servers: `$DAEDALUS_DATA/mcp.json` (Studio → Свързаност writes it).
+- Optional GitHub/GitLab MCP addons reuse `GITHUB_TOKEN` / `GITLAB_TOKEN`. Native `git_forge` already opens PR/MR without those addons.
 - `MIROFISH_URL` / `MIROFISH_UI` — only if you run the AGPL sidecar yourself. It is not vendored here.
 
 ## Peer HTTP

@@ -41,6 +41,7 @@ PERM_MAP: dict[str, str | None] = {
     "assets": None,
     "skill": None,
     "production": None,
+    "git_forge": "github_access",
 }
 
 NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
@@ -329,6 +330,36 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
                 "source": {"type": "string"},
                 "lab_id": {"type": "string"},
                 "path": {"type": "string", "description": "Folder, HTML, or zip to install"},
+            },
+            "required": ["action"],
+        },
+    },
+    {
+        "name": "git_forge",
+        "description": (
+            "GitHub/GitLab for playground games: clone, push, open a Pull Request "
+            "or Merge Request. Local files stay the source of truth."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "status | clone | push | pull_request | merge_request",
+                },
+                "url": {"type": "string", "description": "Git remote URL for clone"},
+                "slug": {"type": "string"},
+                "provider": {
+                    "type": "string",
+                    "description": "auto | github | gitlab",
+                },
+                "repo": {"type": "string", "description": "owner/repo or group/project"},
+                "title": {"type": "string"},
+                "body": {"type": "string"},
+                "head": {"type": "string", "description": "source branch"},
+                "base": {"type": "string", "description": "target branch, default main"},
+                "name": {"type": "string", "description": "project name on clone"},
+                "commit_msg": {"type": "string"},
             },
             "required": ["action"],
         },
@@ -918,6 +949,77 @@ async def execute_native_tool(
             else:
                 r = await mf.ping()
             return f"── mirofish {action} ──\n{json.dumps(r, ensure_ascii=False, default=str)[:4000]}"
+
+        if name == "git_forge":
+            from .playground_git_push import (
+                clone_project_remote,
+                create_upstream_review,
+                push_project_remote,
+                remote_status,
+            )
+            from .playground_github import create_pull_request, parse_github_repo
+            from .playground_gitlab import create_merge_request, parse_gitlab_repo
+            action = str(args.get("action") or "status").strip().lower()
+            slug = str(args.get("slug") or "").strip()
+            provider = str(args.get("provider") or "auto").strip().lower()
+            if action == "status":
+                r = remote_status()
+            elif action == "clone":
+                r = await clone_project_remote(
+                    str(args.get("url") or args.get("repo") or ""),
+                    name=str(args.get("name") or ""),
+                    slug=slug,
+                    source="cloned",
+                    keep_git=True,
+                )
+            elif action == "push":
+                r = await push_project_remote(
+                    slug,
+                    provider=provider,
+                    repo_full_name=str(args.get("repo") or ""),
+                    commit_msg=str(args.get("commit_msg") or ""),
+                )
+            elif action in ("pull_request", "pr", "merge_request", "mr"):
+                repo = str(args.get("repo") or "").strip()
+                head = str(args.get("head") or "").strip()
+                if slug and not (repo and head):
+                    r = await create_upstream_review(
+                        slug,
+                        title=str(args.get("title") or ""),
+                        body=str(args.get("body") or ""),
+                        base=str(args.get("base") or ""),
+                    )
+                elif action in ("merge_request", "mr") or provider == "gitlab":
+                    parsed = parse_gitlab_repo(repo)
+                    ns = parsed[0] if parsed else repo
+                    r = create_merge_request(
+                        ns,
+                        source_branch=head,
+                        target_branch=str(args.get("base") or "main"),
+                        title=str(args.get("title") or ""),
+                        description=str(args.get("body") or ""),
+                    )
+                else:
+                    parsed = parse_github_repo(repo)
+                    if not parsed:
+                        r = {"ok": False, "error": "repo must be owner/repo"}
+                    else:
+                        owner, name = parsed
+                        r = create_pull_request(
+                            owner,
+                            name,
+                            title=str(args.get("title") or ""),
+                            head=head,
+                            base=str(args.get("base") or "main"),
+                            body=str(args.get("body") or ""),
+                        )
+            else:
+                r = {"ok": False, "error": f"unknown git_forge action {action}"}
+            status = "OK" if r.get("ok") else "FAILED"
+            return (
+                f"── git_forge {action} {status} {slug} ──\n"
+                f"{json.dumps(r, ensure_ascii=False, default=str)[:6000]}"
+            )
 
         if name == "generate_image":
             from .image_client import generate_image

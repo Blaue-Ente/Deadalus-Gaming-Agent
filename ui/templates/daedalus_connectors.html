@@ -1,61 +1,44 @@
 {% extends "_shell.html" %}
 {% set page = 'daedalus_connectors' %}
 {% set daedalus_tab = 'connectors' %}
-{% block title %}Connectors — Дедал{% endblock %}
-{% block eyebrow %}Дедал · GitHub · GitLab · Durability{% endblock %}
-{% block heading %}Connectors & Durability{% endblock %}
-{% block mob_title %}Connectors{% endblock %}
+{% block title %}Свързаност — Дедал{% endblock %}
+{% block eyebrow %}Дедал · външен свят{% endblock %}
+{% block heading %}Свързаност{% endblock %}
+{% block mob_title %}Свързаност{% endblock %}
 
 {% block content %}
 {% include "_daedalus_nav.html" %}
 
 <div class="space-y-6 max-w-4xl">
   <p class="text-sm text-argos-dim">
-    Настройки за <strong class="text-white">GitHub / GitLab</strong> push & clone и
-    <strong class="text-white">устойчивост</strong> на Playground проекти при redeploy.
-    Токените се задават в <strong class="text-cyan-400">Replit Secrets</strong> или Integrations — не в този UI.
+    Едно място за всичко, което <strong class="text-white">влиза и излиза</strong> от Дедал:
+    LLM ключове, GitHub/GitLab, публикуване, MCP сървъри, mesh, лаборатория.
+    Стойностите се пишат в <code class="text-cyan-400">$DAEDALUS_DATA/secrets.env</code> — не в git.
+    UI-то никога не показва пълния ключ.
   </p>
 
-  <!-- GitHub -->
-  <section class="bg-argos-panel border border-argos-border rounded-xl p-5">
-    <div class="flex items-center justify-between gap-3 mb-4">
-      <h2 class="text-sm font-semibold text-white">🐙 GitHub</h2>
-      <button onclick="testGithub()" id="btn-test-gh"
-        class="px-3 py-1.5 rounded-lg text-xs bg-indigo-700 hover:bg-indigo-600 text-white">Тест връзка</button>
-    </div>
-    <div id="gh-card" class="text-sm font-mono text-argos-dim">Зареждане…</div>
-    <div class="mt-4 p-3 rounded-lg bg-gray-950 border border-gray-800 text-xs text-gray-400 space-y-1">
-      <p class="text-gray-300 font-medium mb-2">Как да свържеш GitHub за 1-клик push:</p>
-      <ol class="list-decimal list-inside space-y-1">
-        <li><strong class="text-amber-300">Replit Integration ≠ push</strong> — дава read/clone, не създава repos</li>
-        <li>github.com → <strong>Settings → Developer settings → Personal access tokens</strong></li>
-        <li><strong>Classic token</strong> → отметни scope <code class="text-cyan-400">repo</code> (пълен достъп)</li>
-        <li>Replit → <strong>Secrets</strong> → <code class="text-cyan-400">GITHUB_TOKEN</code> = новият PAT</li>
-        <li><strong>Redeploy</strong> на ADN</li>
-        <li>Playground → <strong>⬆ GitHub</strong> (без prompt — автоматично нов repo по slug)</li>
-      </ol>
-      <p class="mt-2 text-gray-500">Fine-grained алтернатива: Contents (Read/Write) + Administration (Read/Write) за твоите repos.</p>
-    </div>
+  <section id="rec-box" class="bg-argos-panel border border-argos-accent/30 rounded-xl p-5 space-y-2">
+    <h2 class="text-sm font-semibold text-white">Какво да избереш</h2>
+    <p class="text-xs text-argos-dim">Зареждане…</p>
   </section>
 
-  <!-- GitLab -->
+  <div id="groups" class="space-y-5"></div>
+
   <section class="bg-argos-panel border border-argos-border rounded-xl p-5">
     <div class="flex items-center justify-between gap-3 mb-4">
-      <h2 class="text-sm font-semibold text-white">🦊 GitLab</h2>
-      <button onclick="testGitlab()" id="btn-test-gl"
-        class="px-3 py-1.5 rounded-lg text-xs bg-orange-800 hover:bg-orange-700 text-white">Тест връзка</button>
+      <h2 class="text-sm font-semibold text-white">🐙 GitHub · 🦊 GitLab</h2>
+      <div class="flex gap-2">
+        <button type="button" onclick="testGithub()" id="btn-test-gh"
+          class="px-3 py-1.5 rounded-lg text-xs bg-indigo-700 hover:bg-indigo-600 text-white">Тест GitHub</button>
+        <button type="button" onclick="testGitlab()" id="btn-test-gl"
+          class="px-3 py-1.5 rounded-lg text-xs bg-orange-800 hover:bg-orange-700 text-white">Тест GitLab</button>
+      </div>
     </div>
-    <div id="gl-card" class="text-sm font-mono text-argos-dim">Зареждане…</div>
-    <div class="mt-4 p-3 rounded-lg bg-gray-950 border border-gray-800 text-xs text-gray-400">
-      Secrets: <code class="text-cyan-400">GITLAB_TOKEN</code> (scope api, write_repository),
-      опционално <code class="text-cyan-400">GITLAB_NAMESPACE</code>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm font-mono">
+      <div id="gh-card" class="text-argos-dim">…</div>
+      <div id="gl-card" class="text-argos-dim">…</div>
     </div>
-  </section>
-
-  <!-- Preferences -->
-  <section class="bg-argos-panel border border-argos-border rounded-xl p-5">
-    <h2 class="text-sm font-semibold text-white mb-4">⚙️ Предпочитания</h2>
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm mt-4">
       <label class="block">
         <span class="text-argos-dim text-xs">Git provider при push</span>
         <select id="pref-provider" onchange="savePrefs()"
@@ -81,7 +64,25 @@
     </div>
   </section>
 
-  <!-- Durability -->
+  <section class="bg-argos-panel border border-argos-border rounded-xl p-5">
+    <h2 class="text-sm font-semibold text-white mb-2">MCP сървъри</h2>
+    <p class="text-xs text-argos-dim mb-4">
+      Native инструменти (файлове, shell, git_forge, web_read) стигат за строеж на игри.
+      Включи MCP само за конкретна дупка. Ключът на сървъра се наследява от полетата по-горе, или го пишеш тук.
+    </p>
+    <div id="mcp-list" class="space-y-3"></div>
+    <details class="mt-4 text-xs text-argos-dim">
+      <summary class="cursor-pointer text-gray-300">Добави custom MCP</summary>
+      <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <input id="mcp-name" placeholder="име (github-extra)" class="px-3 py-2 rounded bg-gray-900 border border-gray-700 text-white">
+        <input id="mcp-cmd" placeholder="command (npx)" class="px-3 py-2 rounded bg-gray-900 border border-gray-700 text-white">
+        <input id="mcp-args" placeholder='args, разделени с интервал' class="px-3 py-2 rounded bg-gray-900 border border-gray-700 text-white sm:col-span-2">
+        <input id="mcp-url" placeholder="или HTTP url" class="px-3 py-2 rounded bg-gray-900 border border-gray-700 text-white sm:col-span-2">
+        <button type="button" onclick="addCustomMcp()" class="px-3 py-2 rounded bg-gray-800 hover:bg-gray-700 text-white">Запиши</button>
+      </div>
+    </details>
+  </section>
+
   <section class="bg-argos-panel border border-emerald-700/40 rounded-xl p-5">
     <h2 class="text-sm font-semibold text-emerald-300 mb-2">🛡 Устойчивост на приложенията</h2>
     <p class="text-xs text-argos-dim mb-4">Как да си сигурен, че проектите ще „живеят“ след redeploy:</p>
@@ -89,9 +90,9 @@
     <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4" id="dur-summary"></div>
     <div id="dur-projects" class="space-y-2 max-h-64 overflow-auto text-xs"></div>
     <div class="mt-4 p-3 rounded-lg bg-emerald-950/30 border border-emerald-800/40 text-xs text-emerald-200/80 space-y-1">
-      <p><strong>Публикувай в /apps/</strong> — най-надеждно (zip в object storage, auto-restore при старт)</p>
-      <p><strong>Workspace backup</strong> — за непубликувани проекти (Autopilot, Revive, ръчен backup)</p>
-      <p><strong>Push към GitHub</strong> — трети слой: кодът живее и в remote repo</p>
+      <p><strong>Публикувай в /apps/</strong> — най-надеждно на тази машина</p>
+      <p><strong>Push към GitLab/GitHub</strong> — кодът живее и в remote (PR/MR от менюто на проекта)</p>
+      <p><strong>Netlify / Pages</strong> — публичен https от Studio → Наживо</p>
     </div>
   </section>
 
@@ -108,50 +109,184 @@ async function api(url, opts) {
   const r = await fetch(url, Object.assign({headers: {'Content-Type': 'application/json'}}, opts || {}));
   return r.json();
 }
-
+function $(id) { return document.getElementById(id); }
+function esc(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
 function statusBadge(ok, label) {
   const cls = ok ? 'text-emerald-400' : 'text-red-400';
   const icon = ok ? '✅' : '❌';
-  return `<span class="${cls}">${icon} ${label}</span>`;
+  return `<span class="${cls}">${icon} ${esc(label)}</span>`;
 }
 
-async function loadStatus() {
-  const d = await api('/admin/daedalus/connectors/status');
-  const gh = d.github || {};
-  const gl = d.gitlab || {};
-  const st = d.storage || {};
+function recLevel(level) {
+  if (level === 'high') return 'border-red-700/50 text-red-200';
+  if (level === 'medium') return 'border-amber-700/50 text-amber-200';
+  if (level === 'ok') return 'border-emerald-700/50 text-emerald-200';
+  return 'border-gray-700 text-gray-300';
+}
 
-  $('gh-card').innerHTML = `
-    <div class="space-y-1">
-      ${statusBadge(gh.ok, gh.configured ? 'Configured' : 'Not configured')}
-      ${gh.login ? `<div>Login: <span class="text-white">${gh.login}</span></div>` : ''}
-      ${gh.source && gh.source !== 'none' ? `<div>Source: <span class="text-indigo-300">${gh.source}</span></div>` : ''}
-      ${gh.scopes ? `<div>Scopes: <span class="text-gray-400">${gh.scopes || '(OAuth — fine-grained)'}</span></div>` : ''}
-      ${gh.can_push === false ? '<div class="text-amber-400 font-medium">⚠️ Няма push права — нужен classic PAT с scope repo (виж инструкциите по-долу)</div>' : '<div class="text-emerald-400">✅ Push OK — Playground ⬆ GitHub създава нов repo с 1 клик</div>'}
-      ${gh.error ? `<div class="text-red-400">${gh.error}</div>` : ''}
-      ${gh.hint ? `<div class="text-gray-500 text-xs mt-2">${gh.hint}</div>` : ''}
-    </div>`;
+async function loadOverview() {
+  const d = await api('/admin/daedalus/connectors/overview');
+  const recs = d.recommendations || [];
+  $('rec-box').innerHTML = `
+    <h2 class="text-sm font-semibold text-white mb-2">Какво да избереш сега</h2>
+    ${recs.map(r => `
+      <div class="p-3 rounded-lg border ${recLevel(r.level)} bg-gray-950/40 text-sm">
+        <div class="font-medium">${esc(r.title)}</div>
+        <p class="text-xs text-argos-dim mt-1">${esc(r.body)}</p>
+      </div>`).join('')}
+    <p class="text-[11px] text-gray-500 mt-2">Файл: <code>${esc(d.secrets_file || '')}</code></p>`;
 
-  $('gl-card').innerHTML = `
-    <div class="space-y-1">
-      ${statusBadge(gl.ok, gl.configured ? 'Configured' : 'Not configured')}
-      ${gl.username ? `<div>User: <span class="text-white">${gl.username}</span></div>` : ''}
-      ${gl.host ? `<div>Host: <span class="text-gray-400">${gl.host}</span></div>` : ''}
-      ${gl.error ? `<div class="text-red-400">${gl.error}</div>` : ''}
-      ${gl.hint ? `<div class="text-gray-500 text-xs mt-2">${gl.hint}</div>` : ''}
-    </div>`;
+  $('groups').innerHTML = (d.groups || []).filter(g => g.id !== 'mcp').map(g => `
+    <section class="bg-argos-panel border border-argos-border rounded-xl p-5" id="grp-${esc(g.id)}">
+      <h2 class="text-sm font-semibold text-white">${esc(g.title)}</h2>
+      <p class="text-xs text-argos-dim mt-1">${esc(g.blurb)}</p>
+      <p class="text-xs text-cyan-200/80 mt-2">${esc(g.pick)}</p>
+      <div class="mt-4 space-y-3">
+        ${(g.fields || []).map(f => fieldRow(f)).join('')}
+      </div>
+    </section>`).join('');
 
-  $('storage-card').innerHTML = `
-    ${statusBadge(st.configured, st.configured ? 'Object Storage активен' : 'Object Storage липсва')}
-    <div class="text-xs text-gray-500 mt-2">${st.hint || ''}</div>`;
-
+  renderGit(d);
+  renderMcp(d);
   const prefs = d.prefs || {};
   $('pref-provider').value = prefs.preferred_git_provider || 'auto';
   $('pref-branch').value = prefs.default_github_branch || 'main';
   $('pref-backup-revive').checked = prefs.auto_backup_on_revive !== false;
   $('pref-backup-publish').checked = prefs.auto_backup_on_publish !== false;
+  const st = d.storage || {};
+  $('storage-card').innerHTML = `
+    ${statusBadge(st.configured, st.configured ? 'Object Storage активен' : 'Object Storage липсва')}
+    <div class="text-xs text-gray-500 mt-2">${esc(st.hint || '')}</div>`;
 }
 
+function fieldRow(f) {
+  const rec = f.recommend ? '<span class="text-[10px] text-cyan-400 ml-1">препоръчан</span>' : '';
+  const src = f.set ? `<span class="text-[10px] text-gray-500">${esc(f.source)} · ${esc(f.mask)}</span>` : '<span class="text-[10px] text-gray-600">празно</span>';
+  const docs = f.docs ? `<a href="${esc(f.docs)}" target="_blank" class="text-indigo-400 underline">docs</a>` : '';
+  const type = f.secret ? 'password' : 'text';
+  return `
+    <div class="border border-gray-800 rounded-lg p-3">
+      <div class="flex items-center justify-between gap-2">
+        <label class="text-sm text-white" for="f-${esc(f.key)}">${esc(f.label)}${rec}</label>
+        ${src}
+      </div>
+      <p class="text-[11px] text-argos-dim mt-1">${esc(f.why)} ${docs}</p>
+      <div class="mt-2 flex gap-2">
+        <input id="f-${esc(f.key)}" data-key="${esc(f.key)}" type="${type}" autocomplete="off"
+          placeholder="${esc(f.placeholder || (f.set ? 'оставя празно = без промяна' : ''))}"
+          class="flex-1 px-3 py-1.5 rounded bg-gray-900 border border-gray-700 text-white text-sm">
+        <button type="button" class="px-3 py-1.5 rounded bg-emerald-800 hover:bg-emerald-700 text-white text-xs"
+          onclick="saveKey('${esc(f.key)}')">Запиши</button>
+        ${f.set ? `<button type="button" class="px-3 py-1.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs" onclick="clearKey('${esc(f.key)}')">Изчисти</button>` : ''}
+      </div>
+    </div>`;
+}
+
+async function saveKey(key) {
+  const el = document.getElementById('f-' + key);
+  const val = (el && el.value || '').trim();
+  if (!val) { alert('Празно поле = без промяна. Ползвай Изчисти за да махнеш ключа.'); return; }
+  const r = await api('/admin/daedalus/connectors/secrets', {
+    method: 'POST', body: JSON.stringify({ secrets: { [key]: val } }),
+  });
+  if (el) el.value = '';
+  if (!r.ok) { alert(r.error || 'неуспешно'); return; }
+  await loadOverview();
+}
+
+async function clearKey(key) {
+  if (!confirm('Да махна ' + key + ' от secrets.env?')) return;
+  await api('/admin/daedalus/connectors/secrets', {
+    method: 'POST', body: JSON.stringify({ clear: [key] }),
+  });
+  await loadOverview();
+}
+
+function renderGit(d) {
+  const gh = d.github || {};
+  const gl = d.gitlab || {};
+  $('gh-card').innerHTML = `
+    <div class="space-y-1">
+      ${statusBadge(gh.ok, gh.configured ? 'Configured' : 'Not configured')}
+      ${gh.login ? `<div>Login: <span class="text-white">${esc(gh.login)}</span></div>` : ''}
+      ${gh.source && gh.source !== 'none' ? `<div>Source: <span class="text-indigo-300">${esc(gh.source)}</span></div>` : ''}
+      ${gh.can_push === false ? '<div class="text-amber-400 font-medium">⚠ Няма push/PR права — classic PAT с scope repo</div>' : (gh.ok ? '<div class="text-emerald-400">✅ Push + PR OK</div>' : '')}
+      ${gh.error ? `<div class="text-red-400">${esc(gh.error)}</div>` : ''}
+      ${gh.hint ? `<div class="text-gray-500 text-xs mt-2 whitespace-pre-line">${esc(gh.hint)}</div>` : ''}
+    </div>`;
+  $('gl-card').innerHTML = `
+    <div class="space-y-1">
+      ${statusBadge(gl.ok, gl.configured ? 'Configured' : 'Not configured')}
+      ${gl.username ? `<div>User: <span class="text-white">${esc(gl.username)}</span></div>` : ''}
+      ${gl.host ? `<div>Host: <span class="text-gray-400">${esc(gl.host)}</span></div>` : ''}
+      ${gl.ok ? '<div class="text-emerald-400">✅ Clone + push + MR</div>' : ''}
+      ${gl.error ? `<div class="text-red-400">${esc(gl.error)}</div>` : ''}
+      ${gl.hint ? `<div class="text-gray-500 text-xs mt-2">${esc(gl.hint)}</div>` : ''}
+    </div>`;
+}
+
+function renderMcp(d) {
+  const addons = (d.addons || []).filter(a => a.kind === 'mcp' || a.id === 'mirofish');
+  $('mcp-list').innerHTML = addons.map(a => `
+    <div class="border border-gray-800 rounded-lg p-3 text-sm">
+      <div class="flex items-center justify-between gap-2">
+        <div>
+          <span class="text-white">${esc(a.label)}</span>
+          ${a.enabled && a.kind === 'mcp' ? '<span class="text-[10px] text-emerald-400 ml-2">включен</span>' : ''}
+        </div>
+        ${a.kind === 'mcp' ? `<button type="button" class="px-2 py-1 rounded text-xs ${a.enabled ? 'bg-gray-800 text-gray-300' : 'bg-emerald-800 text-white'}"
+          onclick="toggleMcp('${esc(a.id)}', ${a.enabled ? 'false' : 'true'})">${a.enabled ? 'Изключи' : 'Включи'}</button>` : ''}
+      </div>
+      <p class="text-[11px] text-argos-dim mt-1">${esc(a.blurb)}</p>
+      ${a.recommend ? `<p class="text-[11px] text-cyan-200/80 mt-1">${esc(a.recommend)}</p>` : ''}
+    </div>`).join('') || '<p class="text-gray-500 text-sm">Няма MCP каталог</p>';
+}
+
+async function toggleMcp(id, on) {
+  const r = await api('/admin/daedalus/connectors/mcp', {
+    method: 'POST', body: JSON.stringify({ id, enabled: on }),
+  });
+  if (!r.ok && r.error) alert(r.error);
+  await loadOverview();
+}
+
+async function addCustomMcp() {
+  const name = ($('mcp-name').value || '').trim();
+  const command = ($('mcp-cmd').value || '').trim();
+  const args = ($('mcp-args').value || '').trim().split(/\s+/).filter(Boolean);
+  const url = ($('mcp-url').value || '').trim();
+  if (!name || (!command && !url)) { alert('Име + command или url'); return; }
+  const r = await api('/admin/daedalus/connectors/mcp', {
+    method: 'POST', body: JSON.stringify({ custom: true, id: name, command, args, url }),
+  });
+  if (!r.ok) { alert(r.error || 'неуспешно'); return; }
+  await loadOverview();
+}
+
+async function testGithub() {
+  const btn = $('btn-test-gh');
+  btn.disabled = true; btn.textContent = '⏳…';
+  await api('/admin/daedalus/connectors/test-github', {method:'POST'});
+  await loadOverview();
+  btn.disabled = false; btn.textContent = 'Тест GitHub';
+}
+async function testGitlab() {
+  const btn = $('btn-test-gl');
+  btn.disabled = true; btn.textContent = '⏳…';
+  await api('/admin/daedalus/connectors/test-gitlab', {method:'POST'});
+  await loadOverview();
+  btn.disabled = false; btn.textContent = 'Тест GitLab';
+}
+async function savePrefs() {
+  await api('/admin/daedalus/connectors/config', {method:'POST', body: JSON.stringify({
+    preferred_git_provider: $('pref-provider').value,
+    default_github_branch: $('pref-branch').value.trim() || 'main',
+    auto_backup_on_revive: $('pref-backup-revive').checked,
+    auto_backup_on_publish: $('pref-backup-publish').checked,
+  })});
+}
 async function loadDurability() {
   const d = await api('/admin/daedalus/playground/api/durability/status');
   if (!d.ok) return;
@@ -171,41 +306,14 @@ async function loadDurability() {
     </div>`;
   $('dur-projects').innerHTML = (d.projects || []).map(p => `
     <div class="flex items-center justify-between p-2 rounded bg-gray-900 border border-gray-800">
-      <span class="text-gray-300 truncate">${p.name || p.slug}</span>
+      <span class="text-gray-300 truncate">${esc(p.name || p.slug)}</span>
       <span class="shrink-0 flex gap-2">
         ${p.published ? '<span class="text-emerald-400">📦 pub</span>' : ''}
         ${p.workspace_empty ? '<span class="text-red-400">⚠ празен</span>' : `<span class="text-gray-500">${p.workspace_files}f</span>`}
       </span>
     </div>`).join('') || '<p class="text-gray-500">Няма проекти</p>';
 }
-
-async function testGithub() {
-  const btn = $('btn-test-gh');
-  btn.disabled = true; btn.textContent = '⏳…';
-  await api('/admin/daedalus/connectors/test-github', {method:'POST'});
-  await loadStatus();
-  btn.disabled = false; btn.textContent = 'Тест връзка';
-}
-
-async function testGitlab() {
-  const btn = $('btn-test-gl');
-  btn.disabled = true; btn.textContent = '⏳…';
-  await api('/admin/daedalus/connectors/test-gitlab', {method:'POST'});
-  await loadStatus();
-  btn.disabled = false; btn.textContent = 'Тест връзка';
-}
-
-async function savePrefs() {
-  await api('/admin/daedalus/connectors/config', {method:'POST', body: JSON.stringify({
-    preferred_git_provider: $('pref-provider').value,
-    default_github_branch: $('pref-branch').value.trim() || 'main',
-    auto_backup_on_revive: $('pref-backup-revive').checked,
-    auto_backup_on_publish: $('pref-backup-publish').checked,
-  })});
-}
-
-function $(id) { return document.getElementById(id); }
-loadStatus();
+loadOverview();
 loadDurability();
 </script>
 {% endblock %}
