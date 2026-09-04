@@ -705,6 +705,9 @@ def select_skills(user_message: str, intent: str, hint: str = "") -> list[str]:
         "unity_runtime": ["unity-check", "unity mcp", "DAEDALUS_UNITY_MCP",
                           "unity hub", "batchmode", "не вендорираме unity",
                           "unity editor in the cloud"],
+        "game_agent_bench": ["game agent bench", "honesty suite", "не bake-off",
+                             "vendor bake-off", "game-agent-bench",
+                             "честност suite"],
         "dissection": ["дисекция", "dissect", "мостра", "play lab",
                        "лаборатория", "разглоби играта", "specimen game"],
     }

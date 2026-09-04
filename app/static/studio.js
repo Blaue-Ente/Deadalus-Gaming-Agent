@@ -394,6 +394,18 @@
     if (ev.key === "Enter") { ev.preventDefault(); $("shrun").click(); }
   });
 
+  async function appendBench(box) {
+    try {
+      const b = await (await fetch("/api/v1/daedalus/bench")).json();
+      const passed = b.passed || 0;
+      const total = b.total || 0;
+      const ok = !!b.ok;
+      box.appendChild(itemEl("честност", passed + "/" + total + " · не bake-off", ok));
+    } catch (e) {
+      box.appendChild(itemEl("честност", String(e), false));
+    }
+  }
+
   async function appendUnity(box) {
     if (!state.slug) return;
     try {
@@ -425,6 +437,7 @@
     const box = $("worldkit");
     if (!box) return;
     box.replaceChildren();
+    await appendBench(box);
     if (!state.slug) {
       const empty = document.createElement("div");
       empty.className = "empty";

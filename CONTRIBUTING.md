@@ -41,6 +41,7 @@ GitLab: [Merge requests](https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/merge_
 
 ```bash
 python3 -m pytest tests -q
+python3 -m daedalus.game_agent_bench --no-persist
 ```
 
 CI runs the same in `.gitlab-ci.yml`. If you add a Godot/Blender path, cover the detector/scaffold with a unit test even when the Godot binary is missing in CI.

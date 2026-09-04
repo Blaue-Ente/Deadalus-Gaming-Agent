@@ -13,8 +13,8 @@ Owner-approved plan (2026-09-04). Each phase lands as its own merge request. The
 | F4 | Asset pipeline v2 (atlas, SFX, 3D jobs) | **Done** — merged to `main` (`e77d0d9`) |
 | F5 | Skill memory (progressive disclosure + Approve) | **Done** — merged to `main` (`a6ed4ed`) |
 | F6 | Production layer vs prototype wall | **Done** — merged to `main` (`53512f3`) |
-| F7 | Unity: real MCP bridge or honest non-promise | **This MR** — awaiting owner approval |
-| F8 | `game_agent_bench` as a real suite | Not started (partial metrics can start after F2) |
+| F7 | Unity: real MCP bridge or honest non-promise | **Done** — merged to `main` (`0ee2010`) |
+| F8 | `game_agent_bench` as a real suite | **This MR** — awaiting owner approval |
 
 ## F0 — Hard-job slices (done)
 
@@ -44,33 +44,37 @@ Progressive catalog (name + description) plus at most one SKILL.md body. Failure
 
 M0–M3 stays a labelled prototype. `design/systems.json` plus persist/pause is the production layer. Empty JSON is not a production layer. Native `production`. Gate `production-check`. Merged as `53512f3`.
 
-## F7 — Unity MCP or honest non-promise (this MR)
+## F7 — Unity MCP or honest non-promise (done)
 
-**Intent:** Daedalus must not pretend there is a Unity Editor in the cloud. Either talk to a real owner-installed MCP plugin, or refuse honestly. Do not vendor Unity.
+Native `engine` on a Unity slug: `DAEDALUS_UNITY_MCP` or `UNITY_PATH` batchmode (import ≠ Play) or honest refuse (`need=unity_local`). Gate `unity-check` is N/A for racing. We do not vendor Unity. Merged as `0ee2010` (`4478a87`).
+
+## F8 — `game_agent_bench` as a real suite (this MR)
+
+**Intent:** The gate list was only flags. F8 runs those honesty checks against this harness. It is still **not** a vendor bake-off — public docs name only Daedalus.
 
 **Shipped**
 
-- Native `engine` on a Unity slug: `DAEDALUS_UNITY_MCP` adapter (local Editor), else `UNITY_PATH` batchmode (import ≠ Play), else honest refuse (`need=unity_local`).
-- Gate `unity-check` — N/A for racing/web; in-cloud Editor claims fail; pre-build does not block guided racing.
-- Studio **Свят** line `unity · Hub/MCP/batchmode`. Game Studio **Unity**. HTTP `GET|POST /api/v1/playground/projects/{slug}/unity`.
-- We do not vendor a Unity Editor, Hub, or a third-party MCP server.
+- `run_suite()` / `evaluate()` — in-process cases (skip ≠ ok, racer ship ≠ store, empty world/systems JSON fail closed, Unity without Editor is honest refuse, explorer cannot write, native tools present, guided racing gates do not block, compact persona, one builder).
+- CLI `python -m daedalus.game_agent_bench`. HTTP `GET|POST /api/v1/daedalus/bench`. Optional `$DAEDALUS_DATA/bench/latest.json`.
+- Studio **Свят** line `честност`. Game Studio **Честност**. Capability `game-agent-bench`.
+- Chromium, Godot, and Unity are not required for the default path.
 
 **Done when (acceptance)**
 
 | Criterion | How we know |
 |-----------|-------------|
-| No Editor → honest refuse, not a skip-pass | `test_unity_no_editor_is_honest_non_promise` |
-| Bare “unity” in a GDD is not a cloud claim | `test_bare_unity_is_not_a_cloud_claim` |
-| In-cloud Editor claim without MCP fails | `test_cloud_editor_claim_fails_prove` |
-| Guided racing not blocked | `test_unity_check_does_not_block_racing` + `test_craft_check_warns_but_does_not_block` |
-| MCP tool mapping | `test_unity_mcp_tool_mapping` |
-| Batchmode is not Play | `test_batchmode_is_not_play_mode` |
-| Persona compact | `test_standalone_persona_is_compact` |
+| Gates still allow measurement | `test_gates_still_allow_measurement` + existing `test_game_agent_bench_gates` |
+| Suite runs without editors | `test_run_suite_passes_without_editors` |
+| CLI exit 0 | `test_cli_main_zero` |
+| HTTP + Studio copy | `test_http_bench_and_studio_copy` |
+| Guided racing still not blocked | `test_craft_check_warns_but_does_not_block` |
+| Not a vendor bake-off | `not_vendor_bakeoff` case + public docs |
+| Persona compact | `test_persona_mentions_honesty_suite` |
 
-**Not in F7** (next phase): real GameAgentBench suite. Do not vendor Unreal. Do not inject Unity into the Vite racer M0.
+**Not in F8** (this is the last planned phase): vendor bake-off, Unreal, extra Godot Editors, injecting atlas/runtime/Unity into the Vite racer M0. There is no F9 unless the owner invents one.
 
-## How to approve F7 and start F8
+## How to approve F8 (last planned phase)
 
-1. Review this MR (honest refuse, MCP adapter, `unity-check`, Studio Unity line).
-2. Optional: create a Unity playground project, call `engine(action=run)` without `UNITY_PATH`, confirm the reply says we do not vendor Unity.
-3. Reply that F7 is approved. F8 is `game_agent_bench` as a real suite — still not a vendor bake-off in this repo.
+1. Review this MR (suite cases, CLI, HTTP, Studio честност line). Confirm public docs still refuse a vendor bake-off.
+2. Optional: `python -m daedalus.game_agent_bench --no-persist` on your machine — should print `ok` without Unity or Chromium.
+3. Reply that F8 is approved. The F0–F8 plan is complete. Do not start a next phase unless you name it.
