@@ -486,6 +486,7 @@
       lines.push("", "MIROFISH " + (mf.ok ? "UP" : "DOWN"));
       const mcp = (data.mcp && data.mcp.servers) || {};
       lines.push("", "MCP  " + (Object.keys(mcp).length ? Object.keys(mcp).join(", ") : "(none)"));
+      lines.push("настрой: /admin/daedalus/connectors");
       text($("worldbox"), lines.join("\n"));
     } catch (e) {
       text($("worldbox"), "connectors: " + e);

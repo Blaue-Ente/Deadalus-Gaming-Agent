@@ -1,10 +1,12 @@
-"""Дедал Playground — GitHub clone / create / push.
+"""Дедал Playground — GitHub clone / create / push / pull request.
 
-Използва ``GITHUB_TOKEN`` (Replit GitHub connector, fine-grained) + git CLI.
+Използва ``GITHUB_TOKEN`` (Studio → Свързаност) + git CLI.
 
   clone_repo(url)        — издърпва repo в playground/projects/{slug}/ (съживяване)
   create_repo(name)      — създава нов repo през PyGithub
   push_project(slug,...) — git init/commit/push с token-authenticated URL
+  create_pull_request    — PR към owner/repo
+  create_upstream_pr     — push branch + PR към revived upstream
 
 Всички write-операции са fail-closed: при липса на токен/права → ясна грешка,
 не тих провал.
@@ -51,16 +53,15 @@ def github_error_hint(exc: Exception | str) -> str:
     if "not configured" in msg or "github_token" in msg:
         return (
             "GITHUB_TOKEN не е конфигуриран. "
-            "Отвори /admin/daedalus/connectors за настройка, "
-            "или свържи GitHub през Replit Integrations / Secrets."
+            "Отвори /admin/daedalus/connectors (Свързаност) и сложи GitHub PAT."
         )
     if "403" in msg or "forbidden" in msg:
         return (
             "GitHub отказа достъп (403). Токенът няма права за push/създаване на repos.\n\n"
-            "Replit Integration ≠ push права. Нужен е GITHUB_TOKEN с scope repo:\n"
+            "Нужен е GITHUB_TOKEN с scope repo:\n"
             "• Classic PAT: github.com/settings/tokens → Generate → отметни repo\n"
-            "• Fine-grained: Contents (Read/Write) + Administration (Read/Write)\n"
-            "• Replit Secrets → GITHUB_TOKEN → Redeploy\n\n"
+            "• Fine-grained: Contents + Pull requests + Administration (Read/Write)\n"
+            "• Studio → Свързаност → GitHub PAT\n\n"
             "След това: Playground → ⬆ GitHub (1 клик, празно repo име = нов repo)."
         )
     if "422" in msg or "already exists" in msg or "name already exists" in msg:
@@ -243,6 +244,148 @@ def create_issue(
         "html_url": issue.get("html_url", ""),
         "state": issue.get("state", ""),
     }
+
+
+def _gh_headers() -> dict[str, str]:
+    tok = _token()
+    if not tok:
+        raise RuntimeError("GITHUB_TOKEN not configured")
+    return {
+        "Authorization": f"Bearer {tok}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+        "User-Agent": "daedalus",
+    }
+
+
+def parse_github_repo(url: str) -> tuple[str, str] | None:
+    """Return (owner, repo) from a GitHub URL or owner/repo slug."""
+    raw = (url or "").strip()
+    if not raw:
+        return None
+    m = re.search(r"github\.com[:/]+([^/]+)/([^/.]+)", raw, re.I)
+    if m:
+        return m.group(1), m.group(2)
+    if re.match(r"^[^/\s]+/[^/\s]+$", raw) and "gitlab" not in raw.lower():
+        owner, repo = raw.split("/", 1)
+        return owner, repo
+    return None
+
+
+def create_pull_request(
+    owner: str,
+    repo: str,
+    *,
+    title: str,
+    head: str,
+    base: str = "main",
+    body: str = "",
+    draft: bool = False,
+) -> dict[str, Any]:
+    """Open a GitHub pull request. If one already exists for head, return it."""
+    import httpx
+
+    if not is_configured():
+        raise RuntimeError(github_error_hint("GITHUB_TOKEN not configured"))
+    owner = (owner or "").strip()
+    repo = (repo or "").strip()
+    head = (head or "").strip()
+    base = (base or "main").strip() or "main"
+    title = (title or "").strip() or f"Дедал: {head}"
+    if not owner or not repo or not head:
+        raise ValueError("owner, repo and head branch are required")
+    headers = _gh_headers()
+    payload = {
+        "title": title,
+        "head": head,
+        "base": base,
+        "body": body or "",
+        "draft": bool(draft),
+    }
+    r = httpx.post(
+        f"https://api.github.com/repos/{owner}/{repo}/pulls",
+        headers=headers,
+        json=payload,
+        timeout=20.0,
+    )
+    if r.status_code in (200, 201):
+        pr = r.json()
+        return {
+            "ok": True,
+            "number": pr.get("number"),
+            "title": pr.get("title", ""),
+            "url": pr.get("html_url", ""),
+            "html_url": pr.get("html_url", ""),
+            "state": pr.get("state", ""),
+            "head": head,
+            "base": base,
+            "existed": False,
+        }
+    if r.status_code == 422:
+        listed = httpx.get(
+            f"https://api.github.com/repos/{owner}/{repo}/pulls",
+            headers=headers,
+            params={"state": "open", "head": f"{owner}:{head}"},
+            timeout=20.0,
+        )
+        if listed.status_code == 200:
+            items = listed.json() or []
+            if items:
+                pr = items[0]
+                return {
+                    "ok": True,
+                    "number": pr.get("number"),
+                    "title": pr.get("title", ""),
+                    "url": pr.get("html_url", ""),
+                    "html_url": pr.get("html_url", ""),
+                    "state": pr.get("state", ""),
+                    "head": head,
+                    "base": base,
+                    "existed": True,
+                }
+        raise RuntimeError(github_error_hint(f"GitHub PR 422: {r.text[:400]}"))
+    raise RuntimeError(github_error_hint(f"GitHub PR failed: HTTP {r.status_code} {r.text[:400]}"))
+
+
+async def create_upstream_pr(
+    slug: str,
+    *,
+    title: str = "",
+    body: str = "",
+    base: str = "",
+    branch_name: str = "",
+    commit_msg: str = "",
+) -> dict[str, Any]:
+    """Push a revive branch and open a PR against the upstream default branch."""
+    pushed = await push_upstream_branch(
+        slug, branch_name=branch_name, commit_msg=commit_msg,
+    )
+    owner = str(pushed.get("owner") or "")
+    repo = str(pushed.get("repo") or "")
+    head = str(pushed.get("branch") or "")
+    if not owner or not repo or not head:
+        raise RuntimeError("upstream push did not return owner/repo/branch")
+    target = (base or "").strip()
+    if not target:
+        try:
+            target = str(get_repo(owner, repo).get("default_branch") or "main")
+        except Exception:
+            target = "main"
+    if head == target:
+        raise RuntimeError(
+            f"head branch {head!r} is the default branch — cannot open a PR onto itself"
+        )
+    proj = await pg.get_project(slug)
+    name = (proj or {}).get("name") or slug
+    pr = create_pull_request(
+        owner,
+        repo,
+        title=title or f"Дедал: {name}",
+        head=head,
+        base=target,
+        body=body or f"Промени от Дедал върху `{slug}`.\n",
+    )
+    return {"ok": True, "pr": pr, "branch": head, "repo": f"{owner}/{repo}"}
 
 
 def _auth_url(repo_url: str) -> str:

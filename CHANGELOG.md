@@ -5,6 +5,13 @@ The version in `pyproject.toml` is the source of truth for the package.
 
 ## [Unreleased]
 
+### Agent
+
+- **Свързаност** — Studio / Command Center one screen for LLM keys, GitHub/GitLab, Netlify, MCP servers, mesh, Play Lab, 3D keys. Values go to `$DAEDALUS_DATA/secrets.env` (masked in the UI, never git). Recommendations say which key to set first (OpenRouter/AllToken vs GitLab vs GitHub PAT).
+- **Git forges** — clone GitHub **or** GitLab; playground push honours `provider`; GitHub Pull Request and GitLab Merge Request (`create-upstream-pr`, native tool `git_forge`). Playground menu 🔀 PR / MR.
+- **Skill memory** — catalog (name + description) plus at most one SKILL.md body per turn. `draft_from_failure` / `draft_from_success` write pending JSON; they stay out of the next prompt until owner Approve in Studio **Уроци**. Native `skill` is catalog/load/pending only — the agent cannot approve itself.
+- **Hard-job slices** — playground work that is already multi-file keeps a job ledger (`original ask`, acceptance, named artifacts) under `$DAEDALUS_DATA/jobs/`. `spawn_subagent` takes `role=explorer|coder|verify` (explorer/verify cannot write), injects only the asked artifacts, and refuses `TASK_COMPLETE` that contradicts a failure. Definition of Done blocks "готово" while slices remain or the reply admits it did not finish. Whisper chat and greenfield playable slices are unchanged.
+
 ### Games
 
 - **Honesty suite** — `python -m daedalus.game_agent_bench` (and `GET /api/v1/daedalus/bench`) runs in-process checks against this harness: skip is not a playtest, a racer “ship” is not a store claim, empty world/systems JSON fail closed, Unity without an Editor is an honest refuse, explorer cannot write. Results may land under `$DAEDALUS_DATA/bench/`. This is not a vendor bake-off.
@@ -13,11 +20,6 @@ The version in `pyproject.toml` is the source of truth for the package.
 - **World kit runtime** — epic projects ship a playable campaign slice: save `{version, region, act, flags, inventory, quests}`, `world/quests.json`, `characters/*.dialogue.json`, gated `levels/graph.json`, and `src/world/runtime.js`. `world({action: prove})` walks talk → flag → quest → travel. Hollow map/graph JSON fails. Gate `world-check` does not block guided builds that have no files yet.
 - **Asset pipeline v2** — `assets({action: atlas|tileset|sfx|font})` packs a 2D kit (PNG atlas + tileset, procedural WAV, 5×7 font) with no paid APIs. `assets({action: mesh})` submits Tripo/Meshy/fal only when `FAL_KEY` / `TRIPO_API_KEY` / `MESHY_API_KEY` exist; otherwise `{need_key: true}` and no fake hero GLB. Greybox is a labelled cube. Suno is a file drop. Gate `asset-check` does not block guided racing before files exist.
 - **Gameplay bot** — visual web kinds run `playtest/scenario.json` (hold keys → canvas pixel-diff, required win/lose). `requestAnimationFrame` FPS and `performance.memory` are gates when the sample is real; a thin headless sample warns. `playtest/balance.json` is a 1000-round economy/combat sim: a resource that only grows, or a fight that never/always wins, fails. Click-Start is not a playtest. Godot/Unity stay on the engine runner.
-
-### Agent
-
-- **Skill memory** — catalog (name + description) plus at most one SKILL.md body per turn. `draft_from_failure` / `draft_from_success` write pending JSON; they stay out of the next prompt until owner Approve in Studio **Уроци**. Native `skill` is catalog/load/pending only — the agent cannot approve itself.
-- **Hard-job slices** — playground work that is already multi-file keeps a job ledger (`original ask`, acceptance, named artifacts) under `$DAEDALUS_DATA/jobs/`. `spawn_subagent` takes `role=explorer|coder|verify` (explorer/verify cannot write), injects only the asked artifacts, and refuses `TASK_COMPLETE` that contradicts a failure. Definition of Done blocks "готово" while slices remain or the reply admits it did not finish. Whisper chat and greenfield playable slices are unchanged.
 
 ### LLM
 

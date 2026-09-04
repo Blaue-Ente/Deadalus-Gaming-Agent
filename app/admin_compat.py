@@ -911,7 +911,26 @@ async def playground_gitlab_status():
         "hint": test.get("hint"),
         "username": test.get("username"),
         "host": test.get("host"),
+        "connectors_url": "/admin/daedalus/connectors",
     })
+
+
+@router.get("/daedalus/playground/api/gitlab/projects")
+async def playground_gitlab_projects(limit: int = 30):
+    from daedalus import playground_gitlab as gl
+    if not gl.is_configured():
+        return JSONResponse(
+            {"ok": False, "error": "GITLAB_TOKEN not configured", "projects": []},
+            status_code=400,
+        )
+    try:
+        projects = gl.list_projects(limit=min(limit, 100))
+        return JSONResponse({"ok": True, "projects": projects, "count": len(projects)})
+    except Exception as extra:
+        return JSONResponse(
+            {"ok": False, "error": str(extra)[:400], "projects": []},
+            status_code=500,
+        )
 
 
 @router.get("/daedalus/playground/api/git/status")
@@ -950,6 +969,65 @@ async def connectors_set_config(request: Request):
     from daedalus.connectors_config import set_prefs
     body = await _body(request)
     return set_prefs(**body)
+
+
+@router.get("/daedalus/connectors/overview")
+async def connectors_overview():
+    from daedalus.connectors_config import full_status, get_prefs
+    from daedalus.connectivity import overview
+    data = overview()
+    git = await full_status()
+    data["github"] = git.get("github")
+    data["gitlab"] = git.get("gitlab")
+    data["storage"] = git.get("storage")
+    data["prefs"] = get_prefs()
+    data["git"] = git.get("git")
+    return data
+
+
+@router.post("/daedalus/connectors/secrets")
+async def connectors_set_secrets(request: Request):
+    from daedalus.connectivity import ALLOWED_KEYS, FORBIDDEN_KEYS, set_secrets
+    body = await _body(request)
+    updates = body.get("secrets") if isinstance(body.get("secrets"), dict) else body
+    if not isinstance(updates, dict):
+        updates = {}
+    clear = body.get("clear") if isinstance(body.get("clear"), list) else []
+    filtered = {str(k): str(v) for k, v in updates.items() if str(k) in ALLOWED_KEYS}
+    for key in list(filtered):
+        if key in FORBIDDEN_KEYS:
+            filtered.pop(key, None)
+    stored = set_secrets(filtered, clear=[str(x) for x in clear])
+    from daedalus.connectivity import field_status, FIELD_BY_KEY
+    return {
+        "ok": True,
+        "set": [k for k in filtered if k in stored],
+        "cleared": [str(x) for x in clear if str(x) in ALLOWED_KEYS],
+        "fields": [field_status(FIELD_BY_KEY[k]) for k in filtered if k in FIELD_BY_KEY],
+    }
+
+
+@router.post("/daedalus/connectors/mcp")
+async def connectors_mcp(request: Request):
+    from daedalus.addons import disable, enable
+    from daedalus.mcp_client import set_server_env, upsert_server
+    body = await _body(request)
+    addon_id = str(body.get("id") or body.get("name") or "").strip()
+    enabled = body.get("enabled")
+    extra_env = body.get("env") if isinstance(body.get("env"), dict) else None
+    if body.get("custom"):
+        return upsert_server(addon_id, {
+            "command": body.get("command"),
+            "args": body.get("args") or [],
+            "url": body.get("url") or "",
+            "env": extra_env or {},
+        })
+    if enabled is False:
+        return disable(addon_id)
+    result = enable(addon_id, extra_env=extra_env)
+    if extra_env and result.get("ok") and addon_id:
+        set_server_env(addon_id, {str(k): str(v) for k, v in extra_env.items()})
+    return result
 
 
 @router.get("/daedalus/playground/api/durability/status")
@@ -1673,13 +1751,13 @@ async def hybrid_export(slug: str):
 
 @router.post("/daedalus/playground/api/clone")
 async def playground_clone(request: Request):
-    from daedalus import playground_github as gh
+    from daedalus.playground_git_push import clone_project_remote, forge_error_hint
     body = await _body(request)
     url = (body.get("url") or "").strip()
     if not url:
         return JSONResponse({"ok": False, "error": "url required"}, status_code=400)
     try:
-        proj = await gh.clone_repo(
+        proj = await clone_project_remote(
             url, name=body.get("name", ""), slug=body.get("slug", ""),
             branch=body.get("branch", ""), ref=body.get("ref", ""),
             source=body.get("source", "cloned"), keep_git=body.get("keep_git"),
@@ -1687,19 +1765,19 @@ async def playground_clone(request: Request):
         )
         return JSONResponse({"ok": True, "project": _jsonable(proj)})
     except Exception as exc:
-        return JSONResponse({"ok": False, "error": gh.github_error_hint(exc)}, status_code=500)
+        return JSONResponse({"ok": False, "error": forge_error_hint(exc)}, status_code=500)
 
 
 @router.post("/daedalus/playground/api/revive")
 async def playground_revive(request: Request):
-    from daedalus import playground_github as gh
+    from daedalus.playground_git_push import clone_project_remote, forge_error_hint
     from daedalus.playground_revive import onboard_project, compatibility_report
     body = await _body(request)
     url = (body.get("url") or "").strip()
     if not url:
         return JSONResponse({"ok": False, "error": "url required"}, status_code=400)
     try:
-        proj = await gh.clone_repo(
+        proj = await clone_project_remote(
             url, name=body.get("name", ""), slug=body.get("slug", ""),
             branch=body.get("branch", ""), ref=body.get("ref", ""),
             source="revived", keep_git=True,
@@ -1707,26 +1785,51 @@ async def playground_revive(request: Request):
         onboard = await onboard_project(proj["slug"])
         compat = compatibility_report(None, repo_meta={"html_url": url})
         return JSONResponse({"ok": True, "project": _jsonable(proj), "onboard": onboard, "compat": compat})
-    except Exception as exc:
-        return JSONResponse({"ok": False, "error": gh.github_error_hint(exc)}, status_code=500)
+    except Exception as extra:
+        return JSONResponse({"ok": False, "error": forge_error_hint(extra)}, status_code=500)
 
 
 @router.post("/daedalus/playground/api/projects/{slug}/push")
 async def playground_push(slug: str, request: Request):
-    from daedalus import playground_github as gh
+    from daedalus.playground_git_push import forge_error_hint, push_project_remote
     body = await _body(request)
+    provider = str(body.get("provider") or "auto").strip().lower() or "auto"
     try:
-        result = await gh.push_project(
+        result = await push_project_remote(
             slug,
+            provider=provider,
             repo_full_name=(body.get("repo") or body.get("repo_full_name") or "").strip(),
             create_if_missing=body.get("create_if_missing", True),
             private=body.get("private", True),
             branch=(body.get("branch") or "main").strip(),
             commit_msg=(body.get("commit_msg") or "").strip(),
+            namespace=(body.get("namespace") or "").strip(),
         )
         return JSONResponse({"ok": True, **(result if isinstance(result, dict) else {})})
-    except Exception as exc:
-        return JSONResponse({"ok": False, "error": gh.github_error_hint(exc)}, status_code=500)
+    except Exception as extra:
+        return JSONResponse(
+            {"ok": False, "error": forge_error_hint(extra, provider=provider)},
+            status_code=500,
+        )
+
+
+@router.post("/daedalus/playground/api/projects/{slug}/create-upstream-pr")
+async def playground_create_upstream_pr(slug: str, request: Request):
+    from daedalus.playground_git_push import create_upstream_review, forge_error_hint
+    body = await _body(request)
+    try:
+        result = await create_upstream_review(
+            slug,
+            title=str(body.get("title") or "").strip(),
+            body=str(body.get("body") or body.get("description") or "").strip(),
+            base=str(body.get("base") or "").strip(),
+            branch_name=str(body.get("branch") or body.get("branch_name") or "").strip(),
+            commit_msg=str(body.get("commit_msg") or "").strip(),
+        )
+        pr = result.get("pr") or result.get("mr") or {}
+        return JSONResponse({"ok": True, "pr": pr, "mr": result.get("mr") or pr, **result})
+    except Exception as extra:
+        return JSONResponse({"ok": False, "error": forge_error_hint(extra)}, status_code=500)
 
 
 @router.post("/daedalus/playground/api/projects/{slug}/assets/generate")

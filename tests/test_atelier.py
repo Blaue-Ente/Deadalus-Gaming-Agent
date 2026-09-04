@@ -88,6 +88,18 @@ def test_addons_enable_mcp_json(harness_tmp):
     rows = {a["id"]: a for a in catalog()}
     assert rows["memory"]["enabled"] is True
     assert rows["fetch"]["offline_ok"] is False
+    assert "github-mcp" in rows and "gitlab-mcp" in rows
+    assert rows["godot-headless"]["kind"] == "native"
+
+
+def test_github_mcp_copies_token(harness_tmp, monkeypatch):
+    monkeypatch.setenv("GITHUB_TOKEN", "ghp_atelier_token")
+    from daedalus.addons import enable
+    from daedalus.mcp_client import load_servers
+    r = enable("github-mcp")
+    assert r["ok"] is True
+    env = (load_servers().get("github-mcp") or {}).get("env") or {}
+    assert env.get("GITHUB_PERSONAL_ACCESS_TOKEN") == "ghp_atelier_token"
 
 
 def test_capsule_zip(harness_tmp):

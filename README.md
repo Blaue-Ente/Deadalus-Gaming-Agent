@@ -93,14 +93,14 @@ Data lives under `$DAEDALUS_DATA` (default `data/daedalus/` on the machine, `%LO
 | Chat (Bulgarian / English) | Studio `/` · `POST /api/v1/daedalus/chat` |
 | Files and projects | Playground `playground/projects/{slug}` |
 | Shell | Studio Shell · `POST /api/v1/daedalus/shell` (jail, secrets stripped from env) |
-| Native tools | `read_file`, `write_file`, `run_command`, `web_search`, `web_fetch`, `web_read`, `generate_image`, `remember`, `code_search`, `browser`, `mcp_call`, `spawn_subagent`, `playtest`, `play_lab`, `dissect_game`, `engine`, `world`, `assets`, `skill`, `production` |
+| Native tools | `read_file`, `write_file`, `run_command`, `web_search`, `web_fetch`, `web_read`, `generate_image`, `remember`, `code_search`, `browser`, `mcp_call`, `spawn_subagent`, `playtest`, `play_lab`, `dissect_game`, `engine`, `world`, `assets`, `skill`, `production`, `git_forge` |
+| MCP | Studio → **Свързаност** (`$DAEDALUS_DATA/mcp.json` + `secrets.env`) |
 | Honesty suite | `python -m daedalus.game_agent_bench` · `GET /api/v1/daedalus/bench` — this harness, not a vendor bake-off |
 | Local LLM | Studio **wardrobe** — hardware profile + Ollama pull; or `DAEDALUS_PROVIDER=ollama` |
 | Offline kit | `DAEDALUS_OFFLINE=1` / Studio toggle — no search/images; local model + capsules still work |
 | Sub-agents | worker slots **and** `spawn_subagent` (files + shell, jailed) |
 | Autopilot | kernel `full_autopilot` + Definition of Done + playtest |
 | Browser | Playwright smoke **and** an interactive session (goto / click / type) |
-| MCP | `$DAEDALUS_DATA/mcp.json` + Studio addon shelf |
 | Memory | Chroma + preferences (“remember that…”) + learned skills |
 | Images | Novita / OpenRouter · `generate_image` |
 | Cloud LLM | AllToken / OpenRouter / Novita / NVIDIA |
@@ -298,7 +298,7 @@ Each project is `playground/projects/{slug}/` with a kind:
    - **Capsule** — zip (USB / send a file). Static: unzip, open `index.html`.
    - **Local /apps/** — Studio “To /apps/”.
    - **Live** — public `https`: Netlify token → GitLab Pages → 1-hour Netlify preview. Static / vite / expo-web only.
-   - **Git** — push to GitLab if `GITLAB_TOKEN` is set, else GitHub.
+   - **Git** — push to GitLab if `GITLAB_TOKEN` is set, else GitHub. Clone from either host. Open a GitHub Pull Request or GitLab Merge Request from Playground (🔀 PR / MR) or the `git_forge` tool. Tokens live in Studio → **Свързаност**.
    - Unity and Godot: open the folder in the matching Editor.
 
 ---

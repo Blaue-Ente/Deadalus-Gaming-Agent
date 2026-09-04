@@ -101,6 +101,66 @@ def load_servers() -> dict[str, dict[str, Any]]:
     return {}
 
 
+def save_servers(servers: dict[str, dict[str, Any]]) -> None:
+    path = config_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps({"servers": servers}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
+def upsert_server(name: str, spec: dict[str, Any]) -> dict[str, Any]:
+    """Create or replace one MCP server entry in mcp.json."""
+    key = (name or "").strip()
+    if not key or "/" in key or ".." in key:
+        return {"ok": False, "error": "invalid server name"}
+    command = spec.get("command")
+    url = spec.get("url")
+    if not command and not url:
+        return {"ok": False, "error": "command or url required"}
+    servers = load_servers()
+    row: dict[str, Any] = {}
+    if url:
+        row["url"] = str(url).strip()
+    if command:
+        row["command"] = command
+        if spec.get("args"):
+            row["args"] = list(spec["args"])
+    env = spec.get("env")
+    if isinstance(env, dict):
+        cleaned = {str(k): str(v) for k, v in env.items() if str(k).strip() and str(v).strip()}
+        if cleaned:
+            row["env"] = cleaned
+    servers[key] = row
+    save_servers(servers)
+    return {"ok": True, "name": key, "config": str(config_path())}
+
+
+def set_server_env(name: str, env: dict[str, str], *, merge: bool = True) -> dict[str, Any]:
+    servers = load_servers()
+    spec = servers.get(name)
+    if not spec:
+        return {"ok": False, "error": f"unknown MCP server {name!r}"}
+    current = dict(spec.get("env") or {}) if merge else {}
+    for k, v in env.items():
+        key = str(k).strip()
+        val = str(v or "").strip()
+        if not key:
+            continue
+        if val:
+            current[key] = val
+        else:
+            current.pop(key, None)
+    if current:
+        spec["env"] = current
+    else:
+        spec.pop("env", None)
+    servers[name] = spec
+    save_servers(servers)
+    return {"ok": True, "name": name, "env_keys": list(current)}
+
+
 async def _http_rpc(url: str, payload: dict[str, Any], timeout: float = 25.0) -> dict[str, Any]:
     import httpx
     async with httpx.AsyncClient(timeout=timeout) as client:
@@ -227,6 +287,7 @@ def status() -> dict[str, Any]:
                 "transport": "http" if spec.get("url") else "stdio",
                 "url": spec.get("url"),
                 "command": spec.get("command"),
+                "env_keys": list((spec.get("env") or {}).keys()) if isinstance(spec.get("env"), dict) else [],
             }
             for name, spec in servers.items()
         },
