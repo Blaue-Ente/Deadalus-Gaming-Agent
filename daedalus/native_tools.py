@@ -638,20 +638,22 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
         "name": "game_canon",
         "description": (
             "Study curated OSS game trees (DOOM 3 BFG, Mindustry, Game Programming Patterns, "
-            "tinyrenderer, stb, GLM, DirectXMath, Tracy). action=list|study|open|clone|search. "
-            "Steal structure; never copy assets or paste the book into a Playground game. "
-            "RenderDoc captures happen on the owner's machine."
+            "tinyrenderer, stb, GLM, DirectXMath, Tracy, Milo Yip path, engine-architecture samples, "
+            "Chop Chop wiki). action=list|study|open|clone|search|chunk. "
+            "Steal structure; never copy assets, books, or Chop Chop into a Playground game. "
+            "game-program-books clone/open is refused. RenderDoc captures happen on the owner's machine."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "action": {
                     "type": "string",
-                    "description": "list | study | open | clone | search",
+                    "description": "list | study | open | clone | search | chunk",
                 },
-                "id": {"type": "string", "description": "doom3-bfg | mindustry | glm | tracy | …"},
-                "path": {"type": "string", "description": "Allowlisted file for open"},
+                "id": {"type": "string", "description": "doom3-bfg | milo-path | unity-chop | engine-arch-samples | …"},
+                "path": {"type": "string", "description": "Allowlisted file for open/chunk (wiki/… for Chop Chop wiki)"},
                 "query": {"type": "string", "description": "Local grep after clone"},
+                "limit": {"type": "integer", "description": "Max RAG chunks for action=chunk"},
             },
             "required": ["action"],
         },
@@ -1294,6 +1296,7 @@ async def execute_native_tool(
                 id=str(args.get("id") or args.get("name") or ""),
                 path=str(args.get("path") or args.get("file") or ""),
                 query=str(args.get("query") or args.get("q") or ""),
+                limit=args.get("limit"),
             )
             status = "OK" if r.get("ok") else "FAILED"
             return (
