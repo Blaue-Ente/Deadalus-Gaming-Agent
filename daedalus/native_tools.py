@@ -39,6 +39,7 @@ PERM_MAP: dict[str, str | None] = {
     "engine": None,
     "world": None,
     "assets": None,
+    "skill": None,
 }
 
 NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
@@ -432,6 +433,27 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
             "required": ["action", "slug"],
         },
     },
+    {
+        "name": "skill",
+        "description": (
+            "Progressive skill memory. action catalog lists name+description; "
+            "action load returns one approved SKILL.md body; action pending lists "
+            "drafts waiting for owner Approve. The agent cannot approve or reject."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "catalog | load | pending",
+                },
+                "query": {"type": "string", "description": "Catalog search text"},
+                "id": {"type": "string", "description": "Skill id for action=load"},
+                "name": {"type": "string", "description": "Alias of id"},
+            },
+            "required": ["action"],
+        },
+    },
 ]
 
 
@@ -816,6 +838,20 @@ async def execute_native_tool(
             status = "OK" if r.get("ok") else "FAILED"
             return (
                 f"── assets {args.get('action')} {status} {args.get('slug')} ──\n"
+                f"{json.dumps(r, ensure_ascii=False, default=str)[:6000]}"
+            )
+
+        if name == "skill":
+            from .learned_skills import run_action as skill_action
+            r = skill_action(
+                str(args.get("action") or "catalog"),
+                query=str(args.get("query") or ""),
+                id=str(args.get("id") or ""),
+                name=str(args.get("name") or ""),
+            )
+            status = "OK" if r.get("ok") else "FAILED"
+            return (
+                f"── skill {args.get('action')} {status} ──\n"
                 f"{json.dumps(r, ensure_ascii=False, default=str)[:6000]}"
             )
 

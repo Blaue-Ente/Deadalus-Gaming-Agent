@@ -59,6 +59,17 @@
       <div>• data/daedalus/skills.json</div>
     </div>
   </div>
+  <!-- Learned skill drafts (F5) — not the self_improve path gates above -->
+  <div class="bg-argos-panel border border-argos-border rounded-lg p-5 space-y-3">
+    <h3 class="text-sm font-semibold text-white uppercase tracking-wider">Уроци · learned SKILL.md</h3>
+    <p class="text-[12px] text-argos-dim">
+      Чернови от провал/успех чакат <b class="text-white">Одобри</b>.
+      Агентът ги вижда в каталога едва след Approve. Не може да се самоодобри.
+    </p>
+    <div id="learned-pending" class="space-y-2 text-[13px] text-slate-300">
+      <div class="text-argos-dim">Зареждам чернови…</div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -115,5 +126,44 @@ async function toggle(name) {
 }
 
 loadSkills();
+loadLessons();
+
+async function loadLessons() {
+  const el = document.getElementById('learned-pending');
+  if (!el) return;
+  try {
+    const r = await fetch('/api/v1/daedalus/learned-skills', { credentials: 'same-origin' });
+    const data = await r.json();
+    const pending = data.pending || [];
+    if (!pending.length) {
+      el.innerHTML = '<div class="text-argos-dim">Няма чернови. Провалите чакат Одобри.</div>';
+      return;
+    }
+    el.innerHTML = pending.map(it => `
+      <div class="flex items-start justify-between gap-3 border border-argos-border rounded p-3">
+        <div>
+          <div class="text-white font-semibold">${it.name || it.id}</div>
+          <div class="text-[12px] text-argos-dim">${it.description || it.origin || ''}</div>
+        </div>
+        <div class="flex gap-2 shrink-0">
+          <button onclick="approveLesson('${it.id}')" class="px-2 py-1 rounded bg-emerald-600 text-white text-[11px]">Одобри</button>
+          <button onclick="rejectLesson('${it.id}')" class="px-2 py-1 rounded border border-argos-border text-[11px]">Откажи</button>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    el.innerHTML = '<div class="text-red-400">Не можах да заредя уроците.</div>';
+  }
+}
+
+async function approveLesson(id) {
+  await fetch('/api/v1/daedalus/learned-skills/' + id + '/approve', { method: 'POST', credentials: 'same-origin' });
+  await loadLessons();
+}
+
+async function rejectLesson(id) {
+  await fetch('/api/v1/daedalus/learned-skills/' + id + '/reject', { method: 'POST', credentials: 'same-origin' });
+  await loadLessons();
+}
 </script>
 {% endblock %}

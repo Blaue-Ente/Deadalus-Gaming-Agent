@@ -100,8 +100,28 @@ async def prefs_delete(pref_id: str) -> dict[str, Any]:
 
 @router.get("/api/v1/daedalus/learned-skills")
 async def skills_list() -> dict[str, Any]:
-    from daedalus.learned_skills import list_skills
-    return {"ok": True, "skills": list_skills()}
+    from daedalus.learned_skills import list_pending, list_skills
+    return {"ok": True, "skills": list_skills(), "pending": list_pending()}
+
+
+@router.post("/api/v1/daedalus/learned-skills/{draft_id}/approve")
+async def skills_approve(draft_id: str) -> dict[str, Any]:
+    from daedalus.learned_skills import approve
+    result = approve(draft_id)
+    if not result.get("ok"):
+        code = 404 if "unknown" in str(result.get("error") or "") else 400
+        raise HTTPException(status_code=code, detail=result.get("error") or "not found")
+    return result
+
+
+@router.post("/api/v1/daedalus/learned-skills/{draft_id}/reject")
+async def skills_reject(draft_id: str, reason: str = "") -> dict[str, Any]:
+    from daedalus.learned_skills import reject
+    result = reject(draft_id, reason=reason)
+    if not result.get("ok"):
+        code = 404 if "unknown" in str(result.get("error") or "") else 400
+        raise HTTPException(status_code=code, detail=result.get("error") or "not found")
+    return result
 
 
 class ReachReadBody(BaseModel):
