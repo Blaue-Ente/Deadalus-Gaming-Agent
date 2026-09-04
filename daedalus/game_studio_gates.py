@@ -473,6 +473,79 @@ def run_play_check(ctx: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def run_world_check(ctx: dict[str, Any]) -> dict[str, Any]:
+    """Campaign runtime: save/quest/dialogue/graph. Hollow JSON fails once files exist."""
+    checks: list[dict[str, Any]] = []
+    config = ctx.get("config") or {}
+    brainstorm = config.get("brainstorm") or {}
+    blob = f"{brainstorm.get('idea', '')} {brainstorm.get('genre', '')} {ctx.get('gdd') or ''}"
+    epic = False
+    try:
+        from .world_kit import needed as world_needed
+        epic = world_needed(blob)
+    except Exception:
+        epic = False
+    if not epic:
+        try:
+            from .arcade_craft import looks_like_campaign_bible
+            epic = looks_like_campaign_bible(blob)
+        except Exception:
+            pass
+
+    root = _project_root(ctx)
+    has_files = _has_game_files(ctx, root)
+    map_path = (root / "world" / "map.json") if root else None
+    has_kit = bool(map_path and map_path.is_file())
+
+    if not has_files:
+        checks.append(_check(
+            "kit",
+            "World kit runtime",
+            "warn" if epic else "pass",
+            "ще се изисква след файлове" if epic else "не е кампания — N/A",
+        ))
+        return {
+            "gate": "world-check",
+            "label": "World Check",
+            "at": datetime.now(timezone.utc).isoformat(),
+            **_aggregate(checks),
+        }
+
+    if not has_kit:
+        checks.append(_check(
+            "kit",
+            "World kit runtime",
+            "warn" if epic else "pass",
+            "липсва world/map.json" if epic else "няма campaign kit",
+        ))
+        return {
+            "gate": "world-check",
+            "label": "World Check",
+            "at": datetime.now(timezone.utc).isoformat(),
+            **_aggregate(checks),
+        }
+
+    from .world_runtime import prove_project
+    proof = prove_project(root)
+    if proof.get("ok"):
+        checks.append(_check(
+            "runtime",
+            "Save / quest / dialogue / graph",
+            "pass",
+            f"regions={proof.get('regions')} flags={list((proof.get('flags') or {}).keys())}",
+        ))
+    else:
+        detail = "; ".join(proof.get("errors") or ["hollow kit"])
+        checks.append(_check("runtime", "Save / quest / dialogue / graph", "fail", detail[:240]))
+
+    return {
+        "gate": "world-check",
+        "label": "World Check",
+        "at": datetime.now(timezone.utc).isoformat(),
+        **_aggregate(checks),
+    }
+
+
 GATE_RUNNERS = {
     "gate-check": run_gate_check,
     "scope-check": run_scope_check,
@@ -480,13 +553,14 @@ GATE_RUNNERS = {
     "balance-check": run_balance_check,
     "craft-check": run_craft_check,
     "play-check": run_play_check,
+    "world-check": run_world_check,
 }
 
 
 def gates_for_build_mode(build_mode: str) -> list[str]:
     if build_mode == "prototype":
-        return ["smoke-check", "gate-check", "scope-check", "craft-check", "play-check"]
-    return ["gate-check", "scope-check", "balance-check", "craft-check", "play-check"]
+        return ["smoke-check", "gate-check", "scope-check", "craft-check", "play-check", "world-check"]
+    return ["gate-check", "scope-check", "balance-check", "craft-check", "play-check", "world-check"]
 
 
 def run_gates(ctx: dict[str, Any], gate_ids: list[str] | None = None) -> dict[str, Any]:

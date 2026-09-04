@@ -387,9 +387,9 @@ def enrich_plan(plan: dict[str, Any], kind: str, description: str = "") -> dict[
                 "id": 0,
                 "title": "World bible + map",
                 "goal": "Campaign kit exists and the first region is named.",
-                "instructions": "Write world/bible.md, world/map.json, characters/, levels/graph.json. Do not invent the whole game loop here.",
+                "instructions": "Write world/bible.md, world/map.json, world/quests.json, characters/*.dialogue.json, levels/graph.json. Prove with world({action: prove}). Do not invent the whole game loop here.",
                 "uses_visuals": False,
-                "files": ["world/bible.md", "world/map.json", "levels/graph.json"],
+                "files": ["world/bible.md", "world/map.json", "world/quests.json", "levels/graph.json"],
                 "status": "pending",
             })
         for i, stage in enumerate(stages):

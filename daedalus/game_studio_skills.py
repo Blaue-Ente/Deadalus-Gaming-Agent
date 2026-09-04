@@ -58,6 +58,7 @@ CCGS_SKILL_SLUGS: tuple[str, ...] = (
     "scope-check",
     "craft-check",
     "play-check",
+    "world-check",
 )
 
 SYSTEM_SUGGESTIONS: dict[str, list[str]] = {

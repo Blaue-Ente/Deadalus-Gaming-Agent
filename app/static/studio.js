@@ -373,6 +373,8 @@
       keys.forEach((k) => {
         box.appendChild(itemEl(k, files[k] ? "има" : "липсва", !!files[k]));
       });
+      const runtime = !!(data.world && data.world.runtime);
+      box.appendChild(itemEl("runtime", runtime ? "жив" : "кух JSON", runtime));
     } catch (e) {
       const empty = document.createElement("div");
       empty.className = "empty";

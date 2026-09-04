@@ -138,7 +138,7 @@ async def start_autopilot(slug: str, body: AutopilotStart) -> dict:
     from daedalus.playground import project_dir
     dec = classify(desc, requested=body.effort)
     if dec.get("world_kit"):
-        write_world(project_dir(slug), name=proj.get("name") or slug, slug=slug, description=desc)
+        write_world(project_dir(slug), name=proj.get("name") or slug, slug=slug, description=desc, kind=proj.get("kind") or "")
     job = await start_builder_run_async(slug, desc, mode=body.mode or "full", resume=body.resume)
     return {"ok": True, "job": job.snapshot()}
 

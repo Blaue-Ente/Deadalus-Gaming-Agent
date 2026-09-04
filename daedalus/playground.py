@@ -473,7 +473,7 @@ async def create_project(
         try:
             from .world_kit import needed as world_needed, write as write_world
             if world_needed(description, effort=effort):
-                write_world(pdir, name=name, slug=slug, description=description)
+                write_world(pdir, name=name, slug=slug, description=description, kind=kind)
         except Exception:
             log.debug("world kit skipped", exc_info=True)
 

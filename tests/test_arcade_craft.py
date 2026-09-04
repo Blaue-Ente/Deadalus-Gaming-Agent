@@ -117,6 +117,7 @@ def test_craft_check_warns_but_does_not_block():
     assert "play-check" in combined["gates"]
     assert combined["blocking"] is False
     assert combined["gates"]["play-check"]["passed"] is True
+    assert combined["gates"]["world-check"]["passed"] is True
 
 
 def test_campaign_bible_is_a_warning_not_a_template():

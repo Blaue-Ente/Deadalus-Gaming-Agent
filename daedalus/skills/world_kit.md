@@ -1,6 +1,6 @@
 ---
 name: world-kit
-description: Build vast games as a living folder — bible, map, factions, characters, levels — not a single toy page.
+description: Build vast games as a living folder with a real save/quest/dialogue/graph runtime — not empty JSON.
 ---
 
 # SKILL: World kit
@@ -10,22 +10,24 @@ description: Build vast games as a living folder — bible, map, factions, chara
 **Layout** (under `playground/projects/{slug}/`):
 - `CAMPAIGN.md` — long-horizon contract
 - `world/bible.md` — premise, tone, player fantasy, open questions
-- `world/map.json` — regions + exits
+- `world/map.json` — regions + exits (`require_flags` on gated rooms)
+- `world/quests.json` — complete_when flags → reward_flags
+- `world/save.schema.json` — `{version, region, act, flags, inventory, quests}`
 - `world/factions.json` — who wants what
 - `world/journal.md` — what shipped this session
-- `characters/{name}.md` — want, wound, tell, secret
-- `levels/graph.json` — acts and edges
-- `levels/{id}/` — one playable space
+- `characters/{id}.md` + `characters/{id}.dialogue.json`
+- `levels/graph.json` — acts and gated edges
+- `src/world/runtime.js` — game-loop copy of the Python runtime
 
 **How**:
-1. If the kit is missing, write it before gameplay code.
-2. First session: bible + one region + one character + one playable slice.
-3. Next sessions: new region or quest beat; update map edges and journal.
-4. Gameplay stays in modules (`src/world`, `src/levels`), not a 500-line `index.html`.
-5. Assets are real PNGs referenced by `load.image` / `drawImage`.
+1. If the kit is missing, write it before gameplay code. The scaffold is a **playable slice** (hearth → gated wilds via keeper).
+2. A quest beat flips a named flag. Travel reads that flag. `world({action: prove, slug})` must pass.
+3. Dialogue choices that never set a flag are flavour. At least one choice must change the map.
+4. Next sessions: new region or quest; update edges and journal. Do not rewrite the bible on "продължи".
+5. Gameplay stays in modules (`src/world`, `src/levels`), not a 500-line `index.html`.
 
 **Anti-patterns**:
+- Empty `map.json` / `graph.json` with no quests or dialogue.
 - CSS-gradient "worlds".
 - Ten empty screens and no loop.
-- Rewriting the bible from scratch on "продължи".
-- Copying an AGPL game into the tree.
+- Claiming done because the markdown exists.
