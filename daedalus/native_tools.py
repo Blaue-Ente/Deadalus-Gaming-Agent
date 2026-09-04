@@ -38,6 +38,7 @@ PERM_MAP: dict[str, str | None] = {
     "dissect_game": None,
     "engine": None,
     "world": None,
+    "assets": None,
 }
 
 NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
@@ -398,6 +399,35 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
                 "to": {"type": "string", "description": "Region id for travel"},
                 "save": {"type": "object"},
                 "steps": {"description": "JSON list of script steps"},
+            },
+            "required": ["action", "slug"],
+        },
+    },
+    {
+        "name": "assets",
+        "description": (
+            "Asset pipeline v2: atlas/tileset/sfx/font with no paid API; "
+            "3D mesh jobs (fal/Tripo/Meshy) fail closed without keys — never a fake hero GLB. "
+            "action: atlas | tileset | sfx | font | mesh | greybox | status | providers | music. "
+            "Coder-only (writes files)."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "atlas | tileset | sfx | font | mesh | greybox | status | providers | music",
+                },
+                "slug": {"type": "string"},
+                "sources": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Existing assets/*.png to pack (atlas/tileset)",
+                },
+                "prompt": {"type": "string", "description": "Text-to-3D prompt for action=mesh"},
+                "name": {"type": "string", "description": "Mesh/greybox stem, e.g. hero"},
+                "provider": {"type": "string", "description": "auto | fal | tripo | meshy"},
+                "job_id": {"type": "string", "description": "Poll a mesh job (action=status)"},
             },
             "required": ["action", "slug"],
         },
@@ -769,6 +799,23 @@ async def execute_native_tool(
             status = "OK" if r.get("ok") else "FAILED"
             return (
                 f"── world {args.get('action')} {status} {args.get('slug')} ──\n"
+                f"{json.dumps(r, ensure_ascii=False, default=str)[:6000]}"
+            )
+
+        if name == "assets":
+            from .asset_pipeline import run_action as assets_action
+            r = assets_action(
+                str(args.get("action") or "status"),
+                str(args.get("slug") or ""),
+                sources=args.get("sources"),
+                prompt=str(args.get("prompt") or ""),
+                name=str(args.get("name") or ""),
+                provider=str(args.get("provider") or "auto"),
+                job_id=str(args.get("job_id") or ""),
+            )
+            status = "OK" if r.get("ok") else "FAILED"
+            return (
+                f"── assets {args.get('action')} {status} {args.get('slug')} ──\n"
                 f"{json.dumps(r, ensure_ascii=False, default=str)[:6000]}"
             )
 

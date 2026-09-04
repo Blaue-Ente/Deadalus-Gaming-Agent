@@ -33,6 +33,15 @@ class AssetGenerate(BaseModel):
     model: str = Field(default="", max_length=80)
 
 
+class AssetPipelineBody(BaseModel):
+    action: str = Field(..., min_length=1, max_length=32)
+    sources: list[str] | None = None
+    prompt: str = Field(default="", max_length=2000)
+    name: str = Field(default="", max_length=80)
+    provider: str = Field(default="auto", max_length=32)
+    job_id: str = Field(default="", max_length=80)
+
+
 def _jsonable(row: dict[str, Any]) -> dict[str, Any]:
     out = {}
     for k, v in row.items():
@@ -244,4 +253,28 @@ async def generate_project_asset(slug: str, body: AssetGenerate) -> dict:
         raise HTTPException(status_code=400, detail=str(exc)[:400]) from exc
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)[:400]) from exc
+    return {"ok": True, **result}
+
+
+@router.post("/projects/{slug}/assets/pipeline")
+async def project_asset_pipeline(slug: str, body: AssetPipelineBody) -> dict:
+    from daedalus import playground as pg
+    from daedalus.asset_pipeline import run_action
+
+    proj = await pg.get_project(slug)
+    if not proj:
+        raise HTTPException(status_code=404, detail="project not found")
+    result = run_action(
+        body.action,
+        slug,
+        sources=body.sources,
+        prompt=body.prompt,
+        name=body.name,
+        provider=body.provider,
+        job_id=body.job_id,
+    )
+    if not result.get("ok") and (result.get("need_key") or result.get("handoff")):
+        return {"ok": False, **result}
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error") or "pipeline failed")
     return {"ok": True, **result}

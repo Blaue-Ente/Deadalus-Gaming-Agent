@@ -67,6 +67,19 @@ Studio → LLM (wardrobe) can switch models without editing `.env` (`wardrobe.js
 
 Web visual kinds need Chromium on PATH for the `playtest/scenario.json` bot (pixel-diff, FPS). Missing Chromium fails closed — it is not a skip-pass.
 
+## 3D mesh jobs (optional)
+
+Atlas / tileset / SFX / bitmap font need **no** keys. Hero GLB submit fails closed unless one of these is set:
+
+| Variable | Provider |
+|---|---|
+| `FAL_KEY` or `FAL_API_KEY` | fal.ai Hunyuan / Trellis queue |
+| `TRIPO_API_KEY` | Tripo text-to-3D |
+| `MESHY_API_KEY` | Meshy text-to-3D |
+| `SUNO_API_KEY` | Recorded only — Daedalus does **not** submit Suno. Drop `assets/music.mp3`. |
+
+Without a mesh key: `assets({action:mesh})` returns `need_key`. Greybox (`action:greybox`) is a labelled cube, not a hero. `DAEDALUS_OFFLINE=1` refuses mesh submit.
+
 ## Publishing
 
 | Variable | Meaning |

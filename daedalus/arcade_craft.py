@@ -141,17 +141,17 @@ def asset_route(text: str) -> dict[str, str]:
     blob = (text or "").lower()
     if looks_like_racer(blob) or wants_high_fidelity(blob):
         return {
-            "hero": "Sketch or brief → image gen → Tripo3D / Meshy / Hunyuan3D GLB. Remesh <15k tris.",
+            "hero": "assets({action:mesh}) with FAL_KEY/TRIPO_API_KEY/MESHY_API_KEY (Tripo/Meshy/Hunyuan). Fail closed without a key — greybox is a cube, not a hero. Remesh <15k tris.",
             "architecture": "Procedural (extrude, instanced facades, splines). Photogrammetry is blurry at speed.",
             "textures": "PBR sets (Polyhaven) or generated albedo/rough/normal — not a single JPEG wrapped on a box.",
-            "sfx": "Layer 2–3 stock one-shots (boost = whoosh + bass + spark). Avoid AI lyrics.",
-            "music": "Suno or similar from a hummed/piano motif; instrumental only in-race.",
+            "sfx": "assets({action:sfx}) kit WAV + Howler/Web Audio. No fake licensed music.",
+            "music": "Suno on the owner's machine; drop assets/music.mp3. Daedalus does not submit Suno.",
         }
     return {
-        "hero": "Generated PNG sprites referenced via load.image / drawImage.",
-        "architecture": "Tiles / simple canvas layers.",
+        "hero": "assets({action:atlas}) or generated PNG sprites via load.image / drawImage.",
+        "architecture": "assets({action:tileset}) or simple canvas layers.",
         "textures": "Consistent style bible in assets/_style_bible.json.",
-        "sfx": "Howler or Web Audio one-shots.",
+        "sfx": "assets({action:sfx}) kit WAV. Howler or Web Audio one-shots.",
         "music": "Optional loop; never fake licensed tracks.",
     }
 
@@ -182,8 +182,8 @@ def planner_addendum(kind: str = "", description: str = "") -> str:
         lines.extend([
             "Renderer: Three.js WebGPU + TSL materials when the brief is 3D arcade (that is what FM1 ships). Phaser is the wrong default.",
             "Scaffold: Vite projects matching this brief already contain a playable M0 (spline + hover ship + fail + boost). Edit those files.",
-            "Hero meshes: specialized 3D tools, not LLM vertices. Environments: procedural for crisp edges at speed.",
-            "Audio: Web Audio / Howler. Layer stock SFX. Instrumental music. No AI-lyric BGM.",
+            "Hero meshes: assets({action:mesh}) only with a key; never LLM vertices. Environments: procedural for crisp edges at speed.",
+            "Audio: assets({action:sfx}) kit WAV + Howler. Instrumental music dropped as files. No AI-lyric BGM.",
             "Quality tiers (Performance / Quality / Ultra) with real knobs: shadows, post-FX, particles, scenery density.",
         ])
         for trap in fidelity_traps(description):

@@ -67,7 +67,7 @@ _KIND_ADDENDA: dict[str, str] = {
   3) src/scenes/MenuScene.js (или src/ui/menu.js)
   4) src/scenes/GameScene.js — gameplay loop
   5) src/lib/audio.js / src/lib/input.js — helpers
-Игри 2D: Phaser boot в отделен файл; assets/*.png в uses_visuals етап.
+Игри 2D: Phaser boot в отделен файл; assets({action: atlas|sfx|font}) за kit, после assets/*.png в uses_visuals етап.
 Игри 3D/racing: Three.js в src/racer/ (boot, track, vehicle, world) — НЕ Phaser, НЕ pixel-art.
 Ако проектът вече има racer scaffold, етап 1 е да го пуснеш, не да го триеш.
 Web игри: държи playtest/scenario.json (вход → canvas_changed / win / lose). Click-Start не е бот.

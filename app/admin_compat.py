@@ -1745,6 +1745,24 @@ async def assets_generate(slug: str, request: Request):
         return JSONResponse({"ok": False, "error": str(exc)[:400]}, status_code=500)
 
 
+@router.post("/daedalus/playground/api/projects/{slug}/assets/pipeline")
+async def assets_pipeline(slug: str, request: Request):
+    from daedalus.asset_pipeline import run_action
+    body = await _body(request)
+    result = run_action(
+        str(body.get("action") or "status"),
+        slug,
+        sources=body.get("sources"),
+        prompt=body.get("prompt") or "",
+        name=body.get("name") or "",
+        provider=body.get("provider") or "auto",
+        job_id=body.get("job_id") or "",
+    )
+    if not result.get("ok") and not (result.get("need_key") or result.get("handoff")):
+        return JSONResponse({"ok": False, **result}, status_code=400)
+    return JSONResponse({"ok": bool(result.get("ok")), **result})
+
+
 @router.post("/daedalus/playground/api/projects/{slug}/assets/auto-pack")
 async def assets_auto_pack(slug: str, request: Request):
     from daedalus import playground as pg

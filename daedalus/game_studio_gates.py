@@ -546,6 +546,60 @@ def run_world_check(ctx: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def run_asset_check(ctx: dict[str, Any]) -> dict[str, Any]:
+    """Atlas/SFX/font are opt-in. Claimed empty GLB fails. Racing without a mesh warns."""
+    checks: list[dict[str, Any]] = []
+    config = ctx.get("config") or {}
+    brainstorm = config.get("brainstorm") or {}
+    blob = f"{brainstorm.get('idea', '')} {brainstorm.get('genre', '')} {ctx.get('gdd') or ''}"
+    wants_3d = False
+    try:
+        from .arcade_craft import looks_like_racer, wants_high_fidelity
+        wants_3d = looks_like_racer(blob) or wants_high_fidelity(blob)
+    except Exception:
+        wants_3d = False
+    kind = (config.get("kind") or (ctx.get("project") or {}).get("kind") or "").strip().lower()
+    if "3d" in blob.lower() or kind in ("godot",) and "mesh" in blob.lower():
+        wants_3d = True
+
+    root = _project_root(ctx)
+    has_files = _has_game_files(ctx, root)
+    if not has_files or root is None:
+        checks.append(_check(
+            "kit",
+            "Asset pipeline",
+            "warn" if wants_3d else "pass",
+            "3D mesh след файлове (ключ или greybox)" if wants_3d else "atlas/sfx/font по нужда",
+        ))
+        return {
+            "gate": "asset-check",
+            "label": "Asset Check",
+            "at": datetime.now(timezone.utc).isoformat(),
+            **_aggregate(checks),
+        }
+
+    from .asset_pipeline import prove_assets
+    proof = prove_assets(root, wants_3d=wants_3d)
+    if proof.get("ok"):
+        warns = proof.get("warnings") or []
+        checks.append(_check(
+            "pipeline",
+            "Atlas / SFX / mesh contract",
+            "warn" if warns else "pass",
+            "; ".join(warns)[:240] if warns else f"atlas={proof.get('atlas')} glb={proof.get('glb')}",
+        ))
+    else:
+        detail = "; ".join(proof.get("errors") or ["asset pipeline"])
+        checks.append(_check("pipeline", "Atlas / SFX / mesh contract", "fail", detail[:240]))
+
+    return {
+        "gate": "asset-check",
+        "label": "Asset Check",
+        "at": datetime.now(timezone.utc).isoformat(),
+        **_aggregate(checks),
+    }
+
+
 GATE_RUNNERS = {
     "gate-check": run_gate_check,
     "scope-check": run_scope_check,
@@ -554,13 +608,14 @@ GATE_RUNNERS = {
     "craft-check": run_craft_check,
     "play-check": run_play_check,
     "world-check": run_world_check,
+    "asset-check": run_asset_check,
 }
 
 
 def gates_for_build_mode(build_mode: str) -> list[str]:
     if build_mode == "prototype":
-        return ["smoke-check", "gate-check", "scope-check", "craft-check", "play-check", "world-check"]
-    return ["gate-check", "scope-check", "balance-check", "craft-check", "play-check", "world-check"]
+        return ["smoke-check", "gate-check", "scope-check", "craft-check", "play-check", "world-check", "asset-check"]
+    return ["gate-check", "scope-check", "balance-check", "craft-check", "play-check", "world-check", "asset-check"]
 
 
 def run_gates(ctx: dict[str, Any], gate_ids: list[str] | None = None) -> dict[str, Any]:
