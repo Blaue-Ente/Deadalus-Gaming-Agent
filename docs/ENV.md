@@ -100,4 +100,4 @@ Without a mesh key: `assets({action:mesh})` returns `need_key`. Greybox (`action
 
 ## Peer HTTP
 
-`.env.example` includes a shared secret for the optional HTTP peer ping. Change it before a public bind. Do not commit it. A public bind also needs `DAEDALUS_TOKEN` — the peer secret is not a substitute.
+`.env.example` has an optional shared secret for the HTTP peer ping. Leave it empty to refuse ask/chat from peers. Set a long random value before a public bind if you use that endpoint. Do not commit it. A public bind also needs `DAEDALUS_TOKEN` — the peer secret is not a substitute.

@@ -139,6 +139,11 @@
     ensureToken,
     stored,
     url: (href) => withToken(href, stored()),
+    eventSource: async (url, esInit) => {
+      const token = await ensureToken();
+      const Orig = OrigES || window.EventSource;
+      return new Orig(token ? withToken(url, token) : String(url), esInit);
+    },
   };
 
   ensureToken();

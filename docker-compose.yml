@@ -16,7 +16,7 @@ services:
       OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
       NOVITA_API_KEY: ${NOVITA_API_KEY:-}
       NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
-      IYVERIS_MESH_KEY: ${IYVERIS_MESH_KEY:-iyveris-mesh-dev-key}
+      IYVERIS_MESH_KEY: ${IYVERIS_MESH_KEY:-}
     volumes:
       - daedalus-data:/var/lib/daedalus
     restart: unless-stopped

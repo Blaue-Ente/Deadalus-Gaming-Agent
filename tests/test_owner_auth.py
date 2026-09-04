@@ -175,12 +175,30 @@ def test_wrong_token_is_401(auth_tmp, raw_http):
 
 
 def test_published_apps_kv_stays_public(auth_tmp, raw_http):
+    from daedalus.playground_publish import app_dir
+    dest = app_dir("maze")
+    dest.mkdir(parents=True, exist_ok=True)
+    (dest / "index.html").write_text("<!doctype html><title>maze</title>", encoding="utf-8")
     from app.main import app
     client = TestClient(app)
     put = client.post("/apps/maze/db/score", json={"value": 3})
     assert put.status_code == 200
     got = client.get("/apps/maze/db/score")
     assert got.json().get("value") == 3
+
+
+def test_unpublished_kv_write_is_404(auth_tmp, raw_http):
+    from app.main import app
+    client = TestClient(app)
+    put = client.post("/apps/not-a-game/db/score", json={"value": 1})
+    assert put.status_code == 404
+
+
+def test_clear_all_kv_requires_owner_token(auth_tmp, raw_http):
+    from app.main import app
+    client = TestClient(app)
+    res = client.delete("/apps/maze/db/")
+    assert res.status_code == 401
 
 
 def test_shell_metacharacters_refused(auth_tmp):
@@ -250,4 +268,10 @@ def test_studio_js_attaches_auth_helpers(auth_tmp):
     nav = (root / "ui" / "templates" / "_daedalus_nav.html").read_text(encoding="utf-8")
     assert "owner-auth.js" in html
     assert "DaedalusAuth" in js
+    assert "/api/v1/daedalus/chat/jobs" in js
+    assert 'value="godot"' in html
+    assert 'value="unity"' in html
+    assert 'value="node"' in html
+    assert 'value="auto"' in html
+    assert "Разговор" in nav
     assert "owner-auth.js" in nav

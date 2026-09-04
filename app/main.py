@@ -1,6 +1,7 @@
 """Standalone Daedalus FastAPI service — equal Iyveris mesh peer."""
 from __future__ import annotations
 
+import hmac
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -30,10 +31,31 @@ def _mesh_key() -> str:
     return os.environ.get("IYVERIS_MESH_KEY", "").strip()
 
 
-def _check_mesh(x_iyveris_mesh_key: str | None, *, loopback: bool) -> None:
+def _mesh_ok(provided: str | None, expected: str) -> bool:
+    got = (provided or "").strip()
+    if not expected or not got:
+        return False
+    if len(got) != len(expected):
+        return False
+    return hmac.compare_digest(got, expected)
+
+
+def _check_mesh(
+    x_iyveris_mesh_key: str | None,
+    *,
+    loopback: bool,
+    require_key: bool = False,
+) -> None:
+    """Peer HTTP auth.
+
+    Ping/health/capabilities: loopback may skip an unset key.
+    Ask/chat always need a configured key (fail closed).
+    """
     expected = _mesh_key()
+    if require_key and not expected:
+        raise HTTPException(status_code=401, detail="mesh key required")
     if expected:
-        if x_iyveris_mesh_key != expected:
+        if not _mesh_ok(x_iyveris_mesh_key, expected):
             raise HTTPException(status_code=401, detail="invalid mesh key")
         return
     if not loopback:
@@ -75,7 +97,7 @@ async def lifespan(_app: FastAPI):
 app = FastAPI(
     title="Daedalus",
     description="Independent coding agent — games, apps, self-improvement.",
-    version="0.3.5",
+    version="0.3.8",
     lifespan=lifespan,
 )
 app.include_router(playground_router)
@@ -190,14 +212,19 @@ async def iyveris_mesh(
     body: MeshBody,
     x_iyveris_mesh_key: str | None = Header(default=None, alias="X-Iyveris-Mesh-Key"),
 ) -> dict:
-    _check_mesh(x_iyveris_mesh_key, loopback=client_is_loopback_scope(request.scope))
     action = (body.action or "ping").strip().lower()
+    ask = action in ("ask", "daedalus.ask", "chat")
+    _check_mesh(
+        x_iyveris_mesh_key,
+        loopback=client_is_loopback_scope(request.scope),
+        require_key=ask,
+    )
     if action in ("ping", "health"):
         return {"ok": True, "result": {"service": "daedalus", "status": "ok"}, "error": None}
     if action == "capabilities":
         caps = await capabilities()
         return {"ok": True, "result": caps, "error": None}
-    if action in ("ask", "daedalus.ask", "chat"):
+    if ask:
         msg = str((body.payload or {}).get("message") or (body.payload or {}).get("prompt") or "")
         if not msg:
             return {"ok": False, "result": None, "error": "payload.message required"}
@@ -209,12 +236,18 @@ async def iyveris_mesh(
 
 @app.post("/api/v1/daedalus/chat")
 async def chat(body: ChatBody) -> dict:
+    try:
         from daedalus.agent import get_daedalus
         return await get_daedalus().chat(
             message=body.message,
             session_id=body.session_id,
             effort=body.effort,
         )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        log.exception("blocking chat failed")
+        raise HTTPException(status_code=500, detail=f"daedalus_failed: {exc}") from exc
 
 
 @app.get("/api/v1/daedalus/identity")

@@ -123,9 +123,26 @@ async def app_db_get(slug: str, key: str):
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=500)
 
 
+async def _published_app(slug: str) -> bool:
+    """True when this slug is a live published app (registry or materialized files)."""
+    try:
+        row = await pub.get_published(slug)
+        if row:
+            return True
+    except Exception:
+        log.debug("published lookup failed for %s", slug, exc_info=True)
+    dest = pub.app_dir(slug)
+    try:
+        return dest.is_dir() and any(dest.iterdir())
+    except OSError:
+        return False
+
+
 @router.post("/{slug}/db/{key:path}")
 async def app_db_set(slug: str, key: str, request: Request):
     """Set a value (body: {"value": ...}). Max 64KB per value, 200 keys per app."""
+    if not await _published_app(slug):
+        return JSONResponse({"ok": False, "error": "not a published app"}, status_code=404)
     try:
         _rdb = _store()
         body = await request.json()
@@ -146,7 +163,7 @@ async def app_db_set(slug: str, key: str, request: Request):
 
 @router.delete("/{slug}/db/")
 async def app_db_clear_all(slug: str):
-    """Delete ALL keys for this app (clear)."""
+    """Delete ALL keys for this app (clear). Owner token required by middleware."""
     try:
         _rdb = _store()
         prefix = _db_ns(slug)
@@ -161,6 +178,8 @@ async def app_db_clear_all(slug: str):
 @router.delete("/{slug}/db/{key:path}")
 async def app_db_delete(slug: str, key: str):
     """Delete a key."""
+    if not await _published_app(slug):
+        return JSONResponse({"ok": False, "error": "not a published app"}, status_code=404)
     try:
         _rdb = _store()
         full = _db_key(slug, key)
@@ -209,7 +228,7 @@ async def apps_index(request: Request):
     import json as _json
     from .host import current_user
     apps = await pub.list_published(enabled_only=True)
-    apps_json = _json.dumps(apps, ensure_ascii=False, default=str)
+    apps_json = _json.dumps(apps, ensure_ascii=False, default=str).replace("<", "\\u003c")
     is_admin = current_user(request) is not None
     is_admin_js = "true" if is_admin else "false"
     html = f"""<!doctype html>
@@ -217,7 +236,7 @@ async def apps_index(request: Request):
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ADN Apps — Каталог</title>
+<title>Дедал — публикувани приложения</title>
 <style>
 *,*::before,*::after{{box-sizing:border-box;margin:0;padding:0}}
 :root{{--bg:#090d13;--surface:#0f1520;--border:#1a2332;--border-hover:#2dd4bf;
@@ -297,7 +316,7 @@ body{{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system
   <div class="logo">
     <span class="logo-icon">🗂</span>
     <div>
-      <div class="logo-text">ADN Apps</div>
+      <div class="logo-text">Дедал /apps</div>
       <div class="logo-sub">Публикувани приложения от Дедал Playground</div>
     </div>
   </div>
@@ -353,7 +372,7 @@ function render(apps) {{
   grid.innerHTML = apps.map(a => `
     <div class="card" data-slug="${{esc(a.slug)}}">
       <a class="card-link" href="/apps/${{esc(a.slug)}}/">
-        <div class="card-icon">${{a.icon || '🎮'}}</div>
+        <div class="card-icon">${{esc(a.icon || '🎮')}}</div>
         <div class="card-name">${{esc(a.name)}}</div>
         <div class="card-desc">${{esc(a.description || '')}}</div>
         <div class="card-foot">
@@ -376,7 +395,7 @@ function filterApps() {{
 }}
 
 function esc(s) {{
-  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }}
 
 function deleteAppFromBtn(btn, ev) {{

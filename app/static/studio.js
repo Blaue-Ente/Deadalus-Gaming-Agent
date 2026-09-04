@@ -6,6 +6,8 @@
     effort: localStorage.getItem("dx.effort") || "auto",
     projects: [],
     lastCwd: "",
+    chatJob: null,
+    chatSource: null,
   };
   localStorage.setItem("dx.session", state.session);
 
@@ -13,6 +15,59 @@
 
   function text(node, value) {
     node.textContent = value == null ? "" : String(value);
+  }
+
+  function errText(err) {
+    if (!err) return "неизвестна грешка";
+    if (typeof err === "string") return err;
+    return err.message || String(err);
+  }
+
+  function busy(btn, on, label) {
+    if (!btn) return;
+    if (on) {
+      if (!btn.dataset.idle) btn.dataset.idle = btn.textContent;
+      btn.disabled = true;
+      if (label) btn.textContent = label;
+    } else {
+      btn.disabled = false;
+      btn.textContent = btn.dataset.idle || label || btn.textContent;
+    }
+  }
+
+  async function api(path, opts) {
+    const options = opts ? Object.assign({}, opts) : {};
+    const timeoutMs = options.timeoutMs == null ? 45000 : options.timeoutMs;
+    delete options.timeoutMs;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    options.signal = ctrl.signal;
+    const headers = new Headers(options.headers || {});
+    if (options.body && !headers.has("Content-Type")) {
+      headers.set("Content-Type", "application/json");
+    }
+    options.headers = headers;
+    try {
+      const res = await fetch(path, options);
+      const raw = await res.text();
+      let data = {};
+      if (raw) {
+        try { data = JSON.parse(raw); }
+        catch { data = { detail: raw.slice(0, 400) }; }
+      }
+      if (!res.ok) {
+        const msg = data.detail || data.error || ("HTTP " + res.status);
+        throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+      }
+      return data;
+    } catch (e) {
+      if (e && e.name === "AbortError") {
+        throw new Error("Изтече времето. Опитай пак или натисни Спри.");
+      }
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   function itemEl(title, sub, active) {
@@ -41,6 +96,16 @@
     return d;
   }
 
+  function setLiveLabel(node, label) {
+    let meta = node.querySelector(".meta");
+    if (!meta) {
+      meta = document.createElement("span");
+      meta.className = "meta";
+      node.appendChild(meta);
+    }
+    text(meta, label);
+  }
+
   function setEffort(next) {
     state.effort = next;
     localStorage.setItem("dx.effort", next);
@@ -60,12 +125,6 @@
     chip.classList.toggle("empty", !p);
     chip.title = p ? "Кликни за изчистване" : "";
     text(chip, p ? (p.name || p.slug) : "Няма избран проект");
-    chip.onclick = () => {
-      if (!state.slug) return;
-      state.slug = null;
-      localStorage.removeItem("dx.slug");
-      refreshProjects();
-    };
     const locked = !state.slug;
     ["pcapsule", "ppub", "plive", "build", "ptest", "dissectbtn"].forEach((id) => {
       const n = $(id);
@@ -76,13 +135,21 @@
       : "cwd · продукт (избери проект за jail в него)";
   }
 
+  $("projchip").onclick = () => {
+    if (!state.slug) return;
+    state.slug = null;
+    localStorage.removeItem("dx.slug");
+    refreshProjects();
+  };
+
   async function previewEffort() {
     const q = $("prompt").value.trim();
     try {
-      const data = await (await fetch(
+      const data = await api(
         "/api/v1/daedalus/effort?effort=" + encodeURIComponent(state.effort) +
-        "&q=" + encodeURIComponent(q.slice(0, 500))
-      )).json();
+        "&q=" + encodeURIComponent(q.slice(0, 500)),
+        { timeoutMs: 8000 }
+      );
       text($("effortnote"), (data.label || "") + " — " + (data.note || ""));
     } catch {
       text($("effortnote"), "");
@@ -97,9 +164,13 @@
 
   document.querySelectorAll(".tabs button").forEach((btn) => {
     btn.onclick = () => {
-      document.querySelectorAll(".tabs button").forEach((b) => b.classList.remove("on"));
+      document.querySelectorAll(".tabs button").forEach((b) => {
+        b.classList.remove("on");
+        b.setAttribute("aria-selected", "false");
+      });
       document.querySelectorAll(".pane").forEach((p) => p.classList.remove("on"));
       btn.classList.add("on");
+      btn.setAttribute("aria-selected", "true");
       $("pane-" + btn.dataset.pane).classList.add("on");
     };
   });
@@ -110,10 +181,10 @@
   async function refreshHealth() {
     try {
       const [h, llm, local, w] = await Promise.all([
-        fetch("/health").then((r) => r.json()),
-        fetch("/api/v1/llm/status").then((r) => r.json()).catch(() => ({})),
-        fetch("/api/v1/llm/local").then((r) => r.json()).catch(() => ({})),
-        fetch("/api/v1/llm/wardrobe").then((r) => r.json()).catch(() => ({})),
+        api("/health", { timeoutMs: 8000 }),
+        api("/api/v1/llm/status", { timeoutMs: 8000 }).catch(() => ({})),
+        api("/api/v1/llm/local", { timeoutMs: 8000 }).catch(() => ({})),
+        api("/api/v1/llm/wardrobe", { timeoutMs: 8000 }).catch(() => ({})),
       ]);
       const pills = $("pills");
       pills.replaceChildren();
@@ -123,7 +194,7 @@
         text(s, label);
         pills.appendChild(s);
       };
-      addPill(h.standalone ? "standalone" : "adn");
+      addPill(h.standalone ? "standalone" : "host");
       if (w.wardrobe && w.wardrobe.offline) addPill("offline", "warn");
       if (llm.ok) addPill((llm.provider || "?") + " · " + (llm.model || "?"));
       else addPill("няма LLM", "err");
@@ -147,24 +218,27 @@
         const el = itemEl(row.label, row.role + " · " + row.ollama + " · " + mark, !!row.recommended);
         el.title = row.blurb || "";
         el.onclick = async () => {
-          if (!row.installed && w.ollama) {
-            if (!confirm("Да сваля " + row.ollama + " през Ollama? Може да е няколко GB.")) return;
-            text($("llmbox"), "дърпам " + row.ollama + "…");
-            await fetch("/api/v1/llm/wardrobe/pull", {
+          try {
+            if (!row.installed && w.ollama) {
+              if (!confirm("Да сваля " + row.ollama + " през Ollama? Може да е няколко GB.")) return;
+              text($("llmbox"), "дърпам " + row.ollama + "…");
+              await api("/api/v1/llm/wardrobe/pull", {
+                method: "POST",
+                body: JSON.stringify({ id: row.id, confirm: true }),
+                timeoutMs: 180000,
+              });
+            } else if (!row.installed && !w.ollama) {
+              add("bot", "Инсталирай Ollama, после кликни пак. ollama pull " + row.ollama);
+              return;
+            }
+            await api("/api/v1/llm/wardrobe/activate", {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ id: row.id, confirm: true }),
+              body: JSON.stringify({ id: row.id }),
             });
-          } else if (!row.installed && !w.ollama) {
-            add("bot", "Инсталирай Ollama, после кликни пак. ollama pull " + row.ollama);
-            return;
+            refreshHealth();
+          } catch (e) {
+            add("bot", "гардероб: " + errText(e));
           }
-          await fetch("/api/v1/llm/wardrobe/activate", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id: row.id }),
-          });
-          refreshHealth();
         };
         box.appendChild(el);
       });
@@ -179,8 +253,13 @@
   }
 
   async function refreshProjects() {
-    const data = await (await fetch("/api/v1/playground/projects")).json();
-    state.projects = data.projects || [];
+    try {
+      const data = await api("/api/v1/playground/projects");
+      state.projects = data.projects || [];
+    } catch (e) {
+      add("bot", "проекти: " + errText(e));
+      state.projects = state.projects || [];
+    }
     const box = $("plist");
     box.replaceChildren();
     if (!state.projects.length) {
@@ -203,153 +282,270 @@
   }
 
   async function refreshPrefs() {
-    const data = await (await fetch("/api/v1/daedalus/preferences")).json();
-    const box = $("preflist");
-    box.replaceChildren();
-    const items = data.items || [];
-    if (!items.length) {
-      const empty = document.createElement("div");
-      empty.className = "empty";
-      text(empty, "Няма записани предпочитания.");
-      box.appendChild(empty);
+    try {
+      const data = await api("/api/v1/daedalus/preferences");
+      const box = $("preflist");
+      box.replaceChildren();
+      const items = data.items || [];
+      if (!items.length) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        text(empty, "Няма записани предпочитания.");
+        box.appendChild(empty);
+      }
+      items.slice(0, 12).forEach((it) => {
+        const el = itemEl(it.text || "", it.kind || "preference", false);
+        el.title = "Кликни за изтриване";
+        el.onclick = async () => {
+          try {
+            await api("/api/v1/daedalus/preferences/" + it.id, { method: "DELETE" });
+            refreshPrefs();
+          } catch (e) {
+            add("bot", "предпочитание: " + errText(e));
+          }
+        };
+        box.appendChild(el);
+      });
+    } catch (e) {
+      text($("preflist"), "предпочитания: " + errText(e));
     }
-    items.slice(0, 12).forEach((it) => {
-      const el = itemEl(it.text || "", it.kind || "preference", false);
-      el.title = "Кликни за изтриване";
-      el.onclick = async () => {
-        await fetch("/api/v1/daedalus/preferences/" + it.id, { method: "DELETE" });
-        refreshPrefs();
-      };
-      box.appendChild(el);
-    });
   }
 
   async function refreshLessons() {
     const box = $("lessonlist");
     if (!box) return;
-    const data = await (await fetch("/api/v1/daedalus/learned-skills")).json();
-    box.replaceChildren();
-    const pending = data.pending || [];
-    if (!pending.length) {
+    try {
+      const data = await api("/api/v1/daedalus/learned-skills");
+      box.replaceChildren();
+      const pending = data.pending || [];
+      if (!pending.length) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        text(empty, "Няма чернови. Провалите чакат Одобри.");
+        box.appendChild(empty);
+        return;
+      }
+      pending.slice(0, 8).forEach((it) => {
+        const el = document.createElement("div");
+        el.className = "item lesson";
+        const b = document.createElement("b");
+        text(b, it.name || it.id || "урок");
+        const s = document.createElement("small");
+        text(s, it.description || it.origin || "pending");
+        const row = document.createElement("div");
+        row.className = "row tight";
+        const okBtn = document.createElement("button");
+        okBtn.className = "primary";
+        okBtn.type = "button";
+        text(okBtn, "Одобри");
+        okBtn.onclick = async (ev) => {
+          ev.stopPropagation();
+          try {
+            await api("/api/v1/daedalus/learned-skills/" + it.id + "/approve", { method: "POST" });
+            refreshLessons();
+          } catch (e) {
+            add("bot", "урок: " + errText(e));
+          }
+        };
+        const noBtn = document.createElement("button");
+        noBtn.type = "button";
+        text(noBtn, "Откажи");
+        noBtn.onclick = async (ev) => {
+          ev.stopPropagation();
+          try {
+            await api("/api/v1/daedalus/learned-skills/" + it.id + "/reject", { method: "POST" });
+            refreshLessons();
+          } catch (e) {
+            add("bot", "урок: " + errText(e));
+          }
+        };
+        row.append(okBtn, noBtn);
+        el.append(b, s, row);
+        box.appendChild(el);
+      });
+    } catch (e) {
+      box.replaceChildren();
       const empty = document.createElement("div");
       empty.className = "empty";
-      text(empty, "Няма чернови. Провалите чакат Одобри.");
+      text(empty, "уроци: " + errText(e));
       box.appendChild(empty);
-      return;
     }
-    pending.slice(0, 8).forEach((it) => {
-      const el = document.createElement("div");
-      el.className = "item lesson";
-      const b = document.createElement("b");
-      text(b, it.name || it.id || "урок");
-      const s = document.createElement("small");
-      text(s, it.description || it.origin || "pending");
-      const row = document.createElement("div");
-      row.className = "row tight";
-      const okBtn = document.createElement("button");
-      okBtn.className = "primary";
-      okBtn.type = "button";
-      text(okBtn, "Одобри");
-      okBtn.onclick = async (ev) => {
-        ev.stopPropagation();
-        await fetch("/api/v1/daedalus/learned-skills/" + it.id + "/approve", { method: "POST" });
-        refreshLessons();
-      };
-      const noBtn = document.createElement("button");
-      noBtn.type = "button";
-      text(noBtn, "Откажи");
-      noBtn.onclick = async (ev) => {
-        ev.stopPropagation();
-        await fetch("/api/v1/daedalus/learned-skills/" + it.id + "/reject", { method: "POST" });
-        refreshLessons();
-      };
-      row.append(okBtn, noBtn);
-      el.append(b, s, row);
-      box.appendChild(el);
-    });
   }
 
   $("pcreate").onclick = async () => {
     const name = $("pname").value.trim();
     if (!name) return;
     const description = ($("pdesc").value.trim() || $("prompt").value.trim() || name);
-    const res = await (await fetch("/api/v1/playground/projects", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        kind: $("pkind").value,
-        description,
-        effort: state.effort,
-      }),
-    })).json();
-    if (!res.project) {
-      add("bot", res.detail || "Не създаде проект.");
-      return;
-    }
-    state.slug = res.project.slug;
-    localStorage.setItem("dx.slug", state.slug);
-    $("pname").value = "";
-    $("pdesc").value = "";
-    await refreshProjects();
-    if (state.effort === "epic" || /кампани|необят|персонаж|сюжет/i.test(description)) {
-      add("bot", "Епос: има world kit (bible, карта, персонажи, нива). Пиши една среза, не целия континент.");
+    busy($("pcreate"), true, "…");
+    try {
+      const res = await api("/api/v1/playground/projects", {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          kind: $("pkind").value,
+          description,
+          effort: state.effort,
+        }),
+      });
+      if (!res.project) {
+        add("bot", res.detail || "Не създаде проект.");
+        return;
+      }
+      state.slug = res.project.slug;
+      localStorage.setItem("dx.slug", state.slug);
+      $("pname").value = "";
+      $("pdesc").value = "";
+      await refreshProjects();
+      if (state.effort === "epic" || /кампани|необят|персонаж|сюжет/i.test(description)) {
+        add("bot", "Епос: има world kit (bible, карта, персонажи, нива). Пиши една среза, не целия континент.");
+      }
+    } catch (e) {
+      add("bot", "проект: " + errText(e));
+    } finally {
+      busy($("pcreate"), false);
     }
   };
 
   $("prefadd").onclick = async () => {
     const value = $("preftext").value.trim();
     if (!value) return;
-    await fetch("/api/v1/daedalus/preferences", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: value }),
-    });
-    $("preftext").value = "";
-    refreshPrefs();
+    busy($("prefadd"), true, "…");
+    try {
+      await api("/api/v1/daedalus/preferences", {
+        method: "POST",
+        body: JSON.stringify({ text: value }),
+      });
+      $("preftext").value = "";
+      refreshPrefs();
+    } catch (e) {
+      add("bot", "предпочитание: " + errText(e));
+    } finally {
+      busy($("prefadd"), false);
+    }
   };
+
+  function chatBusy(on) {
+    $("send").disabled = on;
+    $("stop").hidden = !on;
+    if (!on) {
+      state.chatJob = null;
+      if (state.chatSource) {
+        try { state.chatSource.close(); } catch { /* already closed */ }
+        state.chatSource = null;
+      }
+    }
+  }
+
+  function applyChatResult(last, res) {
+    const body = (res && (res.result || res)) || {};
+    text(last, body.reply || body.message || body.error || JSON.stringify(body, null, 2));
+    const bits = [];
+    if (body.effort && body.effort.label) bits.push(body.effort.label);
+    if (body.complete === false) bits.push("незавършено");
+    if (body.complete === true) bits.push("готово");
+    if (body.model) bits.push(body.model);
+    if (body.elapsed_seconds != null) bits.push(body.elapsed_seconds + "s");
+    if (bits.length) setLiveLabel(last, bits.join(" · "));
+  }
 
   async function sendChat() {
     const message = $("prompt").value.trim();
     if (!message || $("send").disabled) return;
     $("prompt").value = "";
-    $("send").disabled = true;
     add("user", message);
     const last = add("bot", "…мисля");
+    chatBusy(true);
     try {
-      const res = await (await fetch("/api/v1/daedalus/chat", {
+      if (window.DaedalusAuth && DaedalusAuth.ensureToken) {
+        await DaedalusAuth.ensureToken();
+      }
+      const job = await api("/api/v1/daedalus/chat/jobs", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message,
           session_id: state.slug || state.session,
           effort: state.effort,
         }),
-      })).json();
-      text(last, res.reply || res.message || JSON.stringify(res, null, 2));
-      const bits = [];
-      if (res.effort && res.effort.label) bits.push(res.effort.label);
-      if (res.complete === false) bits.push("незавършено");
-      if (res.complete === true) bits.push("готово");
-      if (res.model) bits.push(res.model);
-      if (res.elapsed_seconds != null) bits.push(res.elapsed_seconds + "s");
-      if (bits.length) {
-        const m = document.createElement("span");
-        m.className = "meta";
-        text(m, bits.join(" · "));
-        last.appendChild(m);
-      }
-      refreshPrefs();
-      refreshLessons();
-      previewEffort();
+        timeoutMs: 20000,
+      });
+      state.chatJob = job.job_id;
+      const streamPath = "/api/v1/daedalus/chat/jobs/" + job.job_id + "/stream";
+      const src = (window.DaedalusAuth && DaedalusAuth.eventSource)
+        ? await DaedalusAuth.eventSource(streamPath)
+        : new EventSource(streamPath);
+      state.chatSource = src;
+      let finished = false;
+      const finish = (payload, err) => {
+        if (finished) return;
+        finished = true;
+        try { src.close(); } catch { /* ignore */ }
+        if (err) text(last, "Грешка: " + errText(err));
+        else if (payload && payload.status === "cancelled") text(last, "Спряно.");
+        else if (payload && payload.status === "error") text(last, "Грешка: " + (payload.error || "чатът спря"));
+        else applyChatResult(last, payload);
+        chatBusy(false);
+        refreshPrefs();
+        refreshLessons();
+        previewEffort();
+      };
+      src.addEventListener("live", (ev) => {
+        try {
+          const d = JSON.parse(ev.data);
+          setLiveLabel(last, d.label || d.tool || "…мисля");
+        } catch { /* ignore */ }
+      });
+      src.addEventListener("done", (ev) => {
+        try { finish(JSON.parse(ev.data)); }
+        catch (e) { finish(null, e); }
+      });
+      src.addEventListener("error", (ev) => {
+        if (finished) return;
+        try {
+          const d = JSON.parse(ev.data);
+          finish(null, d.error || "потокът спря");
+        } catch {
+          // EventSource also fires error on disconnect after done.
+          if (!finished) {
+            api("/api/v1/daedalus/chat/jobs/" + job.job_id, { timeoutMs: 8000 })
+              .then((row) => finish(row))
+              .catch((e) => finish(null, e));
+          }
+        }
+      });
+      src.onerror = () => {
+        if (finished) { try { src.close(); } catch { /* ignore */ } return; }
+        api("/api/v1/daedalus/chat/jobs/" + job.job_id, { timeoutMs: 8000 })
+          .then((row) => {
+            if (row.status === "running") return;
+            finish(row);
+          })
+          .catch((e) => finish(null, e));
+      };
     } catch (e) {
-      text(last, "Грешка: " + e);
-    } finally {
-      $("send").disabled = false;
+      text(last, "Грешка: " + errText(e));
+      chatBusy(false);
+    }
+  }
+
+  async function stopChat() {
+    const id = state.chatJob;
+    if (state.chatSource) {
+      try { state.chatSource.close(); } catch { /* ignore */ }
+    }
+    if (id) {
+      try {
+        await api("/api/v1/daedalus/chat/jobs/" + id + "/cancel", { method: "POST", timeoutMs: 8000 });
+      } catch { /* UI stops waiting regardless */ }
+    }
+    chatBusy(false);
+    const last = msgs.querySelector(".msg.bot:last-child");
+    if (last && /мисля|Анализирам|Дедал мисли/i.test(last.textContent || "")) {
+      text(last, "Спряно.");
     }
   }
 
   $("send").onclick = sendChat;
+  $("stop").onclick = stopChat;
   $("prompt").addEventListener("keydown", (ev) => {
     if (ev.key === "Enter" && !ev.shiftKey) { ev.preventDefault(); sendChat(); }
   });
@@ -359,36 +555,65 @@
     if (!state.slug) { add("bot", "Избери или създай проект."); return; }
     document.querySelector('[data-pane="flight"]').click();
     const description = $("prompt").value.trim() || ("Build " + state.slug);
-    const res = await (await fetch("/api/v1/playground/projects/" + state.slug + "/autopilot", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ description, mode: "full", effort: state.effort }),
-    })).json();
-    text($("log"), "job " + (res.job && res.job.id) + "\n");
-    const src = new EventSource("/api/v1/playground/projects/" + state.slug + "/autopilot/stream");
-    src.onmessage = (ev) => { $("log").textContent += ev.data + "\n"; };
-    src.addEventListener("log", (ev) => { $("log").textContent += ev.data + "\n"; });
-    src.addEventListener("phase", (ev) => { $("log").textContent += "phase " + ev.data + "\n"; });
-    src.addEventListener("done", (ev) => { $("log").textContent += "DONE " + ev.data + "\n"; src.close(); });
-    src.addEventListener("error", () => { src.close(); });
+    busy($("build"), true, "…");
+    try {
+      if (window.DaedalusAuth && DaedalusAuth.ensureToken) {
+        await DaedalusAuth.ensureToken();
+      }
+      const res = await api("/api/v1/playground/projects/" + state.slug + "/autopilot", {
+        method: "POST",
+        body: JSON.stringify({ description, mode: "full", effort: state.effort }),
+        timeoutMs: 30000,
+      });
+      text($("log"), "job " + (res.job && res.job.id) + "\n");
+      const streamPath = "/api/v1/playground/projects/" + state.slug + "/autopilot/stream";
+      const src = (window.DaedalusAuth && DaedalusAuth.eventSource)
+        ? await DaedalusAuth.eventSource(streamPath)
+        : new EventSource(streamPath);
+      src.onmessage = (ev) => { $("log").textContent += ev.data + "\n"; };
+      src.addEventListener("log", (ev) => { $("log").textContent += ev.data + "\n"; });
+      src.addEventListener("phase", (ev) => { $("log").textContent += "phase " + ev.data + "\n"; });
+      src.addEventListener("done", (ev) => {
+        $("log").textContent += "DONE " + ev.data + "\n";
+        src.close();
+      });
+      src.addEventListener("error", () => { src.close(); });
+      src.onerror = () => {
+        $("log").textContent += "потокът прекъсна\n";
+        src.close();
+      };
+    } catch (e) {
+      text($("log"), "полет: " + errText(e));
+      add("bot", "полет: " + errText(e));
+    } finally {
+      busy($("build"), false);
+      syncProjectChrome();
+    }
   };
 
   $("shrun").onclick = async () => {
     const command = $("shcmd").value.trim();
     if (!command) return;
     text($("shout"), "$ " + command + "\n…");
-    const res = await (await fetch("/api/v1/daedalus/shell", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ command, slug: state.slug || "" }),
-    })).json();
-    state.lastCwd = res.cwd || "";
-    if (state.lastCwd) text($("cwd"), "cwd · " + state.lastCwd);
-    text($("shout"),
-      "$ " + command + "  (exit " + res.exit_code + ", " + (res.elapsed_ms || 0) + "ms)\n" +
-      (res.cwd ? "# " + res.cwd + "\n" : "") +
-      (res.stdout || "") + (res.stderr ? "\n" + res.stderr : "") +
-      (res.error && !res.ok ? "\n" + res.error : ""));
+    busy($("shrun"), true, "…");
+    try {
+      const res = await api("/api/v1/daedalus/shell", {
+        method: "POST",
+        body: JSON.stringify({ command, slug: state.slug || "" }),
+        timeoutMs: 120000,
+      });
+      state.lastCwd = res.cwd || "";
+      if (state.lastCwd) text($("cwd"), "cwd · " + state.lastCwd);
+      text($("shout"),
+        "$ " + command + "  (exit " + res.exit_code + ", " + (res.elapsed_ms || 0) + "ms)\n" +
+        (res.cwd ? "# " + res.cwd + "\n" : "") +
+        (res.stdout || "") + (res.stderr ? "\n" + res.stderr : "") +
+        (res.error && !res.ok ? "\n" + res.error : ""));
+    } catch (e) {
+      text($("shout"), "$ " + command + "\n" + errText(e));
+    } finally {
+      busy($("shrun"), false);
+    }
   };
   $("shcmd").addEventListener("keydown", (ev) => {
     if (ev.key === "Enter") { ev.preventDefault(); $("shrun").click(); }
@@ -396,20 +621,20 @@
 
   async function appendBench(box) {
     try {
-      const b = await (await fetch("/api/v1/daedalus/bench")).json();
+      const b = await api("/api/v1/daedalus/bench");
       const passed = b.passed || 0;
       const total = b.total || 0;
       const ok = !!b.ok;
       box.appendChild(itemEl("честност", passed + "/" + total + " · не bake-off", ok));
     } catch (e) {
-      box.appendChild(itemEl("честност", String(e), false));
+      box.appendChild(itemEl("честност", errText(e), false));
     }
   }
 
   async function appendUnity(box) {
     if (!state.slug) return;
     try {
-      const u = await (await fetch("/api/v1/playground/projects/" + state.slug + "/unity")).json();
+      const u = await api("/api/v1/playground/projects/" + state.slug + "/unity");
       if (!u.unity) return;
       const promise = u.promise || "local_hub";
       let sub = "Hub локално · не в този облак";
@@ -417,19 +642,19 @@
       else if (promise === "batchmode") sub = "batchmode · не е Play";
       box.appendChild(itemEl("unity", sub, promise === "mcp"));
     } catch (e) {
-      box.appendChild(itemEl("unity", String(e), false));
+      box.appendChild(itemEl("unity", errText(e), false));
     }
   }
 
   async function appendLayer(box) {
     if (!state.slug) return;
     try {
-      const prod = await (await fetch("/api/v1/playground/projects/" + state.slug + "/production")).json();
+      const prod = await api("/api/v1/playground/projects/" + state.slug + "/production");
       const layer = prod.layer || "prototype";
       const wall = prod.wall || "prototype";
       box.appendChild(itemEl("слой", layer + " · " + wall, layer === "production" && wall === "clear"));
     } catch (e) {
-      box.appendChild(itemEl("слой", String(e), false));
+      box.appendChild(itemEl("слой", errText(e), false));
     }
   }
 
@@ -446,13 +671,13 @@
       return;
     }
     try {
-      const data = await (await fetch("/api/v1/playground/projects/" + state.slug + "/world")).json();
+      const data = await api("/api/v1/playground/projects/" + state.slug + "/world");
       const files = (data.world && data.world.files) || {};
       const keys = Object.keys(files);
       if (!keys.length) {
         const empty = document.createElement("div");
         empty.className = "empty";
-        text(empty, "Няма kit. Епос + ново име, или Autopilot с кампания.");
+        text(empty, "Няма kit. Епос + ново име, или Полет с кампания.");
         box.appendChild(empty);
         await appendLayer(box);
         await appendUnity(box);
@@ -468,14 +693,14 @@
     } catch (e) {
       const empty = document.createElement("div");
       empty.className = "empty";
-      text(empty, "world: " + e);
+      text(empty, "world: " + errText(e));
       box.appendChild(empty);
     }
   }
 
   async function refreshConnectors() {
     try {
-      const data = await (await fetch("/api/v1/daedalus/connectors")).json();
+      const data = await api("/api/v1/daedalus/connectors");
       const lines = [];
       const ch = (data.reach && data.reach.channels) || {};
       lines.push("REACH");
@@ -489,27 +714,34 @@
       lines.push("настрой: /admin/daedalus/connectors");
       text($("worldbox"), lines.join("\n"));
     } catch (e) {
-      text($("worldbox"), "connectors: " + e);
+      text($("worldbox"), "connectors: " + errText(e));
     }
   }
   $("cxrefresh").onclick = refreshConnectors;
   $("offon").onclick = async () => {
     const cur = ($("offon").textContent || "").indexOf("ВКЛ") >= 0;
-    await fetch("/api/v1/daedalus/offline", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ offline: !cur }),
-    });
-    refreshHealth();
+    try {
+      await api("/api/v1/daedalus/offline", {
+        method: "POST",
+        body: JSON.stringify({ offline: !cur }),
+      });
+      refreshHealth();
+    } catch (e) {
+      add("bot", "офлайн: " + errText(e));
+    }
   };
   $("usecloud").onclick = async () => {
-    await fetch("/api/v1/llm/wardrobe/cloud", { method: "POST" });
-    refreshHealth();
+    try {
+      await api("/api/v1/llm/wardrobe/cloud", { method: "POST" });
+      refreshHealth();
+    } catch (e) {
+      add("bot", "облак: " + errText(e));
+    }
   };
 
   async function refreshEvolution() {
     try {
-      const data = await (await fetch("/api/v1/daedalus/evolution")).json();
+      const data = await api("/api/v1/daedalus/evolution");
       const on = !!data.enabled;
       $("evoon").textContent = on ? "Еволюция ВКЛ" : "Включи";
       if (data.interval_s) $("evointerval").value = data.interval_s;
@@ -524,45 +756,64 @@
       if (sum.studied) lines.push("последно репо: " + sum.studied);
       text($("evobox"), lines.join("\n"));
     } catch (e) {
-      text($("evobox"), "evolution: " + e);
+      text($("evobox"), "evolution: " + errText(e));
     }
   }
   $("evoon").onclick = async () => {
     const cur = ($("evoon").textContent || "").indexOf("ВКЛ") >= 0;
-    await fetch("/api/v1/daedalus/evolution", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        enabled: !cur,
-        interval_s: Number($("evointerval").value) || 1800,
-        clone_research: !!$("evoclone").checked,
-      }),
-    });
-    refreshEvolution();
+    busy($("evoon"), true, "…");
+    try {
+      await api("/api/v1/daedalus/evolution", {
+        method: "POST",
+        body: JSON.stringify({
+          enabled: !cur,
+          interval_s: Number($("evointerval").value) || 1800,
+          clone_research: !!$("evoclone").checked,
+        }),
+      });
+      refreshEvolution();
+    } catch (e) {
+      text($("evobox"), "evolution: " + errText(e));
+    } finally {
+      busy($("evoon"), false);
+    }
   };
   $("evointerval").onchange = async () => {
-    await fetch("/api/v1/daedalus/evolution", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ interval_s: Number($("evointerval").value) || 1800 }),
-    });
-    refreshEvolution();
+    try {
+      await api("/api/v1/daedalus/evolution", {
+        method: "POST",
+        body: JSON.stringify({ interval_s: Number($("evointerval").value) || 1800 }),
+      });
+      refreshEvolution();
+    } catch (e) {
+      text($("evobox"), "evolution: " + errText(e));
+    }
   };
   $("evoclone").onchange = async () => {
-    await fetch("/api/v1/daedalus/evolution", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ clone_research: !!$("evoclone").checked }),
-    });
+    try {
+      await api("/api/v1/daedalus/evolution", {
+        method: "POST",
+        body: JSON.stringify({ clone_research: !!$("evoclone").checked }),
+      });
+    } catch (e) {
+      text($("evobox"), "evolution: " + errText(e));
+    }
   };
   $("evocycle").onclick = async () => {
     text($("evobox"), "цикъл…");
-    await fetch("/api/v1/daedalus/evolution/cycle", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ force: true }),
-    });
-    refreshEvolution();
+    busy($("evocycle"), true, "…");
+    try {
+      await api("/api/v1/daedalus/evolution/cycle", {
+        method: "POST",
+        body: JSON.stringify({ force: true }),
+        timeoutMs: 120000,
+      });
+      refreshEvolution();
+    } catch (e) {
+      text($("evobox"), "evolution: " + errText(e));
+    } finally {
+      busy($("evocycle"), false);
+    }
   };
 
   $("pcapsule").onclick = () => {
@@ -575,40 +826,40 @@
   $("ppub").onclick = async () => {
     if (!state.slug) return;
     try {
-      const data = await (await fetch("/api/v1/playground/projects/" + state.slug + "/publish-local", { method: "POST" })).json();
+      const data = await api("/api/v1/playground/projects/" + state.slug + "/publish-local", { method: "POST" });
       add("bot", data.ok ? ("Публикувано: " + (data.url || "/apps/" + state.slug + "/")) : (data.detail || JSON.stringify(data)));
-    } catch (e) { add("bot", "publish: " + e); }
+    } catch (e) { add("bot", "publish: " + errText(e)); }
   };
   $("plive").onclick = async () => {
     if (!state.slug) return;
     const last = add("bot", "Качвам наживо…");
     try {
-      const data = await (await fetch("/api/v1/playground/projects/" + state.slug + "/live", {
+      const data = await api("/api/v1/playground/projects/" + state.slug + "/live", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ backend: "auto" }),
-      })).json();
+        timeoutMs: 120000,
+      });
       const bits = [];
       if (data.local_url) bits.push("тук: " + data.local_url);
       if (data.url) bits.push("интернет: " + data.url);
       if (data.backend) bits.push(data.backend);
       text(last, (data.note || "готово") + (bits.length ? "\n" + bits.join("\n") : ""));
-    } catch (e) { text(last, "наживо: " + e); }
+    } catch (e) { text(last, "наживо: " + errText(e)); }
   };
   $("ptest").onclick = async () => {
     if (!state.slug) return;
     document.querySelector('[data-pane="world"]').click();
     text($("worldbox"), "playtest " + state.slug + "…");
     try {
-      const data = await (await fetch("/api/v1/daedalus/playtest", {
+      const data = await api("/api/v1/daedalus/playtest", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ slug: state.slug, n: 4, use_browser: false, with_llm: false }),
-      })).json();
+        timeoutMs: 120000,
+      });
       text($("worldbox"), data.summary || JSON.stringify(data, null, 2));
       add("bot", data.summary || "playtest готов", data.ship_ready ? "ship?" : "blockers");
     } catch (e) {
-      text($("worldbox"), "playtest: " + e);
+      text($("worldbox"), "playtest: " + errText(e));
     }
   };
   $("dissectbtn").onclick = async () => {
@@ -618,31 +869,30 @@
     document.querySelector('[data-pane="world"]').click();
     text($("worldbox"), "дисекция " + source + "…");
     try {
-      const data = await (await fetch("/api/v1/daedalus/dissect", {
+      const data = await api("/api/v1/daedalus/dissect", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ source, slug: state.slug, live: true }),
-      })).json();
+        timeoutMs: 120000,
+      });
       text($("worldbox"), data.specimen_block || data.summary || JSON.stringify(data, null, 2));
       add("bot", data.ok ? ("Мостра: " + (data.title || source)) : (data.detail || data.error || "дисекцията не мина"));
     } catch (e) {
-      text($("worldbox"), "дисекция: " + e);
+      text($("worldbox"), "дисекция: " + errText(e));
     }
   };
   $("labbtn").onclick = async () => {
     document.querySelector('[data-pane="world"]').click();
     text($("worldbox"), "лаборатория…");
     try {
-      const data = await (await fetch("/api/v1/daedalus/labs", {
+      const data = await api("/api/v1/daedalus/labs", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: (selectedProject() && selectedProject().name) || "specimen" }),
-      })).json();
-      const host = await (await fetch("/api/v1/daedalus/labs/status")).json();
+      });
+      const host = await api("/api/v1/daedalus/labs/status");
       text($("worldbox"), JSON.stringify({ lab: data, host }, null, 2));
       add("bot", data.ok ? ("Лаборатория " + data.id + " — инсталирай HTML5/zip в нея, после дисекция.") : (data.detail || "лабораторията не се създаде"));
     } catch (e) {
-      text($("worldbox"), "лаборатория: " + e);
+      text($("worldbox"), "лаборатория: " + errText(e));
     }
   };
 

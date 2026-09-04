@@ -4,38 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>{% block title %}Дедал · Daedalus{% endblock %}</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Inter', 'system-ui', 'sans-serif'],
-            mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
-          },
-          colors: {
-            argos: {
-              bg: '#05070d',
-              panel: '#0b1220',
-              panel2: '#111a2e',
-              border: '#1e2a44',
-              accent: '#22d3ee',
-              accent2: '#34d399',
-              danger: '#f43f5e',
-              warn: '#facc15',
-              dim: '#64748b',
-            },
-          },
-          boxShadow: {
-            glow: '0 0 0 1px rgba(34,211,238,0.25), 0 0 24px rgba(34,211,238,0.15)',
-          },
-        },
-      },
-    };
-  </script>
+  <link rel="stylesheet" href="/admin/static/admin.css" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Daedalus" />
   <meta name="mobile-web-app-capable" content="yes" />

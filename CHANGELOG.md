@@ -11,6 +11,24 @@ The version in `pyproject.toml` is the source of truth for the package.
 - **Git forges** — clone GitHub **or** GitLab; playground push honours `provider`; GitHub Pull Request and GitLab Merge Request (`create-upstream-pr`, native tool `git_forge`). Playground menu 🔀 PR / MR.
 - **Skill memory** — catalog (name + description) plus at most one SKILL.md body per turn. `draft_from_failure` / `draft_from_success` write pending JSON; they stay out of the next prompt until owner Approve in Studio **Уроци**. Native `skill` is catalog/load/pending only — the agent cannot approve itself.
 - **Hard-job slices** — playground work that is already multi-file keeps a job ledger (`original ask`, acceptance, named artifacts) under `$DAEDALUS_DATA/jobs/`. `spawn_subagent` takes `role=explorer|coder|verify` (explorer/verify cannot write), injects only the asked artifacts, and refuses `TASK_COMPLETE` that contradicts a failure. Definition of Done blocks "готово" while slices remain or the reply admits it did not finish. Whisper chat and greenfield playable slices are unchanged.
+- **Studio chat jobs** — Studio starts `POST /api/v1/daedalus/chat/jobs` and listens on SSE (`…/stream`) with live tool labels and **Спри**. The blocking `POST /api/v1/daedalus/chat` stays for API/mesh clients.
+
+### Security
+
+- Peer HTTP ask/chat refuses an empty mesh key (fail closed). Ping on loopback still works without one. Compose no longer ships a default peer secret.
+- Sandbox child processes use the same secret-stripped env as the Studio shell.
+- Unpublished `/apps/{slug}/db/{key}` writes return 404. Clearing the whole KV store needs the owner token. Published games keep anonymous single-key writes.
+
+### Studio
+
+- Canonical chat/build UI: Godot / Unity / node / auto in the kind dropdown; Command Center is proposals, GDD, playground. Fetch calls check `res.ok`, show errors, and disable buttons while in flight.
+- Command Center list pages escape `innerHTML`. Markdown links in the old chat only allow `http(s):`.
+- Owner-facing copy no longer points at Replit Secrets or a foreign product name in titles.
+- Command Center CSS is local (`/admin/static/admin.css`) — no Tailwind CDN, no Google Fonts.
+
+### Delivery
+
+- Docker image health in CI sets `DAEDALUS_TOKEN` so a public bind is allowed. Ruff F401 on `chat_jobs` and the new hardening tests.
 
 ### Games
 

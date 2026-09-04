@@ -601,10 +601,8 @@ def validate_patch(
 
 def _run_subprocess(script: str, timeout: int, checks: list[str]) -> dict[str, Any]:
     t0 = time.monotonic()
-    env = {k: v for k, v in os.environ.items()
-           if k not in ("ANTHROPIC_API_KEY", "AI_INTEGRATIONS_ANTHROPIC_API_KEY",
-                        "SESSION_SECRET", "IYVERIS_MESH_KEY", "VAULT_TOKEN_ARGOS_VAULT",
-                        "VAULT_TOKEN_ARGOS_VAULT_PROD")}
+    from daedalus.shell_center import child_env
+    env = child_env()
     try:
         result = subprocess.run(
             [sys.executable, "-c", script],

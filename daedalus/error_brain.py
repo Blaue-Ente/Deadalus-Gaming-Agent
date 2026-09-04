@@ -161,11 +161,11 @@ _TAXONOMY: list[dict[str, Any]] = [
                      r"DATABASE_URL", r"variable.*not found", r"getenv.*None",
                      r"KeyError.*env"],
         "strategy": [
-            "Провери дали env var-ът е деклариран в Replit Secrets.",
+            "Провери дали env var-ът е в `.env` или Studio → Свързаност.",
             "Провери дали `.env` се зарежда правилно.",
-            "Докладвай на Николай ако env var-ът липсва в Secrets.",
+            "Докладвай ако ключът липсва след запис в Свързаност.",
         ],
-        "hint": "Config грешки: env var в Replit Secrets ли е? Провери с Николай.",
+        "hint": "Config грешки: env var в `.env` / Свързаност ли е?",
     },
 ]
 
