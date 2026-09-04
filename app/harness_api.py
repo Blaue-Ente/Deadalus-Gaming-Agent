@@ -439,6 +439,18 @@ async def live_catalog() -> dict[str, Any]:
     return capabilities()
 
 
+@router.get("/api/v1/daedalus/bench")
+async def bench_get(persist: bool = False) -> dict[str, Any]:
+    from daedalus.game_agent_bench import run_suite
+    return run_suite(persist=persist)
+
+
+@router.post("/api/v1/daedalus/bench")
+async def bench_run() -> dict[str, Any]:
+    from daedalus.game_agent_bench import run_suite
+    return run_suite(persist=True)
+
+
 class EvolutionBody(BaseModel):
     enabled: bool | None = None
     interval_s: int | None = Field(default=None, ge=300, le=86400)

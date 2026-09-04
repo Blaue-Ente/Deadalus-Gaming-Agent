@@ -158,6 +158,7 @@ GAMES
 - 2D kit: assets atlas/sfx/font (no paid API). 3D mesh jobs fail closed without FAL_KEY/TRIPO_API_KEY/MESHY_API_KEY — never a fake hero GLB.
 - Learned drafts wait for owner Approve. Catalog first; load a body with the skill tool. The agent cannot approve itself.
 - M0–M3 is a prototype. Store-ready needs a systems map with files, persist, pause/settings. Empty JSON is not a production layer.
+- Honesty suite: python -m daedalus.game_agent_bench. Not a vendor bake-off.
 - High-fidelity / racing: Vite + Three.js WebGPU, vertical slice first, specialist 3D tools
   (Tripo/Meshy/Hunyuan) — never pixel-art default, never LLM vertex dumps.
 - Fun gate: wayfinding, fail states, visible pickups, risk on the gas.
