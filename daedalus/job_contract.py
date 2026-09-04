@@ -113,6 +113,17 @@ def evaluate(
         blockers.append(
             f"Има {open_slices} незавършени среза в job ledger — не казвай готово."
         )
+    if coding and claims_done:
+        try:
+            from .game_engineer import missing_eng_tools
+            miss = missing_eng_tools(user_message, tool_calls)
+        except Exception:
+            miss = ""
+        if miss:
+            checks["eng_tools"] = False
+            blockers.append(miss)
+        else:
+            checks["eng_tools"] = True
 
     complete = (not coding) or (not blockers)
     if coding and claims_done and blockers:

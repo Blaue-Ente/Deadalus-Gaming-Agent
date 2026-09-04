@@ -224,6 +224,13 @@ def build_description_for_milestone(
         extra = "\n\n" + planner_addendum(kind, gdd_excerpt or body)
     except Exception:
         extra = ""
+    try:
+        from .game_engineer import planner_addendum as _eng
+        eng = _eng(kind, gdd_excerpt or body)
+        if eng and eng not in extra:
+            extra = f"{extra}\n\n{eng}"
+    except Exception:
+        pass
     return f"{header}{body}\n\n--- GDD excerpt ---\n{gdd_excerpt}{extra}"[:5500]
 
 

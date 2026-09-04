@@ -43,6 +43,9 @@ C# (Unity) | TypeScript (Expo/Vite) | Python (FastAPI) — per `kind`
 - All save data must be versioned
 - All features need acceptance criteria (see feature briefs)
 - Use events or store for cross-system communication
+- Nested object-vs-object collision is O(N²) — call spatial(advise) and use a grid/quad/octree/BVH
+- Custom 3D math goes through math3d (claimed) before C++/C#/GDScript; C++ uses GLM or DirectXMath
+- Frame spikes: profiler kind=tracy on Tracy CSV. RenderDoc captures are owner-side.
 
 ## AI Rules
 - Do not rewrite unrelated files

@@ -272,13 +272,26 @@ def disclose(
     query: str,
     *,
     extra_ids: list[str] | None = None,
+    prefer_id: str | None = None,
     limit: int = MAX_CATALOG,
     body_limit: int = MAX_BODY,
 ) -> str:
-    """Progressive disclosure: catalog first, then at most one SKILL.md body."""
+    """Progressive disclosure: catalog first, then at most one SKILL.md body.
+
+    ``prefer_id`` wins the body slot so a game job loads ``senior_tools`` even
+    when ``arcade_craft`` scored higher on keywords like "игра".
+    """
     extra = {str(x).strip() for x in (extra_ids or []) if str(x).strip()}
+    pref = (prefer_id or "").strip()
+    if pref:
+        extra.add(pref)
     scored = _score(query, extra)
     picks = [r for _, r in scored[: max(1, limit)]]
+    if pref:
+        pref_row = next((r for r in list_skills() if r["id"] == pref), None)
+        if pref_row:
+            picks = [pref_row] + [r for r in picks if r["id"] != pref]
+            picks = picks[: max(1, limit)]
     if not picks:
         return ""
     lines = [

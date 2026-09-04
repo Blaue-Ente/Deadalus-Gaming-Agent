@@ -206,9 +206,24 @@ async def run_full_autopilot(
     lessons = ""
     try:
         from daedalus.learned_skills import disclose
-        lessons = disclose(f"{kind} {state.description}", limit=2)
+        from daedalus.game_engineer import extra_skill_ids, prefer_skill_id
+        desc = state.description
+        lessons = disclose(
+            f"{kind} {desc}",
+            extra_ids=extra_skill_ids(desc, kind=kind),
+            prefer_id=prefer_skill_id(desc, kind=kind),
+            limit=2,
+        )
     except Exception:
         lessons = ""
+    eng_plan = ""
+    try:
+        from daedalus.game_engineer import planner_addendum, prompt_block
+        eng_plan = planner_addendum(kind, state.description) or prompt_block(
+            state.description, kind=kind,
+        )
+    except Exception:
+        eng_plan = ""
     specimen = ""
     try:
         from daedalus.dissection import prompt_block_for_slug
@@ -240,6 +255,7 @@ async def run_full_autopilot(
             "3-8 етапа, всеки с 1-3 файла в 'files'."
             + (f"\n\n{lessons}" if lessons else "")
             + (f"\n\n{specimen}" if specimen else "")
+            + (f"\n\n{eng_plan}" if eng_plan else "")
         )
         plan_raw = await backend.llm(
             AgentRole.PLANNER,
@@ -266,6 +282,7 @@ async def run_full_autopilot(
         "или блокове ===FILE: path===\\n...\\n===END===.\n"
         "Пълни, синтактично коректни файлове."
         + (f"\n\n{specimen}" if specimen else "")
+        + (f"\n\n{eng_plan}" if eng_plan else "")
     )
 
     for i, stage in enumerate(stages, 1):
@@ -293,6 +310,14 @@ async def run_full_autopilot(
             for c in changes:
                 _upsert_change(state, c)
             await backend.emit("log", {"line": f"  ✓ {n} файл(а)", "level": "dim"})
+            try:
+                from daedalus.game_engineer import looks_like_game, scan_project
+                if looks_like_game(state.description, kind=kind):
+                    scan = scan_project(state.slug)
+                    for w in (scan.get("warnings") or [])[:3]:
+                        await backend.emit("log", {"line": f"⚠ eng-scan: {w}", "level": "warn"})
+            except Exception:
+                pass
         _save_stage_checkpoint(backend, state, kind=kind, stage=i)
 
     state.set_agent_status(AgentRole.CODER, "done")

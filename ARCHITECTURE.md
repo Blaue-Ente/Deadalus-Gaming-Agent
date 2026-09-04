@@ -37,7 +37,7 @@ Daedalus is **one product**: coding agent + Studio + Playground. One FastAPI pro
 | Preferences | `preferences.py` | Owner speech → durable memory |
 | Learned skills | `learned_skills.py` | Catalog first; pending drafts wait for Approve |
 | DoD | `job_contract.py` | Code without evidence is not done |
-| Senior game tools | `math3d.py`, `game_lint.py`, `profiler.py`, `game_canon.py` | 3D referee, C++/C# lint, log parsers, OSS study jail |
+| Senior game tools | `math3d.py`, `spatial.py`, `game_lint.py`, `profiler.py`, `game_canon.py`, `game_engineer.py` | 3D referee, spatial advisor, C++/C# lint, log/Tracy parsers, OSS study jail, prompt/gate wiring |
 | Reach | `reach.py` | Jina Reader + optional CLIs |
 | Playtest | `playtest.py` | Judge personas; no 1M dataset |
 | Dissection | `dissection.py` + `play_lab.py` | Specimen from name/URL/git/install; Play Lab is the VM |
@@ -82,7 +82,7 @@ Defaults:
 - World kit (`world_kit.py`, `world_runtime.py`): epic games get a save schema, quest engine, dialogue runner, and gated level graph. `world({action: prove})` must pass. Empty JSON is not a campaign.
 - Production layer (`production_layer.py`): M0–M3 is a labelled prototype. Store-ready needs `design/systems.json` with real files, persist, and pause/settings. Empty JSON is not a production layer. Native `production`. Gate `production-check` does not block guided racing before files exist.
 - Honesty suite (`game_agent_bench.py`): `run_suite()` executes in-process checks against this harness. Flags still record whether a comparison *could* be honest; the suite actually runs one — against Daedalus, not other products. `python -m daedalus.game_agent_bench`. Not a vendor bake-off.
-- Senior game tools (`math3d.py`, `game_lint.py`, `profiler.py`, `game_canon.py`): numeric referee for SLERP/rays/look-at; ruff/clang-tidy/Roslyn-or-heuristic lint; parse Unity/NUnit/Chrome/FPS logs; study five OSS trees under `$DAEDALUS_DATA/canon/` — never copy assets or the book into a Playground game. Knowledge lives in `daedalus/knowledge/` (RAG) and `daedalus/skills/`.
+- Senior game tools (`math3d.py`, `spatial.py`, `game_lint.py`, `profiler.py`, `game_canon.py`, `game_engineer.py`): numeric referee for SLERP/rays/look-at; spatial advise/scan so collision is not O(N²); ruff/clang-tidy/Roslyn-or-heuristic lint; parse Unity/NUnit/Chrome/Tracy/FPS logs; study OSS trees (including GLM, DirectXMath, Tracy) under `$DAEDALUS_DATA/canon/` — never copy assets or the book into a Playground game. Knowledge lives in `daedalus/knowledge/` (RAG) and `daedalus/skills/`. Chat, autopilot, Game Studio gates (`eng-check`), and the job contract inject the same contract so the tools actually run on a game build.
 - Asset pipeline v2 (`atlas.py`, `sfx_kit.py`, `mesh_jobs.py`): 2D atlas/tileset/SFX/font with stdlib PNG (no Pillow). 3D jobs fail closed without keys; greybox is a cube, not a hero. Native tool `assets`.
 - Blender jobs (`blender_jobs.py`, `python -m daedalus.blender_mcp`) **emit** a bpy script — they do not import `bpy` in the Daedalus process.
 - Not: own engine, own 3D foundation model, five parallel Godot MCP servers, silent self-editing, “one sentence → finished game”.
