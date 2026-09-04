@@ -41,7 +41,7 @@ where = ["."]
 include = ["daedalus*", "app*"]
 
 [tool.setuptools.package-data]
-daedalus = ["skills/*.md"]
+daedalus = ["skills/*.md", "knowledge/*.md"]
 
 [tool.ruff]
 target-version = "py311"

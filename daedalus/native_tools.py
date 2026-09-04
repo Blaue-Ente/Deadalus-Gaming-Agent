@@ -42,6 +42,10 @@ PERM_MAP: dict[str, str | None] = {
     "skill": None,
     "production": None,
     "git_forge": "github_access",
+    "math3d": None,
+    "game_lint": None,
+    "profiler": None,
+    "game_canon": None,
 }
 
 NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
@@ -518,6 +522,107 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
                 "build_mode": {"type": "string"},
             },
             "required": ["action", "slug"],
+        },
+    },
+    {
+        "name": "math3d",
+        "description": (
+            "Reference 3D math (stdlib; numpy cross-check if installed). "
+            "Ops: dot, cross, facing, triangle_normal, quat_slerp, quat_rotate, "
+            "look_at, perspective, ray_triangle, ray_aabb, mat4_mul, catalog. "
+            "Pass claimed to verify a formula before embedding it in C++/C#/GDScript. "
+            "Quat xyzw, mat4 row-major, OpenGL Y-up."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "Op name or catalog | batch",
+                },
+                "op": {"type": "string", "description": "Alias of action"},
+                "a": {"description": "vec3 / quat / mat4"},
+                "b": {"description": "vec3 / quat / mat4"},
+                "q0": {"description": "quat xyzw"},
+                "q1": {"description": "quat xyzw"},
+                "t": {"type": "number"},
+                "eye": {"description": "look_at eye vec3"},
+                "center": {"description": "look_at target vec3"},
+                "up": {"description": "look_at up vec3"},
+                "origin": {"description": "ray origin"},
+                "direction": {"description": "ray direction"},
+                "v0": {"description": "triangle p0"},
+                "v1": {"description": "triangle p1"},
+                "v2": {"description": "triangle p2"},
+                "claimed": {"description": "Agent's result to verify"},
+                "ops": {"description": "batch: list of {op,...}"},
+            },
+        },
+    },
+    {
+        "name": "game_lint",
+        "description": (
+            "Architectural lint for game code. Python ruff; C++ clang-format/tidy "
+            "when installed plus leak heuristics; C# Unity heuristics and dotnet format; "
+            "GDScript Godot 3 API smells. action=format returns text and does not write. "
+            "Missing clang-tidy is not a leak pass."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "status | check | format",
+                },
+                "slug": {"type": "string"},
+                "path": {"type": "string"},
+                "content": {"type": "string", "description": "Unsaved buffer to lint"},
+            },
+            "required": ["action"],
+        },
+    },
+    {
+        "name": "profiler",
+        "description": (
+            "Parse Unity Test / NUnit XML, Chrome traces, Godot/Unity/generic FPS logs. "
+            "action=unity_tests needs UNITY_PATH batchmode and is not Play. "
+            "Missing Editor is an honest refuse."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "status | parse | unity_tests",
+                },
+                "slug": {"type": "string"},
+                "path": {"type": "string", "description": "Log/XML/trace path"},
+                "kind": {"type": "string", "description": "auto | nunit | chrome | godot | unity | generic"},
+                "text": {"type": "string", "description": "Inline log instead of path"},
+                "platform": {"type": "string", "description": "EditMode | PlayMode for unity_tests"},
+            },
+            "required": ["action"],
+        },
+    },
+    {
+        "name": "game_canon",
+        "description": (
+            "Study curated OSS game trees (DOOM 3 BFG, Mindustry, Game Programming Patterns, "
+            "tinyrenderer, stb). action=list|study|open|clone|search. "
+            "Steal structure; never copy assets or paste the book into a Playground game."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "list | study | open | clone | search",
+                },
+                "id": {"type": "string", "description": "doom3-bfg | mindustry | game-programming-patterns | tinyrenderer | stb"},
+                "path": {"type": "string", "description": "Allowlisted file for open"},
+                "query": {"type": "string", "description": "Local grep after clone"},
+            },
+            "required": ["action"],
         },
     },
 ]
@@ -1095,6 +1200,64 @@ async def execute_native_tool(
             flt = str(args.get("filter", "*"))
             r = await list_modules_tool(flt)
             return f"── modules ──\n{r.get('text', str(r))[:3000]}"
+
+        if name == "math3d":
+            from .math3d import run_action as math3d_action
+            op = str(args.get("action") or args.get("op") or "catalog")
+            payload = {k: v for k, v in args.items() if k not in ("action", "op")}
+            r = math3d_action(op, **payload)
+            status = "OK" if r.get("ok") else "FAILED"
+            if r.get("verdict") == "mismatch":
+                status = "MISMATCH"
+            return (
+                f"── math3d {op} {status} ──\n"
+                f"{json.dumps(r, ensure_ascii=False, default=str)[:6000]}"
+            )
+
+        if name == "game_lint":
+            from .game_lint import run_action as game_lint_action
+            r = game_lint_action(
+                str(args.get("action") or "status"),
+                path=str(args.get("path") or ""),
+                slug=str(args.get("slug") or ""),
+                content=args.get("content"),
+                format_diff=bool(args.get("format_diff")),
+            )
+            status = "OK" if r.get("ok") else "FAILED"
+            return (
+                f"── game_lint {args.get('action')} {status} ──\n"
+                f"{json.dumps(r, ensure_ascii=False, default=str)[:6000]}"
+            )
+
+        if name == "profiler":
+            from .profiler import run_action as profiler_action
+            r = profiler_action(
+                str(args.get("action") or "status"),
+                slug=str(args.get("slug") or ""),
+                path=str(args.get("path") or ""),
+                kind=str(args.get("kind") or "auto"),
+                text=args.get("text"),
+                platform=str(args.get("platform") or "EditMode"),
+            )
+            status = "OK" if r.get("ok") else "FAILED"
+            return (
+                f"── profiler {args.get('action')} {status} ──\n"
+                f"{json.dumps(r, ensure_ascii=False, default=str)[:6000]}"
+            )
+
+        if name == "game_canon":
+            from .game_canon import run_action as game_canon_action
+            r = game_canon_action(
+                str(args.get("action") or "list"),
+                id=str(args.get("id") or args.get("name") or ""),
+                path=str(args.get("path") or args.get("file") or ""),
+                query=str(args.get("query") or args.get("q") or ""),
+            )
+            status = "OK" if r.get("ok") else "FAILED"
+            return (
+                f"── game_canon {args.get('action')} {status} ──\n"
+                f"{json.dumps(r, ensure_ascii=False, default=str)[:8000]}"
+            )
 
         return f"── unknown native tool: {name} ──"
     except Exception as exc:

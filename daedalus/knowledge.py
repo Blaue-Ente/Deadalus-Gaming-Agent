@@ -36,6 +36,7 @@ def _knowledge_sources() -> list[tuple[Path, str]]:
         (root / "plans", "plan"),
         (root / "upgrade-pool" / "items", "upgrade"),
         (package_root() / "skills", "skill"),
+        (package_root() / "knowledge", "game-eng"),
         (data_root() / "learned_skills", "learned_skill"),
     ]
 
