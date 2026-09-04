@@ -83,6 +83,9 @@ class DaedalusKnowledge:
                     continue
                 if path.suffix not in (".md", ".json", ".txt"):
                     continue
+                # F5: pending skill drafts wait for Approve — do not index them.
+                if "learned_skills" in path.parts and "pending" in path.parts:
+                    continue
                 try:
                     content = path.read_text(encoding="utf-8")
                 except Exception as exc:

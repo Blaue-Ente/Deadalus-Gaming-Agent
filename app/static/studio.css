@@ -210,6 +210,8 @@ main {
 }
 
 .prefs { margin-top: auto; padding-top: 0.6rem; border-top: 1px solid var(--line); }
+.lessons { padding-top: 0.6rem; border-top: 1px solid var(--line); }
+.item.lesson .row { margin-top: 0.4rem; }
 
 .msgs {
   flex: 1;

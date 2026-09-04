@@ -50,7 +50,6 @@ from .improvements import (
     mark_schema_read,
     needs_read_first_hint,
     select_skills,
-    render_skills_block,
     review_gate_critique,
     detect_intent_without_action,
 )
@@ -1305,14 +1304,11 @@ class Daedalus:
         )
         try:
             from .preferences import format_block as _pref_block
-            from .learned_skills import format_block as _skill_block
             _prefs = _pref_block()
-            _sk = _skill_block(user_message)
-            extra = "\n\n".join(p for p in (_prefs, _sk) if p)
-            if extra:
-                injected = extra + ("\n\n" + injected if injected else "")
+            if _prefs:
+                injected = _prefs + ("\n\n" + injected if injected else "")
         except Exception as _mem_exc:
-            log.debug("preference/skill inject skipped: %s", _mem_exc)
+            log.debug("preference inject skipped: %s", _mem_exc)
 
         # Inject unread Agent Inbox messages (Replit Agent → Daedalus)
         inbox_block = ""
@@ -1509,15 +1505,16 @@ class Daedalus:
         parts: list[str] = []
         if briefing_block:
             parts.append(briefing_block)
-        # ── Skill registry injection (Phase 13): up to 2 relevant skills ──
+        # Progressive disclosure: catalog + at most one SKILL.md body.
         try:
+            from .learned_skills import disclose as _disclose
             _intent_for_skills = (briefing_dict or {}).get("intent", "") if briefing_dict else ""
             _hint_for_skills = (briefing_dict or {}).get("hint", "") if briefing_dict else ""
             _skill_names = select_skills(user_message, _intent_for_skills, _hint_for_skills)
-            _skill_block = render_skills_block(_skill_names)
+            _skill_block = _disclose(user_message, extra_ids=_skill_names)
             if _skill_block:
                 parts.append(_skill_block)
-                log.info("skills injected: %s (session=%s)", _skill_names, session_id[:10])
+                log.info("skills disclosed: %s (session=%s)", _skill_names, session_id[:10])
         except Exception as _sk_exc:
             log.debug("skill injection skipped: %s", _sk_exc)
         if injected:
@@ -4604,7 +4601,7 @@ class Daedalus:
         dod = None
         try:
             from .job_contract import evaluate, finish_nudge
-            from .learned_skills import draft_from_failure
+            from .learned_skills import draft_from_failure, draft_from_success
             _open_slices = 0
             try:
                 from .job_ledger import open_count_for_session
@@ -4624,6 +4621,11 @@ class Daedalus:
                         errors=dod.blockers,
                         context=message[:400],
                     )
+                except Exception:
+                    pass
+            elif dod.complete and dod.coding_task:
+                try:
+                    draft_from_success(kind="chat", summary=(message or "")[:400])
                 except Exception:
                     pass
         except Exception as _dod_exc:

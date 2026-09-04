@@ -224,6 +224,51 @@
     });
   }
 
+  async function refreshLessons() {
+    const box = $("lessonlist");
+    if (!box) return;
+    const data = await (await fetch("/api/v1/daedalus/learned-skills")).json();
+    box.replaceChildren();
+    const pending = data.pending || [];
+    if (!pending.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      text(empty, "Няма чернови. Провалите чакат Одобри.");
+      box.appendChild(empty);
+      return;
+    }
+    pending.slice(0, 8).forEach((it) => {
+      const el = document.createElement("div");
+      el.className = "item lesson";
+      const b = document.createElement("b");
+      text(b, it.name || it.id || "урок");
+      const s = document.createElement("small");
+      text(s, it.description || it.origin || "pending");
+      const row = document.createElement("div");
+      row.className = "row tight";
+      const okBtn = document.createElement("button");
+      okBtn.className = "primary";
+      okBtn.type = "button";
+      text(okBtn, "Одобри");
+      okBtn.onclick = async (ev) => {
+        ev.stopPropagation();
+        await fetch("/api/v1/daedalus/learned-skills/" + it.id + "/approve", { method: "POST" });
+        refreshLessons();
+      };
+      const noBtn = document.createElement("button");
+      noBtn.type = "button";
+      text(noBtn, "Откажи");
+      noBtn.onclick = async (ev) => {
+        ev.stopPropagation();
+        await fetch("/api/v1/daedalus/learned-skills/" + it.id + "/reject", { method: "POST" });
+        refreshLessons();
+      };
+      row.append(okBtn, noBtn);
+      el.append(b, s, row);
+      box.appendChild(el);
+    });
+  }
+
   $("pcreate").onclick = async () => {
     const name = $("pname").value.trim();
     if (!name) return;
@@ -295,6 +340,7 @@
         last.appendChild(m);
       }
       refreshPrefs();
+      refreshLessons();
       previewEffort();
     } catch (e) {
       text(last, "Грешка: " + e);
@@ -560,6 +606,7 @@
   refreshHealth();
   refreshProjects();
   refreshPrefs();
+  refreshLessons();
   refreshConnectors();
   refreshEvolution();
 })();
