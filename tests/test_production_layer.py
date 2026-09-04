@@ -159,7 +159,7 @@ def test_promote_blocked_without_evidence(tmp_path: Path):
 
 def test_native_production_and_explorer_role():
     spec = next(t for t in NATIVE_TOOL_SPECS if t["name"] == "production")
-    assert "empty systems map" in spec["description"]
+    assert "Empty systems map" in spec["description"]
     assert "production" in tools_for_role("verify")
     assert "production" in tools_for_role("explorer")
     assert "production" in tools_for_role("coder")
