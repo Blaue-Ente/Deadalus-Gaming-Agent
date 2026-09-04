@@ -93,8 +93,9 @@ Data lives under `$DAEDALUS_DATA` (default `data/daedalus/` on the machine, `%LO
 | Chat (Bulgarian / English) | Studio `/` · `POST /api/v1/daedalus/chat` |
 | Files and projects | Playground `playground/projects/{slug}` |
 | Shell | Studio Shell · `POST /api/v1/daedalus/shell` (jail, secrets stripped from env) |
-| Native tools | `read_file`, `write_file`, `run_command`, `web_search`, `web_fetch`, `web_read`, `generate_image`, `remember`, `code_search`, `browser`, `mcp_call`, `spawn_subagent`, `playtest`, `play_lab`, `dissect_game`, `engine`, `world`, `git_forge` |
+| Native tools | `read_file`, `write_file`, `run_command`, `web_search`, `web_fetch`, `web_read`, `generate_image`, `remember`, `code_search`, `browser`, `mcp_call`, `spawn_subagent`, `playtest`, `play_lab`, `dissect_game`, `engine`, `world`, `assets`, `skill`, `production`, `git_forge` |
 | MCP | Studio → **Свързаност** (`$DAEDALUS_DATA/mcp.json` + `secrets.env`) |
+| Honesty suite | `python -m daedalus.game_agent_bench` · `GET /api/v1/daedalus/bench` — this harness, not a vendor bake-off |
 | Local LLM | Studio **wardrobe** — hardware profile + Ollama pull; or `DAEDALUS_PROVIDER=ollama` |
 | Offline kit | `DAEDALUS_OFFLINE=1` / Studio toggle — no search/images; local model + capsules still work |
 | Sub-agents | worker slots **and** `spawn_subagent` (files + shell, jailed) |
@@ -113,7 +114,7 @@ Data lives under `$DAEDALUS_DATA` (default `data/daedalus/` on the machine, `%LO
 | Windows app | Start Menu **Daedalus** (WebView2 / Tk) |
 | Evolution | optional idle gardener; patches still wait for Approve |
 
-Studio tab **World** shows Reach / playtest / MCP / dissection.
+Studio tab **World** shows Reach / playtest / MCP / dissection / honesty suite.
 
 ---
 

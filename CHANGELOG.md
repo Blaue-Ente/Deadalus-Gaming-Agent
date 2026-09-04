@@ -12,6 +12,9 @@ The version in `pyproject.toml` is the source of truth for the package.
 - **Skill memory** — catalog (name + description) plus at most one SKILL.md body per turn. `draft_from_failure` / `draft_from_success` write pending JSON; they stay out of the next prompt until owner Approve in Studio **Уроци**. Native `skill` is catalog/load/pending only — the agent cannot approve itself.
 - **Hard-job slices** — playground work that is already multi-file keeps a job ledger (`original ask`, acceptance, named artifacts) under `$DAEDALUS_DATA/jobs/`. `spawn_subagent` takes `role=explorer|coder|verify` (explorer/verify cannot write), injects only the asked artifacts, and refuses `TASK_COMPLETE` that contradicts a failure. Definition of Done blocks "готово" while slices remain or the reply admits it did not finish. Whisper chat and greenfield playable slices are unchanged.
 
+### Games
+
+- **Honesty suite** — `python -m daedalus.game_agent_bench` (and `GET /api/v1/daedalus/bench`) runs in-process checks against this harness: skip is not a playtest, a racer “ship” is not a store claim, empty world/systems JSON fail closed, Unity without an Editor is an honest refuse, explorer cannot write. Results may land under `$DAEDALUS_DATA/bench/`. This is not a vendor bake-off.
 - **Unity MCP or honest refuse** — `engine` on a Unity project talks to `DAEDALUS_UNITY_MCP` (owner-installed local Editor plugin) or `UNITY_PATH` batchmode (import is not Play). Without either it returns an honest non-promise. We do not vendor Unity. Gate `unity-check` does not block guided racing.
 - **Production layer** — M0–M3 stays a labelled prototype. `design/systems.json` plus persist and pause/settings is the production layer. Native `production`. Gate `production-check` does not block guided racing before files exist. Empty systems JSON is not a production layer. Store-ready / готово за стора on a prototype fails (a racer “ship” mesh does not).
 - **World kit runtime** — epic projects ship a playable campaign slice: save `{version, region, act, flags, inventory, quests}`, `world/quests.json`, `characters/*.dialogue.json`, gated `levels/graph.json`, and `src/world/runtime.js`. `world({action: prove})` walks talk → flag → quest → travel. Hollow map/graph JSON fails. Gate `world-check` does not block guided builds that have no files yet.
@@ -44,7 +47,7 @@ The version in `pyproject.toml` is the source of truth for the package.
 ### Delivery
 
 - GitLab CI: mypy on the new kernel modules; pytest prints coverage (no percentage gate).
-- `uv.lock` is committed; CI runs `uv lock --check`. GameAgentBench stays a gate list — this repo does not ship a vendor bake-off.
+- `uv.lock` is committed; CI runs `uv lock --check`.
 
 ## [0.3.6] — 2026-08-29
 
