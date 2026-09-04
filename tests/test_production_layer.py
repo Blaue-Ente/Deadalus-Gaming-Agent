@@ -201,8 +201,10 @@ def test_http_production_and_studio_copy(harness_tmp):
     client = TestClient(app)
     home = client.get("/")
     assert home.status_code == 200
-    assert "прототип" in home.text
-    assert "продукционен слой" in home.text
+    assert "prototype" in home.text
+    assert "production layer" in home.text
+    i18n = client.get("/static/i18n.js")
+    assert "прототип" in i18n.text
     js = client.get("/static/studio.js")
     assert "/production" in js.text
 

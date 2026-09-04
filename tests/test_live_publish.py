@@ -133,7 +133,9 @@ def test_http_and_studio(live_tmp, monkeypatch):
     assert catalog.status_code == 200
     assert "chain" in catalog.json()
     home = client.get("/")
-    assert "Наживо" in home.text
+    assert "Live" in home.text
+    i18n = client.get("/static/i18n.js")
+    assert "Наживо" in i18n.text
     created = client.post(
         "/api/v1/playground/projects",
         json={"name": "Live Lab", "kind": "static"},

@@ -134,8 +134,11 @@ def test_atelier_http(harness_tmp):
     assert off.json()["offline"] is True
 
     home = client.get("/")
-    assert "Гардероб" in home.text
-    assert "Капсула" in home.text
+    assert "Wardrobe" in home.text
+    assert "Capsule" in home.text
+    i18n = client.get("/static/i18n.js")
+    assert "Гардероб" in i18n.text
+    assert "Капсула" in i18n.text
 
     addons = client.get("/api/v1/daedalus/addons")
     assert addons.status_code == 200
