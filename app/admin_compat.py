@@ -1755,6 +1755,30 @@ async def hybrid_export(slug: str):
         return JSONResponse({"ok": False, "error": str(exc)[:400]}, status_code=400)
 
 
+@router.post("/daedalus/playground/api/projects/{slug}/capacitor/init")
+async def capacitor_init(slug: str, request: Request):
+    from daedalus.playground_capacitor import init_capacitor
+    body = await _body(request)
+    try:
+        return JSONResponse(await init_capacitor(
+            slug,
+            bundle_id=(body.get("bundle_id") or "").strip(),
+            name=(body.get("name") or "").strip(),
+            with_ionic=bool(body.get("with_ionic")),
+        ))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)[:400]}, status_code=400)
+
+
+@router.post("/daedalus/playground/api/projects/{slug}/capacitor/export")
+async def capacitor_export(slug: str):
+    from daedalus.playground_capacitor import export_capacitor
+    try:
+        return JSONResponse(await export_capacitor(slug))
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)[:400]}, status_code=400)
+
+
 @router.post("/daedalus/playground/api/clone")
 async def playground_clone(request: Request):
     from daedalus.playground_git_push import clone_project_remote, forge_error_hint

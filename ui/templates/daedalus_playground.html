@@ -249,7 +249,7 @@
                 <option value="godot_3d">Godot 3D / puzzle room</option>
                 <option value="open_world">Open World</option>
                 <option value="multiplayer">Multiplayer</option>
-                <option value="hybrid_mobile">Hybrid Web → iOS</option>
+                <option value="hybrid_mobile">Hybrid Web → iOS + Android</option>
                 <option value="backend_api">Game Backend API</option>
               </select>
             </div>
@@ -263,8 +263,8 @@
               <p class="text-[9px] text-amber-200/70 leading-relaxed"><span data-i18n="pg.unityAfter">After create: Init Unity from the project menu. Open the folder in Unity Hub 2022.3 LTS. Local build:</span> <code>studio/unity/build-local.sh</code></p>
             </div>
             <div id="np-hybrid-panel" class="hidden space-y-2 pt-1 border-t border-amber-800/30">
-              <div class="text-[10px] font-bold text-emerald-300">📱 Hybrid Web → iOS</div>
-              <p class="text-[9px] text-amber-200/70 leading-relaxed">Framework7 + Vite prototype → PakePlus-iOS. Pipeline: <code>npm run hybrid:build</code> → PakePlus on a Mac.</p>
+              <div class="text-[10px] font-bold text-emerald-300" data-i18n="pg.hybridPanelTitle">📱 Hybrid Web → iOS + Android</div>
+              <p class="text-[9px] text-amber-200/70 leading-relaxed" data-i18n="pg.hybridPanelBody">Same Vite/canvas game → Capacitor (iOS + Android). Ionic UI is optional for menus/settings, not the game loop. Framework7 + PakePlus stays an iOS-only fallback.</p>
             </div>
             <div id="np-firebase-panel" class="space-y-2 pt-1 border-t border-amber-800/30">
               <div class="text-[10px] font-bold text-orange-300">🔥 Firebase (project-specific)</div>
@@ -274,7 +274,7 @@
             </div>
             <details class="text-[10px] text-amber-200/80">
               <summary class="cursor-pointer text-amber-300 font-mono">🔗 Integrations catalog</summary>
-              <p class="mt-1 leading-relaxed">Firebase iOS, Framework7, PakePlus, LiveContainer, ios-app-signer, UnityGameFramework. See studio/integrations/ after the build.</p>
+              <p class="mt-1 leading-relaxed" data-i18n="pg.integrationsSee">Firebase iOS, Capacitor, Ionic (optional UI), Framework7, PakePlus, LiveContainer, ios-app-signer, UnityGameFramework. See studio/integrations/ after the build.</p>
               <p class="mt-1 text-red-300/80">⚠️ ThrowTheSwitch/Unity = Catch2 (C++ tests), NOT a game engine. unitycontainer/unity = PHP.</p>
             </details>
           </div>
@@ -596,8 +596,10 @@
             <button onclick="initUnityForPlan()" id="plan-unity-init-btn" class="hidden px-3 py-2 rounded bg-indigo-800 hover:bg-indigo-700 text-indigo-100 text-xs transition">🎮 Init Unity</button>
             <button onclick="generateUnityBuildScripts()" id="plan-unity-build-btn" class="hidden px-3 py-2 rounded bg-slate-700 hover:bg-slate-600 text-slate-100 text-xs transition">🛠 Unity Build Scripts</button>
             <button onclick="exportUnityBridge()" id="plan-unity-export-btn" class="hidden px-3 py-2 rounded bg-amber-800 hover:bg-amber-700 text-amber-100 text-xs transition">📦 Export Unity Bridge</button>
-            <button onclick="initHybridForPlan()" id="plan-hybrid-init-btn" class="hidden px-3 py-2 rounded bg-emerald-800 hover:bg-emerald-700 text-emerald-100 text-xs transition">📱 Init Hybrid F7</button>
-            <button onclick="exportHybridForPlan()" id="plan-hybrid-export-btn" class="hidden px-3 py-2 rounded bg-teal-800 hover:bg-teal-700 text-teal-100 text-xs transition">📦 Export PakePlus</button>
+            <button onclick="initHybridForPlan()" id="plan-hybrid-init-btn" class="hidden px-3 py-2 rounded bg-emerald-800 hover:bg-emerald-700 text-emerald-100 text-xs transition" data-i18n="pg.hybridInit">📱 Init Hybrid F7</button>
+            <button onclick="exportHybridForPlan()" id="plan-hybrid-export-btn" class="hidden px-3 py-2 rounded bg-teal-800 hover:bg-teal-700 text-teal-100 text-xs transition" data-i18n="pg.hybridExport">📦 Export PakePlus</button>
+            <button onclick="initCapacitorForPlan()" id="plan-capacitor-init-btn" class="hidden px-3 py-2 rounded bg-sky-800 hover:bg-sky-700 text-sky-100 text-xs transition" data-i18n="pg.capInit">⚡ Init Capacitor</button>
+            <button onclick="exportCapacitorForPlan()" id="plan-capacitor-export-btn" class="hidden px-3 py-2 rounded bg-sky-900 hover:bg-sky-800 text-sky-100 text-xs transition" data-i18n="pg.capExport">📦 Export Capacitor</button>
             <button onclick="configureFirebaseForPlan()" id="plan-firebase-btn" class="hidden px-3 py-2 rounded bg-orange-800 hover:bg-orange-700 text-orange-100 text-xs transition">🔥 Firebase Config</button>
             <button onclick="resetPlan()" class="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs transition" data-i18n="pg.newPlan">↺ New plan</button>
           </div>
@@ -1154,6 +1156,10 @@ function projectOverflowMenu(p, isStatic, isPublishable, running) {
     const pubLabel = p.kind === 'expo' ? '📦 Export' : (p.kind === 'vite' || p.kind === 'vite-react' ? '🔨 Build & Pub' : t('pg.publish'));
     items.push(`<button onclick="publishProj('${p.slug}')" class="pg-menu-item">${pubLabel}</button>`);
   }
+  if (p.kind === 'vite' || p.kind === 'vite-react' || p.kind === 'static') {
+    items.push(`<button onclick="initCapacitorShip('${p.slug}').then(r=>alert(r.skipped?(r.reason||'skipped'):('Capacitor:\\n'+(r.written||[]).join('\\n')))).catch(e=>alert(e.message))" class="pg-menu-item">${t('pg.capInit')}</button>`);
+    items.push(`<button onclick="exportCapacitorShip('${p.slug}').then(r=>alert((r.manifest&&r.manifest.next_steps||[]).join('\\n'))).catch(e=>alert(e.message))" class="pg-menu-item">${t('pg.capExport')}</button>`);
+  }
   if (p.kind === 'expo') {
     items.push(`<button onclick="runExpoTunnel('${p.slug}')" class="pg-menu-item">📱 Tunnel+QR</button>`);
     items.push(`<button onclick="showQr('${p.slug}')" class="pg-menu-item">🔳 QR</button>`);
@@ -1456,6 +1462,23 @@ async function exportHybridIos(slug) {
   return r;
 }
 
+async function initCapacitorShip(slug, withIonic) {
+  const body = { ..._firebaseApiBody() };
+  if (withIonic) body.with_ionic = true;
+  const r = await api(`/admin/daedalus/playground/api/projects/${slug}/capacitor/init`, {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) throw new Error(r.error || 'capacitor init failed');
+  return r;
+}
+
+async function exportCapacitorShip(slug) {
+  const r = await api(`/admin/daedalus/playground/api/projects/${slug}/capacitor/export`, { method: 'POST' });
+  if (!r.ok) throw new Error(r.error || 'capacitor export failed');
+  return r;
+}
+
 async function generateUnityBuildScripts(slug) {
   const r = await api(`/admin/daedalus/playground/api/projects/${slug}/unity/generate-build-scripts`, {
     method: 'POST',
@@ -1551,6 +1574,7 @@ async function createAndPlan() {
     }
     if (isBuildStudio() && studioPreset() === 'hybrid_mobile') {
       try { await initHybridMobile(r.project.slug); } catch (e) { console.warn('hybrid init', e); }
+      try { await initCapacitorShip(r.project.slug); } catch (e) { console.warn('capacitor init', e); }
     }
     const autoPrompt = prompt || ($('np-desc')?.value || '').trim();
     hideCreate();
@@ -1720,6 +1744,12 @@ function _updateStudioUi(plan) {
   const showHybrid = studio && (preset === 'hybrid_mobile' || $('np-kind')?.value === 'vite');
   if (hybridInit) hybridInit.classList.toggle('hidden', !showHybrid);
   if (hybridExport) hybridExport.classList.toggle('hidden', !showHybrid);
+  const capInit = $('plan-capacitor-init-btn');
+  const capExport = $('plan-capacitor-export-btn');
+  const kindNow = $('np-kind')?.value || '';
+  const showCap = ['vite', 'vite-react', 'static'].includes(kindNow) || preset === 'hybrid_mobile';
+  if (capInit) capInit.classList.toggle('hidden', !showCap);
+  if (capExport) capExport.classList.toggle('hidden', !showCap);
   const fbBtn = $('plan-firebase-btn');
   if (fbBtn) fbBtn.classList.toggle('hidden', !studio);
 }
@@ -1730,11 +1760,16 @@ async function initHybridForPlan() {
   if (btn) { btn.disabled = true; btn.textContent = '⏳…'; }
   try {
     const r = await initHybridMobile(_planSlug);
-    alert('Hybrid init OK:\n' + (r.written || []).join('\n'));
+    let extra = '';
+    try {
+      const cap = await initCapacitorShip(_planSlug);
+      extra = '\nCapacitor:\n' + (cap.written || []).join('\n');
+    } catch (e) { extra = '\nCapacitor: ' + e.message; }
+    alert('Hybrid init OK:\n' + (r.written || []).join('\n') + extra);
   } catch (e) {
     alert('Hybrid init: ' + e.message);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '📱 Init Hybrid F7'; }
+    if (btn) { btn.disabled = false; btn.textContent = t('pg.hybridInit'); }
   }
 }
 
@@ -1748,7 +1783,40 @@ async function exportHybridForPlan() {
   } catch (e) {
     alert('Hybrid export: ' + e.message);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '📦 Export PakePlus'; }
+    if (btn) { btn.disabled = false; btn.textContent = t('pg.hybridExport'); }
+  }
+}
+
+async function initCapacitorForPlan() {
+  if (!_planSlug) return;
+  const btn = $('plan-capacitor-init-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳…'; }
+  try {
+    const r = await initCapacitorShip(_planSlug);
+    if (r.skipped) {
+      alert(r.reason || 'Capacitor skipped for this kind');
+    } else {
+      alert('Capacitor init:\n' + (r.written || []).join('\n') + '\n' + (r.note || ''));
+    }
+  } catch (e) {
+    alert('Capacitor init: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = t('pg.capInit'); }
+  }
+}
+
+async function exportCapacitorForPlan() {
+  if (!_planSlug) return;
+  const btn = $('plan-capacitor-export-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳…'; }
+  try {
+    const r = await exportCapacitorShip(_planSlug);
+    const man = r.manifest || {};
+    alert('Capacitor export:\n' + (man.next_steps || []).join('\n'));
+  } catch (e) {
+    alert('Capacitor export: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = t('pg.capExport'); }
   }
 }
 

@@ -521,6 +521,12 @@ async def start_game_studio_project(
             init_notes.append("hybrid_mobile_init")
         except Exception as exc:
             init_notes.append(f"hybrid_init_skipped:{exc}")
+        try:
+            from .playground_capacitor import init_capacitor
+            await init_capacitor(project_slug)
+            init_notes.append("capacitor_init")
+        except Exception as exc:
+            init_notes.append(f"capacitor_init_skipped:{exc}")
 
     proj = await pg.get_project(project_slug)
     plan_description = (

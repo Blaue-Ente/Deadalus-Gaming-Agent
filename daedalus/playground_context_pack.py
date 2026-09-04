@@ -182,7 +182,7 @@ def _game_design(preset: str, description: str) -> str:
         "platformer": "Platformer / runner",
         "open_world": "Open world (phased MVP)",
         "multiplayer": "Multiplayer-ready architecture",
-        "hybrid_mobile": "Hybrid web → native iOS",
+        "hybrid_mobile": "Hybrid web → iOS + Android (Capacitor)",
         "backend_api": "Game backend services",
         "custom": "Custom genre from description",
     }
