@@ -1,39 +1,39 @@
 {% extends "_shell.html" %}
 {% set page = 'app_builder' %}
 {% set daedalus_tab = 'playground' %}
-{% block title %}App Builder — Дедал{% endblock %}
-{% block eyebrow %}Дедал · Build · Test · Publish{% endblock %}
-{% block heading %}App Builder{% endblock %}
-{% block mob_title %}App Builder{% endblock %}
+{% block title %}Playground — Daedalus{% endblock %}
+{% block eyebrow %}<span data-i18n="pg.eyebrow">Daedalus · Build · Test · Publish</span>{% endblock %}
+{% block heading %}<span data-i18n="pg.heading">Playground</span>{% endblock %}
+{% block mob_title %}Playground{% endblock %}
 {% block content %}
 <div class="max-w-6xl mx-auto">
 {% include "_daedalus_nav.html" %}
 
-  <p class="text-gray-400 text-sm mb-4">Строй · тествай в sandbox · публикувай · push към GitHub/GitLab · PR / MR</p>
+  <p class="text-gray-400 text-sm mb-4" data-i18n="pg.intro">Build · test in sandbox · publish · push to GitHub/GitLab · PR / MR</p>
 
   <!-- GitHub / connectors status -->
   <div id="gh-status" class="mb-4 text-xs font-mono px-3 py-2 rounded border border-gray-700 bg-gray-900 text-gray-400 flex flex-wrap items-center justify-between gap-2">
-    <span id="gh-status-text">GitHub: проверка…</span>
-    <a href="/admin/daedalus/connectors" class="text-indigo-400 hover:text-indigo-300 shrink-0">🔗 Свързаност</a>
+    <span id="gh-status-text" data-i18n="pg.ghChecking">GitHub: checking…</span>
+    <a href="/admin/daedalus/connectors" class="text-argos-accent hover:text-argos-accent2 shrink-0" data-i18n="pg.connectors">Connectors</a>
   </div>
 
   <!-- Actions: primary + overflow -->
   <div class="flex flex-wrap items-center gap-2 mb-6">
-    <button onclick="openCreateWizard()" class="px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white">+ Нов проект</button>
-    <button onclick="openReviveModal()" class="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white">⬇ Съживи от Git</button>
-    <a href="/admin/daedalus/game-studio" class="px-4 py-2 rounded-lg text-sm font-medium bg-purple-600 hover:bg-purple-500 text-white">🎮 Game Studio</a>
-    <button onclick="openSkillCreator()" class="px-4 py-2 rounded-lg text-sm font-medium bg-amber-600 hover:bg-amber-500 text-white">📝 Skill Creator</button>
+    <button onclick="openCreateWizard()" class="px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white" data-i18n="pg.newProject">+ New project</button>
+    <button onclick="openReviveModal()" class="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white" data-i18n="pg.revive">Revive from Git</button>
+    <a href="/admin/daedalus/game-studio" class="px-4 py-2 rounded-lg text-sm font-medium bg-purple-600 hover:bg-purple-500 text-white" data-i18n="pg.gameStudio">Game Studio</a>
+    <button onclick="openSkillCreator()" class="px-4 py-2 rounded-lg text-sm font-medium bg-amber-600 hover:bg-amber-500 text-white" data-i18n="pg.skillCreator">Skill Creator</button>
     <button onclick="loadProjects()" class="px-3 py-2 rounded-lg text-sm font-medium bg-gray-700 hover:bg-gray-600 text-gray-200" title="Обнови списъка">↻</button>
     <div class="relative ml-auto">
       <button onclick="togglePgMenu()" id="pg-menu-btn"
-        class="px-3 py-2 rounded-lg text-sm font-medium bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700">⋮ Още</button>
+        class="px-3 py-2 rounded-lg text-sm font-medium bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700" data-i18n="pg.more">More</button>
       <div id="pg-overflow-menu" class="hidden absolute right-0 top-full mt-1 z-30 min-w-[11rem] py-1 rounded-lg border border-gray-700 bg-gray-900 shadow-xl">
-        <button onclick="hidePgMenu(); showClone();" class="block w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-800">⬇ Clone GitHub/GitLab</button>
-        <button onclick="hidePgMenu(); showLearning();" class="block w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-800">📖 Учене</button>
-        <button onclick="hidePgMenu(); openSkillCreator();" class="block w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-800">📝 Skill Creator</button>
-        <button onclick="hidePgMenu(); showPublishedPanel();" class="block w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-800">📋 Публикувани /apps</button>
+        <button onclick="hidePgMenu(); showClone();" class="block w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-800" data-i18n="pg.clone">Clone GitHub/GitLab</button>
+        <button onclick="hidePgMenu(); showLearning();" class="block w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-800" data-i18n="pg.learning">Learning</button>
+        <button onclick="hidePgMenu(); openSkillCreator();" class="block w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-800" data-i18n="pg.skillCreator">Skill Creator</button>
+        <button onclick="hidePgMenu(); showPublishedPanel();" class="block w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-800" data-i18n="pg.published">Published /apps</button>
         <a href="/apps/" target="_blank" class="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-800">↗ /apps</a>
-        <a href="/admin/daedalus" class="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-800">💬 Дедал Chat</a>
+        <a href="/admin/daedalus" class="block px-4 py-2 text-sm text-gray-200 hover:bg-gray-800" data-i18n="pg.classicChat">Classic chat</a>
       </div>
     </div>
   </div>

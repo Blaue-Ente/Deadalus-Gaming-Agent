@@ -233,7 +233,9 @@ def test_evolution_http_and_studio(evo_tmp, monkeypatch):
     assert cyc.json().get("ok") is True
 
     home = client.get("/")
-    assert "Еволюция" in home.text
+    assert "Evolution" in home.text
+    i18n = client.get("/static/i18n.js")
+    assert "Еволюция" in i18n.text
 
     caps = client.get("/capabilities")
     assert "evolution" in caps.json()["capabilities"]

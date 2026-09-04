@@ -168,7 +168,7 @@ def test_http_unity_and_studio_copy(harness_tmp):
     client = TestClient(app)
     home = client.get("/")
     assert home.status_code == 200
-    assert "не Editor в този облак" in home.text or "Hub или MCP" in home.text
+    assert "not Editor in this cloud" in home.text or "Hub or MCP" in home.text
     js = client.get("/static/studio.js")
     assert "/unity" in js.text
 

@@ -5,12 +5,11 @@
 
 <div class="flex flex-1 min-h-screen">
 
-  <aside id="sidebar"
-    class="fixed inset-y-0 left-0 z-40 w-64 border-r border-argos-border bg-argos-panel/95 backdrop-blur
+  <aside id="sidebar" class="dx-shell-sidebar
+    fixed inset-y-0 left-0 z-40 w-64 border-r border-argos-border bg-argos-panel/95 backdrop-blur
            px-4 py-6 flex flex-col overflow-y-auto
            -translate-x-full
-           transition-transform duration-200 ease-in-out
-           md:static md:translate-x-0 md:w-60 md:shrink-0">
+           transition-transform duration-200 ease-in-out">
 
     <div class="flex items-center justify-between mb-8">
       <a href="/admin/daedalus/hub" class="flex items-center gap-2">
@@ -20,11 +19,10 @@
           </svg>
         </div>
         <div>
-          <div class="text-[10px] uppercase tracking-[0.25em] text-argos-dim">Дедал</div>
-          <div class="text-sm font-semibold text-white -mt-0.5">Daedalus</div>
+          <div class="text-sm font-semibold text-white" data-i18n="shell.brand">Daedalus</div>
         </div>
       </a>
-      <button onclick="closeSidebar()" class="md:hidden text-argos-dim hover:text-white p-1 -mr-1 rounded" aria-label="Затвори меню">
+      <button onclick="closeSidebar()" class="text-argos-dim hover:text-white p-1 -mr-1 rounded" data-i18n-aria="shell.close" aria-label="Close menu">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
         </svg>
@@ -33,56 +31,26 @@
 
     <nav class="text-sm flex-1">
       {% set page = page|default('daedalus_hub') %}
-
-      <div class="px-3 pt-1 pb-1.5 text-[9px] uppercase tracking-[0.22em] text-slate-500 font-mono select-none">Product</div>
       <div class="space-y-0.5 mb-3">
         <a href="/" onclick="closeSidebar()" class="flex items-center gap-2 px-3 py-2 rounded text-slate-300 hover:bg-argos-panel2 border border-transparent">
           <span class="w-1.5 h-1.5 rounded-full shrink-0 bg-argos-dim"></span>
-          Разговор
-        </a>
-      </div>
-
-      <div class="px-3 pt-1 pb-1.5 text-[9px] uppercase tracking-[0.22em] text-emerald-600 font-mono select-none">Дедал</div>
-      <div class="space-y-0.5 mb-3">
-        <a href="/admin/daedalus/hub" onclick="closeSidebar()" class="flex items-center gap-2 px-3 py-2 rounded {% if page == 'daedalus_hub' %}bg-argos-accent2/10 text-argos-accent2 border border-argos-accent2/30{% else %}text-slate-300 hover:bg-argos-panel2 border border-transparent{% endif %}">
-          <span class="w-1.5 h-1.5 rounded-full shrink-0 {% if page == 'daedalus_hub' %}bg-argos-accent2{% else %}bg-argos-dim{% endif %}"></span>
-          Hub
-        </a>
-        <a href="/admin/daedalus" onclick="closeSidebar()" class="flex items-center gap-2 px-3 py-2 rounded {% if page == 'daedalus' %}bg-argos-accent2/10 text-argos-accent2 border border-argos-accent2/30{% else %}text-slate-300 hover:bg-argos-panel2 border border-transparent{% endif %}">
-          <span class="w-1.5 h-1.5 rounded-full shrink-0 {% if page == 'daedalus' %}bg-argos-accent2{% else %}bg-argos-dim{% endif %}"></span>
-          Стар чат
+          <span data-i18n="nav.studio">Studio</span>
         </a>
         <a href="/admin/daedalus/playground" onclick="closeSidebar()" class="flex items-center gap-2 px-3 py-2 rounded {% if page == 'app_builder' %}bg-argos-accent2/10 text-argos-accent2 border border-argos-accent2/30{% else %}text-slate-300 hover:bg-argos-panel2 border border-transparent{% endif %}">
           <span class="w-1.5 h-1.5 rounded-full shrink-0 {% if page == 'app_builder' %}bg-argos-accent2{% else %}bg-argos-dim{% endif %}"></span>
-          Playground
+          <span data-i18n="nav.playground">Playground</span>
         </a>
         <a href="/admin/daedalus/game-studio" onclick="closeSidebar()" class="flex items-center gap-2 px-3 py-2 rounded {% if page == 'game_studio' %}bg-argos-accent2/10 text-argos-accent2 border border-argos-accent2/30{% else %}text-slate-300 hover:bg-argos-panel2 border border-transparent{% endif %}">
           <span class="w-1.5 h-1.5 rounded-full shrink-0 {% if page == 'game_studio' %}bg-argos-accent2{% else %}bg-argos-dim{% endif %}"></span>
-          Game Studio
+          <span data-i18n="nav.gameStudio">Game Studio</span>
         </a>
         <a href="/admin/daedalus/proposals" onclick="closeSidebar()" class="flex items-center gap-2 px-3 py-2 rounded {% if page == 'proposals' %}bg-argos-accent2/10 text-argos-accent2 border border-argos-accent2/30{% else %}text-slate-300 hover:bg-argos-panel2 border border-transparent{% endif %}">
           <span class="w-1.5 h-1.5 rounded-full shrink-0 {% if page == 'proposals' %}bg-argos-accent2{% else %}bg-argos-dim{% endif %}"></span>
-          Proposals
-        </a>
-        <a href="/admin/daedalus/skills" onclick="closeSidebar()" class="flex items-center gap-2 px-3 py-2 rounded {% if page == 'skills' %}bg-argos-accent2/10 text-argos-accent2 border border-argos-accent2/30{% else %}text-slate-300 hover:bg-argos-panel2 border border-transparent{% endif %}">
-          <span class="w-1.5 h-1.5 rounded-full shrink-0 {% if page == 'skills' %}bg-argos-accent2{% else %}bg-argos-dim{% endif %}"></span>
-          Умения
+          <span data-i18n="nav.proposals">Proposals</span>
         </a>
         <a href="/admin/daedalus/connectors" onclick="closeSidebar()" class="flex items-center gap-2 px-3 py-2 rounded {% if page == 'daedalus_connectors' %}bg-argos-accent2/10 text-argos-accent2 border border-argos-accent2/30{% else %}text-slate-300 hover:bg-argos-panel2 border border-transparent{% endif %}">
           <span class="w-1.5 h-1.5 rounded-full shrink-0 {% if page == 'daedalus_connectors' %}bg-argos-accent2{% else %}bg-argos-dim{% endif %}"></span>
-          Свързаност
-        </a>
-        <a href="/admin/daedalus/bundles" onclick="closeSidebar()" class="flex items-center gap-2 px-3 py-2 rounded {% if page == 'bundles' %}bg-argos-accent2/10 text-argos-accent2 border border-argos-accent2/30{% else %}text-slate-300 hover:bg-argos-panel2 border border-transparent{% endif %}">
-          <span class="w-1.5 h-1.5 rounded-full shrink-0 {% if page == 'bundles' %}bg-argos-accent2{% else %}bg-argos-dim{% endif %}"></span>
-          Bundles
-        </a>
-      </div>
-
-      <div class="px-3 pt-1 pb-1.5 text-[9px] uppercase tracking-[0.22em] text-emerald-700/80 font-mono select-none">LLM</div>
-      <div class="space-y-0.5 mb-3">
-        <a href="/admin/llm-router" onclick="closeSidebar()" class="flex items-center gap-2 px-3 py-2 rounded {% if page == 'llm_router' %}bg-emerald-500/10 text-emerald-300 border border-emerald-500/30{% else %}text-slate-300 hover:bg-argos-panel2 border border-transparent{% endif %}">
-          <span class="w-1.5 h-1.5 rounded-full shrink-0 {% if page == 'llm_router' %}bg-emerald-400{% else %}bg-argos-dim{% endif %}"></span>
-          LLM status
+          <span data-i18n="nav.setup">Setup</span>
         </a>
       </div>
     </nav>
@@ -95,7 +63,7 @@
   <div class="flex flex-col flex-1 min-w-0">
 
     <header class="md:hidden sticky top-0 z-20 bg-argos-panel/95 backdrop-blur border-b border-argos-border flex items-center justify-between px-4 py-3 shrink-0">
-      <button onclick="openSidebar()" class="text-argos-dim hover:text-white p-1 -ml-1 rounded" aria-label="Меню">
+      <button onclick="openSidebar()" class="text-argos-dim hover:text-white p-1 -ml-1 rounded" data-i18n-aria="shell.menu" aria-label="Menu">
         <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
         </svg>
@@ -106,11 +74,11 @@
             <circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="9"/>
           </svg>
         </div>
-        <span class="text-sm font-semibold text-white truncate">{% block mob_title %}Дедал{% endblock %}</span>
+        <span class="text-sm font-semibold text-white truncate">{% block mob_title %}Daedalus{% endblock %}</span>
       </div>
-      <div class="flex items-center gap-1.5 shrink-0">
-        <span class="w-2 h-2 rounded-full bg-argos-accent2 animate-pulse"></span>
-        <span class="text-[10px] font-mono text-argos-dim">online</span>
+      <div class="dx-lang" role="group" data-i18n-aria="lang.aria" aria-label="Language">
+        <button type="button" data-lang="en" aria-pressed="true">EN</button>
+        <button type="button" data-lang="bg" aria-pressed="false">BG</button>
       </div>
     </header>
 
@@ -120,9 +88,9 @@
           <div class="text-xs uppercase tracking-[0.3em] text-argos-dim">{% block eyebrow %}Coding agent{% endblock %}</div>
           <h1 class="text-2xl font-semibold text-white mt-1">{% block heading %}{% endblock %}</h1>
         </div>
-        <div class="flex items-center gap-2 text-xs font-mono text-argos-dim">
+        <div class="flex items-center gap-3 text-xs font-mono text-argos-dim">
           <span class="w-2 h-2 rounded-full bg-argos-accent2 animate-pulse"></span>
-          daedalus online
+          <span data-i18n="shell.online">daedalus online</span>
         </div>
       </header>
 

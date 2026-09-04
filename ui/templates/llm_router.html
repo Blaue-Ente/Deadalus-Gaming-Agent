@@ -1,11 +1,13 @@
 {% extends "_shell.html" %}
 {% set page = 'llm_router' %}
-{% block title %}LLM — Дедал{% endblock %}
+{% set daedalus_tab = 'config' %}
+{% block title %}LLM — Daedalus{% endblock %}
 {% block eyebrow %}Standalone · Direct LLM{% endblock %}
-{% block heading %}LLM status{% endblock %}
+{% block heading %}LLM{% endblock %}
 {% block mob_title %}LLM{% endblock %}
 
 {% block content %}
+{% include "_daedalus_nav.html" %}
 <div class="bg-argos-panel border border-argos-border rounded-lg p-5 space-y-3 max-w-xl">
   <p class="text-sm text-argos-dim">
     Standalone Daedalus talks to the provider directly (AllToken / OpenRouter / Novita / NVIDIA).
@@ -17,6 +19,6 @@
     <div class="flex justify-between gap-4"><dt class="text-argos-dim">source</dt><dd class="text-white">{{ source or "—" }}</dd></div>
     <div class="flex justify-between gap-4"><dt class="text-argos-dim">key</dt><dd class="text-white">{% if has_key %}set{% else %}missing{% endif %}</dd></div>
   </dl>
-  <p class="text-xs text-argos-dim">Ключовете се пишат в <a href="/admin/daedalus/connectors" class="text-cyan-400 underline">Свързаност</a> или в <code>.env</code>.</p>
+  <p class="text-xs text-argos-dim" data-i18n="llm.keys" data-i18n-html>Keys are set in <a href="/admin/daedalus/connectors" class="text-argos-accent underline">Connectors</a> or in <code>.env</code>.</p>
 </div>
 {% endblock %}

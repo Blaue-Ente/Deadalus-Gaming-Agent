@@ -1,4 +1,4 @@
-"""Studio → Свързаност: secrets.env, mask, recommendations, HTTP."""
+"""Studio → Connectors: secrets.env, mask, recommendations, HTTP."""
 from __future__ import annotations
 
 import os
@@ -114,7 +114,7 @@ def test_connectors_http_save_and_page(conn_tmp):
 
     page = client.get("/admin/daedalus/connectors")
     assert page.status_code == 200
-    assert "Свързаност" in page.text
+    assert "Connectors" in page.text
     assert "secrets.env" in page.text
 
     overview = client.get("/admin/daedalus/connectors/overview")

@@ -73,15 +73,15 @@ def classify(text: str, *, requested: str = "auto") -> dict[str, Any]:
     if tier == "whisper":
         role, budget, min_stages, world = "talk", "cheap", 0, False
         apply_model = True
-        note = "Кратко. Евтин/малък модел. Без строеж, освен ако поискаш."
+        note = "Short. Cheap/small model. No build unless you ask."
     elif tier == "epic":
         role, budget, min_stages, world = "reason", "quality", 12, True
         apply_model = True
-        note = "Епос. По-силен модел за този ход. Свят, глави, персонажи — на парчета."
+        note = "Epic. Stronger model for this turn. World, chapters, characters — in slices."
     else:
         role, budget, min_stages, world = "code", "balanced", 6, False
         apply_model = False
-        note = "Занаят. Остава избраният ти модел. Една играема среза, после разширяване."
+        note = "Craft. Keeps your chosen model. One playable slice, then expand."
 
     decision = {
         "ok": True,
@@ -93,7 +93,7 @@ def classify(text: str, *, requested: str = "auto") -> dict[str, Any]:
         "world_kit": world,
         "apply_model": apply_model,
         "note": note,
-        "label": {"whisper": "Шепот", "craft": "Занаят", "epic": "Епос"}[tier],
+        "label": {"whisper": "Whisper", "craft": "Craft", "epic": "Epic"}[tier],
     }
     decision.update(resolve_model(decision))
     return decision

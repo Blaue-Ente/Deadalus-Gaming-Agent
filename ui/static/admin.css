@@ -1,30 +1,30 @@
-/* Command Center — static utilities (no Tailwind CDN, no webfonts) */
+/* Command Center — static utilities (Studio gold language) */
 :root {
-  --argos-bg: #05070d;
-  --argos-panel: #0b1220;
-  --argos-panel2: #111a2e;
-  --argos-border: #1e2a44;
-  --argos-accent: #22d3ee;
-  --argos-accent2: #34d399;
-  --argos-danger: #f43f5e;
-  --argos-warn: #facc15;
-  --argos-dim: #64748b;
+  --argos-bg: #12100c;
+  --argos-panel: #1a1611;
+  --argos-panel2: #241f18;
+  --argos-border: #3d3428;
+  --argos-accent: #c9a227;
+  --argos-accent2: #e4c56a;
+  --argos-danger: #d26a4a;
+  --argos-warn: #d4a24a;
+  --argos-dim: #8a8070;
 }
 html { height: 100%; }
 *, *::before, *::after {
   box-sizing: border-box;
   border-width: 0;
   border-style: solid;
-  border-color: #1e2a44;
+  border-color: #3d3428;
 }
-body { margin: 0; background-color: #05070d; color: #e2e8f0; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; }
+body { margin: 0; background-color: #12100c; color: #e8e0d4; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; }
 img, svg, video, canvas { display: block; max-width: 100%; }
 button { background: none; }
 a { color: inherit; }
 button, input, select, textarea { font: inherit; }
 @keyframes dx-pulse { 50% { opacity: .45; } }
 @keyframes dx-spin { to { transform: rotate(360deg); } }
-.dx-skel { background: linear-gradient(90deg, #1e2a44, #111a2e, #1e2a44); background-size: 200% 100%; animation: dx-pulse 1.4s ease infinite; }
+.dx-skel { background: linear-gradient(90deg, #3d3428, #241f18, #3d3428); background-size: 200% 100%; animation: dx-pulse 1.4s ease infinite; }
 .min-h-screen { min-height: 100vh; }
 .-ml-1 { margin-left: -0.25rem; }
 .-mr-1 { margin-right: -0.25rem; }
@@ -49,14 +49,14 @@ button, input, select, textarea { font: inherit; }
 .bg-amber-950\/20 { background-color: rgba(69,26,3,0.2); }
 .bg-amber-950\/30 { background-color: rgba(69,26,3,0.3); }
 .bg-amber-950\/40 { background-color: rgba(69,26,3,0.4); }
-.bg-argos-accent { background-color: #22d3ee; }
-.bg-argos-accent2 { background-color: #34d399; }
-.bg-argos-bg { background-color: #05070d; }
-.bg-argos-border { background-color: #1e2a44; }
-.bg-argos-dim { background-color: #64748b; }
-.bg-argos-panel { background-color: #0b1220; }
-.bg-argos-panel2 { background-color: #111a2e; }
-.bg-argos-warn { background-color: #facc15; }
+.bg-argos-accent { background-color: #c9a227; }
+.bg-argos-accent2 { background-color: #e4c56a; }
+.bg-argos-bg { background-color: #12100c; }
+.bg-argos-border { background-color: #3d3428; }
+.bg-argos-dim { background-color: #8a8070; }
+.bg-argos-panel { background-color: #1a1611; }
+.bg-argos-panel2 { background-color: #241f18; }
+.bg-argos-warn { background-color: #d4a24a; }
 .bg-black { background-color: #000000; }
 .bg-black\/40 { background-color: rgba(0,0,0,0.4); }
 .bg-black\/60 { background-color: rgba(0,0,0,0.6); }
@@ -188,7 +188,7 @@ button, input, select, textarea { font: inherit; }
 .border-amber-800\/30 { border-color: rgba(146,64,14,0.3); }
 .border-amber-800\/40 { border-color: rgba(146,64,14,0.4); }
 .border-amber-800\/50 { border-color: rgba(146,64,14,0.5); }
-.border-argos-border { border-color: #1e2a44; }
+.border-argos-border { border-color: #3d3428; }
 .border-b { border-bottom-width: 1px; }
 .border-blue-400\/60 { border-color: rgba(96,165,250,0.6); }
 .border-blue-500\/30 { border-color: rgba(59,130,246,0.3); }
@@ -279,8 +279,8 @@ button, input, select, textarea { font: inherit; }
 .flex-1 { flex: 1 1 0%; }
 .flex-col { flex-direction: column; }
 .flex-wrap { flex-wrap: wrap; }
-.focus\:border-argos-accent:focus { border-color: #22d3ee; }
-.focus\:border-argos-accent2:focus { border-color: #34d399; }
+.focus\:border-argos-accent:focus { border-color: #c9a227; }
+.focus\:border-argos-accent2:focus { border-color: #e4c56a; }
 .focus\:border-cyan-600:focus { border-color: #0891b2; }
 .focus\:border-emerald-500:focus { border-color: #10b981; }
 .focus\:border-purple-600:focus { border-color: #9333ea; }
@@ -304,7 +304,7 @@ button, input, select, textarea { font: inherit; }
 .grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .grid-cols-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .group:hover .group-hover\:opacity-100 { opacity: 1.0; }
-.group:hover .group-hover\:text-argos-accent2 { color: #34d399; }
+.group:hover .group-hover\:text-argos-accent2 { color: #e4c56a; }
 .group:hover .group-hover\:text-argos-warn { color: #facc15; }
 .group:hover .group-hover\:text-cyan-300 { color: #67e8f9; }
 .group:hover .group-hover\:text-emerald-300 { color: #6ee7b7; }
@@ -327,9 +327,9 @@ button, input, select, textarea { font: inherit; }
 .hover\:bg-amber-500:hover { background-color: #f59e0b; }
 .hover\:bg-amber-500\/10:hover { background-color: rgba(245,158,11,0.1); }
 .hover\:bg-amber-700:hover { background-color: #b45309; }
-.hover\:bg-argos-bg:hover { background-color: #05070d; }
-.hover\:bg-argos-panel:hover { background-color: #0b1220; }
-.hover\:bg-argos-panel2:hover { background-color: #111a2e; }
+.hover\:bg-argos-bg:hover { background-color: #12100c; }
+.hover\:bg-argos-panel:hover { background-color: #1a1611; }
+.hover\:bg-argos-panel2:hover { background-color: #241f18; }
 .hover\:bg-blue-500\/10:hover { background-color: rgba(59,130,246,0.1); }
 .hover\:bg-blue-500\/30:hover { background-color: rgba(59,130,246,0.3); }
 .hover\:bg-blue-600:hover { background-color: #2563eb; }
@@ -387,10 +387,10 @@ button, input, select, textarea { font: inherit; }
 .hover\:border-slate-400\/40:hover { border-color: rgba(148,163,184,0.4); }
 .hover\:border-yellow-400\/40:hover { border-color: rgba(250,204,21,0.4); }
 .hover\:border-yellow-600\/50:hover { border-color: rgba(202,138,4,0.5); }
-.hover\:text-argos-accent:hover { color: #22d3ee; }
-.hover\:text-argos-accent2:hover { color: #34d399; }
-.hover\:text-argos-danger:hover { color: #f43f5e; }
-.hover\:text-argos-warn:hover { color: #facc15; }
+.hover\:text-argos-accent:hover { color: #c9a227; }
+.hover\:text-argos-accent2:hover { color: #e4c56a; }
+.hover\:text-argos-danger:hover { color: #d26a4a; }
+.hover\:text-argos-warn:hover { color: #d4a24a; }
 .hover\:text-blue-300:hover { color: #93c5fd; }
 .hover\:text-emerald-300:hover { color: #6ee7b7; }
 .hover\:text-emerald-400:hover { color: #34d399; }
@@ -557,7 +557,7 @@ button, input, select, textarea { font: inherit; }
 .select-none { user-select: none; }
 .self-center { align-self: center; }
 .self-stretch { align-self: stretch; }
-.shadow-glow { box-shadow: 0 0 0 1px rgba(34,211,238,0.25), 0 0 24px rgba(34,211,238,0.15); }
+.shadow-glow { box-shadow: 0 0 0 1px rgba(201,162,39,0.25), 0 0 24px rgba(201,162,39,0.12); }
 .shrink-0 { flex-shrink: 0; }
 .space-y-0\.5 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.125rem; }
 .space-y-1 > :not([hidden]) ~ :not([hidden]) { margin-top: 0.25rem; }
@@ -589,11 +589,11 @@ button, input, select, textarea { font: inherit; }
 .text-amber-400\/50 { color: rgba(251,191,36,0.5); }
 .text-amber-400\/90 { color: rgba(251,191,36,0.9); }
 .text-amber-500\/90 { color: rgba(245,158,11,0.9); }
-.text-argos-accent { color: #22d3ee; }
-.text-argos-accent2 { color: #34d399; }
-.text-argos-danger { color: #f43f5e; }
-.text-argos-dim { color: #64748b; }
-.text-argos-warn { color: #facc15; }
+.text-argos-accent { color: #c9a227; }
+.text-argos-accent2 { color: #e4c56a; }
+.text-argos-danger { color: #d26a4a; }
+.text-argos-dim { color: #8a8070; }
+.text-argos-warn { color: #d4a24a; }
 .text-base { font-size:1rem; line-height:1.5rem; }
 .text-black { color: #000000; }
 .text-blue-300 { color: #93c5fd; }
@@ -783,4 +783,52 @@ button, input, select, textarea { font: inherit; }
   .lg\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 .-translate-x-full { transform: translateX(-100%); }
+
+/* Studio gold opacity utilities used by Command Center templates */
+.bg-argos-accent\/5 { background-color: rgba(201,162,39,0.05); }
+.bg-argos-accent\/10 { background-color: rgba(201,162,39,0.10); }
+.bg-argos-accent\/15 { background-color: rgba(201,162,39,0.15); }
+.bg-argos-accent\/20 { background-color: rgba(201,162,39,0.20); }
+.bg-argos-accent2\/10 { background-color: rgba(228,197,106,0.10); }
+.bg-argos-accent2\/15 { background-color: rgba(228,197,106,0.15); }
+.bg-argos-accent2\/20 { background-color: rgba(228,197,106,0.20); }
+.border-argos-accent\/30 { border-color: rgba(201,162,39,0.30); }
+.border-argos-accent\/40 { border-color: rgba(201,162,39,0.40); }
+.border-argos-accent2\/30 { border-color: rgba(228,197,106,0.30); }
+.border-argos-accent2\/40 { border-color: rgba(228,197,106,0.40); }
+.border-argos-accent2\/50 { border-color: rgba(228,197,106,0.50); }
+.hover\:border-argos-accent2\/50:hover { border-color: rgba(228,197,106,0.50); }
+.hover\:bg-argos-accent\/10:hover { background-color: rgba(201,162,39,0.10); }
+.hover\:bg-argos-accent2\/10:hover { background-color: rgba(228,197,106,0.10); }
+
+.dx-lang {
+  display: inline-flex;
+  flex-shrink: 0;
+  border: 1px solid var(--argos-border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.dx-lang button {
+  border: 0;
+  border-radius: 0;
+  padding: 0.28rem 0.55rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  background: transparent;
+  color: var(--argos-dim);
+  cursor: pointer;
+}
+.dx-lang button[aria-pressed="true"] {
+  background: rgba(201, 162, 39, 0.16);
+  color: var(--argos-accent2);
+}
+.dx-lang--nav {
+  margin-left: auto;
+  align-self: center;
+}
+
+/* Desktop: one chrome — the top tabs. Drawer is mobile only. */
+@media (min-width: 768px) {
+  .dx-shell-sidebar { display: none !important; }
+}
 

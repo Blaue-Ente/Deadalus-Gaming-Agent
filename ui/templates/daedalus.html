@@ -1,19 +1,18 @@
 {% extends "_shell.html" %}
 {% set page = 'daedalus' %}
 {% set daedalus_tab = 'chat' %}
-{% block title %}Дедал · стар чат{% endblock %}
-{% block mob_title %}Дедал{% endblock %}
-{% block eyebrow %}Персистентен агент-инженер{% endblock %}
-{% block heading %}Дедал — Команден център{% endblock %}
-{% block eyebrow_mob %}Персистентен агент-инженер{% endblock %}
-{% block heading_mob %}Дедал{% endblock %}
+{% block title %}Daedalus · classic chat{% endblock %}
+{% block mob_title %}Chat{% endblock %}
+{% block eyebrow %}Persistent coding agent{% endblock %}
+{% block heading %}<span data-i18n="classic.heading">Classic chat</span>{% endblock %}
+{% block eyebrow_mob %}Persistent coding agent{% endblock %}
+{% block heading_mob %}Classic chat{% endblock %}
 
 {% block content %}
 {% include "_daedalus_nav.html" %}
 
-<div class="mb-3 rounded-lg border border-argos-accent/30 bg-argos-accent/5 px-4 py-3 text-sm text-slate-300">
-  Разговорът и строежът са в <a href="/" class="text-argos-accent hover:underline">Studio</a>.
-  Тук остават предложенията, GDD и playground.
+<div class="mb-3 rounded-lg border border-argos-accent/30 bg-argos-accent/5 px-4 py-3 text-sm text-slate-300" data-i18n="classic.banner" data-i18n-html>
+  Chat and build live in <a href="/" class="text-argos-accent hover:underline">Studio</a>. This page keeps proposals, GDD, and playground.
 </div>
 <div class="flex gap-3 relative daedalus-layout" style="min-height:calc(100vh - 200px)">
 
@@ -27,7 +26,7 @@
 
       <!-- Header -->
       <div class="flex items-center justify-between mb-3 shrink-0 gap-2">
-        <h2 class="text-sm font-semibold text-white uppercase tracking-wider">Разговор с Дедал</h2>
+        <h2 class="text-sm font-semibold text-white uppercase tracking-wider">Chat</h2>
         <div class="flex items-center gap-2 text-xs font-mono flex-wrap justify-end">
           <span id="dx-status" class="text-argos-dim">idle</span>
           <span id="dx-duration" class="text-argos-dim"></span>

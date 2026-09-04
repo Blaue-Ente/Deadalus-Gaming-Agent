@@ -1,8 +1,8 @@
 {% extends "_shell.html" %}
 {% set page = 'game_studio' %}
 {% set daedalus_tab = 'game_studio' %}
-{% block title %}Game Studio — Дедал{% endblock %}
-{% block eyebrow %}Дедал · Game Studio · Brainstorm → GDD → Build{% endblock %}
+{% block title %}Game Studio — Daedalus{% endblock %}
+{% block eyebrow %}<span data-i18n="gs.eyebrow">Daedalus · Game Studio · Brainstorm → GDD → Build</span>{% endblock %}
 {% block heading %}Game Studio{% endblock %}
 {% block mob_title %}Game Studio{% endblock %}
 
@@ -10,18 +10,14 @@
 <div class="max-w-5xl mx-auto">
 {% include "_daedalus_nav.html" %}
 
-  <p class="text-gray-400 text-sm mb-4">
-    Отделен поток за игри — brainstorm, GDD lite, Studio milestones, после guided или autopilot build.
-    Racing / F-Zero-клас: Vite + Three.js WebGPU, vertical slice първо, specialist 3D инструменти (виж Arcade craft в GDD).
-    Godot 2D / Metroidvania: kind <code>godot</code>, текстови .tscn/.gd.
-    Godot 3D puzzle room: същият kind, 3D M0 (плоча → врата), headless probe — не Vite.
-    <a href="/admin/daedalus/playground" class="text-indigo-400 hover:text-indigo-300">Playground</a> остава за apps и Revive.
+  <p class="text-gray-400 text-sm mb-4" data-i18n="gs.intro">
+    A separate flow for games — brainstorm, GDD lite, Studio milestones, then guided or autopilot build. Playground stays for apps and Revive.
   </p>
 
   <!-- LIST VIEW -->
   <div id="gs-view-list">
     <div class="flex flex-wrap items-center gap-2 mb-4">
-      <button onclick="showGsWizard()" class="px-4 py-2 rounded-lg text-sm font-medium bg-purple-600 hover:bg-purple-500 text-white">+ Нова игра</button>
+      <button onclick="showGsWizard()" class="px-4 py-2 rounded-lg text-sm font-medium bg-purple-600 hover:bg-purple-500 text-white" data-i18n="gs.newGame">+ New game</button>
       <button onclick="loadGsProjects()" class="px-3 py-2 rounded-lg text-sm bg-gray-700 hover:bg-gray-600 text-gray-200">↻</button>
     </div>
     <div id="gs-project-list" class="space-y-3" data-dx-skeleton="cards:2"></div>
@@ -32,10 +28,10 @@
     <div class="bg-gray-900 border border-purple-600/40 rounded-xl shadow-xl overflow-hidden">
       <div class="flex items-center justify-between p-4 border-b border-gray-800">
         <div>
-          <h3 class="text-white font-semibold">🎮 Нова игра</h3>
+          <h3 class="text-white font-semibold" data-i18n="gs.wizardTitle">New game</h3>
           <p class="text-xs text-gray-500 mt-1">Brainstorm → GDD → платформа → milestones → build</p>
         </div>
-        <button onclick="showGsList()" class="text-gray-400 hover:text-white text-sm">← Към проектите</button>
+        <button onclick="showGsList()" class="text-gray-400 hover:text-white text-sm" data-i18n="gs.backToProjects">← Back to projects</button>
       </div>
       <div class="px-4 pt-3">
         <div class="flex gap-1 text-[10px] font-mono">
@@ -360,7 +356,7 @@ async function loadGsProjects() {
     const r = await api(GS_API + '/projects');
     const projects = r.projects || [];
     if (!projects.length) {
-      el.innerHTML = '<p class="text-gray-500 text-sm">Няма Game Studio проекти. <button onclick="showGsWizard()" class="text-purple-400 hover:underline">Създай първата игра</button></p>';
+      el.innerHTML = '<p class="text-gray-500 text-sm">' + ((window.DaedalusI18n && DaedalusI18n.t('gs.empty')) || 'No Game Studio projects.') + ' <button onclick="showGsWizard()" class="text-purple-400 hover:underline">' + ((window.DaedalusI18n && DaedalusI18n.t('gs.createFirst')) || 'Create the first game') + '</button></p>';
       return;
     }
     el.innerHTML = projects.map(p => {
