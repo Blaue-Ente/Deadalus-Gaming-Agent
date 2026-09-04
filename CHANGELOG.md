@@ -7,7 +7,7 @@ The version in `pyproject.toml` is the source of truth for the package.
 
 ### Games
 
-- **Godot runtime bridge** — when `GODOT_BIN` (or `godot` on PATH) exists, a Godot slice is not done on static files. Autoload `DaedalusBridge` speaks JSON-lines on 127.0.0.1 (`scene_tree`, `inspect_node`, `send_input`, `errors`, `fps_sample`, `screenshot`). Native tool `engine({action, slug})`. A `.tscn` `[connection]` whose method is missing fails DoD without a binary. PNG/GLB get `.import` sidecars; `godot --import` runs before the probe. Optional `DAEDALUS_GODOT_MCP` uses one MCP server from `mcp.json` and falls back to headless. Godot 4.3 API pin lives in `skills/godot_api.md`.
+- **Gameplay bot** — visual web kinds run `playtest/scenario.json` (hold keys → canvas pixel-diff, required win/lose). `requestAnimationFrame` FPS and `performance.memory` are gates when the sample is real; a thin headless sample warns. `playtest/balance.json` is a 1000-round economy/combat sim: a resource that only grows, or a fight that never/always wins, fails. Click-Start is not a playtest. Godot/Unity stay on the engine runner.
 
 ### Agent
 

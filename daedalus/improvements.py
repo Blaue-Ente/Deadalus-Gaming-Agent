@@ -693,6 +693,8 @@ def select_skills(user_message: str, intent: str, hint: str = "") -> list[str]:
         "godot_api": ["kinematicbody", "characterbody2d", "godot 4.3", ".import", "daedalus-bridge"],
         "blender_jobs": ["blender", "bpy", "gltf", "glb export", "armature"],
         "playtest": ["playtest", "тествай играта", "готови ли сме"],
+        "gameplay_bot": ["scenario.json", "gameplay bot", "pixel-diff", "fps budget",
+                         "play-check", "balance.json"],
         "dissection": ["дисекция", "dissect", "мостра", "play lab",
                        "лаборатория", "разглоби играта", "specimen game"],
     }

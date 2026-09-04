@@ -173,7 +173,7 @@ def planner_addendum(kind: str = "", description: str = "") -> str:
         "━━━ ARCADE CRAFT (FM1 / vibe-racer field notes) ━━━",
         "Never 'build me this game'. Hundreds of tiny verified steps. Plan with a strong model; implement cheaply.",
         vertical_slice("", description),
-        "Zero trust: smoke + browser + playtest after each playable slice. Cul-de-sac (same error 3×) → change approach, don't enlarge the prompt.",
+        "Zero trust: smoke + browser + playtest/scenario.json bot after each playable slice. Cul-de-sac (same error 3×) → change approach, don't enlarge the prompt.",
         "FUN is a gate: wayfinding from distance, fail states, visible pickups, skill ceiling. Hammering gas with no risk is not a game.",
         "Web first (Vite + Three.js). Unity/Godot later only if shipping to Steam/stores.",
         "Mobile web: landscape lock, touch stick, load-budget, PWA. FM1 spent versions on this.",
@@ -188,6 +188,7 @@ def planner_addendum(kind: str = "", description: str = "") -> str:
         ])
         for trap in fidelity_traps(description):
             lines.append(f"TRAP: {trap}")
+        lines.append("Keep playtest/scenario.json (hold keys → canvas_changed / lose). Do not delete the racer scaffold's copy.")
     route = asset_route(description)
     lines.append("Assets: " + "; ".join(f"{k}={v}" for k, v in route.items()))
     if kind:

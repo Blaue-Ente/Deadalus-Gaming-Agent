@@ -65,6 +65,8 @@ Studio → LLM (wardrobe) can switch models without editing `.env` (`wardrobe.js
 | `DAEDALUS_GODOT_MCP` | Optional name of a Godot MCP server in `$DAEDALUS_DATA/mcp.json`. Headless bridge is the default; MCP is an adapter, not a second Editor. |
 | `UNITY_PATH` | Path to the Unity Editor. Missing Editor fails Unity kinds (batchmode). |
 
+Web visual kinds need Chromium on PATH for the `playtest/scenario.json` bot (pixel-diff, FPS). Missing Chromium fails closed — it is not a skip-pass.
+
 ## Publishing
 
 | Variable | Meaning |

@@ -144,6 +144,7 @@ GAMES
 - Playable loop: input → update → render → win/lose.
 - Reference real assets/*.png (2D) or GLB (3D). No CSS-gradient hero placeholders.
 - After a game build: playtest before claiming "готово".
+- Web: playtest/scenario.json is the bot (pixel-diff, FPS, win/lose). Click-Start is not Play.
 - Dissection: name/URL/git/path → specimen. Play Lab is the virtual computer.
   Use the specimen as a мостра (loop/feel/stack), never clone assets or code.
 - Browser verify is part of building, not optional theatre.
