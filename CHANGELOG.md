@@ -7,6 +7,7 @@ The version in `pyproject.toml` is the source of truth for the package.
 
 ### Agent
 
+- **Play Lab computers** — local HTTP still always serves the specimen. Optional **SmolVM** guest Chromium (`pip install smolvm`, not vendored) adds a live viewer + CDP so the owner can watch. `DAEDALUS_LAB_BACKEND=auto|local|smolvm|docker`. Explicit `smolvm` without the package fails closed; `auto` falls back to local. Windows guests are not started. Studio World → Watch build.
 - **Connectors** — Studio / Command Center one screen for the brain (Ollama or cloud), GitHub/GitLab, Netlify, MCP servers, mesh, Play Lab, 3D keys. Values go to `$DAEDALUS_DATA/secrets.env` (masked in the UI, never git). Recommendations say which key to set first (OpenRouter/AllToken vs GitLab vs GitHub PAT).
 - **One brain** — activating Ollama (wardrobe, Connectors **Brain**, or `DAEDALUS_PROVIDER=ollama`) routes Studio chat, Command Center, workers, autopilot, and CLI. Workers inherit the local model instead of staying on OpenRouter/NVIDIA defaults. A leftover cloud `DAEDALUS_MODEL` is not sent to Ollama. Studio **Brain** is a compact switcher; keys live on Connectors.
 - **Git forges** — clone GitHub **or** GitLab; playground push honours `provider`; GitHub Pull Request and GitLab Merge Request (`create-upstream-pr`, native tool `git_forge`). Playground menu 🔀 PR / MR.

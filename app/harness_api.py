@@ -149,6 +149,16 @@ class LabInstallBody(BaseModel):
     path: str = Field(..., min_length=1, max_length=500)
 
 
+class ComputerOpenBody(BaseModel):
+    lab_id: str = Field(default="", max_length=80)
+    slug: str = Field(default="", max_length=80)
+    live: bool = True
+
+
+class ComputerStopBody(BaseModel):
+    lab_id: str = Field(default="", max_length=80)
+
+
 class DissectBody(BaseModel):
     source: str = Field(default="", max_length=500)
     slug: str = Field(default="", max_length=80)
@@ -261,6 +271,53 @@ async def labs_stop(lab_id: str) -> dict[str, Any]:
 async def labs_destroy(lab_id: str) -> dict[str, Any]:
     from daedalus.play_lab import destroy_lab
     return destroy_lab(lab_id)
+
+
+@router.get("/api/v1/daedalus/computer")
+async def computer_status() -> dict[str, Any]:
+    from daedalus.computer import live_computers, probe
+    from daedalus.play_lab import probe_host
+    return {
+        "ok": True,
+        "host": probe_host(),
+        "computer": probe(),
+        "live": live_computers(),
+    }
+
+
+@router.post("/api/v1/daedalus/computer")
+async def computer_open(body: ComputerOpenBody) -> dict[str, Any]:
+    from daedalus.computer import open_project_computer
+    from daedalus.play_lab import start_vm
+    try:
+        if (body.lab_id or "").strip():
+            row = start_vm(body.lab_id.strip())
+        elif (body.slug or "").strip():
+            row = open_project_computer(body.slug.strip())
+        else:
+            raise ValueError("lab_id or slug required")
+    except ValueError as extra:
+        raise HTTPException(status_code=400, detail=str(extra)) from extra
+    return {"ok": True, **row}
+
+
+@router.post("/api/v1/daedalus/computer/stop")
+async def computer_stop(body: ComputerStopBody) -> dict[str, Any]:
+    from daedalus.computer_smolvm import stop_all
+    from daedalus.play_lab import stop_vm
+    lab_id = (body.lab_id or "").strip()
+    if lab_id:
+        return stop_vm(lab_id)
+    from daedalus.computer import live_computers
+    stopped: list[str] = []
+    for row in live_computers():
+        lid = str(row.get("lab_id") or "")
+        if lid:
+            stop_vm(lid)
+            stopped.append(lid)
+    if not stopped:
+        stop_all()
+    return {"ok": True, "stopped": stopped}
 
 
 @router.post("/api/v1/daedalus/dissect")

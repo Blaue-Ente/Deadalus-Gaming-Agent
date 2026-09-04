@@ -107,14 +107,14 @@ Data lives under `$DAEDALUS_DATA` (default `data/daedalus/` on the machine, `%LO
 | Games — browser | Phaser, canvas, Vite; 3D arcade / racing → Vite + Three.js WebGPU (`src/racer/`) |
 | Games — Godot 4 | kind `godot`: `.tscn` + GDScript; 2D scaffold or 3D greybox room |
 | Dissection | name / URL / git / Play Lab install → specimen used as a **мостра** (loop, feel, stack — not a clone) |
-| Play Lab | virtual computer for specimens: `$DAEDALUS_DATA/labs/{id}/` + local HTTP; optional Docker |
+| Play Lab | virtual computer: `$DAEDALUS_DATA/labs/{id}/` + local HTTP; optional SmolVM guest browser (live viewer); optional Docker |
 | Meshes | `python -m daedalus.blender_mcp` or `blender_jobs.emit_job` (no `bpy` in the cloud) |
 | Live publish | local `/apps/{slug}/` + Netlify / GitLab Pages / 1-hour preview |
 | Capsule | zip for USB — `GET /api/v1/playground/projects/{slug}/capsule` |
 | Windows app | Start Menu **Daedalus** (WebView2 / Tk) |
 | Evolution | optional idle gardener; patches still wait for Approve |
 
-Studio tab **World** shows Reach / playtest / MCP / dissection / honesty suite.
+Studio tab **World** shows Reach / playtest / MCP / dissection / computer / honesty suite.
 
 ---
 
@@ -343,6 +343,7 @@ After `pip install -e .` the command is `daedalus` (same as `python -m app.cli`)
 | `daedalus ping [--message …]` | One LLM call, no UI |
 | `daedalus models` | Effective provider + probe of local backends |
 | `daedalus desktop [--ui auto\|webview\|tk\|browser\|none]` | Window + local server |
+| `daedalus computer` | Play Lab backends (local HTTP, optional SmolVM) |
 
 ---
 

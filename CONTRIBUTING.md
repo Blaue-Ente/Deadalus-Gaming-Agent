@@ -18,7 +18,8 @@ python3 -m pytest tests -q
 ```
 
 Optional browser verify: `pip install -e ".[playwright]"` and `python -m playwright install chromium`.  
-Optional Windows GUI: `pip install -e ".[gui]"`.
+Optional Windows GUI: `pip install -e ".[gui]"`.  
+Optional Play Lab guest computer: `pip install -e ".[computer]"` then `smolvm setup`.
 
 ## Change rules
 
