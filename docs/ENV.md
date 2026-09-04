@@ -49,6 +49,8 @@ Optional: `OPENROUTER_HTTP_REFERER`, `OPENROUTER_APP_TITLE` (sent on OpenRouter 
 | `DAEDALUS_LOCAL_LLM` | `1` |
 | `OLLAMA_HOST` | `127.0.0.1:11434` |
 | `DAEDALUS_OFFLINE` | `1` — refuse search / Jina / images |
+| `DAEDALUS_LAB_BACKEND` | `auto` / `local` / `smolvm` / `docker` — computer for Play Lab |
+| `DAEDALUS_SMOLVM` | `0` — never boot SmolVM even if installed |
 | `DAEDALUS_LAB_IMAGE` | Docker image for Play Lab VM (default `python:3.12-alpine`) |
 | `DAEDALUS_LAB_PULL` | `1` — allow `docker pull` for the lab image (off by default) |
 | `DAEDALUS_LAB_DOCKER` | `0` — never start a Docker lab; local HTTP only |
