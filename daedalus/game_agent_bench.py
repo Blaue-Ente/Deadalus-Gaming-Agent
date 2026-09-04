@@ -17,7 +17,7 @@ GATES: dict[str, bool] = {
     "one_builder_pipeline": True,
     "quality_gate_default_on": True,
     "playwright_gameplay": True,
-    "gameplay_bot": True,
+    "world_kit_runtime": True,
     "godot_headless_required": True,
     "unity_runner": True,
     "asset_pipeline": True,

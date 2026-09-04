@@ -27,8 +27,8 @@ _SUB_RE = re.compile(
 
 MAX_PARALLEL = 3
 DEFAULT_ROUNDS = 6
-CODER_TOOLS = ("read_file", "list_dir", "write_file", "run_command", "engine")
-EXPLORER_TOOLS = ("read_file", "list_dir", "run_command", "engine")
+CODER_TOOLS = ("read_file", "list_dir", "write_file", "run_command", "engine", "world")
+EXPLORER_TOOLS = ("read_file", "list_dir", "run_command", "engine", "world")
 VERIFY_TOOLS = EXPLORER_TOOLS
 
 _BASE_SYSTEM = """You are a Daedalus sub-agent. You have tools. The master agent
@@ -60,6 +60,7 @@ Use injected artifacts instead of rediscovering the tree.
 _VERIFY_SYSTEM = """
 Role: verify. Read-only for files. Confirm the slice matches the original ask.
 For Godot: engine({action: run|inspect|input|errors, slug}) — files are not Play.
+For campaigns: world({action: prove, slug}) — empty JSON is not a campaign.
 Say TASK_COMPLETE only if evidence supports it; otherwise TASK_BLOCKED.
 """
 

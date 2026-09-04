@@ -184,9 +184,10 @@ def briefing(decision: dict[str, Any]) -> str:
     if tier == "epic":
         return (
             "[EFFORT: epic] Усилие = сложност. Не стъпквай целия свят в един файл. "
-            "Пиши/обнови world/bible.md, world/map.json, characters/, levels/. "
+            "Пиши/обнови world/bible.md, world/map.json, world/quests.json, characters/, levels/. "
             "Една играема среза на ход. Продължавай през journal / resume. "
-            "Definition of Done: loop + поне един регион + персонаж + ниво, не placeholder."
+            "world({action: prove}) трябва да мине — празен JSON не е кампания. "
+            "Definition of Done: loop + регион + персонаж + квест/диалог, не placeholder."
         )
     return (
         "[EFFORT: craft] Една завършена среза: input → update → render → win/lose. "

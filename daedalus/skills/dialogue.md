@@ -12,7 +12,7 @@ description: Branching spoken lines that change flags or map edges. Not a lore d
 2. A choice either (a) goes to another node or (b) sets a flag / opens a map exit.
 3. Lines are short and spoken. One tell, not a lecture.
 4. The character's `want` and `wound` from `characters/{slug}.md` must appear in the graph.
-5. Hook the graph from the level loop — talking is a verb, like shooting or walking.
+5. Hook the graph from the level loop — talking is a verb, like shooting or walking. `world({action: talk, slug, who, pick})` walks it.
 
 **Anti-patterns**:
 - A paragraph of lore on the title screen.

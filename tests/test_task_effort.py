@@ -47,6 +47,7 @@ def test_world_kit_writes_once(tmp_path):
     assert needed("здравей") is False
     written = write(tmp_path, name="Лабиринт", slug="lab", description="епос")
     assert "world/bible.md" in written
+    assert "world/quests.json" in written
     assert (tmp_path / "CAMPAIGN.md").is_file()
     again = write(tmp_path, name="Лабиринт", slug="lab", description="епос")
     assert again == []
@@ -62,6 +63,7 @@ def test_min_stages_epic():
     assert out["effort"] == "epic"
     files = " ".join(" ".join(s.get("files") or []) for s in out["stages"])
     assert "world/bible.md" in files
+    assert "world/quests.json" in files
 
 
 @pytest.fixture
@@ -114,6 +116,7 @@ def test_effort_http_and_studio_assets(isolated, monkeypatch):
     assert world.status_code == 200
     assert world.json()["world"]["ready"] is True
     assert world.json()["world"]["files"]["bible"] is True
+    assert world.json()["world"]["runtime"] is True
     page = client.get("/")
     assert "worldkit" in page.text
     assert "pdesc" in page.text

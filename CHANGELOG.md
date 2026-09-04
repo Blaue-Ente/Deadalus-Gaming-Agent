@@ -7,6 +7,7 @@ The version in `pyproject.toml` is the source of truth for the package.
 
 ### Games
 
+- **World kit runtime** — epic projects ship a playable campaign slice: save `{version, region, act, flags, inventory, quests}`, `world/quests.json`, `characters/*.dialogue.json`, gated `levels/graph.json`, and `src/world/runtime.js`. `world({action: prove})` walks talk → flag → quest → travel. Hollow map/graph JSON fails. Gate `world-check` does not block guided builds that have no files yet.
 - **Gameplay bot** — visual web kinds run `playtest/scenario.json` (hold keys → canvas pixel-diff, required win/lose). `requestAnimationFrame` FPS and `performance.memory` are gates when the sample is real; a thin headless sample warns. `playtest/balance.json` is a 1000-round economy/combat sim: a resource that only grows, or a fight that never/always wins, fails. Click-Start is not a playtest. Godot/Unity stay on the engine runner.
 
 ### Agent
