@@ -236,8 +236,11 @@ def test_http_production_and_studio_copy(harness_tmp):
 
     gs = client.get("/admin/daedalus/game-studio")
     assert gs.status_code == 200
-    assert "Слой" in gs.text
-    assert "не билд за стора" in gs.text
+    assert "Layer" in gs.text
+    assert 'data-i18n="gs.layer"' in gs.text
+    assert "not a store build" in gs.text
+    i18n = client.get("/static/i18n.js")
+    assert "не билд за стора" in i18n.text
 
     caps = client.get("/capabilities")
     assert "production-layer" in caps.json()["capabilities"]

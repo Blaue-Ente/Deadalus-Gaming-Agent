@@ -83,6 +83,10 @@
 let currentFilter = '';
 let currentProposal = null;
 
+function t(key, vars) {
+  return (window.DaedalusI18n && DaedalusI18n.t) ? DaedalusI18n.t(key, vars) : key;
+}
+
 function escHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
@@ -122,17 +126,17 @@ async function loadProposals() {
   try {
     const r = await fetch(url, { credentials: 'same-origin' });
     if (r.status === 303 || r.redirected) {
-      el.innerHTML = '<div class="text-center text-red-400 py-12 text-sm">Сесията е изтекла — <a href="/admin/login" class="underline">влез отново</a>.</div>';
+      el.innerHTML = '<div class="text-center text-red-400 py-12 text-sm">' + t('prop.expired') + '</div>';
       return;
     }
     data = await r.json();
   } catch (e) {
-    el.innerHTML = `<div class="text-center text-red-400 py-12 text-sm">⚠ Грешка: ${escHtml(e.message)}</div>`;
+    el.innerHTML = `<div class="text-center text-red-400 py-12 text-sm">${t('prop.err', {msg: escHtml(e.message)})}</div>`;
     return;
   }
   const list = data.proposals || [];
   if (!list.length) {
-    el.innerHTML = `<div class="text-center text-argos-dim py-12 text-sm">Няма предложения${currentFilter ? ' в категория "' + escHtml(currentFilter) + '"' : ''}.</div>`;
+    el.innerHTML = `<div class="text-center text-argos-dim py-12 text-sm">${t('prop.empty')}${currentFilter ? t('prop.inCat', {cat: escHtml(currentFilter)}) : ''}.</div>`;
     return;
   }
   el.innerHTML = list.map(p => `
@@ -165,7 +169,7 @@ async function openDiff(id) {
   try {
     const r = await fetch(`/admin/daedalus/proposals/${id}`, { credentials: 'same-origin' });
     p = await r.json();
-  } catch(e) { alert('Мрежова грешка: ' + e.message); return; }
+  } catch(e) { alert(t('prop.net') + e.message); return; }
   if (!p.ok && p.error) { alert(p.error); return; }
   const proposal = p.proposal || p;
   currentProposal = proposal;
@@ -256,37 +260,37 @@ function closeDiff() {
 }
 
 async function approve(id) {
-  if (!confirm('Apply този patch към файла? Ще се направи backup преди това.')) return;
+  if (!confirm(t('prop.applyAsk'))) return;
   const r = await fetch(`/admin/daedalus/proposals/${id}/approve`, { method: 'POST' });
   const d = await r.json();
-  if (!d.ok) { alert('Грешка: ' + d.error); return; }
+  if (!d.ok) { alert(t('prop.errShort') + d.error); return; }
   closeDiff(); await loadStats(); await loadProposals();
 }
 
 async function reject(id) {
-  const note = prompt('Причина за отказ (опционално):', '') || '';
+  const note = prompt(t('prop.rejectWhy'), '') || '';
   const r = await fetch(`/admin/daedalus/proposals/${id}/reject`, {
     method: 'POST', headers: {'Content-Type':'application/json'},
     body: JSON.stringify({ note })
   });
   const d = await r.json();
-  if (!d.ok) { alert('Грешка: ' + d.error); return; }
+  if (!d.ok) { alert(t('prop.errShort') + d.error); return; }
   closeDiff(); await loadStats(); await loadProposals();
 }
 
 async function rollback(id) {
-  if (!confirm('Връщане към оригиналното състояние? Файлът ще бъде презаписан от backup.')) return;
+  if (!confirm(t('prop.rollbackAsk'))) return;
   const r = await fetch(`/admin/daedalus/proposals/${id}/rollback`, { method: 'POST' });
   const d = await r.json();
-  if (!d.ok) { alert('Грешка: ' + d.error); return; }
+  if (!d.ok) { alert(t('prop.errShort') + d.error); return; }
   closeDiff(); await loadStats(); await loadProposals();
 }
 
 async function del(id) {
-  if (!confirm('Изтрий това предложение?')) return;
+  if (!confirm(t('prop.delAsk'))) return;
   const r = await fetch(`/admin/daedalus/proposals/${id}`, { method: 'DELETE' });
   const d = await r.json();
-  if (!d.ok) { alert('Грешка: ' + d.error); return; }
+  if (!d.ok) { alert(t('prop.errShort') + d.error); return; }
   closeDiff(); await loadStats(); await loadProposals();
 }
 
@@ -305,5 +309,6 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDiff();
 
 loadStats(); loadProposals();
 setInterval(() => { loadStats(); loadProposals(); }, 30000);
+document.addEventListener('daedalus:langchange', () => { loadStats(); loadProposals(); });
 </script>
 {% endblock %}

@@ -203,7 +203,10 @@ def test_http_unity_and_studio_copy(harness_tmp):
 
     gs = client.get("/admin/daedalus/game-studio")
     assert gs.status_code == 200
-    assert "Няма Editor в този облак" in gs.text
+    assert "No Editor in this cloud" in gs.text
+    assert 'data-i18n="gs.noEditor"' in gs.text
+    i18n = client.get("/static/i18n.js")
+    assert "Няма Editor в този облак" in i18n.text
 
     caps = client.get("/capabilities")
     assert "unity-mcp" in caps.json()["capabilities"]

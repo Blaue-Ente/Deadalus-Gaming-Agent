@@ -114,8 +114,9 @@ def test_http_bench_and_studio_copy(tmp_path, monkeypatch):
 
     gs = client.get("/admin/daedalus/game-studio")
     assert gs.status_code == 200
-    assert "Честност" in gs.text
-    assert "не bake-off" in gs.text.lower() or "Не bake-off" in gs.text
+    assert "Honesty" in gs.text
+    assert 'data-i18n="gs.honesty"' in gs.text
+    assert "not a bake-off" in gs.text.lower()
 
     caps = client.get("/capabilities")
     assert "game-agent-bench" in caps.json()["capabilities"]

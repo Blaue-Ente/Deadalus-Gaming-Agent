@@ -192,3 +192,16 @@ def test_cc_escapes_skill_fields():
     assert "/static/i18n.js" in html
     assert "Дедал / Daedalus" not in html
     assert "Умения — Skills" not in (ROOT / "ui" / "templates" / "skills.html").read_text(encoding="utf-8")
+    import re
+    cyr = re.compile(r"[А-Яа-яЁё]")
+    playground = (ROOT / "ui" / "templates" / "daedalus_playground.html").read_text(encoding="utf-8")
+    gs = (ROOT / "ui" / "templates" / "daedalus_game_studio.html").read_text(encoding="utf-8")
+    pg_chrome = playground.split("<script>", 1)[0]
+    gs_chrome = gs.split("<script>", 1)[0]
+    assert not cyr.search(pg_chrome), "Playground HTML chrome must be English"
+    assert not cyr.search(gs_chrome), "Game Studio HTML chrome must be English"
+    assert 'data-i18n="pg.wizardTitle"' in playground
+    assert 'data-i18n="gs.honesty"' in gs
+    assert '"pg.wizardTitle"' in i18n
+    assert "Честност" in i18n
+    assert "не bake-off" in i18n
