@@ -38,8 +38,8 @@ def run_action(action: str, slug: str, **fields: Any) -> dict[str, Any]:
         return music_handoff()
 
     root = pg.project_dir(slug)
-    if action in ("status",) and fields.get("job_id"):
-        return poll_mesh(str(fields.get("job_id") or ""))
+    if action == "status" and fields.get("job_id"):
+        return poll_mesh(str(fields.get("job_id") or ""), transport=fields.get("transport"))
     if not slug:
         return {"ok": False, "error": "slug required"}
     if action != "status" and not root.exists():
@@ -77,9 +77,6 @@ def run_action(action: str, slug: str, **fields: Any) -> dict[str, Any]:
     except (ValueError, FileNotFoundError, OSError) as exc:
         return {"ok": False, "error": str(exc)[:240]}
     if action == "status":
-        job_id = str(fields.get("job_id") or "")
-        if job_id:
-            return poll_mesh(job_id, transport=fields.get("transport"))
         return _project_status(root)
     return {"ok": False, "error": f"unknown action {action}"}
 
