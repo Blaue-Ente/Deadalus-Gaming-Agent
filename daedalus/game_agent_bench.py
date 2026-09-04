@@ -186,7 +186,7 @@ def _case_native_tools_present() -> dict[str, Any]:
     from daedalus.native_tools import NATIVE_TOOL_SPECS
 
     names = {str(t.get("name") or "") for t in NATIVE_TOOL_SPECS}
-    need = {"engine", "world", "assets", "skill", "production"}
+    need = {"engine", "world", "assets", "skill", "production", "math3d", "game_lint", "profiler", "game_canon"}
     missing = sorted(need - names)
     return _ok(not missing, "native tools: " + ", ".join(sorted(need)))
 

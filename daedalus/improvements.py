@@ -710,6 +710,19 @@ def select_skills(user_message: str, intent: str, hint: str = "") -> list[str]:
                              "честност suite"],
         "dissection": ["дисекция", "dissect", "мостра", "play lab",
                        "лаборатория", "разглоби играта", "specimen game"],
+        "transform_math": ["quaternion", "slerp", "ray-triangle", "ray triangle",
+                           "look-at", "look_at", "projection matrix", "math3d",
+                           "dot product", "cross product", "кватернион"],
+        "data_oriented_design": ["data-oriented", "data oriented", "cache miss",
+                                 "cache line", "soa", "aos", "dod layout",
+                                 "contiguous", "cpu cache"],
+        "netcode": ["netcode", "client-side prediction", "lag compensation",
+                    "server reconciliation", "lockstep", "rubber-band",
+                    "hitscan", "multiplayer tick"],
+        "game_canon": ["doom 3", "doom3", "mindustry", "tinyrenderer",
+                       "game programming patterns", "stb_ds", "idlib"],
+        "senior_tools": ["clang-tidy", "clang-format", "roslyn", "unity test framework",
+                         "profiler log", "game_lint"],
     }
     for name in _SKILLS_CACHE:
         kws = keywords.get(name, [name.split("_")[0]])
