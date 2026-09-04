@@ -15,9 +15,9 @@
       <img class="mark" src="/static/daedalus-mark.png" alt="Daedalus" />
       <div class="brand">
         <h1>Дедал <em>/ Daedalus</em></h1>
-        <div class="sub">Игри първо · говори нормално · <a href="/admin/daedalus/hub">Command Center</a></div>
+        <div class="sub">Игри първо · говори нормално · <a href="/admin/daedalus/proposals">Одобрения</a> · <a href="/admin/daedalus/hub">център</a></div>
       </div>
-      <div class="chip empty" id="projchip">Няма избран проект</div>
+      <button type="button" class="chip empty" id="projchip">Няма избран проект</button>
       <div class="effort" role="group" aria-label="Усилие">
         <button type="button" data-effort="auto" aria-pressed="true">Авто</button>
         <button type="button" data-effort="whisper" aria-pressed="false">Шепот</button>
@@ -31,16 +31,23 @@
       <div>
         <p class="kicker">Проект</p>
         <p class="hint">Епос пише world kit. Занаят — една среза. Името е на играта, не на презентацията.</p>
-        <input id="pname" placeholder="Име на игра / приложение" autocomplete="off" />
-        <textarea id="pdesc" rows="2" placeholder="Какво строиш? Тон, играч, първа среза. Епосът чете това."></textarea>
+        <label class="sr-only" for="pname">Име на проект</label>
+        <input id="pname" placeholder="Име на игра / приложение" autocomplete="off" aria-label="Име на игра или приложение" />
+        <label class="sr-only" for="pdesc">Описание</label>
+        <textarea id="pdesc" rows="2" placeholder="Какво строиш? Тон, играч, първа среза. Епосът чете това." aria-label="Описание на проекта"></textarea>
         <div class="row tight">
-          <select id="pkind">
+          <label class="sr-only" for="pkind">Вид проект</label>
+          <select id="pkind" aria-label="Вид проект">
+            <option value="auto">auto — Дедал избира</option>
             <option value="static">игра / static</option>
             <option value="vite">vite</option>
             <option value="vite-react">vite-react</option>
             <option value="fastapi">fastapi</option>
             <option value="streamlit">streamlit</option>
             <option value="expo">expo</option>
+            <option value="node">node</option>
+            <option value="godot">godot</option>
+            <option value="unity">unity</option>
           </select>
           <button class="primary" id="pcreate" type="button">Нов</button>
         </div>
@@ -54,7 +61,7 @@
       <div class="prefs">
         <p class="kicker">Предпочитания</p>
         <p class="hint">Или в чата: „запомни, че предпочитам Phaser“.</p>
-        <input id="preftext" placeholder="Запомни…" />
+        <input id="preftext" placeholder="Запомни…" aria-label="Ново предпочитание" />
         <div class="row tight"><button id="prefadd" type="button">Запиши</button></div>
         <div class="list" id="preflist"></div>
       </div>
@@ -69,11 +76,12 @@
       <p class="kicker">Разговор</p>
       <div class="msgs" id="msgs"></div>
       <div class="composer">
-        <textarea id="prompt" placeholder="Пиши свободно. Shift+Enter за нов ред. Авто избира шепот / занаят / епос."></textarea>
+        <textarea id="prompt" placeholder="Пиши свободно. Shift+Enter за нов ред. Авто избира шепот / занаят / епос." aria-label="Съобщение към Дедал"></textarea>
         <div class="meta-row">
           <span class="effort-note" id="effortnote"></span>
           <div class="row">
-            <button id="build" type="button" disabled>Autopilot</button>
+            <button id="build" type="button" disabled>Полет</button>
+            <button id="stop" type="button" hidden>Спри</button>
             <button class="primary" id="send" type="button">Изпрати</button>
           </div>
         </div>
@@ -81,23 +89,23 @@
     </main>
 
     <section class="rail">
-      <div class="tabs" role="tablist">
-        <button class="on" data-pane="shell" type="button">Shell</button>
-        <button data-pane="flight" type="button">Полет</button>
-        <button data-pane="llm" type="button">LLM</button>
-        <button data-pane="evo" type="button">Еволюция</button>
-        <button data-pane="world" type="button">Свят</button>
+      <div class="tabs" role="tablist" aria-label="Странични панели">
+        <button class="on" data-pane="shell" type="button" role="tab" aria-selected="true">Shell</button>
+        <button data-pane="flight" type="button" role="tab" aria-selected="false">Полет</button>
+        <button data-pane="llm" type="button" role="tab" aria-selected="false">LLM</button>
+        <button data-pane="evo" type="button" role="tab" aria-selected="false">Еволюция</button>
+        <button data-pane="world" type="button" role="tab" aria-selected="false">Свят</button>
       </div>
       <div class="pane on" id="pane-shell">
         <p class="kicker">Команди</p>
         <p class="hint">Jail: продукт / playground / данни. Избран проект сменя cwd. Ключовете не влизат в процеса.</p>
         <p class="cwd" id="cwd">cwd · продукт</p>
-        <input id="shcmd" placeholder="ls · pytest · python -m compileall" />
+        <input id="shcmd" placeholder="ls · pytest · python -m compileall" aria-label="Команда за shell" />
         <div class="row tight"><button class="primary" id="shrun" type="button">Изпълни</button></div>
         <pre id="shout">Готов.</pre>
       </div>
       <div class="pane" id="pane-flight">
-        <p class="kicker">Autopilot</p>
+        <p class="kicker">Полет</p>
         <p class="hint">Лог на текущия полет. Епосът първо пише bible, после среза.</p>
         <pre id="log">Няма активен autopilot.</pre>
       </div>
@@ -136,7 +144,7 @@
         </div>
         <p class="kicker stack-mt">Дисекция</p>
         <p class="hint">Име, линк или път. Лабораторията е виртуалният компютър на Дедал за мострата.</p>
-        <input id="dissectsrc" placeholder="Flappy Bird · https://itch.io/… · път към zip" />
+        <input id="dissectsrc" placeholder="Flappy Bird · https://itch.io/… · път към zip" aria-label="Източник за дисекция" />
         <div class="row tight">
           <button class="primary" id="dissectbtn" type="button" disabled>Дисекция</button>
           <button id="labbtn" type="button">Лаборатория</button>

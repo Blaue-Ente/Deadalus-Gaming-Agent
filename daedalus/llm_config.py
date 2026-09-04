@@ -39,7 +39,7 @@ PROVIDER_ENV_KEYS: dict[str, str] = {
 
 
 def resolve_provider_api_key(provider: str, fallback: str = "") -> str:
-    """Read provider API key from environment (Replit Secrets)."""
+    """Read provider API key from the process environment."""
     p = (provider or "").strip().lower()
     if not p:
         return fallback

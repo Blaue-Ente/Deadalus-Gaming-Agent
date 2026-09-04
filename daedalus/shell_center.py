@@ -46,7 +46,8 @@ _META = re.compile(r"[|;&`$<>\n]")
 
 _SAFE_ENV = {
     "PATH", "HOME", "LANG", "LC_ALL", "TERM", "TZ", "USER", "TMPDIR",
-    "PYTHONUNBUFFERED", "PYTHONDONTWRITEBYTECODE", "VIRTUAL_ENV",
+    "PYTHONUNBUFFERED", "PYTHONDONTWRITEBYTECODE", "PYTHONPATH", "PYTHONHOME",
+    "VIRTUAL_ENV",
     "NODE_ENV", "NPM_CONFIG_CACHE", "npm_config_cache",
     "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME",
     "SHELL", "PWD",
@@ -131,6 +132,11 @@ def _blocked(command: str) -> str | None:
             "this is still not a container)"
         )
     return None
+
+
+def child_env() -> dict[str, str]:
+    """Environment for jailed children: allowlisted keys, secrets stripped."""
+    return _child_env()
 
 
 def _child_env() -> dict[str, str]:

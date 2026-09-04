@@ -1109,14 +1109,17 @@ async function loadPublishedApps() {
     }
     el.innerHTML = '<div class="space-y-2">' + apps.map(a => `
       <div class="flex flex-wrap items-center gap-2 p-3 rounded-lg border border-gray-700 bg-gray-800/80">
-        <span class="text-lg">${a.icon || '🎮'}</span>
+        <span class="text-lg">${escHtml(a.icon || '🎮')}</span>
         <div class="flex-1 min-w-0">
           <div class="text-white font-medium truncate">${escHtml(a.name || a.slug)}</div>
           <div class="text-[10px] font-mono text-gray-500">${escHtml(a.slug)}</div>
         </div>
         <a href="/apps/${encodeURIComponent(a.slug)}/" target="_blank" class="btn-sm bg-gray-700 hover:bg-gray-600">↗ Отвори</a>
-        <button onclick="deletePublishedProj('${a.slug}')" class="btn-sm bg-red-900/50 hover:bg-red-800 text-red-300 border border-red-800">🗑 Изтрий</button>
+        <button type="button" data-unpublish="${escHtml(a.slug)}" class="btn-sm bg-red-900/50 hover:bg-red-800 text-red-300 border border-red-800">🗑 Изтрий</button>
       </div>`).join('') + '</div>';
+    el.querySelectorAll('[data-unpublish]').forEach((btn) => {
+      btn.addEventListener('click', () => deletePublishedProj(btn.getAttribute('data-unpublish')));
+    });
   } catch (e) {
     el.innerHTML = '<p class="text-red-400">Грешка: ' + escHtml(e.message) + '</p>';
   }
@@ -3668,11 +3671,11 @@ function closeLogs() { $('logs-modal').classList.add('hidden'); if (_logTimer) c
 // ── Kind note ──────────────────────────────────────────────────
 const KIND_INFO = {
   auto:      { pub: true,  note: '🧠 Дедал анализира описанието и избира оптималната платформа автоматично. Натисни <b>✨ Генерирай</b> за препоръка преди старт.', cls: 'text-indigo-400 bg-indigo-900/30 border border-indigo-700/40' },
-  static:    { pub: true,  note: '✅ Публикуем — ще живее на <b>/apps/{slug}</b> в ADN', cls: 'text-emerald-400 bg-emerald-900/30 border border-emerald-700/40' },
+  static:    { pub: true,  note: '✅ Публикуем — ще живее на <b>/apps/{slug}</b>', cls: 'text-emerald-400 bg-emerald-900/30 border border-emerald-700/40' },
   fastapi:   { pub: false, note: '⚙️ Dev test само — публикуване: Push GitHub → свържи с <b>Railway / Render</b>', cls: 'text-yellow-400 bg-yellow-900/20 border border-yellow-700/30' },
   streamlit: { pub: false, note: '⚙️ Dev test само — Push GitHub → <b>Streamlit Community Cloud</b> (безплатно)', cls: 'text-yellow-400 bg-yellow-900/20 border border-yellow-700/30' },
-  vite:        { pub: true,  note: '✅ Публикуем — <b>🔨 Build &amp; Publish</b> ще build-не dist/ и го запише в ADN на <b>/apps/{slug}</b>', cls: 'text-emerald-400 bg-emerald-900/30 border border-emerald-700/40' },
-  'vite-react':{ pub: true,  note: '✅ Публикуем — React 18 + JSX. <b>🔨 Build &amp; Publish</b> ще build-не dist/ и го запише в ADN на <b>/apps/{slug}</b>', cls: 'text-cyan-400 bg-cyan-900/30 border border-cyan-700/40' },
+  vite:        { pub: true,  note: '✅ Публикуем — <b>🔨 Build &amp; Publish</b> ще build-не dist/ и го запише на <b>/apps/{slug}</b>', cls: 'text-emerald-400 bg-emerald-900/30 border border-emerald-700/40' },
+  'vite-react':{ pub: true,  note: '✅ Публикуем — React 18 + JSX. <b>🔨 Build &amp; Publish</b> ще build-не dist/ и го запише на <b>/apps/{slug}</b>', cls: 'text-cyan-400 bg-cyan-900/30 border border-cyan-700/40' },
   node:        { pub: false, note: '⚙️ Dev test само — Push GitHub → <b>Railway / Render</b> (Node.js, безплатно)', cls: 'text-yellow-400 bg-yellow-900/20 border border-yellow-700/30' },
   expo:        { pub: true,  note: '📱 React Native / Expo. Dev preview = Expo Web в браузъра. <b>🔨 Build &amp; Publish</b> = <code>expo export --platform web</code> → /apps/{slug}. ⚠️ Първа инсталация ~5 мин.', cls: 'text-pink-400 bg-pink-900/30 border border-pink-700/40' },
   unity:       { pub: false, note: '🎮 Unity C# — не се пуска в cloud. Scaffold + Git → Unity Hub локално.', cls: 'text-amber-400 bg-amber-900/20 border border-amber-700/30' },

@@ -161,13 +161,29 @@ def assert_bind_allowed(host: str) -> None:
     )
 
 
+def _apps_db_item_path(path: str) -> bool:
+    """True for ``/apps/{slug}/db/{key}`` with a non-empty key (not clear-all)."""
+    parts = [seg for seg in (path or "").split("/") if seg]
+    if len(parts) < 4 or parts[0] != "apps" or parts[2] != "db":
+        return False
+    return bool("/".join(parts[3:]).strip())
+
+
 def is_public_request(method: str, path: str) -> bool:
     m = (method or "GET").upper()
     if m == "OPTIONS":
         return True
     p = path.split("?", 1)[0]
-    if p.startswith("/apps/") or p == "/api/iyveris":
+    if p == "/api/iyveris":
         return True
+    if p.startswith("/apps/"):
+        if m in ("GET", "HEAD"):
+            return True
+        # Single-key PlaygroundDB writes from a published game stay public.
+        # Clear-all DELETE /apps/{slug}/db/ and /apps/api/* need the owner token.
+        if m in ("POST", "DELETE") and _apps_db_item_path(p):
+            return True
+        return False
     if m not in ("GET", "HEAD"):
         return False
     if p in _PUBLIC_EXACT:

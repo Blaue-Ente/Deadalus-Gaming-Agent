@@ -173,6 +173,10 @@ def test_github_repos_and_skill_creator_are_wired(standalone_tmp, monkeypatch):
     assert apps.status_code == 200
     menu = client.get("/apps/menu.json")
     assert menu.status_code == 200
+    from daedalus.playground_publish import app_dir
+    dest = app_dir("maze")
+    dest.mkdir(parents=True, exist_ok=True)
+    (dest / "index.html").write_text("<!doctype html><title>maze</title>", encoding="utf-8")
     put = client.post("/apps/maze/db/score", json={"value": 9})
     assert put.status_code == 200
     assert put.json().get("ok") is True
