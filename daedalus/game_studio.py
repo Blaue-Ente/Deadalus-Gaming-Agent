@@ -489,6 +489,15 @@ async def start_game_studio_project(
         CONFIG_PATH: json.dumps(config, ensure_ascii=False, indent=2),
     }
     pg.write_files(project_slug, files)
+    try:
+        from .production_layer import seed_map
+        seed_map(
+            pg.project_dir(project_slug),
+            systems=list(b.get("systems") or []),
+            layer="prototype",
+        )
+    except Exception:
+        pass
     if dissection and isinstance(dissection, dict):
         try:
             from .dissection import save_dissection

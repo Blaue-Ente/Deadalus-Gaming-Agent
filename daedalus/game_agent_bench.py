@@ -23,6 +23,7 @@ GATES: dict[str, bool] = {
     "asset_pipeline": True,
     "asset_pipeline_v2": True,
     "skill_memory_approve": True,
+    "production_layer": True,
     "ci_ruff": True,
     "uv_lock": True,
 }

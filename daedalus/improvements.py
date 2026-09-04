@@ -699,6 +699,9 @@ def select_skills(user_message: str, intent: str, hint: str = "") -> list[str]:
                            "meshy", "hunyuan", "glb job", "asset-check", "greybox"],
         "skill_memory": ["learned skill", "одобри урока", "skill catalog",
                          "progressive disclosure", "skill memory", "уроци"],
+        "production_layer": ["production-check", "prototype wall", "store-ready",
+                             "системи", "продукционен слой", "systems.json",
+                             "готово за стора"],
         "dissection": ["дисекция", "dissect", "мостра", "play lab",
                        "лаборатория", "разглоби играта", "specimen game"],
     }

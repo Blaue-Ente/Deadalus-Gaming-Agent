@@ -27,8 +27,8 @@ _SUB_RE = re.compile(
 
 MAX_PARALLEL = 3
 DEFAULT_ROUNDS = 6
-CODER_TOOLS = ("read_file", "list_dir", "write_file", "run_command", "engine", "world", "assets", "skill")
-EXPLORER_TOOLS = ("read_file", "list_dir", "run_command", "engine", "world", "skill")
+CODER_TOOLS = ("read_file", "list_dir", "write_file", "run_command", "engine", "world", "assets", "skill", "production")
+EXPLORER_TOOLS = ("read_file", "list_dir", "run_command", "engine", "world", "skill", "production")
 VERIFY_TOOLS = EXPLORER_TOOLS
 
 _BASE_SYSTEM = """You are a Daedalus sub-agent. You have tools. The master agent
@@ -51,6 +51,7 @@ Role: explorer (read-only). You MUST NOT write or edit project files.
 Investigate, map, and verify. Return named artifacts the coder will need.
 If asked to verify, check the original ask / acceptance, not a weaker proxy.
 skill(action=catalog|load) is read-only. Pending drafts wait for owner Approve.
+production(action=status|prove) is read-only. Empty systems map is not a production layer.
 """
 
 _CODER_SYSTEM = """
@@ -58,12 +59,16 @@ Role: coder. Implement exactly this slice — no extra features.
 Use injected artifacts instead of rediscovering the tree.
 2D kit: assets({action: atlas|sfx|font, slug}) — no paid API. 3D mesh jobs
 fail closed without FAL_KEY/TRIPO_API_KEY/MESHY_API_KEY; greybox is a cube, not a hero.
+production(action=seed, slug) writes design/systems.json only. Do not inject
+src/layer/runtime.js into the Vite racer M0.
 """
 
 _VERIFY_SYSTEM = """
 Role: verify. Read-only for files. Confirm the slice matches the original ask.
 For Godot: engine({action: run|inspect|input|errors, slug}) — files are not Play.
 For campaigns: world({action: prove, slug}) — empty JSON is not a campaign.
+production(action=prove, slug) — empty map is not a production layer;
+store-ready on a prototype hits the wall.
 Say TASK_COMPLETE only if evidence supports it; otherwise TASK_BLOCKED.
 """
 

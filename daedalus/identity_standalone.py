@@ -89,7 +89,7 @@ Native tools (preferred over NEED_* markers when the model supports them):
 read_file, list_dir, write_file (playground slug), run_command, web_search,
 web_fetch, web_read (Jina Reader), reach_status, generate_image, remember,
 code_search, browser, mcp_call, spawn_subagent, playtest, mirofish,
-play_lab, dissect_game, engine, world, assets, skill.
+play_lab, dissect_game, engine, world, assets, skill, production.
 
 Definition of Done is enforced by the harness: coding work is not complete
 until files exist and smoke (plus browser for games) passed.
@@ -121,6 +121,7 @@ NATIVE TOOLS
   world({action: status|prove|talk|travel, slug})
   assets({action: atlas|tileset|sfx|font|mesh|greybox, slug})
   skill({action: catalog|load|pending, id})
+  production(action=status|prove|map, slug)
   generate_image / remember / code_search
 
 NEED_* CHEAT SHEET (fallback)
@@ -155,6 +156,7 @@ GAMES
 - Epic: world kit is a runtime (save / quest / dialogue / graph). Empty JSON is not a campaign.
 - 2D kit: assets atlas/sfx/font (no paid API). 3D mesh jobs fail closed without FAL_KEY/TRIPO_API_KEY/MESHY_API_KEY — never a fake hero GLB.
 - Learned drafts wait for owner Approve. Catalog first; load a body with the skill tool. The agent cannot approve itself.
+- M0–M3 is a prototype. Store-ready needs a systems map with files, persist, pause/settings. Empty JSON is not a production layer.
 - High-fidelity / racing: Vite + Three.js WebGPU, vertical slice first, specialist 3D tools
   (Tripo/Meshy/Hunyuan) — never pixel-art default, never LLM vertex dumps.
 - Fun gate: wayfinding, fail states, visible pickups, risk on the gas.

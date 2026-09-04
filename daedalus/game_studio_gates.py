@@ -600,6 +600,59 @@ def run_asset_check(ctx: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def run_production_check(ctx: dict[str, Any]) -> dict[str, Any]:
+    """Prototype wall: store-ready on a hollow layer fails. Pre-build does not block."""
+    checks: list[dict[str, Any]] = []
+    config = ctx.get("config") or {}
+    brainstorm = config.get("brainstorm") or {}
+    blob = f"{brainstorm.get('idea', '')} {brainstorm.get('genre', '')} {ctx.get('gdd') or ''}"
+    root = _project_root(ctx)
+    has_files = _has_game_files(ctx, root)
+
+    if not has_files or root is None:
+        from .production_layer import looks_like_ship_claim
+        ship = looks_like_ship_claim(blob)
+        checks.append(_check(
+            "wall",
+            "Production layer",
+            "warn" if ship else "pass",
+            "store-ready след файлове и systems map" if ship
+            else "M0–M3 е прототип — production-check не блокира планиране",
+        ))
+        return {
+            "gate": "production-check",
+            "label": "Production Check",
+            "at": datetime.now(timezone.utc).isoformat(),
+            **_aggregate(checks),
+        }
+
+    from .production_layer import prove_production
+    proof = prove_production(
+        root,
+        claim=blob,
+        build_mode=str(config.get("build_mode") or ctx.get("build_mode") or ""),
+    )
+    if proof.get("ok"):
+        warns = proof.get("warnings") or []
+        wall = proof.get("wall") or "prototype"
+        checks.append(_check(
+            "layer",
+            "Systems map / persist / pause",
+            "warn" if warns or wall == "prototype" else "pass",
+            "; ".join(warns)[:240] if warns else f"layer={proof.get('layer')} wall={wall}",
+        ))
+    else:
+        detail = "; ".join(proof.get("errors") or ["prototype wall"])
+        checks.append(_check("layer", "Systems map / persist / pause", "fail", detail[:240]))
+
+    return {
+        "gate": "production-check",
+        "label": "Production Check",
+        "at": datetime.now(timezone.utc).isoformat(),
+        **_aggregate(checks),
+    }
+
+
 GATE_RUNNERS = {
     "gate-check": run_gate_check,
     "scope-check": run_scope_check,
@@ -609,13 +662,14 @@ GATE_RUNNERS = {
     "play-check": run_play_check,
     "world-check": run_world_check,
     "asset-check": run_asset_check,
+    "production-check": run_production_check,
 }
 
 
 def gates_for_build_mode(build_mode: str) -> list[str]:
     if build_mode == "prototype":
-        return ["smoke-check", "gate-check", "scope-check", "craft-check", "play-check", "world-check", "asset-check"]
-    return ["gate-check", "scope-check", "balance-check", "craft-check", "play-check", "world-check", "asset-check"]
+        return ["smoke-check", "gate-check", "scope-check", "craft-check", "play-check", "world-check", "asset-check", "production-check"]
+    return ["gate-check", "scope-check", "balance-check", "craft-check", "play-check", "world-check", "asset-check", "production-check"]
 
 
 def run_gates(ctx: dict[str, Any], gate_ids: list[str] | None = None) -> dict[str, Any]:

@@ -11,8 +11,8 @@ Owner-approved plan (2026-09-04). Each phase lands as its own merge request. The
 | F2 | Gameplay bot + performance gates (web) | **Done** — merged to `main` (`d16cb9f`) |
 | F3 | Content systems as code (world_kit v2) | **Done** — merged to `main` (`bcff039`) |
 | F4 | Asset pipeline v2 (atlas, SFX, 3D jobs) | **Done** — merged to `main` (`e77d0d9`) |
-| F5 | Skill memory (progressive disclosure + Approve) | **This MR** — awaiting owner approval |
-| F6 | Production layer vs prototype wall | Not started |
+| F5 | Skill memory (progressive disclosure + Approve) | **Done** — merged to `main` (`a6ed4ed`) |
+| F6 | Production layer vs prototype wall | **This MR** — awaiting owner approval |
 | F7 | Unity: real MCP bridge or honest non-promise | Not started |
 | F8 | `game_agent_bench` as a real suite | Not started (partial metrics can start after F2) |
 
@@ -36,36 +36,39 @@ Campaign runtime: save `{version, region, act, flags, inventory, quests}`, quest
 
 2D atlas/tileset/SFX/font without paid APIs. 3D mesh jobs fail closed without keys. Native `assets` is coder-only. Gate `asset-check` does not block guided racing before files exist. Merged as `e77d0d9`.
 
-## F5 — Skill memory (this MR)
+## F5 — Skill memory (done)
 
-**Intent:** agentskills.io progressive disclosure. Failure/success drafts wait for owner Approve. Pending drafts must not inject into the next prompt. The agent cannot approve itself.
+Progressive catalog (name + description) plus at most one SKILL.md body. Failure/success drafts wait for owner Approve in Studio **Уроци**. Native `skill` cannot approve itself. Merged as `a6ed4ed`.
+
+## F6 — Production layer vs prototype wall (this MR)
+
+**Intent:** a playable M0–M3 slice is not a shipped product. Hermes/Claude Code games die at that wall. F6 names the wall and adds a real production layer.
 
 **Shipped**
 
-- Catalog (name + description) in the turn; at most one SKILL.md body (`disclose` / `format_block`).
-- Drafts live in `$DAEDALUS_DATA/learned_skills/pending/*.json` until Approve writes a live `*.md`.
-- Native tool `skill` — action catalog | load | pending. Read-only. All sub-agent roles. No approve/reject action.
-- Studio **Уроци**: Одобри / Откажи. HTTP `POST /api/v1/daedalus/learned-skills/{id}/approve|reject`.
-- Evolution radar notes queue a pending draft instead of a live skill.
-- Autopilot records `draft_from_success` only when tests passed.
+- `design/systems.json` — `{version, layer: prototype|production, systems: [{id, purpose, mvp, files[], status}]}`. Empty JSON is not a production layer.
+- Optional `src/layer/runtime.js` — persist / restore / pause / resume / settings. Game Studio start seeds the map only; it does not inject the runtime into the Vite racer M0.
+- Native `production` — action status | prove | seed | runtime | map | promote. Explorer/verify/coder all have it (explorer still cannot `write_file`).
+- Gate `production-check` — pre-build / guided racing with no files does not block. Store-ready / готово за стора on a prototype fails. A racer “ship” mesh is not a store claim.
+- Studio World kit line `слой · prototype|production`. Game Studio **Слой**. HTTP `GET|POST /api/v1/playground/projects/{slug}/production`.
 
 **Done when (acceptance)**
 
 | Criterion | How we know |
 |-----------|-------------|
-| Failure draft exists but is not in the next prompt | `test_pending_draft_does_not_inject` |
-| Approve makes the body loadable | `test_approve_then_disclose_includes_body` |
-| Reject never goes live | `test_reject_never_goes_live` |
-| Catalog is name+description, pending excluded | `test_catalog_is_name_and_description` |
-| Native `skill` cannot approve | `test_native_skill_cannot_approve` |
-| Explorer has `skill`, not `write_file` | `test_explorer_has_skill_not_write` |
-| Persona stays compact | `test_standalone_persona_is_compact` |
-| Guided racing still non-blocking | `test_craft_check_warns_but_does_not_block` |
+| Racer “ship” is not a store claim | `test_racer_ship_is_not_a_store_claim` |
+| Empty systems map is not production | `test_empty_map_is_not_production` |
+| Pre-build / guided racing not blocked | `test_pre_build_does_not_block` + `test_craft_check_warns_but_does_not_block` |
+| Honest prototype with planned systems | `test_honest_prototype_with_planned_systems` |
+| Missing claimed files fail | `test_claimed_missing_files_fail` |
+| Promote needs persist+pause+files | `test_promote_requires_evidence` |
+| Promote blocked without evidence | `test_promote_blocked_without_evidence` |
+| Persona compact | `test_standalone_persona_is_compact` |
 
-**Not in F5** (next phases): production layer vs prototype wall, Unity MCP, Unreal, real GameAgentBench suite.
+**Not in F6** (next phases): Unity MCP or honest non-promise, Unreal, real GameAgentBench suite. Do not vendor a Unity Editor. Do not inject layer runtime into the Vite racer M0.
 
-## How to approve F5 and start F6
+## How to approve F6 and start F7
 
-1. Review this MR (progressive catalog, pending JSON, Studio Уроци, native `skill`).
-2. Optional: fail a coding turn, confirm Studio shows a draft, Одобри, then confirm the next catalog can load it.
-3. Reply that F5 is approved. F6 is the production layer vs the prototype wall.
+1. Review this MR (systems map, prototype wall, native `production`, gate `production-check`, Studio **Слой**).
+2. Optional: start a Game Studio racing project, confirm `design/systems.json` exists and `src/layer/runtime.js` does not, then prove a store-ready claim fails until persist/pause exist.
+3. Reply that F6 is approved. F7 is Unity: a real MCP bridge **or** an honest non-promise — not a fake Editor in the cloud.
