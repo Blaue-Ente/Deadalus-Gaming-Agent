@@ -29,7 +29,7 @@ def harness_tmp(tmp_path, monkeypatch):
 
 def test_native_specs_include_senior_tools():
     names = {t["name"] for t in NATIVE_TOOL_SPECS}
-    for n in ("math3d", "game_lint", "profiler", "game_canon"):
+    for n in ("math3d", "spatial", "game_lint", "profiler", "game_canon"):
         assert n in names
 
 
@@ -39,12 +39,14 @@ def test_subagents_get_read_tools_not_write():
     for role in ("explorer", "verify"):
         tools = tools_for_role(role)
         assert "math3d" in tools
+        assert "spatial" in tools
         assert "game_lint" in tools
         assert "profiler" in tools
         assert "game_canon" in tools
         assert "write_file" not in tools
     assert "write_file" in tools_for_role("coder")
     assert "math3d" in tools_for_role("coder")
+    assert "spatial" in tools_for_role("coder")
 
 
 def test_dot_cross_facing():
@@ -224,10 +226,11 @@ def test_game_canon_list_study_allowlist(harness_tmp):
     ids = {row["id"] for row in CANON}
     assert ids == {
         "doom3-bfg", "mindustry", "game-programming-patterns", "tinyrenderer", "stb",
+        "glm", "directxmath", "tracy",
     }
     listing = run_action("list")
     assert listing["ok"] is True
-    assert len(listing["canon"]) == 5
+    assert len(listing["canon"]) == 8
     brief = run_action("study", id="doom3-bfg")
     assert "idLib" in " ".join(brief["study"])
     assert brief["do_not_copy"]
@@ -247,13 +250,13 @@ def test_knowledge_and_skills_exist():
     cats = {c for _, c in _knowledge_sources()}
     assert "game-eng" in cats
     know = package_root() / "knowledge"
-    for name in ("data_oriented_design.md", "transform_math.md", "netcode.md", "game_canon.md"):
+    for name in ("data_oriented_design.md", "transform_math.md", "netcode.md", "game_canon.md", "game_dev_agent_knowledge_base.md"):
         text = (know / name).read_text(encoding="utf-8")
         assert len(text) > 400
         assert "Iyveris" not in text
         assert "ArgosDataNexus" not in text
     ids = {s["id"] for s in list_skills()}
-    for sid in ("transform_math", "data_oriented_design", "netcode", "game_canon", "senior_tools"):
+    for sid in ("transform_math", "data_oriented_design", "netcode", "game_canon", "senior_tools", "spatial_simd"):
         assert sid in ids
         loaded = load_skill(sid)
         assert loaded and loaded["body"]
@@ -310,6 +313,7 @@ def test_capabilities_and_persona(harness_tmp):
 
     text = build_persona()
     assert "math3d" in text
+    assert "spatial" in text
     assert "game_canon" in text
     assert len(text) < 12_000
     assert text.count("\n") < 200
@@ -317,5 +321,131 @@ def test_capabilities_and_persona(harness_tmp):
     client = TestClient(app)
     caps = client.get("/capabilities")
     names = caps.json()["capabilities"]
-    for n in ("math3d", "game-lint", "profiler", "game-canon"):
+    for n in ("math3d", "game-lint", "profiler", "game-canon", "spatial"):
         assert n in names
+
+
+def test_spatial_advise_and_aabb():
+    from daedalus.spatial import run_action
+
+    tiny = run_action("advise", n=10, dim=3)
+    assert tiny["ok"] is True
+    assert tiny["recommend"] == "brute_force"
+    crowd = run_action("advise", n=500, dim=3, moving=True)
+    assert crowd["recommend"] in ("uniform_grid", "octree")
+    rays = run_action("advise", n=80, dim=3, rays=True)
+    assert rays["recommend"] == "bvh"
+    hit = run_action("aabb", a_min=[0, 0, 0], a_max=[1, 1, 1], b_min=[0.5, 0.5, 0.5], b_max=[2, 2, 2])
+    assert hit["hit"] is True
+    miss = run_action("aabb", a_min=[0, 0, 0], a_max=[1, 1, 1], b_min=[2, 2, 2], b_max=[3, 3, 3])
+    assert miss["hit"] is False
+    nested = run_action(
+        "scan",
+        text="for (const a of ents) { for (const b of ents) { a.distanceTo(b) } }",
+        path="src/loop.js",
+    )
+    assert nested["warnings"]
+
+
+def test_tracy_csv_parse():
+    from daedalus.profiler import parse_log
+
+    csv_text = "Name,Duration\nPhysicsUpdate,12.4\nDraw,1.1\nAI,2.0\n"
+    row = parse_log(text=csv_text, kind="tracy")
+    assert row["kind"] == "tracy"
+    assert row["ok"] is True
+    names = [z["name"] for z in row["heaviest"]]
+    assert "PhysicsUpdate" in names
+    slow = parse_log(text="Name,Duration\nSpike,40.0\n", kind="tracy")
+    assert slow["ok"] is False
+    ns = parse_log(text="name,total_ns\nPhysics,16400000\n", kind="tracy")
+    assert ns["kind"] == "tracy"
+    assert ns["heaviest"][0]["ms"] == 16.4
+
+
+def test_canon_includes_glm_tracy():
+    from daedalus.game_canon import list_canon
+
+    ids = {row["id"] for row in list_canon()["canon"]}
+    for cid in ("glm", "directxmath", "tracy", "tinyrenderer"):
+        assert cid in ids
+
+
+def test_game_jobs_wire_senior_tools_not_just_rag():
+    from daedalus.game_engineer import extra_skill_ids, prefer_skill_id, prompt_block, missing_eng_tools
+    from daedalus.learned_skills import disclose
+
+    q = "Направи 3D игра с octree physics"
+    extra = extra_skill_ids(q, "build")
+    assert "senior_tools" in extra
+    assert "spatial_simd" in extra
+    pref = prefer_skill_id(q, intent="build")
+    assert pref == "senior_tools"
+    block = disclose(q, extra_ids=extra, prefer_id=pref)
+    assert "SKILL BODY:" in block
+    assert "math3d" in block
+    assert "spatial" in block.lower()
+    contract = prompt_block(q)
+    assert "GAME ENGINEER CONTRACT" in contract
+    assert missing_eng_tools("simple snake", [{"tool": "write_file"}]) == ""
+    assert missing_eng_tools("quaternion slerp in the camera", [])
+    assert not missing_eng_tools("quaternion slerp in the camera", [{"tool": "math3d"}])
+
+
+def test_job_contract_heavy_eng_requires_tool():
+    from daedalus.job_contract import evaluate
+
+    snake = evaluate(
+        "напиши snake игра",
+        "Готово.",
+        tool_calls=[{"tool": "write_file", "ok": True}, {"tool": "run_command", "ok": True}],
+    )
+    assert snake.complete is True
+    heavy = evaluate(
+        "напиши quaternion slerp and octree broadphase",
+        "Готово.",
+        intent="code",
+        tool_calls=[{"tool": "write_file", "ok": True}, {"tool": "run_command", "ok": True}],
+    )
+    assert heavy.complete is False
+    assert any("math3d" in b or "spatial" in b for b in heavy.blockers)
+    ok = evaluate(
+        "напиши quaternion slerp and octree broadphase",
+        "Готово.",
+        intent="code",
+        tool_calls=[
+            {"tool": "write_file", "ok": True},
+            {"tool": "run_command", "ok": True},
+            {"tool": "spatial", "ok": True},
+        ],
+    )
+    assert ok.complete is True
+
+
+def test_eng_check_warns_not_blocks_racing():
+    from daedalus.game_studio_gates import run_eng_check, run_gates
+    from daedalus.game_agent_bench import _guided_racing_ctx
+
+    ctx = _guided_racing_ctx()
+    row = run_eng_check(ctx)
+    assert row["gate"] == "eng-check"
+    assert row["passed"] is True
+    assert row["blocking"] is False
+    combined = run_gates(ctx)
+    assert combined["blocking"] is False
+    assert combined["gates"]["eng-check"]["passed"] is True
+
+
+def test_native_execute_spatial(harness_tmp):
+    text = asyncio.run(
+        execute_native_tool(
+            "spatial",
+            {"action": "advise", "n": 400, "dim": 2},
+            memory=None,
+            session_id="t",
+            read_file_fn=lambda *a, **k: {"ok": False},
+        )
+    )
+    assert "FAILED" not in text
+    assert "quadtree" in text.lower() or "uniform_grid" in text.lower() or "grid" in text.lower()
+

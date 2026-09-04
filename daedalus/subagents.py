@@ -27,8 +27,8 @@ _SUB_RE = re.compile(
 
 MAX_PARALLEL = 3
 DEFAULT_ROUNDS = 6
-CODER_TOOLS = ("read_file", "list_dir", "write_file", "run_command", "engine", "world", "assets", "skill", "production", "math3d", "game_lint", "profiler", "game_canon")
-EXPLORER_TOOLS = ("read_file", "list_dir", "run_command", "engine", "world", "skill", "production", "math3d", "game_lint", "profiler", "game_canon")
+CODER_TOOLS = ("read_file", "list_dir", "write_file", "run_command", "engine", "world", "assets", "skill", "production", "math3d", "spatial", "game_lint", "profiler", "game_canon")
+EXPLORER_TOOLS = ("read_file", "list_dir", "run_command", "engine", "world", "skill", "production", "math3d", "spatial", "game_lint", "profiler", "game_canon")
 VERIFY_TOOLS = EXPLORER_TOOLS
 
 _BASE_SYSTEM = """You are a Daedalus sub-agent. You have tools. The master agent
@@ -62,6 +62,7 @@ fail closed without FAL_KEY/TRIPO_API_KEY/MESHY_API_KEY; greybox is a cube, not 
 Do not vendor a Unity Editor. engine(action=run) on Unity is MCP or batchmode or honest refuse.
 production(action=seed, slug) writes design/systems.json only. Do not inject
 src/layer/runtime.js into the Vite racer M0.
+Game slice: math3d / spatial before custom SLERP, rays, or nested collision.
 """
 
 _VERIFY_SYSTEM = """
@@ -72,6 +73,7 @@ Scaffold is not Play. This cloud does not vendor a Unity Editor.
 For campaigns: world({action: prove, slug}) — empty JSON is not a campaign.
 production(action=prove, slug) — empty map is not a production layer;
 store-ready on a prototype hits the wall.
+Game verify: spatial scan / math3d when the slice claimed custom math or physics.
 Say TASK_COMPLETE only if evidence supports it; otherwise TASK_BLOCKED.
 """
 

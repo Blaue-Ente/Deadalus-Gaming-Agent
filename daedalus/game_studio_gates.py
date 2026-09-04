@@ -716,6 +716,60 @@ def run_unity_check(ctx: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def run_eng_check(ctx: dict[str, Any]) -> dict[str, Any]:
+    """Warn on O(N²) collision / missing engineer tools. Never block empty racing plans."""
+    checks: list[dict[str, Any]] = []
+    config = ctx.get("config") or {}
+    brainstorm = config.get("brainstorm") or {}
+    blob = f"{brainstorm.get('idea', '')} {brainstorm.get('genre', '')} {ctx.get('gdd') or ''}"
+    kind = config.get("kind") or (ctx.get("project") or {}).get("kind") or ""
+    from .game_engineer import looks_like_game, looks_like_heavy_eng, scan_project
+    game = looks_like_game(blob, kind=kind)
+    heavy = looks_like_heavy_eng(blob)
+    root = _project_root(ctx)
+    has_files = _has_game_files(ctx, root)
+    if not has_files:
+        checks.append(_check(
+            "contract",
+            "Game engineer tools",
+            "warn" if game else "pass",
+            "math3d / spatial / profiler след файлове — не блокира планирането" if game
+            else "не е game-eng срез",
+        ))
+        return {
+            "gate": "eng-check",
+            "label": "Eng Check",
+            "at": datetime.now(timezone.utc).isoformat(),
+            **_aggregate(checks),
+        }
+
+    slug = (ctx.get("project") or {}).get("slug") or ""
+    scan = scan_project(slug) if slug else {"warnings": [], "scanned": 0}
+    warns = list(scan.get("warnings") or [])
+    if warns:
+        checks.append(_check("n2", "O(N²) broadphase", "warn", "; ".join(warns)[:240]))
+    else:
+        checks.append(_check(
+            "n2",
+            "O(N²) broadphase",
+            "pass",
+            f"scanned {scan.get('scanned') or 0} files",
+        ))
+    if heavy:
+        checks.append(_check(
+            "heavy",
+            "Custom math / physics",
+            "warn",
+            "math3d claimed + spatial advise on this slice",
+        ))
+    return {
+        "gate": "eng-check",
+        "label": "Eng Check",
+        "at": datetime.now(timezone.utc).isoformat(),
+        **_aggregate(checks),
+    }
+
+
 GATE_RUNNERS = {
     "gate-check": run_gate_check,
     "scope-check": run_scope_check,
@@ -727,13 +781,14 @@ GATE_RUNNERS = {
     "asset-check": run_asset_check,
     "production-check": run_production_check,
     "unity-check": run_unity_check,
+    "eng-check": run_eng_check,
 }
 
 
 def gates_for_build_mode(build_mode: str) -> list[str]:
     if build_mode == "prototype":
-        return ["smoke-check", "gate-check", "scope-check", "craft-check", "play-check", "world-check", "asset-check", "production-check", "unity-check"]
-    return ["gate-check", "scope-check", "balance-check", "craft-check", "play-check", "world-check", "asset-check", "production-check", "unity-check"]
+        return ["smoke-check", "gate-check", "scope-check", "craft-check", "play-check", "world-check", "asset-check", "production-check", "unity-check", "eng-check"]
+    return ["gate-check", "scope-check", "balance-check", "craft-check", "play-check", "world-check", "asset-check", "production-check", "unity-check", "eng-check"]
 
 
 def run_gates(ctx: dict[str, Any], gate_ids: list[str] | None = None) -> dict[str, Any]:

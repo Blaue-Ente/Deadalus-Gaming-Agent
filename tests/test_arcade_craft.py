@@ -115,10 +115,12 @@ def test_craft_check_warns_but_does_not_block():
     combined = run_gates(ctx)
     assert "craft-check" in combined["gates"]
     assert "play-check" in combined["gates"]
+    assert "eng-check" in combined["gates"]
     assert combined["blocking"] is False
     assert combined["gates"]["play-check"]["passed"] is True
     assert combined["gates"]["world-check"]["passed"] is True
     assert combined["gates"]["asset-check"]["passed"] is True
+    assert combined["gates"]["eng-check"]["passed"] is True
 
 
 def test_campaign_bible_is_a_warning_not_a_template():
@@ -173,6 +175,7 @@ def test_planner_prompt_sees_fzero_brief():
     assert "STUDIO SHELF" in sys
     assert "tripo" in sys.lower() or "Tripo" in sys
     assert "scenario.json" in sys
+    assert "math3d" in sys or "GAME ENGINEER" in sys
 
 
 def test_skill_select_arcade_craft():

@@ -43,6 +43,7 @@ PERM_MAP: dict[str, str | None] = {
     "production": None,
     "git_forge": "github_access",
     "math3d": None,
+    "spatial": None,
     "game_lint": None,
     "profiler": None,
     "game_canon": None,
@@ -560,6 +561,35 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "spatial",
+        "description": (
+            "Spatial partitioning advisor. action=advise picks brute/grid/quadtree/octree/BVH "
+            "from N and dim so the agent does not ship O(N²) collision. action=aabb tests overlap. "
+            "action=scan flags nested for+distance in a Playground slug."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "advise | aabb | scan | catalog",
+                },
+                "n": {"description": "Entity count for advise"},
+                "count": {"description": "Alias of n"},
+                "dim": {"description": "2 or 3"},
+                "moving": {"type": "boolean"},
+                "rays": {"type": "boolean"},
+                "a_min": {"description": "AABB min vec3"},
+                "a_max": {"description": "AABB max vec3"},
+                "b_min": {"description": "AABB min vec3"},
+                "b_max": {"description": "AABB max vec3"},
+                "slug": {"type": "string"},
+                "text": {"type": "string", "description": "Inline source for scan"},
+                "path": {"type": "string"},
+            },
+        },
+    },
+    {
         "name": "game_lint",
         "description": (
             "Architectural lint for game code. Python ruff; C++ clang-format/tidy "
@@ -584,9 +614,9 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
     {
         "name": "profiler",
         "description": (
-            "Parse Unity Test / NUnit XML, Chrome traces, Godot/Unity/generic FPS logs. "
-            "action=unity_tests needs UNITY_PATH batchmode and is not Play. "
-            "Missing Editor is an honest refuse."
+            "Parse Unity Test / NUnit XML, Chrome traces, Tracy CSV, Godot/Unity/generic FPS logs. "
+            "kind=tracy for Tracy zone exports. action=unity_tests needs UNITY_PATH batchmode "
+            "and is not Play. RenderDoc .rdc is owner-side — do not fake a capture here."
         ),
         "input_schema": {
             "type": "object",
@@ -597,7 +627,7 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
                 },
                 "slug": {"type": "string"},
                 "path": {"type": "string", "description": "Log/XML/trace path"},
-                "kind": {"type": "string", "description": "auto | nunit | chrome | godot | unity | generic"},
+                "kind": {"type": "string", "description": "auto | nunit | chrome | tracy | godot | unity | generic"},
                 "text": {"type": "string", "description": "Inline log instead of path"},
                 "platform": {"type": "string", "description": "EditMode | PlayMode for unity_tests"},
             },
@@ -608,8 +638,9 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
         "name": "game_canon",
         "description": (
             "Study curated OSS game trees (DOOM 3 BFG, Mindustry, Game Programming Patterns, "
-            "tinyrenderer, stb). action=list|study|open|clone|search. "
-            "Steal structure; never copy assets or paste the book into a Playground game."
+            "tinyrenderer, stb, GLM, DirectXMath, Tracy). action=list|study|open|clone|search. "
+            "Steal structure; never copy assets or paste the book into a Playground game. "
+            "RenderDoc captures happen on the owner's machine."
         ),
         "input_schema": {
             "type": "object",
@@ -618,7 +649,7 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
                     "type": "string",
                     "description": "list | study | open | clone | search",
                 },
-                "id": {"type": "string", "description": "doom3-bfg | mindustry | game-programming-patterns | tinyrenderer | stb"},
+                "id": {"type": "string", "description": "doom3-bfg | mindustry | glm | tracy | …"},
                 "path": {"type": "string", "description": "Allowlisted file for open"},
                 "query": {"type": "string", "description": "Local grep after clone"},
             },
@@ -1211,6 +1242,17 @@ async def execute_native_tool(
                 status = "MISMATCH"
             return (
                 f"── math3d {op} {status} ──\n"
+                f"{json.dumps(r, ensure_ascii=False, default=str)[:6000]}"
+            )
+
+        if name == "spatial":
+            from .spatial import run_action as spatial_action
+            op = str(args.get("action") or "advise")
+            payload = {k: v for k, v in args.items() if k != "action"}
+            r = spatial_action(op, **payload)
+            status = "OK" if r.get("ok") else "FAILED"
+            return (
+                f"── spatial {op} {status} ──\n"
                 f"{json.dumps(r, ensure_ascii=False, default=str)[:6000]}"
             )
 

@@ -37,6 +37,7 @@ def outbox_guardrails_block(*, slug: str = "", kind: str = "static") -> str:
         "• vite/vite-react: провери entrypoint (index.html → main.js/jsx) преди App.jsx/GameScene.\n"
         "• Expo/React Native: НЕ пиши index.html/style.css — ползвай View/Text или Git push.\n"
         "• Прости игри (Snake/Tetris/Pong): НЕ ползвай NEED_WEB_FETCH — пиши директно.\n"
+        "• Game builds: call math3d / spatial / profiler / game_canon — RAG is not a tool call.\n"
         "• След проучване (≤3 tool calls) → BUILD, не оставай в recon.\n"
         f"• Платформа: {kind} — не смесвай web и mobile toolchain.\n"
     )
@@ -147,6 +148,11 @@ async def build_repair_context(slug: str, proj: dict[str, Any]) -> tuple[str, st
     coding_mode = proj.get("coding_mode", "lite")
     desc = proj.get("description", "") or proj.get("name", slug)
     combined_sys = build_combined_sys(kind, coding_mode)
+    try:
+        from .game_engineer import attach_to_sys
+        combined_sys = attach_to_sys(combined_sys, text=desc, kind=kind)
+    except Exception:
+        pass
     build_model, _ = resolve_build_model_for_project(
         desc,
         is_game=is_likely_game(f"{proj.get('name', slug)} {desc}"),

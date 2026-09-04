@@ -1,12 +1,15 @@
-"""Profiler / test-log connectors — parse Unity, Godot, Chrome, NUnit, generic FPS logs.
+"""Profiler / test-log connectors — parse Unity, Godot, Chrome, NUnit, Tracy CSV, generic FPS logs.
 
 Does not vendor Unity. ``unity_tests`` needs UNITY_PATH (batchmode) and is not Play.
-Missing binaries return an honest need, not a green skip.
+Missing binaries return an honest need, not a green skip. RenderDoc captures are
+owner-side; this parser does not open ``.rdc`` files.
 
 Native tool: ``profiler``. CLI: ``python -m daedalus.profiler``.
 """
 from __future__ import annotations
 
+import csv
+import io
 import json
 import re
 import subprocess
@@ -31,8 +34,17 @@ def _read_text(path: Path) -> str:
     return data.decode("utf-8", errors="replace")
 
 
+def _looks_like_tracy_csv(text: str) -> bool:
+    head = (text or "")[:1200].lower()
+    has_name = any(tok in head for tok in ("name", "zone", "label", "event"))
+    has_dur = any(tok in head for tok in ("duration", "total time", "total_ns", "mean", "self_ns", "elapsed"))
+    return has_name and has_dur
+
+
 def detect_kind(text: str, path: str = "") -> str:
     name = Path(path).name.lower()
+    if "tracy" in name or (name.endswith(".csv") and _looks_like_tracy_csv(text)):
+        return "tracy"
     if name.endswith(".xml") or "<test-run" in text[:2000] or "<test-case" in text[:4000]:
         return "nunit"
     if text.lstrip().startswith("{") or text.lstrip().startswith("["):
@@ -48,6 +60,8 @@ def detect_kind(text: str, path: str = "") -> str:
         return "godot"
     if "UnityEngine" in text or "Microsoft NUnit" in text or "Unity Editor" in text:
         return "unity"
+    if _looks_like_tracy_csv(text):
+        return "tracy"
     return "generic"
 
 
@@ -137,6 +151,93 @@ def parse_chrome_trace(text: str) -> dict[str, Any]:
     }
 
 
+def _csv_ms(raw: str, *, assume_ns: bool) -> float | None:
+    s = (raw or "").strip().lower().replace(",", "")
+    if not s:
+        return None
+    m = re.match(r"^([+-]?\d+(?:\.\d+)?)\s*(ns|us|µs|ms|s)?$", s)
+    if not m:
+        return None
+    value = float(m.group(1))
+    unit = m.group(2) or ""
+    if unit == "ns":
+        return value / 1_000_000.0
+    if unit in ("us", "µs"):
+        return value / 1_000.0
+    if unit == "s":
+        return value * 1_000.0
+    if unit == "ms":
+        return value
+    if assume_ns:
+        return value / 1_000_000.0
+    return value
+
+
+def parse_tracy_csv(text: str) -> dict[str, Any]:
+    """Parse Tracy statistics / zone CSV (name + duration columns)."""
+    sample = (text or "").lstrip("\ufeff")
+    if not sample.strip():
+        return {"ok": False, "kind": "tracy", "error": "empty csv"}
+    try:
+        dialect = csv.Sniffer().sniff(sample[:4000], delimiters=",;\t")
+    except csv.Error:
+        dialect = csv.excel
+    reader = csv.DictReader(io.StringIO(sample), dialect=dialect)
+    orig_fields = [str(f or "") for f in (reader.fieldnames or [])]
+    if not orig_fields:
+        return {"ok": False, "kind": "tracy", "error": "no header"}
+    lower: dict[str, str] = {}
+    for orig in orig_fields:
+        key = orig.strip().lower()
+        if key:
+            lower[key] = orig
+
+    def _col(*names: str) -> str | None:
+        for name in names:
+            if name in lower:
+                return lower[name]
+        for key, orig in lower.items():
+            if any(name in key for name in names):
+                return orig
+        return None
+
+    name_col = _col("name", "zone", "label", "event", "function")
+    dur_col = _col("duration", "total time", "total_ns", "total", "elapsed", "self_ns", "mean", "ms")
+    if not name_col or not dur_col:
+        return {"ok": False, "kind": "tracy", "error": "need name + duration columns"}
+    dur_key = dur_col.lower()
+    assume_ns = "ns" in dur_key or "nanosecond" in dur_key
+    rows: list[tuple[str, float]] = []
+    for rec in reader:
+        label = str(rec.get(name_col) or "").strip() or "zone"
+        ms = _csv_ms(str(rec.get(dur_col) or ""), assume_ns=assume_ns)
+        if ms is None:
+            continue
+        rows.append((label, ms))
+    if not rows:
+        return {"ok": False, "kind": "tracy", "error": "no numeric duration rows", "columns": [f.strip() for f in orig_fields]}
+    totals: dict[str, float] = {}
+    for label, ms in rows:
+        totals[label] = totals.get(label, 0.0) + ms
+    durations = sorted(ms for _, ms in rows)
+    p95 = durations[min(len(durations) - 1, int(len(durations) * 0.95))]
+    avg = sum(durations) / len(durations)
+    heavy = sorted(totals.items(), key=lambda kv: -kv[1])[:8]
+    budget_ok = p95 <= 16.7
+    return {
+        "ok": budget_ok,
+        "kind": "tracy",
+        "samples": len(rows),
+        "zones": len(totals),
+        "avg_ms": round(avg, 3),
+        "p95_ms": round(p95, 3),
+        "max_ms": round(durations[-1], 3),
+        "budget_60fps": budget_ok,
+        "heaviest": [{"name": n, "ms": round(ms, 3)} for n, ms in heavy],
+        "note": "" if budget_ok else "heaviest Tracy zones over 16.7ms (60 FPS budget)",
+    }
+
+
 def parse_generic(text: str, *, kind: str = "generic") -> dict[str, Any]:
     fps = [float(x) for x in _FPS_RE.findall(text)]
     frame_ms = [float(x) for x in _MS_RE.findall(text)]
@@ -178,7 +279,9 @@ def parse_log(path: str = "", *, slug: str = "", text: str | None = None, kind: 
         result = parse_nunit(blob)
     elif detected in ("chrome", "trace"):
         result = parse_chrome_trace(blob)
-    elif detected in ("godot", "unity", "generic", "tracy"):
+    elif detected in ("tracy", "tracy-csv"):
+        result = parse_tracy_csv(blob)
+    elif detected in ("godot", "unity", "generic"):
         result = parse_generic(blob, kind=detected)
     else:
         result = parse_generic(blob, kind=detected)
@@ -254,8 +357,9 @@ def status() -> dict[str, Any]:
         "unity": bool(unity_bin()),
         "godot": bool(gbin),
         "note": (
-            "Parse logs anytime. Unity Test Framework needs UNITY_PATH. "
-            "That run is not Play."
+            "Parse logs anytime, including Tracy CSV (kind=tracy). "
+            "Unity Test Framework needs UNITY_PATH. That run is not Play. "
+            "RenderDoc .rdc captures are owner-side."
         ),
     }
 

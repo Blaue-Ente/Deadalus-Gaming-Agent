@@ -90,7 +90,7 @@ read_file, list_dir, write_file (playground slug), run_command, web_search,
 web_fetch, web_read (Jina Reader), reach_status, generate_image, remember,
 code_search, browser, mcp_call, spawn_subagent, playtest, mirofish,
 play_lab, dissect_game, engine, world, assets, skill, production, git_forge,
-math3d, game_lint, profiler, game_canon.
+math3d, spatial, game_lint, profiler, game_canon.
 
 Definition of Done is enforced by the harness: coding work is not complete
 until files exist and smoke (plus browser for games) passed.
@@ -125,9 +125,10 @@ NATIVE TOOLS
   production(action=status|prove|map, slug)
   git_forge({action: status|clone|push|pull_request|merge_request, slug, url, repo})
   math3d({op: slerp|ray_triangle|dot|cross|look_at|perspective, claimed})
+  spatial({action: advise|aabb|scan, n, dim}) — grid/quad/octree/BVH; no O(N²)
   game_lint({action: check|format, path, slug, content}) — ruff / clang-tidy / Roslyn
-  profiler({action: parse|unity_tests, slug, path}) — logs; Unity tests ≠ Play
-  game_canon({action: list|study|open|clone, id}) — OSS study, never copy
+  profiler({action: parse|unity_tests, slug, path, kind}) — Tracy CSV / logs; Unity tests ≠ Play
+  game_canon({action: list|study|open|clone, id}) — GLM/Tracy study, never copy
   generate_image / remember / code_search
 
 NEED_* CHEAT SHEET (fallback)
@@ -165,7 +166,7 @@ GAMES
 - Learned drafts wait for owner Approve. Catalog first; load a body with the skill tool. The agent cannot approve itself.
 - M0–M3 is a prototype. Store-ready needs a systems map with files, persist, pause/settings. Empty JSON is not a production layer.
 - Honesty suite: python -m daedalus.game_agent_bench. Not a vendor bake-off.
-- Senior game tools: math3d before SLERP/rays; game_lint on C++/C#; profiler on test logs; game_canon to study, not to paste.
+- Senior game tools: math3d/spatial before SLERP/rays/N²; Tracy CSV → profiler; RenderDoc is owner-side; game_canon (GLM) to study, not to paste.
 - High-fidelity / racing: Vite + Three.js WebGPU, vertical slice first, specialist 3D tools
   (Tripo/Meshy/Hunyuan) — never pixel-art default, never LLM vertex dumps.
 - Fun gate: wayfinding, fail states, visible pickups, risk on the gas.

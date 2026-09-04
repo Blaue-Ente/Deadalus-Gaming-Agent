@@ -720,9 +720,12 @@ def select_skills(user_message: str, intent: str, hint: str = "") -> list[str]:
                     "server reconciliation", "lockstep", "rubber-band",
                     "hitscan", "multiplayer tick"],
         "game_canon": ["doom 3", "doom3", "mindustry", "tinyrenderer",
-                       "game programming patterns", "stb_ds", "idlib"],
+                       "game programming patterns", "stb_ds", "idlib",
+                       "glm", "directxmath", "g-truc"],
         "senior_tools": ["clang-tidy", "clang-format", "roslyn", "unity test framework",
-                         "profiler log", "game_lint"],
+                         "profiler log", "game_lint", "tracy", "renderdoc"],
+        "spatial_simd": ["octree", "quadtree", "bvh", "spatial partition",
+                         "broadphase", "simd", "o(n^2)", "uniform grid"],
     }
     for name in _SKILLS_CACHE:
         kws = keywords.get(name, [name.split("_")[0]])

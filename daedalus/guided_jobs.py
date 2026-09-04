@@ -414,6 +414,15 @@ async def _run_guided_step(job: GuidedJob) -> None:
         coding_mode = proj.get("coding_mode", "lite")
         combined_sys = build_combined_sys(kind, coding_mode)
         try:
+            from .game_engineer import attach_to_sys
+            combined_sys = attach_to_sys(
+                combined_sys,
+                text=f"{proj.get('name', '')} {proj.get('description', '')} {job.description}",
+                kind=kind,
+            )
+        except Exception:
+            pass
+        try:
             from .dissection import prompt_block_for_slug
             specimen = prompt_block_for_slug(job.slug)
             if specimen:

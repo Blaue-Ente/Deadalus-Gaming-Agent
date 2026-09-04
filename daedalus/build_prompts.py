@@ -142,6 +142,15 @@ def build_combined_sys(kind: str, coding_mode: str) -> str:
     parts = [_AI_BUILD_SYS_BASE, game_arch, kind_block]
     if mode_block:
         parts.append(mode_block)
+    try:
+        from .game_engineer import prompt_block
+        # Kind alone is not enough for vite/static apps; "игра" marks Studio game builds.
+        blob = "игра" if kind in ("godot", "unity", "expo") else ""
+        eng = prompt_block(blob, kind=kind)
+        if eng:
+            parts.append(eng)
+    except Exception:
+        pass
     return "\n".join(p for p in parts if p)
 
 

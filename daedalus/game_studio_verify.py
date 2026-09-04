@@ -99,6 +99,15 @@ async def _build_fix_context(slug: str, proj: dict[str, Any], description: str) 
     kind = proj.get("kind", "static")
     coding_mode = proj.get("coding_mode", "lite")
     combined_sys = build_combined_sys(kind, coding_mode)
+    try:
+        from .game_engineer import attach_to_sys
+        combined_sys = attach_to_sys(
+            combined_sys,
+            text=f"{proj.get('name', slug)} {description}",
+            kind=kind,
+        )
+    except Exception:
+        pass
     is_game = is_likely_game(f"{proj.get('name', slug)} {description}")
     build_model, _ = resolve_build_model_for_project(
         description, is_game=is_game, coding_mode=coding_mode,
