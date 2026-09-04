@@ -6,7 +6,7 @@ ruff:
   image: python:3.12-slim
   script:
     - pip install --no-cache-dir ruff
-    - ruff check daedalus/tool_protocol.py daedalus/model_router.py daedalus/run_engine.py daedalus/need_scan.py daedalus/game_build_contract.py daedalus/game_agent_bench.py daedalus/engine_runners.py daedalus/quality_gate.py daedalus/playtest_scenario.py daedalus/balance_sim.py daedalus/playground_gameplay_verify.py daedalus/game_studio_gates.py daedalus/world_runtime.py daedalus/world_kit.py daedalus/png_codec.py daedalus/atlas.py daedalus/sfx_kit.py daedalus/mesh_jobs.py daedalus/asset_pipeline.py daedalus/learned_skills.py daedalus/production_layer.py tests/test_harness_kernel.py tests/test_gameplay_bot.py tests/test_world_runtime.py tests/test_asset_pipeline.py tests/test_skill_memory.py tests/test_production_layer.py
+    - ruff check daedalus/tool_protocol.py daedalus/model_router.py daedalus/run_engine.py daedalus/need_scan.py daedalus/game_build_contract.py daedalus/game_agent_bench.py daedalus/engine_runners.py daedalus/quality_gate.py daedalus/playtest_scenario.py daedalus/balance_sim.py daedalus/playground_gameplay_verify.py daedalus/game_studio_gates.py daedalus/world_runtime.py daedalus/world_kit.py daedalus/png_codec.py daedalus/atlas.py daedalus/sfx_kit.py daedalus/mesh_jobs.py daedalus/asset_pipeline.py daedalus/learned_skills.py daedalus/production_layer.py daedalus/unity_runtime.py tests/test_harness_kernel.py tests/test_gameplay_bot.py tests/test_world_runtime.py tests/test_asset_pipeline.py tests/test_skill_memory.py tests/test_production_layer.py tests/test_unity_runtime.py
     - ruff check --select E9,F63,F7,F82 --exclude daedalus/agent.py daedalus app tests
   rules:
     - if: $CI_COMMIT_BRANCH

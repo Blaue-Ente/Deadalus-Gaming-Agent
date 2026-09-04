@@ -653,6 +653,69 @@ def run_production_check(ctx: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def run_unity_check(ctx: dict[str, Any]) -> dict[str, Any]:
+    """Unity is local Hub or MCP. In-cloud Editor claims fail. Racing is N/A."""
+    checks: list[dict[str, Any]] = []
+    config = ctx.get("config") or {}
+    kind = (config.get("kind") or (ctx.get("project") or {}).get("kind") or "").strip().lower()
+    brainstorm = config.get("brainstorm") or {}
+    blob = f"{brainstorm.get('idea', '')} {brainstorm.get('genre', '')} {ctx.get('gdd') or ''}"
+    root = _project_root(ctx)
+    has_files = _has_game_files(ctx, root)
+
+    if kind != "unity" and not (root and (root / "Assets").is_dir()):
+        checks.append(_check(
+            "na",
+            "Unity runtime",
+            "pass",
+            "не е Unity проект — N/A",
+        ))
+        return {
+            "gate": "unity-check",
+            "label": "Unity Check",
+            "at": datetime.now(timezone.utc).isoformat(),
+            **_aggregate(checks),
+        }
+
+    if not has_files or root is None:
+        from .unity_runtime import looks_like_cloud_editor_claim
+        claim = looks_like_cloud_editor_claim(blob)
+        checks.append(_check(
+            "hub",
+            "Unity Editor / MCP",
+            "warn" if claim else "pass",
+            "Unity не е в този облак — Hub или DAEDALUS_UNITY_MCP" if claim
+            else "unity-check не блокира планиране преди файлове",
+        ))
+        return {
+            "gate": "unity-check",
+            "label": "Unity Check",
+            "at": datetime.now(timezone.utc).isoformat(),
+            **_aggregate(checks),
+        }
+
+    from .unity_runtime import prove_unity
+    proof = prove_unity(root, claim=blob, kind=kind)
+    if proof.get("ok"):
+        warns = proof.get("warnings") or []
+        checks.append(_check(
+            "promise",
+            "Unity MCP or honest Hub",
+            "warn" if warns else "pass",
+            "; ".join(warns)[:240] if warns else (proof.get("status") or {}).get("promise") or "ok",
+        ))
+    else:
+        detail = "; ".join(proof.get("errors") or ["Unity Editor is not in this cloud"])
+        checks.append(_check("promise", "Unity MCP or honest Hub", "fail", detail[:240]))
+
+    return {
+        "gate": "unity-check",
+        "label": "Unity Check",
+        "at": datetime.now(timezone.utc).isoformat(),
+        **_aggregate(checks),
+    }
+
+
 GATE_RUNNERS = {
     "gate-check": run_gate_check,
     "scope-check": run_scope_check,
@@ -663,13 +726,14 @@ GATE_RUNNERS = {
     "world-check": run_world_check,
     "asset-check": run_asset_check,
     "production-check": run_production_check,
+    "unity-check": run_unity_check,
 }
 
 
 def gates_for_build_mode(build_mode: str) -> list[str]:
     if build_mode == "prototype":
-        return ["smoke-check", "gate-check", "scope-check", "craft-check", "play-check", "world-check", "asset-check", "production-check"]
-    return ["gate-check", "scope-check", "balance-check", "craft-check", "play-check", "world-check", "asset-check", "production-check"]
+        return ["smoke-check", "gate-check", "scope-check", "craft-check", "play-check", "world-check", "asset-check", "production-check", "unity-check"]
+    return ["gate-check", "scope-check", "balance-check", "craft-check", "play-check", "world-check", "asset-check", "production-check", "unity-check"]
 
 
 def run_gates(ctx: dict[str, Any], gate_ids: list[str] | None = None) -> dict[str, Any]:

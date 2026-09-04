@@ -394,6 +394,21 @@
     if (ev.key === "Enter") { ev.preventDefault(); $("shrun").click(); }
   });
 
+  async function appendUnity(box) {
+    if (!state.slug) return;
+    try {
+      const u = await (await fetch("/api/v1/playground/projects/" + state.slug + "/unity")).json();
+      if (!u.unity) return;
+      const promise = u.promise || "local_hub";
+      let sub = "Hub локално · не в този облак";
+      if (promise === "mcp") sub = "MCP · локален Editor";
+      else if (promise === "batchmode") sub = "batchmode · не е Play";
+      box.appendChild(itemEl("unity", sub, promise === "mcp"));
+    } catch (e) {
+      box.appendChild(itemEl("unity", String(e), false));
+    }
+  }
+
   async function appendLayer(box) {
     if (!state.slug) return;
     try {
@@ -427,6 +442,7 @@
         text(empty, "Няма kit. Епос + ново име, или Autopilot с кампания.");
         box.appendChild(empty);
         await appendLayer(box);
+        await appendUnity(box);
         return;
       }
       keys.forEach((k) => {
@@ -435,6 +451,7 @@
       const runtime = !!(data.world && data.world.runtime);
       box.appendChild(itemEl("runtime", runtime ? "жив" : "кух JSON", runtime));
       await appendLayer(box);
+      await appendUnity(box);
     } catch (e) {
       const empty = document.createElement("div");
       empty.className = "empty";

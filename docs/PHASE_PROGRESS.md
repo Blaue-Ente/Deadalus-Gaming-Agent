@@ -12,8 +12,8 @@ Owner-approved plan (2026-09-04). Each phase lands as its own merge request. The
 | F3 | Content systems as code (world_kit v2) | **Done** — merged to `main` (`bcff039`) |
 | F4 | Asset pipeline v2 (atlas, SFX, 3D jobs) | **Done** — merged to `main` (`e77d0d9`) |
 | F5 | Skill memory (progressive disclosure + Approve) | **Done** — merged to `main` (`a6ed4ed`) |
-| F6 | Production layer vs prototype wall | **This MR** — awaiting owner approval |
-| F7 | Unity: real MCP bridge or honest non-promise | Not started |
+| F6 | Production layer vs prototype wall | **Done** — merged to `main` (`53512f3`) |
+| F7 | Unity: real MCP bridge or honest non-promise | **This MR** — awaiting owner approval |
 | F8 | `game_agent_bench` as a real suite | Not started (partial metrics can start after F2) |
 
 ## F0 — Hard-job slices (done)
@@ -40,35 +40,37 @@ Campaign runtime: save `{version, region, act, flags, inventory, quests}`, quest
 
 Progressive catalog (name + description) plus at most one SKILL.md body. Failure/success drafts wait for owner Approve in Studio **Уроци**. Native `skill` cannot approve itself. Merged as `a6ed4ed`.
 
-## F6 — Production layer vs prototype wall (this MR)
+## F6 — Production layer vs prototype wall (done)
 
-**Intent:** a playable M0–M3 slice is not a shipped product. Hermes/Claude Code games die at that wall. F6 names the wall and adds a real production layer.
+M0–M3 stays a labelled prototype. `design/systems.json` plus persist/pause is the production layer. Empty JSON is not a production layer. Native `production`. Gate `production-check`. Merged as `53512f3`.
+
+## F7 — Unity MCP or honest non-promise (this MR)
+
+**Intent:** Daedalus must not pretend there is a Unity Editor in the cloud. Either talk to a real owner-installed MCP plugin, or refuse honestly. Do not vendor Unity.
 
 **Shipped**
 
-- `design/systems.json` — `{version, layer: prototype|production, systems: [{id, purpose, mvp, files[], status}]}`. Empty JSON is not a production layer.
-- Optional `src/layer/runtime.js` — persist / restore / pause / resume / settings. Game Studio start seeds the map only; it does not inject the runtime into the Vite racer M0.
-- Native `production` — action status | prove | seed | runtime | map | promote. Explorer/verify/coder all have it (explorer still cannot `write_file`).
-- Gate `production-check` — pre-build / guided racing with no files does not block. Store-ready / готово за стора on a prototype fails. A racer “ship” mesh is not a store claim.
-- Studio World kit line `слой · prototype|production`. Game Studio **Слой**. HTTP `GET|POST /api/v1/playground/projects/{slug}/production`.
+- Native `engine` on a Unity slug: `DAEDALUS_UNITY_MCP` adapter (local Editor), else `UNITY_PATH` batchmode (import ≠ Play), else honest refuse (`need=unity_local`).
+- Gate `unity-check` — N/A for racing/web; in-cloud Editor claims fail; pre-build does not block guided racing.
+- Studio **Свят** line `unity · Hub/MCP/batchmode`. Game Studio **Unity**. HTTP `GET|POST /api/v1/playground/projects/{slug}/unity`.
+- We do not vendor a Unity Editor, Hub, or a third-party MCP server.
 
 **Done when (acceptance)**
 
 | Criterion | How we know |
 |-----------|-------------|
-| Racer “ship” is not a store claim | `test_racer_ship_is_not_a_store_claim` |
-| Empty systems map is not production | `test_empty_map_is_not_production` |
-| Pre-build / guided racing not blocked | `test_pre_build_does_not_block` + `test_craft_check_warns_but_does_not_block` |
-| Honest prototype with planned systems | `test_honest_prototype_with_planned_systems` |
-| Missing claimed files fail | `test_claimed_missing_files_fail` |
-| Promote needs persist+pause+files | `test_promote_requires_evidence` |
-| Promote blocked without evidence | `test_promote_blocked_without_evidence` |
+| No Editor → honest refuse, not a skip-pass | `test_unity_no_editor_is_honest_non_promise` |
+| Bare “unity” in a GDD is not a cloud claim | `test_bare_unity_is_not_a_cloud_claim` |
+| In-cloud Editor claim without MCP fails | `test_cloud_editor_claim_fails_prove` |
+| Guided racing not blocked | `test_unity_check_does_not_block_racing` + `test_craft_check_warns_but_does_not_block` |
+| MCP tool mapping | `test_unity_mcp_tool_mapping` |
+| Batchmode is not Play | `test_batchmode_is_not_play_mode` |
 | Persona compact | `test_standalone_persona_is_compact` |
 
-**Not in F6** (next phases): Unity MCP or honest non-promise, Unreal, real GameAgentBench suite. Do not vendor a Unity Editor. Do not inject layer runtime into the Vite racer M0.
+**Not in F7** (next phase): real GameAgentBench suite. Do not vendor Unreal. Do not inject Unity into the Vite racer M0.
 
-## How to approve F6 and start F7
+## How to approve F7 and start F8
 
-1. Review this MR (systems map, prototype wall, native `production`, gate `production-check`, Studio **Слой**).
-2. Optional: start a Game Studio racing project, confirm `design/systems.json` exists and `src/layer/runtime.js` does not, then prove a store-ready claim fails until persist/pause exist.
-3. Reply that F6 is approved. F7 is Unity: a real MCP bridge **or** an honest non-promise — not a fake Editor in the cloud.
+1. Review this MR (honest refuse, MCP adapter, `unity-check`, Studio Unity line).
+2. Optional: create a Unity playground project, call `engine(action=run)` without `UNITY_PATH`, confirm the reply says we do not vendor Unity.
+3. Reply that F7 is approved. F8 is `game_agent_bench` as a real suite — still not a vendor bake-off in this repo.

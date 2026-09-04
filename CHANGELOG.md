@@ -7,6 +7,7 @@ The version in `pyproject.toml` is the source of truth for the package.
 
 ### Games
 
+- **Unity MCP or honest refuse** — `engine` on a Unity project talks to `DAEDALUS_UNITY_MCP` (owner-installed local Editor plugin) or `UNITY_PATH` batchmode (import is not Play). Without either it returns an honest non-promise. We do not vendor Unity. Gate `unity-check` does not block guided racing.
 - **Production layer** — M0–M3 stays a labelled prototype. `design/systems.json` plus persist and pause/settings is the production layer. Native `production`. Gate `production-check` does not block guided racing before files exist. Empty systems JSON is not a production layer. Store-ready / готово за стора on a prototype fails (a racer “ship” mesh does not).
 - **World kit runtime** — epic projects ship a playable campaign slice: save `{version, region, act, flags, inventory, quests}`, `world/quests.json`, `characters/*.dialogue.json`, gated `levels/graph.json`, and `src/world/runtime.js`. `world({action: prove})` walks talk → flag → quest → travel. Hollow map/graph JSON fails. Gate `world-check` does not block guided builds that have no files yet.
 - **Asset pipeline v2** — `assets({action: atlas|tileset|sfx|font})` packs a 2D kit (PNG atlas + tileset, procedural WAV, 5×7 font) with no paid APIs. `assets({action: mesh})` submits Tripo/Meshy/fal only when `FAL_KEY` / `TRIPO_API_KEY` / `MESHY_API_KEY` exist; otherwise `{need_key: true}` and no fake hero GLB. Greybox is a labelled cube. Suno is a file drop. Gate `asset-check` does not block guided racing before files exist.
