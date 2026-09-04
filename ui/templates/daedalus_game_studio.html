@@ -3,7 +3,7 @@
 {% set daedalus_tab = 'game_studio' %}
 {% block title %}Game Studio — Daedalus{% endblock %}
 {% block eyebrow %}<span data-i18n="gs.eyebrow">Daedalus · Game Studio · Brainstorm → GDD → Build</span>{% endblock %}
-{% block heading %}Game Studio{% endblock %}
+{% block heading %}<span data-i18n="gs.heading">Game Studio</span>{% endblock %}
 {% block mob_title %}Game Studio{% endblock %}
 
 {% block content %}
@@ -29,22 +29,22 @@
       <div class="flex items-center justify-between p-4 border-b border-gray-800">
         <div>
           <h3 class="text-white font-semibold" data-i18n="gs.wizardTitle">New game</h3>
-          <p class="text-xs text-gray-500 mt-1">Brainstorm → GDD → платформа → milestones → build</p>
+          <p class="text-xs text-gray-500 mt-1" data-i18n="gs.wizardFlow">Brainstorm → GDD → platform → milestones → build</p>
         </div>
         <button onclick="showGsList()" class="text-gray-400 hover:text-white text-sm" data-i18n="gs.backToProjects">← Back to projects</button>
       </div>
       <div class="px-4 pt-3">
         <div class="flex gap-1 text-[10px] font-mono">
-          <span id="gs-step-1" class="flex-1 text-center py-1 rounded bg-purple-900/50 text-purple-300">1 Brainstorm</span>
-          <span id="gs-step-2" class="flex-1 text-center py-1 rounded bg-gray-800 text-gray-500">2 GDD</span>
-          <span id="gs-step-3" class="flex-1 text-center py-1 rounded bg-gray-800 text-gray-500">3 Платформа</span>
-          <span id="gs-step-4" class="flex-1 text-center py-1 rounded bg-gray-800 text-gray-500">4 Milestones</span>
-          <span id="gs-step-5" class="flex-1 text-center py-1 rounded bg-gray-800 text-gray-500">5 Build</span>
+          <span id="gs-step-1" class="flex-1 text-center py-1 rounded bg-purple-900/50 text-purple-300" data-i18n="gs.step1">1 Brainstorm</span>
+          <span id="gs-step-2" class="flex-1 text-center py-1 rounded bg-gray-800 text-gray-500" data-i18n="gs.step2">2 GDD</span>
+          <span id="gs-step-3" class="flex-1 text-center py-1 rounded bg-gray-800 text-gray-500" data-i18n="gs.step3">3 Platform</span>
+          <span id="gs-step-4" class="flex-1 text-center py-1 rounded bg-gray-800 text-gray-500" data-i18n="gs.step4">4 Milestones</span>
+          <span id="gs-step-5" class="flex-1 text-center py-1 rounded bg-gray-800 text-gray-500" data-i18n="gs.step5">5 Build</span>
         </div>
       </div>
       <div class="p-4 space-y-4 max-h-[60vh] overflow-auto">
         <div id="gs-pane-1" class="space-y-3">
-          <input id="gs-title" placeholder="Име на играта *" class="w-full px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700">
+          <input id="gs-title" data-i18n-placeholder="gs.titlePh" placeholder="Game title *" class="w-full px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700">
           <select id="gs-genre" class="w-full px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700">
             <option value="action">Action / Shooter</option>
             <option value="puzzle">Puzzle / Casual</option>
@@ -55,36 +55,36 @@
             <option value="survival">Survival / Crafting</option>
             <option value="casual">Casual / Hyper-casual</option>
             <option value="multiplayer">Multiplayer / PvP</option>
-            <option value="other">Друго</option>
+            <option value="other" data-i18n="gs.other">Other</option>
           </select>
-          <textarea id="gs-idea" rows="3" placeholder="Идея в 2–3 изречения — какво прави играчът? *"
+          <textarea id="gs-idea" rows="3" data-i18n-placeholder="gs.ideaPh" placeholder="Idea in 2–3 sentences — what does the player do? *"
             class="w-full px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700"></textarea>
-          <input id="gs-hook" placeholder="Уникален ъгъл / hook (опционално)"
+          <input id="gs-hook" data-i18n-placeholder="gs.hookPh" placeholder="Unique angle / hook (optional)"
             class="w-full px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <select id="gs-audience" class="px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700">
-              <option value="casual">Casual играчи</option>
-              <option value="kids">Деца</option>
-              <option value="core">Core геймъри</option>
+              <option value="casual" data-i18n="gs.audCasual">Casual players</option>
+              <option value="kids" data-i18n="gs.audKids">Kids</option>
+              <option value="core" data-i18n="gs.audCore">Core gamers</option>
               <option value="hardcore">Hardcore</option>
-              <option value="all_ages">Всички възрасти</option>
+              <option value="all_ages" data-i18n="gs.audAll">All ages</option>
             </select>
             <select id="gs-platform-hint" class="px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700">
-              <option value="web">Web браузър</option>
+              <option value="web" data-i18n="gs.platWeb">Web browser</option>
               <option value="mobile">Mobile (iOS/Android)</option>
               <option value="desktop">Desktop (Unity)</option>
               <option value="cross_platform">Cross-platform</option>
             </select>
           </div>
-          <input id="gs-references" placeholder="Референции (име или URL за дисекция)"
+          <input id="gs-references" data-i18n-placeholder="gs.refsPh" placeholder="References (name or URL to dissect)"
             class="w-full px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700">
           <div class="flex gap-2">
             <button type="button" onclick="gsDissectReferences()" id="gs-dissect-btn"
-              class="px-3 py-2 rounded text-xs font-medium bg-cyan-800 hover:bg-cyan-700 text-white">🔬 Дисекция</button>
+              class="px-3 py-2 rounded text-xs font-medium bg-cyan-800 hover:bg-cyan-700 text-white" data-i18n="gs.dissect">🔬 Dissection</button>
             <button type="button" onclick="gsEnsureLab()" id="gs-lab-btn"
-              class="px-3 py-2 rounded text-xs bg-gray-800 hover:bg-gray-700 text-gray-200">🖥 Лаборатория</button>
+              class="px-3 py-2 rounded text-xs bg-gray-800 hover:bg-gray-700 text-gray-200" data-i18n="gs.lab">🖥 Lab</button>
           </div>
-          <p class="text-[10px] text-gray-500">Дисекцията анализира игра (линк / име / инсталация в лабораторията) и я ползва като мостра — не като клонинг.</p>
+          <p class="text-[10px] text-gray-500" data-i18n="gs.dissectHint">Dissection analyzes a game (link / name / lab install) and uses it as a specimen — not a clone.</p>
           <div id="gs-dissection-panel" class="hidden p-3 rounded-lg border border-cyan-800/50 bg-cyan-950/30 text-xs text-cyan-100 space-y-1"></div>
           <div id="gs-brainstorm-hints" class="hidden p-3 rounded-lg border border-purple-800/50 bg-purple-950/30 text-xs text-purple-200"></div>
         </div>
@@ -102,7 +102,7 @@
             <div>
               <label class="text-xs text-gray-500 block mb-1">Playground kind</label>
               <select id="gs-kind" class="w-full px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700">
-                <option value="">авто (препоръчано)</option>
+                <option value="" data-i18n="gs.kindAuto">auto (recommended)</option>
                 <option value="static">static</option>
                 <option value="vite">vite</option>
                 <option value="vite-react">vite-react</option>
@@ -123,23 +123,23 @@
           <div class="grid grid-cols-1 gap-2">
             <label class="flex items-start gap-3 p-3 rounded-lg border border-gray-700 bg-gray-800/50 cursor-pointer">
               <input type="radio" name="gs-build-mode" value="guided" checked class="mt-1">
-              <span><span class="text-white text-sm font-medium">Guided</span><span class="block text-[10px] text-gray-500">Checkpoint build (препоръчано)</span></span>
+              <span><span class="text-white text-sm font-medium">Guided</span><span class="block text-[10px] text-gray-500" data-i18n="gs.guidedHint">Checkpoint build (recommended)</span></span>
             </label>
             <label class="flex items-start gap-3 p-3 rounded-lg border border-gray-700 bg-gray-800/50 cursor-pointer">
               <input type="radio" name="gs-build-mode" value="autopilot" class="mt-1">
-              <span><span class="text-white text-sm font-medium">Autopilot</span><span class="block text-[10px] text-gray-500">Автономен build</span></span>
+              <span><span class="text-white text-sm font-medium">Autopilot</span><span class="block text-[10px] text-gray-500" data-i18n="gs.autoHint">Autonomous build</span></span>
             </label>
             <label class="flex items-start gap-3 p-3 rounded-lg border border-gray-700 bg-gray-800/50 cursor-pointer">
               <input type="radio" name="gs-build-mode" value="prototype" class="mt-1">
-              <span><span class="text-white text-sm font-medium">Prototype</span><span class="block text-[10px] text-gray-500">Само M0–M3</span></span>
+              <span><span class="text-white text-sm font-medium">Prototype</span><span class="block text-[10px] text-gray-500" data-i18n="gs.protoHint">M0–M3 only</span></span>
             </label>
           </div>
         </div>
       </div>
       <div class="flex gap-2 p-4 border-t border-gray-800">
-        <button onclick="gsPrev()" id="gs-prev-btn" class="hidden px-4 py-2 rounded bg-gray-800 text-gray-300 text-sm">← Назад</button>
-        <button onclick="gsNext()" id="gs-next-btn" class="flex-1 px-4 py-2 rounded bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium">Напред →</button>
-        <button onclick="gsStart()" id="gs-start-btn" class="hidden flex-1 px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">🚀 Стартирай</button>
+        <button onclick="gsPrev()" id="gs-prev-btn" class="hidden px-4 py-2 rounded bg-gray-800 text-gray-300 text-sm" data-i18n="gs.back">← Back</button>
+        <button onclick="gsNext()" id="gs-next-btn" class="flex-1 px-4 py-2 rounded bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium" data-i18n="gs.next">Next →</button>
+        <button onclick="gsStart()" id="gs-start-btn" class="hidden flex-1 px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium" data-i18n="gs.start">🚀 Start</button>
       </div>
     </div>
   </div>
@@ -147,7 +147,7 @@
   <!-- WORKSPACE VIEW -->
   <div id="gs-view-workspace" class="hidden space-y-4">
     <div class="flex flex-wrap items-center gap-2">
-      <button onclick="showGsList()" class="text-gray-400 hover:text-white text-sm">← Проекти</button>
+      <button onclick="showGsList()" class="text-gray-400 hover:text-white text-sm" data-i18n="gs.projects">← Projects</button>
       <h2 id="gs-ws-title" class="text-white font-semibold text-lg flex-1 truncate"></h2>
       <span id="gs-ws-badge" class="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-900/50 text-purple-300"></span>
     </div>
@@ -160,28 +160,28 @@
         </section>
         <section class="bg-gray-900 border border-cyan-800/40 rounded-xl p-4">
           <div class="flex items-center justify-between gap-2 mb-2">
-            <h3 class="text-sm font-semibold text-white">🔬 Дисекция (мостра)</h3>
+            <h3 class="text-sm font-semibold text-white" data-i18n="gs.dissectSpecimen">🔬 Dissection (specimen)</h3>
             <button onclick="gsWsDissect()" id="gs-ws-dissect-btn"
-              class="px-3 py-1 rounded bg-cyan-800 hover:bg-cyan-700 text-white text-[10px]">Анализирай</button>
+              class="px-3 py-1 rounded bg-cyan-800 hover:bg-cyan-700 text-white text-[10px]" data-i18n="gs.analyze">Analyze</button>
           </div>
-          <input id="gs-ws-dissect-src" placeholder="Име, URL, git или път към инсталация"
+          <input id="gs-ws-dissect-src" data-i18n-placeholder="gs.dissectSrc" placeholder="Name, URL, git, or path to an install"
             class="w-full px-3 py-2 rounded bg-gray-800 text-white text-xs border border-gray-700 mb-2">
           <pre id="gs-ws-dissection" class="text-[10px] text-cyan-200/80 font-mono whitespace-pre-wrap max-h-40 overflow-auto hidden"></pre>
         </section>
         <section class="bg-gray-900 border border-gray-800 rounded-xl p-4">
-          <h3 class="text-sm font-semibold text-white mb-2">🗺️ Studio план</h3>
-          <div id="gs-ws-plan-empty" class="text-xs text-gray-500 mb-3">Няма запазен план. Създай Studio план от GDD.</div>
+          <h3 class="text-sm font-semibold text-white mb-2" data-i18n="gs.studioPlan">🗺️ Studio plan</h3>
+          <div id="gs-ws-plan-empty" class="text-xs text-gray-500 mb-3" data-i18n="gs.noPlan">No saved plan. Create a Studio plan from the GDD.</div>
           <div id="gs-ws-plan-stages" class="space-y-2 hidden"></div>
           <button onclick="gsCreatePlan()" id="gs-ws-plan-btn"
-            class="mt-2 px-4 py-2 rounded bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-medium">🗺️ Създай Studio план</button>
+            class="mt-2 px-4 py-2 rounded bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-medium" data-i18n="gs.createPlan">🗺️ Create Studio plan</button>
         </section>
         <section class="bg-gray-900 border border-amber-800/40 rounded-xl p-4">
           <div class="flex items-center justify-between gap-2 mb-2">
             <h3 class="text-sm font-semibold text-white">🚦 Quality Gates</h3>
             <button onclick="gsRunGates()" id="gs-ws-gates-btn"
-              class="px-3 py-1 rounded bg-amber-800 hover:bg-amber-700 text-white text-[10px]">Пусни проверки</button>
+              class="px-3 py-1 rounded bg-amber-800 hover:bg-amber-700 text-white text-[10px]" data-i18n="gs.runGates">Run checks</button>
           </div>
-          <p id="gs-ws-gates-summary" class="text-xs text-gray-500 mb-2">Пусни gate-check преди guided build.</p>
+          <p id="gs-ws-gates-summary" class="text-xs text-gray-500 mb-2" data-i18n="gs.gatesHint">Run a gate-check before a guided build.</p>
           <div id="gs-ws-gates-list" class="space-y-2 text-xs"></div>
         </section>
       </div>
@@ -193,42 +193,42 @@
           <div id="gs-ws-handoff" class="mt-3 p-2 rounded border border-gray-800 bg-gray-950/60 text-[10px] text-gray-400 hidden"></div>
         </section>
         <section class="bg-gray-900 border border-teal-800/40 rounded-xl p-4">
-          <h3 class="text-sm font-semibold text-white mb-2">🧱 Слой</h3>
-          <p id="gs-ws-layer-copy" class="text-xs text-gray-400 mb-2">M0–M3 е прототип, не билд за стора. Празен systems.json не е продукционен слой.</p>
-          <div id="gs-ws-layer" class="text-xs text-gray-300 font-mono">слой · prototype</div>
+          <h3 class="text-sm font-semibold text-white mb-2" data-i18n="gs.layer">🧱 Layer</h3>
+          <p id="gs-ws-layer-copy" class="text-xs text-gray-400 mb-2" data-i18n="gs.layerCopy">M0–M3 is a prototype, not a store build. Empty systems.json is not a production layer.</p>
+          <div id="gs-ws-layer" class="text-xs text-gray-300 font-mono" data-i18n="gs.layerProto">layer · prototype</div>
         </section>
         <section class="bg-gray-900 border border-sky-800/40 rounded-xl p-4">
           <h3 class="text-sm font-semibold text-white mb-2">🎮 Unity</h3>
-          <p id="gs-ws-unity-copy" class="text-xs text-gray-400 mb-2">Няма Editor в този облак. Hub локално или DAEDALUS_UNITY_MCP. Scaffold не е Play.</p>
+          <p id="gs-ws-unity-copy" class="text-xs text-gray-400 mb-2" data-i18n="gs.noEditor">No Editor in this cloud. Hub locally or DAEDALUS_UNITY_MCP. Scaffold is not Play.</p>
           <div id="gs-ws-unity" class="text-xs text-gray-300 font-mono">unity · n/a</div>
         </section>
         <section class="bg-gray-900 border border-amber-800/40 rounded-xl p-4">
-          <h3 class="text-sm font-semibold text-white mb-2">📏 Честност</h3>
-          <p id="gs-ws-bench-copy" class="text-xs text-gray-400 mb-2">Suite върху този harness. Не bake-off срещу други продукти. Пропуснат браузър не е playtest.</p>
-          <div id="gs-ws-bench" class="text-xs text-gray-300 font-mono">честност · …</div>
+          <h3 class="text-sm font-semibold text-white mb-2" data-i18n="gs.honesty">📏 Honesty</h3>
+          <p id="gs-ws-bench-copy" class="text-xs text-gray-400 mb-2" data-i18n="gs.honestyCopy">A suite on this harness. Not a bake-off against other products. A skipped browser is not a playtest.</p>
+          <div id="gs-ws-bench" class="text-xs text-gray-300 font-mono" data-i18n="gs.honestyWait">honesty · …</div>
         </section>
         <section class="bg-gray-900 border border-purple-800/40 rounded-xl p-4 space-y-2">
-          <h3 class="text-sm font-semibold text-white mb-2">Build (milestone по milestone)</h3>
-          <p id="gs-ws-build-hint" class="text-[10px] text-gray-500">Gate-check + план → Guided за текущия milestone.</p>
+          <h3 class="text-sm font-semibold text-white mb-2" data-i18n="gs.buildMs">Build (milestone by milestone)</h3>
+          <p id="gs-ws-build-hint" class="text-[10px] text-gray-500" data-i18n="gs.buildHint">Gate-check + plan → Guided for the current milestone.</p>
           <button onclick="gsStartGuided()" id="gs-ws-guided-btn"
-            class="w-full px-3 py-2 rounded bg-emerald-700 hover:bg-emerald-600 text-white text-xs disabled:opacity-40 disabled:cursor-not-allowed">▶ Guided за текущия milestone</button>
+            class="w-full px-3 py-2 rounded bg-emerald-700 hover:bg-emerald-600 text-white text-xs disabled:opacity-40 disabled:cursor-not-allowed" data-i18n="gs.guidedCur">▶ Guided for the current milestone</button>
           <button onclick="gsStartAutopilot()" id="gs-ws-autopilot-btn"
             class="w-full px-3 py-2 rounded bg-purple-700 hover:bg-purple-600 text-white text-xs disabled:opacity-40 disabled:cursor-not-allowed">🚀 Autopilot (scoped)</button>
           <button onclick="gsRunFullStudioAuto()" id="gs-full-auto-btn"
             class="w-full px-3 py-2 rounded bg-amber-600 hover:bg-amber-500 text-white text-xs font-semibold disabled:opacity-40 disabled:cursor-not-allowed"
-            title="M0→M8 без checkpoint спирания — auto-approve всеки етап">⚡ Пълен Auto M0→M8</button>
+            title="M0→M8 with no checkpoint stops — auto-approve every stage" data-i18n-title="gs.fullAutoTitle" data-i18n="gs.fullAuto">⚡ Full Auto M0→M8</button>
           <button onclick="gsAdvanceMilestone()" id="gs-ws-advance-btn"
-            class="w-full px-3 py-2 rounded bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs disabled:opacity-40 hidden">⏭ Следващ milestone</button>
+            class="w-full px-3 py-2 rounded bg-gray-800 hover:bg-gray-700 text-gray-200 text-xs disabled:opacity-40 hidden" data-i18n="gs.nextMs">⏭ Next milestone</button>
           <button onclick="gsAdvanceMilestone({unity_waiver:true})" id="gs-ws-unity-waiver-btn"
             class="w-full px-3 py-2 rounded bg-purple-900/60 hover:bg-purple-800 text-purple-200 text-xs disabled:opacity-40 hidden"
-            title="Unity scaffold OK — пълен gameplay тест в Unity Hub локално">📦 Advance с Unity waiver</button>
+            title="Unity scaffold OK — full gameplay test in Unity Hub locally" data-i18n-title="gs.waiverTitle" data-i18n="gs.unityWaiver">📦 Advance with Unity waiver</button>
           <button onclick="gsRunVerify()" id="gs-ws-verify-inline-btn"
-            class="w-full px-3 py-2 rounded bg-cyan-800 hover:bg-cyan-700 text-white text-xs disabled:opacity-40 hidden">🔬 Пусни Verify</button>
-          <div id="gs-ws-complete-banner" class="hidden p-2 rounded border border-emerald-500/40 bg-emerald-950/30 text-emerald-300 text-xs text-center">
-            ✅ Проектът е завършен — всички milestone-и са build + verify.
+            class="w-full px-3 py-2 rounded bg-cyan-800 hover:bg-cyan-700 text-white text-xs disabled:opacity-40 hidden" data-i18n="gs.runVerify">🔬 Run Verify</button>
+          <div id="gs-ws-complete-banner" class="hidden p-2 rounded border border-emerald-500/40 bg-emerald-950/30 text-emerald-300 text-xs text-center" data-i18n="gs.complete">
+            ✅ Project complete — every milestone is build + verify.
           </div>
           <a id="gs-ws-preview" href="#" target="_blank" class="block text-center w-full px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-white text-xs">👁 Preview /apps</a>
-          <a id="gs-ws-pg-link" href="#" class="block text-center text-[10px] text-gray-500 hover:text-gray-300 pt-1">↗ Advanced в Playground</a>
+          <a id="gs-ws-pg-link" href="#" class="block text-center text-[10px] text-gray-500 hover:text-gray-300 pt-1" data-i18n="gs.advPg">↗ Advanced in Playground</a>
         </section>
       </div>
     </div>
@@ -242,18 +242,18 @@
         <div class="flex gap-2">
           <button onclick="gsOpenPlayground('plan')" class="px-2 py-1 rounded bg-gray-800 hover:bg-gray-700 text-[10px] text-gray-400">↗ Playground</button>
           <button onclick="gsStopGuided()" id="gs-guided-stop-btn"
-            class="px-2 py-1 rounded bg-red-900/60 hover:bg-red-800 text-[10px] text-red-200">■ Спри</button>
+            class="px-2 py-1 rounded bg-red-900/60 hover:bg-red-800 text-[10px] text-red-200" data-i18n="gs.stop">■ Stop</button>
         </div>
       </div>
       <div id="gs-guided-stages" class="flex flex-wrap gap-1.5"></div>
       <div id="gs-guided-log" class="font-mono text-[11px] max-h-52 overflow-y-auto bg-black/40 rounded p-2 border border-gray-800"></div>
       <div id="gs-guided-checkpoint" class="hidden p-3 rounded border border-amber-800/50 bg-amber-950/20 space-y-2">
-        <div class="text-xs font-medium text-amber-200">⏸ Checkpoint — прегледай преди следващия етап</div>
+        <div class="text-xs font-medium text-amber-200" data-i18n="gs.cpReview">⏸ Checkpoint — review before the next stage</div>
         <pre id="gs-guided-cp-review" class="text-[10px] text-gray-400 whitespace-pre-wrap max-h-32 overflow-auto"></pre>
         <div id="gs-guided-cp-files" class="text-[10px] text-gray-500 font-mono"></div>
         <div id="gs-guided-cp-trunk" class="text-[10px] text-violet-400 hidden"></div>
         <div id="gs-guided-cp-options" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
-        <textarea id="gs-guided-cp-notes" rows="2" placeholder="Бележки за retry / edit plan…"
+        <textarea id="gs-guided-cp-notes" rows="2" data-i18n-placeholder="gs.cpNotes" placeholder="Notes for retry / edit plan…"
           class="w-full text-xs bg-gray-950 border border-gray-700 rounded p-2 text-gray-300"></textarea>
       </div>
       <div id="gs-guided-done" class="hidden p-3 rounded border border-emerald-800/50 bg-emerald-950/20 text-sm text-emerald-300"></div>
@@ -263,10 +263,10 @@
       <div class="flex items-center justify-between gap-2 flex-wrap">
         <div>
           <h3 class="text-sm font-semibold text-cyan-300">🔬 Prove It Works</h3>
-          <p id="gs-proof-subtitle" class="text-[10px] text-gray-500">Runtime + browser + gameplay (до 5 поправки на фаза)</p>
+          <p id="gs-proof-subtitle" class="text-[10px] text-gray-500" data-i18n="gs.proofSub">Runtime + browser + gameplay (up to 5 fixes per phase)</p>
         </div>
         <button onclick="gsRunVerify()" id="gs-verify-btn"
-          class="px-3 py-1.5 rounded bg-cyan-800 hover:bg-cyan-700 text-white text-[10px]">Пусни Verify</button>
+          class="px-3 py-1.5 rounded bg-cyan-800 hover:bg-cyan-700 text-white text-[10px]" data-i18n="gs.runVerify">Run Verify</button>
       </div>
       <div id="gs-proof-status" class="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs"></div>
       <div id="gs-proof-checks" class="text-[10px] text-gray-400 space-y-0.5 hidden"></div>
@@ -313,10 +313,13 @@ function gsClearFullAuto() {
   _gsFullAuto = false;
   gsPersistFullAuto(false);
   const btn = $('gs-full-auto-btn');
-  if (btn) { btn.disabled = false; btn.textContent = '⚡ Пълен Auto M0→M8'; }
+  if (btn) { btn.disabled = false; btn.textContent = t('gs.fullAuto'); }
 }
 
 function $(id) { return document.getElementById(id); }
+function t(key, vars) {
+  return (window.DaedalusI18n && DaedalusI18n.t) ? DaedalusI18n.t(key, vars) : key;
+}
 function escHtml(s) {
   return String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
@@ -351,12 +354,12 @@ function showGsWizard() {
 
 async function loadGsProjects() {
   const el = $('gs-project-list');
-  el.innerHTML = '<p class="text-gray-500 text-sm animate-pulse">Зареждам…</p>';
+  el.innerHTML = '<p class="text-gray-500 text-sm animate-pulse">' + t('gs.loading') + '</p>';
   try {
     const r = await api(GS_API + '/projects');
     const projects = r.projects || [];
     if (!projects.length) {
-      el.innerHTML = '<p class="text-gray-500 text-sm">' + ((window.DaedalusI18n && DaedalusI18n.t('gs.empty')) || 'No Game Studio projects.') + ' <button onclick="showGsWizard()" class="text-purple-400 hover:underline">' + ((window.DaedalusI18n && DaedalusI18n.t('gs.createFirst')) || 'Create the first game') + '</button></p>';
+      el.innerHTML = '<p class="text-gray-500 text-sm">' + t('gs.empty') + ' <button onclick="showGsWizard()" class="text-purple-400 hover:underline">' + t('gs.createFirst') + '</button></p>';
       return;
     }
     el.innerHTML = projects.map(p => {
@@ -375,7 +378,7 @@ async function loadGsProjects() {
       </div>`;
     }).join('');
   } catch (e) {
-    el.innerHTML = '<p class="text-red-400 text-sm">Грешка: ' + escHtml(e.message) + '</p>';
+    el.innerHTML = '<p class="text-red-400 text-sm">' + t('gs.errPrefix') + escHtml(e.message) + '</p>';
   }
 }
 
@@ -396,11 +399,11 @@ function renderGsDissectionPanel(el, data) {
   const mech = (data.mechanics || []).map(m => `<li>${escHtml(String(m))}</li>`).join('');
   const stack = data.stack || {};
   el.innerHTML =
-    `<div class="font-semibold text-cyan-300">${escHtml(data.title || data.source || 'Дисекция')}</div>` +
+    `<div class="font-semibold text-cyan-300">${escHtml(data.title || data.source || t('gs.dissect'))}</div>` +
     `<div>${escHtml(data.summary || '')}</div>` +
-    (stack.engine || stack.renderer ? `<div class="text-gray-400">Стек: ${escHtml([stack.engine, stack.renderer].filter(Boolean).join(' · '))}</div>` : '') +
+    (stack.engine || stack.renderer ? `<div class="text-gray-400">${t('gs.stack')} ${escHtml([stack.engine, stack.renderer].filter(Boolean).join(' · '))}</div>` : '') +
     (mech ? `<ul class="list-disc list-inside">${mech}</ul>` : '') +
-    (data.lab_id ? `<div class="text-[10px] text-gray-500">Лаборатория: ${escHtml(data.lab_id)}</div>` : '');
+    (data.lab_id ? `<div class="text-[10px] text-gray-500">${t('gs.labId')} ${escHtml(data.lab_id)}</div>` : '');
   el.classList.remove('hidden');
 }
 
@@ -419,13 +422,13 @@ async function gsDissectReferences() {
         live: true,
       }),
     });
-    if (!r.ok) { alert(r.error || r.detail || 'дисекцията не мина'); return; }
+    if (!r.ok) { alert(r.error || r.detail || t('gs.dissectFail')); return; }
     _gsDissection = r;
     renderGsDissectionPanel($('gs-dissection-panel'), r);
   } catch (e) {
-    alert('Дисекция: ' + e.message);
+    alert(t('gs.dissectErr') + e.message);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '🔬 Дисекция'; }
+    if (btn) { btn.disabled = false; btn.textContent = t('gs.dissect'); }
   }
 }
 
@@ -440,15 +443,15 @@ async function gsEnsureLab() {
         source: ($('gs-references')?.value || '').trim(),
       }),
     });
-    if (!r.ok) { alert(r.error || 'лабораторията не се създаде'); return; }
+    if (!r.ok) { alert(r.error || t('gs.labFail')); return; }
     const panel = $('gs-dissection-panel');
     if (panel) {
       panel.classList.remove('hidden');
-      panel.innerHTML = `<div class="text-cyan-300">🖥 Лаборатория <span class="font-mono">${escHtml(r.id)}</span></div>
-        <div class="text-gray-400">Инсталирай HTML5 / zip / git clone в <code>$DAEDALUS_DATA/labs/${escHtml(r.id)}/install</code>, после Дисекция.</div>`;
+      panel.innerHTML = `<div class="text-cyan-300">${t('gs.labCreated')} <span class="font-mono">${escHtml(r.id)}</span></div>
+        <div class="text-gray-400">${t('gs.labInstall', {id: escHtml(r.id)})}</div>`;
     }
   } catch (e) {
-    alert('Лаборатория: ' + e.message);
+    alert(t('gs.labErr') + e.message);
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -470,7 +473,7 @@ function renderGsDissection(data) {
 
 async function gsWsDissect() {
   const source = ($('gs-ws-dissect-src')?.value || '').trim();
-  if (!source || !_gsWorkspaceSlug) { alert('Въведи източник'); return; }
+  if (!source || !_gsWorkspaceSlug) { alert(t('gs.enterSrc')); return; }
   const btn = $('gs-ws-dissect-btn');
   if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
   try {
@@ -478,12 +481,12 @@ async function gsWsDissect() {
       method: 'POST',
       body: JSON.stringify({ source, live: true }),
     });
-    if (!r.ok) { alert(r.error || r.detail || 'дисекцията не мина'); return; }
+    if (!r.ok) { alert(r.error || r.detail || t('gs.dissectFail')); return; }
     renderGsDissection(r);
   } catch (e) {
-    alert('Дисекция: ' + e.message);
+    alert(t('gs.dissectErr') + e.message);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Анализирай'; }
+    if (btn) { btn.disabled = false; btn.textContent = t('gs.analyze'); }
   }
 }
 
@@ -517,8 +520,8 @@ async function loadGsPresets() {
 
 async function gsRunBrainstorm() {
   const payload = gsBrainstormPayload();
-  if (!payload.title) { alert('Въведи име'); return false; }
-  if (!payload.idea) { alert('Опиши идеята'); return false; }
+  if (!payload.title) { alert(t('gs.enterName')); return false; }
+  if (!payload.idea) { alert(t('gs.enterIdea')); return false; }
   const r = await api(GS_API + '/brainstorm', { method: 'POST', body: JSON.stringify(payload) });
   if (!r.ok) { alert(r.error || 'brainstorm failed'); return false; }
   _gsBrainstorm = r.brainstorm || payload;
@@ -579,7 +582,7 @@ async function gsNext() {
     if (_gsStep === 3) { await gsLoadGdd(); _gsStep = 4; paintGsStep(); return; }
     if (_gsStep === 4) { _gsStep = 5; paintGsStep(); }
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Напред →'; }
+    if (btn) { btn.disabled = false; btn.textContent = t('gs.next'); }
   }
 }
 
@@ -605,7 +608,7 @@ async function gsStart() {
     if (!r.ok) { alert(r.error || 'start failed'); return; }
     openGsWorkspace(r.slug);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '🚀 Стартирай'; }
+    if (btn) { btn.disabled = false; btn.textContent = t('gs.start'); }
   }
 }
 
@@ -615,8 +618,8 @@ function renderGsGates(ctx) {
   const gates = ctx.gates || {};
   const ids = Object.keys(gates);
   if (!ids.length) {
-    if (summary) summary.textContent = 'Пусни gate-check преди guided build.';
-    if (list) list.innerHTML = '<p class="text-gray-600">Очаква се след Studio план.</p>';
+    if (summary) summary.textContent = t('gs.gatesHint');
+    if (list) list.innerHTML = '<p class="text-gray-600">' + t('gs.afterPlan') + '</p>';
     return;
   }
   const statusIcon = { pass: '✅', warn: '⚠️', fail: '❌' };
@@ -668,8 +671,8 @@ function updateGsBuildButtons(ctx) {
   if (guided) {
     guided.disabled = !canG;
     guided.textContent = canG
-      ? `▶ Guided за ${cur} (${pending} етапа)`
-      : (hasPlan && milestoneComplete ? `✓ ${cur} build готов` : '▶ Guided за текущия milestone');
+      ? t('gs.guidedFor', {cur, n: pending})
+      : (hasPlan && milestoneComplete ? t('gs.buildReady', {cur}) : t('gs.guidedCur'));
   }
   if (autopilot) autopilot.disabled = !canA;
   if (verifyInline) {
@@ -685,40 +688,40 @@ function updateGsBuildButtons(ctx) {
     const canWaiver = !!ctx.can_unity_waiver && !isFinal;
     advance.classList.toggle('hidden', !milestoneComplete || isFinal || projectDone);
     advance.disabled = !canAdv;
-    advance.title = canAdv ? '' : (isFinal ? 'Финален milestone — няма следващ' : 'Пусни Verify и мини преди следващ milestone');
+    advance.title = canAdv ? '' : (isFinal ? t('gs.finalMs') : t('gs.verifyFirst'));
     if (unityWaiver) {
       unityWaiver.classList.toggle('hidden', !milestoneComplete || canAdv || isFinal || projectDone);
       unityWaiver.disabled = !canWaiver;
       unityWaiver.title = canWaiver
-        ? 'Scaffold OK — пълен тест в Unity Hub; cloud не може gameplay proof'
-        : 'Няма eligible Unity waiver за този milestone';
+        ? t('gs.waiverOk')
+        : t('gs.noWaiver');
     }
   }
   if (hint) {
     if (projectDone) {
-      hint.textContent = 'Проектът е завършен — отвори Preview или Playground за финални корекции.';
+      hint.textContent = t('gs.doneHint');
     } else if (!hasPlan) {
-      hint.textContent = 'Стъпка 1: Създай Studio план от GDD.';
+      hint.textContent = t('gs.step1Hint');
     } else if (orphans > 0) {
-      hint.textContent = `⚠ ${orphans} етапа без валиден milestone — презареди страницата (авто-поправка) или прегенерирай плана.`;
+      hint.textContent = t('gs.orphanHint', {n: orphans});
     } else if (!ctx.can_guided) {
-      hint.textContent = 'Стъпка 2: Пусни gate-check преди build.';
+      hint.textContent = t('gs.step2Hint');
     } else if (canStart && canG) {
-      hint.textContent = `Стъпка 3: Guided за ${cur} (${pending} етапа) — кодира checkpoint по checkpoint.`;
+      hint.textContent = t('gs.step3Hint', {cur, n: pending});
     } else if (canStart && canA) {
-      hint.textContent = `Безопасен handoff: само ${cur}, без прегенериране на плана.`;
+      hint.textContent = t('gs.handoffHint', {cur});
     } else if (milestoneComplete && !ctx.can_advance && !isFinal) {
-      hint.textContent = `Milestone ${cur} build готов — пусни Verify (runtime + browser + gameplay).`;
+      hint.textContent = t('gs.msReadyHint', {cur});
     } else if (milestoneComplete && ctx.can_advance && !isFinal) {
-      hint.textContent = `Verify минал — преминаваме към следващия milestone…`;
+      hint.textContent = t('gs.verifyPassHint');
     } else if (milestoneComplete && isFinal && !ctx.current_verify?.ok) {
-      hint.textContent = `Финален milestone ${cur} — пусни Verify за потвърждение че играта работи.`;
+      hint.textContent = t('gs.finalVerify', {cur});
     } else if (milestoneComplete && isFinal && ctx.current_verify?.ok) {
-      hint.textContent = `Финален milestone ${cur} — Verify минал. Проектът е готов за Preview.`;
+      hint.textContent = t('gs.finalOk', {cur});
     } else if (!canStart && curRow && curRow.total === 0) {
-      hint.textContent = `${cur} няма етапи в плана — прегенерирай Studio плана.`;
+      hint.textContent = t('gs.noStages', {cur});
     } else {
-      hint.textContent = 'Създай план → Пусни проверки → Guided.';
+      hint.textContent = t('gs.flowHint');
     }
   }
 }
@@ -731,21 +734,21 @@ function renderGsHandoff(ctx) {
   box.classList.remove('hidden');
   const titles = (h.stage_titles || []).map(t => escHtml(t)).join(' · ');
   box.innerHTML = `<div class="text-amber-200 font-medium">Handoff ${escHtml(h.milestone_id)}</div>
-    <div>${h.pending_count} pending етапа — ${titles}</div>
-    <div class="text-gray-500 mt-1">✓ Запазен план · ✓ Само pending етапи · ✓ Без full rewrite</div>`;
+    <div>${t('gs.pendingStages', {n: h.pending_count, titles})}</div>
+    <div class="text-gray-500 mt-1">${t('gs.handoffBits')}</div>`;
 }
 
 function renderGsWorkspace(ctx) {
   const p = ctx.project || {};
   $('gs-ws-title').textContent = p.name || p.slug;
   $('gs-ws-badge').textContent = (ctx.studio_preset || 'custom') + ' · ' + (p.kind || '');
-  $('gs-ws-gdd').textContent = ctx.gdd || '(GDD липсва)';
+  $('gs-ws-gdd').textContent = ctx.gdd || t('gs.gddMissing');
   renderGsDissection(ctx.dissection);
   const msSum = ctx.milestone_summary || {};
   const curEl = $('gs-ws-ms-current');
   if (curEl) {
     curEl.textContent = msSum.current_milestone
-      ? `Текущ: ${msSum.current_milestone} · build mode: ${ctx.build_mode || 'guided'}`
+      ? t('gs.currentMs', {id: msSum.current_milestone, mode: ctx.build_mode || 'guided'})
       : '';
   }
   const msBox = $('gs-ws-milestones');
@@ -759,7 +762,7 @@ function renderGsWorkspace(ctx) {
       <span class="font-mono text-[10px]">${prog}</span></div>`;
   }).join('');
   if (msSum.orphan_stages > 0) {
-    msBox.innerHTML += `<div class="text-amber-400 text-[10px] mt-1 p-1.5 rounded border border-amber-800/40">⚠ ${msSum.orphan_stages} етапа без milestone — ще се поправят при reload</div>`;
+    msBox.innerHTML += `<div class="text-amber-400 text-[10px] mt-1 p-1.5 rounded border border-amber-800/40">${t('gs.orphanFix', {n: msSum.orphan_stages})}</div>`;
   }
   renderGsHandoff(ctx);
   const plan = ctx.plan;
@@ -778,11 +781,11 @@ function renderGsWorkspace(ctx) {
         ${escHtml(s.title)}
         <div class="text-gray-500 mt-0.5">${escHtml(s.goal || '')}</div></div>`;
     }).join('');
-    $('gs-ws-plan-btn').textContent = '🔄 Прегенерирай Studio план';
+    $('gs-ws-plan-btn').textContent = t('gs.regenPlan');
   } else {
     $('gs-ws-plan-empty').classList.remove('hidden');
     $('gs-ws-plan-stages').classList.add('hidden');
-    $('gs-ws-plan-btn').textContent = '🗺️ Създай Studio план';
+    $('gs-ws-plan-btn').textContent = t('gs.createPlan');
   }
   $('gs-ws-preview').href = '/apps/' + encodeURIComponent(p.slug) + '/';
   $('gs-ws-pg-link').href = '/admin/daedalus/playground?slug=' + encodeURIComponent(p.slug);
@@ -804,15 +807,15 @@ async function refreshGsLayer(slug) {
     const layer = data.layer || 'prototype';
     const wall = data.wall || 'prototype';
     const n = data.systems || 0;
-    let label = 'прототип';
-    if (wall === 'hit') label = 'стена — store-ready без доказателства';
-    else if (layer === 'production' && wall === 'clear') label = 'продукционен слой';
-    box.textContent = 'слой · ' + layer + ' · системи ' + n + ' · ' + label;
+    let label = t('gs.proto');
+    if (wall === 'hit') label = t('gs.wallHit');
+    else if (layer === 'production' && wall === 'clear') label = t('gs.prodLayer');
+    box.textContent = t('gs.layerLine', {layer, n, label});
     if (copy && n === 0) {
-      copy.textContent = 'M0–M3 е прототип, не билд за стора. Празен systems.json не е продукционен слой.';
+      copy.textContent = t('gs.layerCopy');
     }
   } catch (e) {
-    box.textContent = 'слой: ' + e;
+    box.textContent = t('gs.layerErr', {e});
   }
 }
 
@@ -824,9 +827,9 @@ async function refreshGsBench() {
     const data = await r.json();
     const passed = data.passed || 0;
     const total = data.total || 0;
-    box.textContent = 'честност · ' + passed + '/' + total + (data.ok ? ' · ok' : ' · FAIL') + ' · не bake-off';
+    box.textContent = t('gs.honestyLine', {passed, total, ok: data.ok ? 'ok' : 'FAIL'});
   } catch (e) {
-    box.textContent = 'честност: ' + e;
+    box.textContent = t('gs.honestyErr', {e});
   }
 }
 
@@ -842,14 +845,14 @@ async function refreshGsUnity(slug) {
       box.textContent = 'unity · n/a';
       return;
     }
-    let label = 'Hub локално · не в този облак';
-    if (promise === 'mcp') label = 'MCP · локален Editor';
-    else if (promise === 'batchmode') label = 'batchmode · не е Play';
+    let label = t('gs.hubLocal');
+    if (promise === 'mcp') label = t('gs.mcpLocal');
+    else if (promise === 'batchmode') label = t('gs.batchNotPlay');
     box.textContent = 'unity · ' + promise + ' · ' + label;
     if (copy) {
-      if (promise === 'mcp') copy.textContent = 'Локален Editor през MCP. Не вендорираме Unity.';
-      else if (promise === 'batchmode') copy.textContent = 'UNITY_PATH batchmode импортира — това не е Play.';
-      else copy.textContent = 'Няма Editor в този облак. Hub локално или DAEDALUS_UNITY_MCP. Scaffold не е Play.';
+      if (promise === 'mcp') copy.textContent = t('gs.mcpCopy');
+      else if (promise === 'batchmode') copy.textContent = t('gs.batchCopy');
+      else copy.textContent = t('gs.noEditor');
     }
   } catch (e) {
     box.textContent = 'unity: ' + e;
@@ -870,11 +873,11 @@ function renderGsProof(ctx) {
   panel.classList.remove('hidden');
   if (!v && milestoneDone) {
     const status = $('gs-proof-status');
-    if (status) status.innerHTML = '<div class="col-span-full text-amber-300 text-xs p-2">Milestone build завършен — пусни Verify за proof.</div>';
+    if (status) status.innerHTML = '<div class="col-span-full text-amber-300 text-xs p-2">' + t('gs.msDoneProof') + '</div>';
     const res = $('gs-proof-result');
     if (res) {
       res.classList.remove('hidden');
-      res.innerHTML = '<span class="text-gray-400">Очаква Verify (runtime + browser + gameplay).</span>';
+      res.innerHTML = '<span class="text-gray-400">' + t('gs.awaitVerify') + '</span>';
     }
     return;
   }
@@ -917,14 +920,14 @@ function renderGsProof(ctx) {
     const prev = v.preview_url || ('/apps/' + encodeURIComponent(slug) + '/');
     let extra = '';
     if (v.proof_incomplete) {
-      extra = '<div class="text-amber-400 text-xs mt-2">⚠️ Непълен proof (липсва Chromium или Unity web preview). Advance е блокиран.</div>';
+      extra = '<div class="text-amber-400 text-xs mt-2">' + t('gs.partialProof') + '</div>';
     }
     if (v.unity_local_required) {
-      extra += '<div class="text-purple-300 text-xs mt-1">📦 Unity: пълен тест в Unity Hub. Cloud проверява scaffold + studio/preview ако има.</div>';
+      extra += '<div class="text-purple-300 text-xs mt-1">' + t('gs.unityHubNote') + '</div>';
     }
     res.innerHTML = v.ok
-      ? `<span class="text-emerald-400">✅ Verify минал (runtime + browser + gameplay).</span> <a href="${escHtml(prev)}" target="_blank" class="underline text-cyan-400">Отвори Preview</a>${extra}`
-      : `<span class="text-red-400">❌ Verify не мина.</span> Пусни отново след поправки.${extra}`;
+      ? `<span class="text-emerald-400">${t('gs.verifyOk')}</span> <a href="${escHtml(prev)}" target="_blank" class="underline text-cyan-400">${t('gs.openPreview')}</a>${extra}`
+      : `<span class="text-red-400">${t('gs.verifyFail')}</span> ${t('gs.retryFixes')}${extra}`;
   }
 }
 
@@ -991,7 +994,7 @@ async function gsContinueAfterVerify(verifyResult) {
 
   if (ms.project_complete || ctx.project_complete) {
     gsClearFullAuto();
-    alert('✅ Game Studio завършен — всички milestone-и M0→M8!');
+    alert(t('gs.allDone'));
     return;
   }
 
@@ -1010,15 +1013,15 @@ async function gsContinueAfterVerify(verifyResult) {
   const ver = verifyResult || ctx.current_verify || {};
   if (!ver.ok) {
     if (ver.runtime_ok === false) {
-      gsGuidedLog('🔄 Verify fail — повторен guided build…', 'warn');
+      gsGuidedLog(t('gs.verifyRetry'), 'warn');
       await gsStartGuided(true, true);
     } else {
-      gsGuidedLog('⚠️ Advance блокиран — повторен опит след 5s…', 'warn');
+      gsGuidedLog(t('gs.advBlocked'), 'warn');
       setTimeout(() => gsFullAutoStep(), 5000);
     }
     return;
   }
-  gsGuidedLog('🔄 Full Auto — продължавам…', 'dim');
+  gsGuidedLog(t('gs.fullAutoCont'), 'dim');
   await gsFullAutoStep();
 }
 
@@ -1031,7 +1034,7 @@ async function gsRunVerify(milestoneId, silent) {
   const log = $('gs-proof-log');
   if (log && !silent) log.innerHTML = '';
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Verify…'; }
-  gsProofLog(`🔍 Verify ${mid} (до 5 поправки на runtime + browser)…`, 'info');
+  gsProofLog(t('gs.verifyLog', {mid}), 'info');
   try {
     const r = await api(GS_API + '/projects/' + encodeURIComponent(_gsWorkspaceSlug) + '/verify', {
       method: 'POST',
@@ -1050,10 +1053,10 @@ async function gsRunVerify(milestoneId, silent) {
       await gsContinueAfterVerify(r.verify);
     }
     if (!silent && r.verify && !r.verify.ok && !_gsFullAuto) {
-      alert('Verify не мина след ' + (r.verify.max_fix_attempts || 5) + ' опита за поправка. Виж лога.');
+      alert(t('gs.verifyGaveUp', {n: r.verify.max_fix_attempts || 5}));
     }
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Пусни Verify'; }
+    if (btn) { btn.disabled = false; btn.textContent = t('gs.runVerify'); }
   }
 }
 
@@ -1063,7 +1066,7 @@ async function openGsWorkspace(slug) {
   $('gs-view-wizard').classList.add('hidden');
   $('gs-view-workspace').classList.remove('hidden');
   history.replaceState(null, '', '/admin/daedalus/game-studio?project=' + encodeURIComponent(slug));
-  $('gs-ws-gdd').textContent = 'Зареждам…';
+  $('gs-ws-gdd').textContent = t('gs.loading');
   try {
     const r = await api(GS_API + '/projects/' + encodeURIComponent(slug));
     if (!r.ok) { alert(r.error || 'not found'); showGsList(); return; }
@@ -1080,12 +1083,12 @@ async function gsCreatePlan() {
   if (!_gsWorkspaceSlug) return;
   const existing = _gsWorkspaceCtx && _gsWorkspaceCtx.plan;
   const hasDone = existing && (existing.stages || []).some(s => s.status === 'done');
-  if (hasDone && !confirm('Прегенериране ще изгуби прогреса по етапите. Продължи?')) return;
+  if (hasDone && !confirm(t('gs.regenWarn'))) return;
   const btn = $('gs-ws-plan-btn');
   const phases = [
-    '📋 Кристализирам Studio план от GDD…',
+    t('gs.crystal'),
     '🔬 Ultra fragmentation (milestones)…',
-    '💾 Записвам етапите…',
+    t('gs.savingStages'),
   ];
   let phaseIdx = 0;
   btn.disabled = true;
@@ -1112,7 +1115,7 @@ async function gsCreatePlan() {
     });
     if (!r.ok) {
       const msg = r.error || r.raw || (r.research_skipped === false ? 'plan failed' : 'plan failed');
-      alert(msg + (String(msg).includes('504') ? '\n\nСъвет: опитай пак — research вече се пропуска при Studio.' : ''));
+      alert(msg + (String(msg).includes('504') ? t('gs.timeoutHint') : ''));
       return;
     }
     _gsWorkspaceCtx.plan = r.plan;
@@ -1126,11 +1129,11 @@ async function gsCreatePlan() {
       }
     } catch {}
   } catch (e) {
-    alert((e.message || 'plan failed') + '\n\nАко виждаш HTTP 504 — gateway timeout. Опитай пак след deploy на fix-а.');
+    alert((e.message || 'plan failed') + t('gs.gwTimeout'));
   } finally {
     clearInterval(phaseTimer);
     btn.disabled = false;
-    btn.textContent = _gsWorkspaceCtx.plan ? '🔄 Прегенерирай Studio план' : '🗺️ Създай Studio план';
+    btn.textContent = _gsWorkspaceCtx.plan ? t('gs.regenPlan') : t('gs.createPlan');
   }
 }
 
@@ -1154,10 +1157,10 @@ async function gsRunGates(silent) {
     renderGsGates(_gsWorkspaceCtx);
     updateGsBuildButtons(_gsWorkspaceCtx);
     if (!silent && r.blocking) {
-      alert('Има блокиращи проблеми — виж Quality Gates.');
+      alert(t('gs.blocking'));
     }
   } finally {
-    if (btn && !silent) { btn.disabled = false; btn.textContent = 'Пусни проверки'; }
+    if (btn && !silent) { btn.disabled = false; btn.textContent = t('gs.runGates'); }
   }
 }
 
@@ -1181,7 +1184,7 @@ function gsShowGuidedPanel(milestoneId) {
   _gsGuidedMilestoneScope = milestoneId || '';
   $('gs-guided-panel')?.classList.remove('hidden');
   const sub = $('gs-guided-subtitle');
-  if (sub) sub.textContent = milestoneId ? `Milestone ${milestoneId} · checkpoint след всеки етап` : '';
+  if (sub) sub.textContent = milestoneId ? t('gs.cpAfter', {id: milestoneId}) : '';
   $('gs-guided-done')?.classList.add('hidden');
   $('gs-guided-checkpoint')?.classList.add('hidden');
   const log = $('gs-guided-log');
@@ -1283,7 +1286,7 @@ function gsShowCheckpoint(d) {
   if (filesEl) filesEl.textContent = filesLine;
   const trunkEl = $('gs-guided-cp-trunk');
   if (trunkEl && d.trunk) {
-    trunkEl.textContent = `🎛 Trunk: ${d.trunk.trunk_files || 0} файла`;
+    trunkEl.textContent = t('gs.trunkN', {n: d.trunk.trunk_files || 0});
     trunkEl.classList.remove('hidden');
   } else if (trunkEl) {
     trunkEl.classList.add('hidden');
@@ -1300,7 +1303,7 @@ function gsShowCheckpoint(d) {
     });
   }
   const btn = $('gs-ws-guided-btn');
-  if (btn) { btn.disabled = true; btn.textContent = '⏸ На checkpoint'; }
+  if (btn) { btn.disabled = true; btn.textContent = t('gs.atCp'); }
 }
 
 async function gsHandleGuidedEvent(ev, d) {
@@ -1309,7 +1312,7 @@ async function gsHandleGuidedEvent(ev, d) {
       gsGuidedLog(d.line || '', d.level || 'info');
       break;
     case 'stage':
-      if (d.stage_id) gsUpdateStageStatus(d.stage_id, '🔨', 'Строи…', 'bg-yellow-800/80 text-yellow-200');
+      if (d.stage_id) gsUpdateStageStatus(d.stage_id, '🔨', t('gs.building'), 'bg-yellow-800/80 text-yellow-200');
       break;
     case 'stage_done':
       if (d.stage_id) {
@@ -1318,7 +1321,7 @@ async function gsHandleGuidedEvent(ev, d) {
       break;
     case 'checkpoint':
       if (_gsFullAuto) {
-        gsGuidedLog('⚡ Auto-approve етап…', 'dim');
+        gsGuidedLog(t('gs.autoStage'), 'dim');
         await gsGuidedContinue('approve');
       } else {
         gsShowCheckpoint(d);
@@ -1326,17 +1329,17 @@ async function gsHandleGuidedEvent(ev, d) {
       break;
     case 'milestone_done':
       _gsGuidedMilestoneScope = d.milestone_id || _gsGuidedMilestoneScope;
-      gsGuidedLog(`✅ Milestone ${d.milestone_id || ''} завършен`, 'ok');
-      await gsOnGuidedFinished(`Milestone ${d.milestone_id || ''} build готов — пускам Verify…`);
+      gsGuidedLog(t('gs.msDone', {id: d.milestone_id || ''}), 'ok');
+      await gsOnGuidedFinished(t('gs.msReadyVerify', {id: d.milestone_id || ''}));
       await gsRunVerify(d.milestone_id, true);
       break;
     case 'done':
       if (_gsGuidedMilestoneScope) {
-        gsGuidedLog(`✅ Milestone ${_gsGuidedMilestoneScope} завършен`, 'ok');
-        await gsOnGuidedFinished(`Milestone ${_gsGuidedMilestoneScope} build готов — пускам Verify…`);
+        gsGuidedLog(t('gs.msDone', {id: _gsGuidedMilestoneScope}), 'ok');
+        await gsOnGuidedFinished(t('gs.msReadyVerify', {id: _gsGuidedMilestoneScope}));
         await gsRunVerify(_gsGuidedMilestoneScope, true);
       } else {
-        await gsOnGuidedFinished(`Guided build завършен — ${(d.files || []).length} файла.`);
+        await gsOnGuidedFinished(t('gs.guidedDoneN', {n: (d.files || []).length}));
       }
       break;
     case 'error':
@@ -1346,7 +1349,7 @@ async function gsHandleGuidedEvent(ev, d) {
       gsClearGuided();
       updateGsBuildButtons(_gsWorkspaceCtx || {});
       if (_gsFullAuto) {
-        gsGuidedLog('🔄 Full Auto: повторен опит след 3s…', 'warn');
+        gsGuidedLog(t('gs.retry3s'), 'warn');
         setTimeout(() => gsFullAutoStep(), 3000);
       }
       break;
@@ -1384,18 +1387,18 @@ async function gsGuidedContinue(action) {
   if (!r.ok) { alert(r.error || 'continue failed'); return; }
   if (r.milestone_complete) {
     const mid = (_gsWorkspaceCtx && _gsWorkspaceCtx.current_milestone) || '';
-    await gsOnGuidedFinished('Milestone завършен — пускам Verify…');
+    await gsOnGuidedFinished(t('gs.msDoneRunVerify'));
     await gsRunVerify(mid, true);
     return;
   }
   const btn = $('gs-ws-guided-btn');
-  if (btn) btn.textContent = '⏳ Строи…';
+  if (btn) btn.textContent = t('gs.buildingWait');
   await gsGuidedStreamLoop();
 }
 
 async function gsStopGuided() {
   if (!_gsWorkspaceSlug) return;
-  if (!confirm('Спри guided build?')) return;
+  if (!confirm(t('gs.stopAsk'))) return;
   try {
     await api(`/admin/daedalus/playground/api/projects/${encodeURIComponent(_gsWorkspaceSlug)}/guided/stop`, { method: 'POST' });
   } catch {}
@@ -1403,7 +1406,7 @@ async function gsStopGuided() {
   _gsGuidedStreaming = false;
   gsClearGuided();
   if (_gsFullAuto) gsClearFullAuto();
-  gsGuidedLog('■ Спряно', 'warn');
+  gsGuidedLog(t('gs.stopped'), 'warn');
   updateGsBuildButtons(_gsWorkspaceCtx || {});
 }
 
@@ -1413,8 +1416,8 @@ async function gsMaybeReconnectGuided() {
   if (savedAuto && !_gsFullAuto) {
     _gsFullAuto = true;
     const btn = $('gs-full-auto-btn');
-    if (btn) { btn.disabled = true; btn.textContent = '⚡ Auto работи…'; }
-    gsGuidedLog('🔄 Възстановявам Full Auto M0→M8…', 'ok');
+    if (btn) { btn.disabled = true; btn.textContent = t('gs.autoWorking'); }
+    gsGuidedLog(t('gs.restoreFull'), 'ok');
     setTimeout(() => gsFullAutoStep(), 800);
   }
   try {
@@ -1424,13 +1427,13 @@ async function gsMaybeReconnectGuided() {
       _gsGuidedOffset = r.snapshot.event_count || 0;
       _gsGuidedRunning = r.snapshot.status === 'running' || r.snapshot.status === 'checkpoint';
       gsShowGuidedPanel(r.snapshot.milestone_scope || _gsWorkspaceCtx?.current_milestone);
-      gsGuidedLog('🔄 Закачам се към guided job…', 'ok');
+      gsGuidedLog(t('gs.attachGuided'), 'ok');
       if (r.snapshot.status === 'checkpoint' && r.snapshot.checkpoint && Object.keys(r.snapshot.checkpoint).length) {
         gsShowCheckpoint(r.snapshot.checkpoint);
       } else if (r.snapshot.status === 'running') {
         await gsGuidedStreamLoop();
       } else if (r.snapshot.status === 'done') {
-        await gsOnGuidedFinished('Guided job завършен.');
+        await gsOnGuidedFinished(t('gs.jobFinished'));
       }
       return;
     }
@@ -1441,7 +1444,7 @@ async function gsMaybeReconnectGuided() {
       const chk = await api(`/admin/daedalus/playground/api/projects/${encodeURIComponent(_gsWorkspaceSlug)}/guided/active`);
       if (chk.active) {
         gsShowGuidedPanel(_gsWorkspaceCtx?.current_milestone);
-        gsGuidedLog('🔄 Възстановявам guided session…', 'dim');
+        gsGuidedLog(t('gs.restoreGuided'), 'dim');
         if (chk.snapshot?.status === 'checkpoint' && chk.snapshot.checkpoint) {
           gsShowCheckpoint(chk.snapshot.checkpoint);
         } else {
@@ -1457,20 +1460,16 @@ async function gsMaybeReconnectGuided() {
 async function gsRunFullStudioAuto() {
   if (!_gsWorkspaceSlug || !_gsWorkspaceCtx) return;
   if (!confirm(
-    'Пълен автоматичен прогон M0→M8:\n'
-    + '• Auto-approve на всеки етап (без checkpoint)\n'
-    + '• Verify + advance автоматично към следващ milestone\n'
-    + '• При грешка — повторен опит\n\n'
-    + 'Може да отнеме дълго време. Продължи?'
+    t('gs.fullAutoAsk')
   )) return;
   _gsFullAuto = true;
   gsPersistFullAuto(true);
   const btn = $('gs-full-auto-btn');
-  if (btn) { btn.disabled = true; btn.textContent = '⚡ Auto работи…'; }
+  if (btn) { btn.disabled = true; btn.textContent = t('gs.autoWorking'); }
   try {
     await gsFullAutoStep();
   } catch (e) {
-    alert('Full Auto спря: ' + (e.message || e));
+    alert(t('gs.fullAutoStopped') + (e.message || e));
     gsClearFullAuto();
   }
 }
@@ -1481,16 +1480,16 @@ async function gsFullAutoStep() {
   const ctx = _gsWorkspaceCtx || {};
   if (ctx.project_complete || (ctx.milestone_summary || {}).project_complete) {
     gsClearFullAuto();
-    alert('✅ Game Studio завършен — всички milestone-и M0→M8!');
+    alert(t('gs.allDone'));
     return;
   }
   if (!ctx.plan || !(ctx.plan.stages || []).length) {
-    gsGuidedLog('🗺️ Няма план — създавам Studio план…', 'info');
+    gsGuidedLog(t('gs.noPlanAuto'), 'info');
     await gsCreatePlan();
     return gsFullAutoStep();
   }
   if (!ctx.can_guided) {
-    gsGuidedLog('🚦 Gates — пускам проверки…', 'info');
+    gsGuidedLog(t('gs.gatesAuto'), 'info');
     await gsRunGates(true);
     return gsFullAutoStep();
   }
@@ -1516,16 +1515,16 @@ async function gsFullAutoStep() {
 async function gsStartGuided(skipConfirm, autoApprove) {
   if (!_gsWorkspaceSlug || !_gsWorkspaceCtx) return;
   const ctx = _gsWorkspaceCtx;
-  if (!ctx.can_guided) { alert('Пусни gate-check и създай план.'); return; }
+  if (!ctx.can_guided) { alert(t('gs.needGates')); return; }
   const h = ctx.handoff || {};
   const mid = ctx.current_milestone || h.milestone_id || 'M0';
   const useAuto = autoApprove || _gsFullAuto;
   if (!skipConfirm && !useAuto) {
-    const msg = `Guided за ${mid}:\n• ${h.pending_count || '?'} pending етапа\n• Запазен Studio план (без research)\n• Спира след ${mid}\n\nПродължи?`;
+    const msg = t('gs.guidedConfirm', {mid, n: h.pending_count || '?'});
     if (!confirm(msg)) return;
   }
   const btn = $('gs-ws-guided-btn');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Стартирам…'; }
+  if (btn) { btn.disabled = true; btn.textContent = t('pg.starting'); }
   try {
     const r = await api(GS_API + '/projects/' + encodeURIComponent(_gsWorkspaceSlug) + '/build/guided', {
       method: 'POST',
@@ -1536,7 +1535,7 @@ async function gsStartGuided(skipConfirm, autoApprove) {
     _gsGuidedOffset = 0;
     gsPersistGuided({ slug: _gsWorkspaceSlug, job_id: r.job_id, offset: 0 });
     gsShowGuidedPanel(mid);
-    gsGuidedLog(`🎬 Старт ${mid} · auto=${useAuto ? 'да' : 'не'}`, 'ok');
+    gsGuidedLog(t('gs.startLog', {mid, auto: useAuto ? t('gs.yes') : t('gs.no')}), 'ok');
     $('gs-guided-panel')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     await gsGuidedStreamLoop();
   } finally {
@@ -1547,12 +1546,12 @@ async function gsStartGuided(skipConfirm, autoApprove) {
 async function gsStartAutopilot() {
   if (!_gsWorkspaceSlug || !_gsWorkspaceCtx) return;
   const ctx = _gsWorkspaceCtx;
-  if (!ctx.can_autopilot) { alert('Autopilot изисква scope-check + gates.'); return; }
+  if (!ctx.can_autopilot) { alert(t('gs.autoNeed')); return; }
   const h = ctx.handoff || {};
   const mid = ctx.current_milestone || h.milestone_id || 'M0';
-  const msg = `Autopilot (scoped) за ${mid}:\n• Използва ЗАПАЗЕНИЯ план — НЕ го прегенерира\n• Само pending етапи за ${mid}\n• По-малко контрол от Guided\n\nСигурен ли си?`;
+  const msg = t('gs.autoConfirm', {mid});
   if (!confirm(msg)) return;
-  if (!confirm('Последно потвърждение: Autopilot ще пипа само файловете на текущите етапи.')) return;
+  if (!confirm(t('gs.autoLast'))) return;
   const preset = ctx.studio_preset || 'custom';
   const q = new URLSearchParams({
     slug: _gsWorkspaceSlug,
@@ -1573,16 +1572,16 @@ async function gsAdvanceMilestone(opts) {
   const ctx = _gsWorkspaceCtx || {};
   const unityWaiver = !!opts.unity_waiver;
   if (!unityWaiver && !ctx.can_advance) {
-    alert('Първо мини Verify за текущия milestone (зелен PASS).');
+    alert(t('gs.verifyPassFirst'));
     return;
   }
   if (unityWaiver && !ctx.can_unity_waiver) {
-    alert('Unity waiver не е наличен — пусни Verify и провери scaffold/runtime.');
+    alert(t('gs.noWaiverAlert'));
     return;
   }
   const msg = unityWaiver
-    ? 'Unity waiver: пълен gameplay тест е локален в Unity Hub. Продължавам към следващия milestone?'
-    : 'Преминавам към следващия milestone?';
+    ? t('gs.waiverAsk')
+    : t('gs.nextAsk');
   if (!confirm(msg)) return;
   const r = await api(GS_API + '/projects/' + encodeURIComponent(_gsWorkspaceSlug) + '/milestones/advance', {
     method: 'POST',
@@ -1603,10 +1602,10 @@ function gsOpenPlayground(mode) {
     const gates = ctx.gates || {};
     const failed = Object.values(gates).filter(g => g.blocking || g.status === 'fail');
     if (failed.length) {
-      alert('Gates не минаха:\n' + failed.map(g => g.summary || g.label).join('\n'));
+      alert(t('gs.gatesFail', {list: failed.map(g => g.summary || g.label).join('\n')}));
       return;
     }
-    if (!confirm('Проверките не са пълни. Продължи все пак?')) return;
+    if (!confirm(t('gs.gatesIncomplete'))) return;
   }
   const preset = (_gsWorkspaceCtx && _gsWorkspaceCtx.studio_preset) || 'custom';
   const q = new URLSearchParams({
@@ -1627,6 +1626,10 @@ function gsOpenPlayground(mode) {
     if (document.visibilityState === 'visible') gsMaybeReconnectGuided();
   });
   window.addEventListener('focus', () => gsMaybeReconnectGuided());
+  document.addEventListener('daedalus:langchange', () => {
+    if (window.DaedalusI18n && DaedalusI18n.apply) DaedalusI18n.apply();
+    if (!_gsWorkspaceSlug) loadGsProjects();
+  });
 })();
 </script>
 

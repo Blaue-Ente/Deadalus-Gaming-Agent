@@ -23,7 +23,7 @@
     <button onclick="openReviveModal()" class="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white" data-i18n="pg.revive">Revive from Git</button>
     <a href="/admin/daedalus/game-studio" class="px-4 py-2 rounded-lg text-sm font-medium bg-purple-600 hover:bg-purple-500 text-white" data-i18n="pg.gameStudio">Game Studio</a>
     <button onclick="openSkillCreator()" class="px-4 py-2 rounded-lg text-sm font-medium bg-amber-600 hover:bg-amber-500 text-white" data-i18n="pg.skillCreator">Skill Creator</button>
-    <button onclick="loadProjects()" class="px-3 py-2 rounded-lg text-sm font-medium bg-gray-700 hover:bg-gray-600 text-gray-200" title="Обнови списъка">↻</button>
+    <button onclick="loadProjects()" class="px-3 py-2 rounded-lg text-sm font-medium bg-gray-700 hover:bg-gray-600 text-gray-200" title="Refresh list" data-i18n-title="pg.refreshList">↻</button>
     <div class="relative ml-auto">
       <button onclick="togglePgMenu()" id="pg-menu-btn"
         class="px-3 py-2 rounded-lg text-sm font-medium bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700" data-i18n="pg.more">More</button>
@@ -41,10 +41,10 @@
   <!-- Published apps panel (/apps catalog — incl. orphaned) -->
   <div id="published-panel" class="hidden mb-6 p-4 bg-gray-900 border border-cyan-600/40 rounded-xl">
     <div class="flex items-center justify-between mb-3">
-      <h3 class="text-white font-semibold">📋 Публикувани в /apps/</h3>
+      <h3 class="text-white font-semibold" data-i18n="pg.publishedApps">📋 Published in /apps/</h3>
       <button onclick="hidePublishedPanel()" class="text-gray-400 hover:text-white text-sm">X</button>
     </div>
-    <p class="text-xs text-gray-500 mb-3">Тук виждаш всички live apps — дори ако проектът липсва от списъка по-долу.</p>
+    <p class="text-xs text-gray-500 mb-3" data-i18n="pg.publishedHint">All live apps — even if the project is missing from the list below.</p>
     <div id="published-content" class="text-sm text-gray-300">
       <div data-dx-skeleton="lines:2"></div>
     </div>
@@ -53,7 +53,7 @@
   <!-- Learning stats panel -->
   <div id="learning-panel" class="hidden mb-6 p-4 bg-gray-900 border border-amber-600/40 rounded-xl">
     <div class="flex items-center justify-between mb-3">
-      <h3 class="text-white font-semibold">📖 Дедал учене — статистика от билдовете</h3>
+      <h3 class="text-white font-semibold" data-i18n="pg.learningTitle">📖 Daedalus learning — build stats</h3>
       <button onclick="hideLearning()" class="text-gray-400 hover:text-white text-sm">X</button>
     </div>
     <div id="learning-content" class="text-sm text-gray-300">
@@ -67,13 +67,13 @@
       <div class="flex items-center justify-between p-4 border-b border-gray-800 shrink-0">
         <div>
           <h3 class="text-white font-semibold">📝 Skill Creator</h3>
-          <p class="text-[11px] text-gray-400 mt-0.5">Създай SKILL.md за Cursor, Claude, Codex или всяка agent платформа</p>
+          <p class="text-[11px] text-gray-400 mt-0.5" data-i18n="pg.scSub">Write a SKILL.md for Cursor, Claude, Codex, or any agent platform</p>
           <div class="flex gap-2 mt-2 text-[10px] font-mono uppercase tracking-wider">
-            <span id="sc-step-1" class="sc-step text-amber-400">① Идея</span>
+            <span id="sc-step-1" class="sc-step text-amber-400" data-i18n="pg.scStep1">① Idea</span>
             <span class="text-gray-600">→</span>
-            <span id="sc-step-2" class="sc-step text-gray-500">② План &amp; Q&amp;A</span>
+            <span id="sc-step-2" class="sc-step text-gray-500" data-i18n="pg.scStep2">② Plan &amp; Q&amp;A</span>
             <span class="text-gray-600">→</span>
-            <span id="sc-step-3" class="sc-step text-gray-500">③ Готов skill</span>
+            <span id="sc-step-3" class="sc-step text-gray-500" data-i18n="pg.scStep3">③ Ready skill</span>
           </div>
         </div>
         <button onclick="closeSkillCreator()" class="text-gray-400 hover:text-white text-xl leading-none p-1">✕</button>
@@ -82,7 +82,7 @@
         <!-- Step 1: Idea -->
         <div id="sc-pane-idea" class="sc-pane space-y-3">
           <div>
-            <label class="text-[11px] font-mono text-amber-300">Целева платформа</label>
+            <label class="text-[11px] font-mono text-amber-300" data-i18n="pg.scPlatform">Target platform</label>
             <select id="sc-platform" class="mt-1 w-full px-3 py-2 rounded bg-gray-800 text-white text-sm border border-amber-700/50">
               <option value="cursor">Cursor IDE (.cursor/skills/)</option>
               <option value="claude">Claude Code (.claude/skills/)</option>
@@ -92,53 +92,53 @@
             </select>
           </div>
           <div>
-            <label class="text-[11px] font-mono text-amber-300">Идея за Skill — какво трябва да прави agent-ът?</label>
-            <textarea id="sc-idea" rows="5" placeholder="напр. Skill за code review на FastAPI endpoints — проверява auth, validation, error handling…"
+            <label class="text-[11px] font-mono text-amber-300" data-i18n="pg.scIdea">Skill idea — what should the agent do?</label>
+            <textarea id="sc-idea" rows="5" data-i18n-placeholder="pg.scIdeaPh" placeholder="e.g. Skill for FastAPI endpoint review — auth, validation, error handling…"
               class="mt-1 w-full px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700 resize-y"></textarea>
           </div>
           <div>
-            <label class="text-[11px] font-mono text-gray-400">Допълнителен контекст (по избор)</label>
-            <textarea id="sc-context" rows="2" placeholder="Repo структура, conventions, референции…"
+            <label class="text-[11px] font-mono text-gray-400" data-i18n="pg.scCtx">Extra context (optional)</label>
+            <textarea id="sc-context" rows="2" data-i18n-placeholder="pg.scCtxPh" placeholder="Repo layout, conventions, references…"
               class="mt-1 w-full px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700 resize-y"></textarea>
           </div>
           <button onclick="skillCreatorStart()" id="sc-start-btn"
             class="w-full py-2.5 rounded-lg text-sm font-medium bg-amber-600 hover:bg-amber-500 text-white">
-            🔬 Проучи и създай план
+            <span data-i18n="pg.scResearch">🔬 Research and draft a plan</span>
           </button>
-          <p class="text-[10px] text-gray-500">Дедал проучва skill каталога и интернет, после задава уточняващи въпроси.</p>
+          <p class="text-[10px] text-gray-500" data-i18n="pg.scHint">Daedalus searches the skill catalog and the web, then asks follow-up questions.</p>
         </div>
 
         <!-- Loading -->
         <div id="sc-pane-loading" class="sc-pane hidden text-center py-8 space-y-3">
-          <div class="text-amber-300 text-sm font-mono" id="sc-loading-phase">🔬 Фаза 1: Проучване…</div>
-          <div class="text-gray-500 text-xs">Може да отнеме 30–90 сек — Master LLM + skill каталог</div>
+          <div class="text-amber-300 text-sm font-mono" id="sc-loading-phase" data-i18n="pg.scPhase1">🔬 Phase 1: Research…</div>
+          <div class="text-gray-500 text-xs" data-i18n="pg.scWait">May take 30–90s — Master LLM + skill catalog</div>
         </div>
 
         <!-- Step 2: Plan + Q&A -->
         <div id="sc-pane-refine" class="sc-pane hidden space-y-3">
           <div id="sc-research-box" class="hidden p-3 rounded-lg border border-blue-700/40 bg-blue-950/30">
-            <div class="text-[10px] font-mono text-blue-300 mb-1">🔬 Проучване</div>
+            <div class="text-[10px] font-mono text-blue-300 mb-1" data-i18n="pg.scResearchBox">🔬 Research</div>
             <div id="sc-research-notes" class="text-xs text-blue-100/90 whitespace-pre-wrap"></div>
             <div id="sc-research-tools" class="flex flex-wrap gap-1 mt-2"></div>
           </div>
           <div class="p-3 rounded-lg border border-gray-700 bg-gray-800/50">
             <div class="flex items-center justify-between mb-2">
-              <span class="text-[10px] font-mono text-gray-400">План</span>
+              <span class="text-[10px] font-mono text-gray-400" data-i18n="pg.scPlan">Plan</span>
               <span id="sc-skill-slug" class="text-[10px] font-mono text-amber-300"></span>
             </div>
             <div id="sc-plan-summary" class="text-xs text-gray-200 whitespace-pre-wrap"></div>
           </div>
           <div id="sc-tips-box" class="hidden p-3 rounded-lg border border-emerald-700/40 bg-emerald-950/20">
-            <div class="text-[10px] font-mono text-emerald-300 mb-1">💡 Съвети за подобряване</div>
+            <div class="text-[10px] font-mono text-emerald-300 mb-1" data-i18n="pg.scTips">💡 Tips to improve</div>
             <ul id="sc-tips-list" class="text-xs text-emerald-100/90 list-disc list-inside space-y-1"></ul>
           </div>
           <div id="sc-questions-box" class="hidden space-y-2">
-            <div class="text-[10px] font-mono text-amber-300">❓ Уточняващи въпроси</div>
+            <div class="text-[10px] font-mono text-amber-300" data-i18n="pg.scQuestions">❓ Follow-up questions</div>
             <div id="sc-questions-list" class="space-y-2"></div>
           </div>
           <div id="sc-chat-history" class="max-h-48 overflow-y-auto space-y-2 text-xs"></div>
           <div class="flex gap-2">
-            <textarea id="sc-refine-input" rows="2" placeholder="Отговори на въпросите или уточни skill-а…"
+            <textarea id="sc-refine-input" rows="2" data-i18n-placeholder="pg.scRefinePh" placeholder="Answer the questions or refine the skill…"
               class="flex-1 px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700 resize-none"></textarea>
             <button onclick="skillCreatorRefine()" id="sc-refine-btn"
               class="shrink-0 px-4 py-2 rounded-lg text-sm font-medium bg-gray-700 hover:bg-gray-600 text-white self-end">→</button>
@@ -146,30 +146,30 @@
           <div class="flex flex-wrap gap-2 pt-2 border-t border-gray-800">
             <button onclick="skillCreatorGenerate(false)" id="sc-generate-btn"
               class="px-4 py-2 rounded-lg text-sm font-medium bg-emerald-700 hover:bg-emerald-600 text-white disabled:opacity-40"
-              disabled>✅ Генерирай SKILL.md</button>
+              disabled data-i18n="pg.scGenerate">✅ Generate SKILL.md</button>
             <button onclick="skillCreatorGenerate(true)" id="sc-force-generate-btn"
               class="px-3 py-2 rounded-lg text-xs font-medium bg-gray-700 hover:bg-gray-600 text-gray-300"
-              title="Генерирай без да чакаш всички отговори">⚡ Force</button>
+              title="Generate without waiting for every answer" data-i18n-title="pg.scForce">⚡ Force</button>
           </div>
         </div>
 
         <!-- Step 3: Generated -->
         <div id="sc-pane-done" class="sc-pane hidden space-y-3">
           <div class="flex items-center gap-2">
-            <span class="text-emerald-400 text-sm font-semibold">✅ Skill е готов</span>
+            <span class="text-emerald-400 text-sm font-semibold" data-i18n="pg.scReady">✅ Skill is ready</span>
             <span id="sc-done-slug" class="text-[10px] font-mono text-gray-400"></span>
           </div>
           <div id="sc-warnings" class="hidden p-2 rounded border border-yellow-700/50 bg-yellow-950/30 text-xs text-yellow-200"></div>
           <div>
-            <div class="text-[10px] font-mono text-gray-400 mb-1">Файлове</div>
+            <div class="text-[10px] font-mono text-gray-400 mb-1" data-i18n="pg.scFiles">Files</div>
             <div id="sc-files-list" class="flex flex-wrap gap-1"></div>
           </div>
           <pre id="sc-preview" class="text-[11px] font-mono text-gray-200 bg-gray-950 border border-gray-700 rounded-lg p-3 max-h-64 overflow-auto whitespace-pre-wrap"></pre>
           <div class="flex flex-wrap gap-2">
-            <button onclick="skillCreatorDownload()" class="px-4 py-2 rounded-lg text-sm font-medium bg-amber-600 hover:bg-amber-500 text-white">⬇ Сваля SKILL.md</button>
-            <button onclick="skillCreatorDownloadZip()" class="px-4 py-2 rounded-lg text-sm font-medium bg-gray-700 hover:bg-gray-600 text-white">📦 ZIP пакет</button>
+            <button onclick="skillCreatorDownload()" class="px-4 py-2 rounded-lg text-sm font-medium bg-amber-600 hover:bg-amber-500 text-white" data-i18n="pg.scDownload">⬇ Download SKILL.md</button>
+            <button onclick="skillCreatorDownloadZip()" class="px-4 py-2 rounded-lg text-sm font-medium bg-gray-700 hover:bg-gray-600 text-white" data-i18n="pg.scZip">📦 ZIP pack</button>
             <button onclick="skillCreatorGist()" id="sc-gist-btn" class="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-700 hover:bg-indigo-600 text-white">🐙 GitHub Gist</button>
-            <button onclick="skillCreatorReset()" class="px-3 py-2 rounded-lg text-xs font-medium bg-gray-800 hover:bg-gray-700 text-gray-400">+ Нов skill</button>
+            <button onclick="skillCreatorReset()" class="px-3 py-2 rounded-lg text-xs font-medium bg-gray-800 hover:bg-gray-700 text-gray-400" data-i18n="pg.scNew">+ New skill</button>
           </div>
         </div>
       </div>
@@ -181,13 +181,13 @@
     <div class="bg-gray-900 border border-emerald-600/40 rounded-t-2xl sm:rounded-xl w-full max-w-2xl max-h-[92vh] flex flex-col shadow-2xl">
       <div class="flex items-center justify-between p-4 border-b border-gray-800 shrink-0">
         <div>
-          <h3 class="text-white font-semibold">Нов проект</h3>
+          <h3 class="text-white font-semibold" data-i18n="pg.wizardTitle">New project</h3>
           <div class="flex gap-2 mt-2 text-[10px] font-mono uppercase tracking-wider">
-            <span id="wiz-step-1" class="wiz-step text-emerald-400">① Основи</span>
+            <span id="wiz-step-1" class="wiz-step text-emerald-400" data-i18n="pg.wiz1">① Basics</span>
             <span class="text-gray-600">→</span>
-            <span id="wiz-step-2" class="wiz-step text-gray-500">② Описание</span>
+            <span id="wiz-step-2" class="wiz-step text-gray-500" data-i18n="pg.wiz2">② Description</span>
             <span class="text-gray-600">→</span>
-            <span id="wiz-step-3" class="wiz-step text-gray-500">③ Старт</span>
+            <span id="wiz-step-3" class="wiz-step text-gray-500" data-i18n="pg.wiz3">③ Start</span>
           </div>
         </div>
         <button onclick="hideCreate()" class="text-gray-400 hover:text-white text-xl leading-none p-1">✕</button>
@@ -196,14 +196,14 @@
         <!-- Step 1 -->
         <div id="wiz-pane-1" class="wiz-pane space-y-3">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <input id="np-name" placeholder="Име (напр. Snake Game)" class="px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700">
+            <input id="np-name" data-i18n-placeholder="pg.namePh" placeholder="Name (e.g. Snake Game)" class="px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700">
             <select id="np-kind" class="px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700">
-              <option value="auto">🧠 auto — Дедал избира</option>
-              <option value="static">static — публикуем</option>
+              <option value="auto" data-i18n="pg.kind.auto">🧠 auto — Daedalus chooses</option>
+              <option value="static" data-i18n="pg.kind.static">static — publishable</option>
               <option value="fastapi">fastapi — dev test</option>
               <option value="streamlit">streamlit — dev test</option>
-              <option value="vite">vite — публикуем</option>
-              <option value="vite-react">vite-react — публикуем</option>
+              <option value="vite" data-i18n="pg.kind.vite">vite — publishable</option>
+              <option value="vite-react" data-i18n="pg.kind.viteReact">vite-react — publishable</option>
               <option value="node">node — dev test</option>
               <option value="unity">unity — C# URP (Unity Hub)</option>
               <option value="godot">godot — GDScript (Godot 4.3)</option>
@@ -211,24 +211,24 @@
           </div>
           <div id="np-kind-note" class="text-[10px] font-mono px-2 py-1 rounded"></div>
           <div id="np-kind-suggest" class="hidden flex items-center gap-2 text-[11px] font-mono px-2 py-1.5 rounded bg-indigo-900/40 border border-indigo-600/50 text-indigo-300">
-            <span>🤖 Препоръка:</span>
+            <span data-i18n="pg.recommend">🤖 Suggestion:</span>
             <span id="np-kind-suggest-text"></span>
-            <button id="np-kind-suggest-apply" onclick="applyKindSuggestion()" class="ml-auto px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px]">✓ Приложи</button>
+            <button id="np-kind-suggest-apply" onclick="applyKindSuggestion()" class="ml-auto px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px]" data-i18n="pg.apply">✓ Apply</button>
           </div>
           <div>
-            <label class="text-[11px] font-mono text-gray-400 mb-1.5 block">⚙️ Build profile</label>
+            <label class="text-[11px] font-mono text-gray-400 mb-1.5 block" data-i18n="pg.buildProfile">⚙️ Build profile</label>
             <div class="dx-profile-cards" id="np-profile-cards">
               <button type="button" class="dx-profile-card" data-profile="quick" onclick="setBuildProfile('quick')">
-                <div class="dx-profile-card-title">🟢 Бърз прототип</div>
-                <div class="dx-profile-card-desc">Lite HTML/JS — mini-games, бързи инструменти</div>
+                <div class="dx-profile-card-title" data-i18n="pg.profQuick">🟢 Quick prototype</div>
+                <div class="dx-profile-card-desc" data-i18n="pg.profQuickDesc">Lite HTML/JS — mini-games, fast tools</div>
               </button>
               <button type="button" class="dx-profile-card" data-profile="balanced" onclick="setBuildProfile('balanced')">
-                <div class="dx-profile-card-title">🟡 Баланс</div>
-                <div class="dx-profile-card-desc">Pro — Tailwind, responsive, полиран UX</div>
+                <div class="dx-profile-card-title" data-i18n="pg.profBal">🟡 Balanced</div>
+                <div class="dx-profile-card-desc" data-i18n="pg.profBalDesc">Pro — Tailwind, responsive, polished UX</div>
               </button>
               <button type="button" class="dx-profile-card" data-profile="studio" onclick="setBuildProfile('studio')">
-                <div class="dx-profile-card-title">🎬 Studio Production</div>
-                <div class="dx-profile-card-desc">Milestones M0–M8, 16 AI роли, Ultra merge</div>
+                <div class="dx-profile-card-title" data-i18n="pg.profStudio">🎬 Studio Production</div>
+                <div class="dx-profile-card-desc" data-i18n="pg.profStudioDesc">Milestones M0–M8, 16 AI roles, Ultra merge</div>
               </button>
             </div>
           </div>
@@ -260,34 +260,34 @@
                 <option value="unity_game_framework">+ Unity Game Framework</option>
                 <option value="daedalus_ugf">Daedalus + UGF + Firebase docs</option>
               </select>
-              <p class="text-[9px] text-amber-200/70 leading-relaxed">След създаване: Init Unity от project menu. Отвори папката в Unity Hub 2022.3 LTS. Локален build: <code>studio/unity/build-local.sh</code></p>
+              <p class="text-[9px] text-amber-200/70 leading-relaxed"><span data-i18n="pg.unityAfter">After create: Init Unity from the project menu. Open the folder in Unity Hub 2022.3 LTS. Local build:</span> <code>studio/unity/build-local.sh</code></p>
             </div>
             <div id="np-hybrid-panel" class="hidden space-y-2 pt-1 border-t border-amber-800/30">
               <div class="text-[10px] font-bold text-emerald-300">📱 Hybrid Web → iOS</div>
-              <p class="text-[9px] text-amber-200/70 leading-relaxed">Framework7 + Vite prototype → PakePlus-iOS. Pipeline: <code>npm run hybrid:build</code> → PakePlus на Mac.</p>
+              <p class="text-[9px] text-amber-200/70 leading-relaxed">Framework7 + Vite prototype → PakePlus-iOS. Pipeline: <code>npm run hybrid:build</code> → PakePlus on a Mac.</p>
             </div>
             <div id="np-firebase-panel" class="space-y-2 pt-1 border-t border-amber-800/30">
               <div class="text-[10px] font-bold text-orange-300">🔥 Firebase (project-specific)</div>
               <input id="np-firebase-project" placeholder="Firebase project ID (my-game-123)" class="w-full px-2 py-1.5 rounded bg-gray-800 text-white text-xs border border-amber-700/50">
               <input id="np-firebase-bundle" placeholder="iOS bundle ID (com.studio.mygame)" class="w-full px-2 py-1.5 rounded bg-gray-800 text-white text-xs border border-amber-700/50">
-              <p class="text-[9px] text-amber-200/60">Генерира <code>studio/integrations/firebase.md</code> + plist template при Unity/Hybrid init.</p>
+              <p class="text-[9px] text-amber-200/60" data-i18n="pg.firebaseGen">Writes studio/integrations/firebase.md + a plist template on Unity/Hybrid init.</p>
             </div>
             <details class="text-[10px] text-amber-200/80">
               <summary class="cursor-pointer text-amber-300 font-mono">🔗 Integrations catalog</summary>
-              <p class="mt-1 leading-relaxed">Firebase iOS, Framework7, PakePlus, LiveContainer, ios-app-signer, UnityGameFramework. Виж <code>studio/integrations/</code> след build.</p>
-              <p class="mt-1 text-red-300/80">⚠️ ThrowTheSwitch/Unity = Catch2 (C++ tests), НЕ game engine. unitycontainer/unity = PHP.</p>
+              <p class="mt-1 leading-relaxed">Firebase iOS, Framework7, PakePlus, LiveContainer, ios-app-signer, UnityGameFramework. See studio/integrations/ after the build.</p>
+              <p class="mt-1 text-red-300/80">⚠️ ThrowTheSwitch/Unity = Catch2 (C++ tests), NOT a game engine. unitycontainer/unity = PHP.</p>
             </details>
           </div>
         </div>
         <!-- Step 2 -->
         <div id="wiz-pane-2" class="wiz-pane hidden space-y-3">
           <div class="relative">
-            <label class="text-[11px] font-mono text-emerald-300">✍️ Идея (накратко)</label>
-            <textarea id="np-desc" placeholder="напр. платформинг игра, 3 нива, босс накрая…"
+            <label class="text-[11px] font-mono text-emerald-300" data-i18n="pg.ideaLabel">✍️ Idea (short)</label>
+            <textarea id="np-desc" data-i18n-placeholder="pg.ideaPh" placeholder="e.g. a platformer, 3 levels, a boss at the end…"
               class="mt-1 w-full px-3 py-2 pr-28 rounded bg-gray-800 text-white text-sm border border-gray-700 resize-y" rows="3"
               oninput="scheduleGameHints()"></textarea>
             <div id="np-game-hints" class="hidden mt-2 p-2.5 rounded-lg border border-amber-700/40 bg-amber-950/30 text-[10px] font-mono text-amber-100/90 space-y-1.5">
-              <div class="text-amber-300 font-semibold">🎮 Препоръки за игри</div>
+              <div class="text-amber-300 font-semibold" data-i18n="pg.gameHints">🎮 Game recommendations</div>
               <div id="np-game-hints-short"></div>
               <div id="np-game-hints-arch" class="text-amber-200/80"></div>
               <ul id="np-game-hints-libs" class="list-disc list-inside text-amber-200/70"></ul>
@@ -295,11 +295,11 @@
             </div>
             <button onclick="aiGenDesc()" id="ai-gen-btn"
               class="absolute top-7 right-2 px-2.5 py-1 text-[10px] font-mono rounded bg-purple-800 hover:bg-purple-700 text-purple-200 transition whitespace-nowrap">
-              ✨ Генерирай
+              <span data-i18n="pg.generate">✨ Generate</span>
             </button>
           </div>
           <div>
-            <label class="text-[11px] font-mono text-cyan-300">🔎 Референция — «направи като…»</label>
+            <label class="text-[11px] font-mono text-cyan-300" data-i18n="pg.refLabel">🔎 Reference — “make it like…”</label>
             <div class="flex gap-2 mt-1">
               <input id="np-reference" placeholder="Flappy Bird · https://itch.io/… · Pokemon"
                 class="flex-1 px-3 py-2 rounded bg-gray-800 text-white text-sm border border-cyan-700/50 font-mono"
@@ -307,7 +307,7 @@
               <button onclick="scoutWizardReference()" id="np-ref-scout-btn"
                 class="shrink-0 px-3 py-2 rounded text-xs font-medium bg-cyan-800 hover:bg-cyan-700 text-white whitespace-nowrap">🔍 Scout</button>
               <button onclick="dissectWizardReference()" id="np-ref-dissect-btn"
-                class="shrink-0 px-3 py-2 rounded text-xs font-medium bg-indigo-800 hover:bg-indigo-700 text-white whitespace-nowrap">🔬 Дисекция</button>
+                class="shrink-0 px-3 py-2 rounded text-xs font-medium bg-indigo-800 hover:bg-indigo-700 text-white whitespace-nowrap" data-i18n="pg.dissect">🔬 Dissection</button>
             </div>
             <div id="np-reference-panel" class="hidden mt-2 p-2.5 rounded-lg border border-cyan-700/40 bg-cyan-950/30 text-[10px] font-mono text-cyan-100/90 space-y-1">
               <div class="text-cyan-300 font-semibold" id="np-ref-title"></div>
@@ -317,58 +317,58 @@
             </div>
           </div>
           <div>
-            <label class="text-[11px] font-mono text-purple-300">🤖 Пълна команда за Дедал</label>
+            <label class="text-[11px] font-mono text-purple-300" data-i18n="pg.fullCmd">🤖 Full command for Daedalus</label>
             <textarea id="np-build" rows="8"
-              placeholder="Попълва се от ✨ Генерирай — или пиши ръчно. Празно = празен проект."
+              data-i18n-placeholder="pg.fullCmdPh" placeholder="Filled by ✨ Generate — or type it. Empty = empty project."
               class="mt-1 w-full px-3 py-2 rounded bg-gray-800 text-white text-sm border border-purple-700/50 resize-y"></textarea>
           </div>
         </div>
         <!-- Step 3 -->
         <div id="wiz-pane-3" class="wiz-pane hidden space-y-3">
-          <p id="np-profile-summary" class="text-[10px] font-mono text-emerald-400/90 px-2 py-1.5 rounded bg-emerald-950/30 border border-emerald-800/30">Profile: Бърз прототип — fine-tune по-долу или смени в стъпка ①</p>
+          <p id="np-profile-summary" class="text-[10px] font-mono text-emerald-400/90 px-2 py-1.5 rounded bg-emerald-950/30 border border-emerald-800/30" data-i18n="pg.profileSummary">Profile: Quick prototype — fine-tune below or change in step ①</p>
           <div>
-            <label class="text-[11px] font-mono text-gray-400 mb-1 block">⚙️ Режим на кодиране (fine-tune)</label>
+            <label class="text-[11px] font-mono text-gray-400 mb-1 block" data-i18n="pg.codingMode">⚙️ Coding mode (fine-tune)</label>
             <div class="flex gap-2 flex-wrap">
               <button type="button" onclick="setNewMode('lite')" id="mode-btn-lite"
-                class="px-3 py-1.5 rounded text-xs font-mono border transition-all mode-create-btn mode-active">🟢 Бързо</button>
+                class="px-3 py-1.5 rounded text-xs font-mono border transition-all mode-create-btn mode-active" data-i18n="pg.fast">🟢 Fast</button>
               <button type="button" onclick="setNewMode('pro')" id="mode-btn-pro"
-                class="px-3 py-1.5 rounded text-xs font-mono border transition-all mode-create-btn">🟡 Баланс</button>
+                class="px-3 py-1.5 rounded text-xs font-mono border transition-all mode-create-btn" data-i18n="pg.profBal">🟡 Balanced</button>
               <button type="button" onclick="setNewMode('premium')" id="mode-btn-premium"
-                class="px-3 py-1.5 rounded text-xs font-mono border transition-all mode-create-btn">🔴 Премиум</button>
+                class="px-3 py-1.5 rounded text-xs font-mono border transition-all mode-create-btn" data-i18n="pg.premium">🔴 Premium</button>
             </div>
-            <div id="np-mode-hint" class="mt-1 text-[10px] font-mono text-gray-500">Прост HTML/JS — идеален за прототипи</div>
+            <div id="np-mode-hint" class="mt-1 text-[10px] font-mono text-gray-500" data-i18n="pg.modeHintLite">Simple HTML/JS — ideal for prototypes</div>
           </div>
           <label class="flex items-start gap-2 mb-3 p-2.5 rounded-lg border border-violet-700/40 bg-violet-950/30 cursor-pointer select-none">
             <input type="checkbox" id="np-ultra-check" class="mt-0.5 rounded border-violet-600 bg-gray-800 text-violet-500 focus:ring-violet-500" onchange="setBuildUltra(this.checked)">
             <span class="text-[10px] text-violet-200 leading-relaxed">
-              <strong class="text-violet-300">🔬 Ултра фрагментиране</strong> — micro-задачи (1 файл / герой / ниво), LLM <code class="text-violet-400">fragment_command</code>, orchestrator trunk merge. За комплексни игри.
+              <strong class="text-violet-300" data-i18n="pg.ultraTitle">🔬 Ultra fragmentation</strong><span data-i18n="pg.ultraBody"> — micro-tasks (1 file / hero / level), LLM fragment_command, orchestrator trunk merge. For complex games.</span>
             </span>
           </label>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-            <button onclick="createAndAutopilot()" class="px-4 py-3 rounded-lg bg-green-600 hover:bg-green-500 text-white text-sm font-bold text-left">🚀 Autopilot<span class="block text-[10px] font-normal opacity-80 mt-0.5">Пълен автономен цикъл</span></button>
-            <button onclick="createAndBuild()" class="px-4 py-3 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium text-left">🤖 Построй<span class="block text-[10px] font-normal opacity-80 mt-0.5">Autopilot (пълен цикъл)</span></button>
-            <button onclick="createAndPlan()" class="px-4 py-3 rounded-lg bg-yellow-600 hover:bg-yellow-500 text-white text-sm font-medium text-left">🗺️ План<span class="block text-[10px] font-normal opacity-80 mt-0.5">Планирай & строй</span></button>
-            <button onclick="createProject()" class="px-4 py-3 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-sm text-left">📁 Празен<span class="block text-[10px] font-normal opacity-80 mt-0.5">Само scaffold</span></button>
+            <button onclick="createAndAutopilot()" class="px-4 py-3 rounded-lg bg-green-600 hover:bg-green-500 text-white text-sm font-bold text-left">🚀 Autopilot<span class="block text-[10px] font-normal opacity-80 mt-0.5">Full autonomous cycle</span></button>
+            <button onclick="createAndBuild()" class="px-4 py-3 rounded-lg bg-purple-600 hover:bg-purple-500 text-white text-sm font-medium text-left">🤖 Build<span class="block text-[10px] font-normal opacity-80 mt-0.5">Autopilot (full cycle)</span></button>
+            <button onclick="createAndPlan()" class="px-4 py-3 rounded-lg bg-yellow-600 hover:bg-yellow-500 text-white text-sm font-medium text-left">🗺️ Plan<span class="block text-[10px] font-normal opacity-80 mt-0.5" data-i18n="pg.planBuild">Plan & build</span></button>
+            <button onclick="createProject()" class="px-4 py-3 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-sm text-left">📁 Empty<span class="block text-[10px] font-normal opacity-80 mt-0.5" data-i18n="pg.scaffoldOnly">Scaffold only</span></button>
           </div>
-          <button onclick="createAndRaw()" class="w-full px-3 py-2 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-mono border border-gray-700">&lt; Строй в Raw режим</button>
+          <button onclick="createAndRaw()" class="w-full px-3 py-2 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-mono border border-gray-700">&lt; Build in Raw mode</button>
         </div>
       </div>
       <div class="flex gap-2 p-4 border-t border-gray-800 shrink-0">
-        <button onclick="wizPrev()" id="wiz-prev-btn" class="hidden px-4 py-2 rounded bg-gray-700 text-gray-300 text-sm">← Назад</button>
-        <button onclick="wizNext()" id="wiz-next-btn" class="flex-1 px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium">Напред →</button>
-        <button onclick="hideCreate()" class="px-4 py-2 rounded bg-gray-800 text-gray-400 text-sm">Откажи</button>
+        <button onclick="wizPrev()" id="wiz-prev-btn" class="hidden px-4 py-2 rounded bg-gray-700 text-gray-300 text-sm" data-i18n="pg.back">← Back</button>
+        <button onclick="wizNext()" id="wiz-next-btn" class="flex-1 px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium" data-i18n="pg.next">Next →</button>
+        <button onclick="hideCreate()" class="px-4 py-2 rounded bg-gray-800 text-gray-400 text-sm" data-i18n="pg.cancel">Cancel</button>
       </div>
     </div>
   </div>
 
   <!-- Inline clone form -->
   <div id="clone-form" class="hidden mb-6 p-4 bg-gray-900 border border-indigo-600/40 rounded-xl">
-    <h3 class="text-white font-semibold mb-3">Clone от GitHub или GitLab</h3>
+    <h3 class="text-white font-semibold mb-3" data-i18n="pg.cloneTitle">Clone from GitHub or GitLab</h3>
     <input id="cl-url" placeholder="https://github.com/owner/repo · https://gitlab.com/group/project · owner/repo" class="w-full px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700">
-    <input id="cl-name" placeholder="Локално име (опционално)" class="mt-3 w-full px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700">
+    <input id="cl-name" data-i18n-placeholder="pg.localName" placeholder="Local name (optional)" class="mt-3 w-full px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700">
     <div class="mt-3 flex gap-2">
       <button onclick="cloneRepo()" class="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-sm">Clone</button>
-      <button onclick="hideClone()" class="px-4 py-2 rounded bg-gray-700 text-gray-300 text-sm">Откажи</button>
+      <button onclick="hideClone()" class="px-4 py-2 rounded bg-gray-700 text-gray-300 text-sm" data-i18n="pg.cancel">Cancel</button>
     </div>
   </div>
 
@@ -377,21 +377,21 @@
     <div class="bg-gray-900 border border-indigo-600/40 rounded-t-2xl sm:rounded-xl w-full max-w-3xl max-h-[92vh] flex flex-col shadow-2xl">
       <div class="flex items-center justify-between p-4 border-b border-gray-800 shrink-0">
         <div>
-          <h3 class="text-white font-semibold">⬇ Съживи от Git</h3>
-          <p class="text-xs text-gray-500 mt-1">GitHub списък или URL към GitHub/GitLab — clone, оценка, onboarding</p>
+          <h3 class="text-white font-semibold" data-i18n="pg.reviveTitle">⬇ Revive from Git</h3>
+          <p class="text-xs text-gray-500 mt-1">GitHub list or a GitHub/GitLab URL — clone, score, onboarding</p>
         </div>
         <button onclick="closeReviveModal()" class="text-gray-400 hover:text-white text-xl leading-none p-1">✕</button>
       </div>
       <div class="overflow-auto flex-1 p-4 space-y-4">
         <!-- Tab: picker vs URL -->
         <div class="flex gap-2 text-xs">
-          <button id="rev-tab-picker" onclick="setReviveTab('picker')" class="px-3 py-1.5 rounded bg-indigo-700 text-white">Моите repos</button>
+          <button id="rev-tab-picker" onclick="setReviveTab('picker')" class="px-3 py-1.5 rounded bg-indigo-700 text-white" data-i18n="pg.myRepos">My repos</button>
           <button id="rev-tab-url" onclick="setReviveTab('url')" class="px-3 py-1.5 rounded bg-gray-800 text-gray-400">URL paste</button>
         </div>
 
         <div id="rev-pane-picker" class="space-y-3">
           <div id="rev-repo-list" class="space-y-2 max-h-64 overflow-auto">
-            <p class="text-gray-500 text-sm animate-pulse">Зареждам repos…</p>
+            <p class="text-gray-500 text-sm animate-pulse" data-i18n="pg.loadRepos">Loading repos…</p>
           </div>
         </div>
 
@@ -402,7 +402,7 @@
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <input id="rev-name" placeholder="Локално име (опционално)"
+          <input id="rev-name" data-i18n-placeholder="pg.localName" placeholder="Local name (optional)"
             class="px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700">
           <select id="rev-branch" class="px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700">
             <option value="">default branch</option>
@@ -421,15 +421,15 @@
 
         <label class="flex items-center gap-2 text-xs text-gray-400">
           <input type="checkbox" id="rev-repair" checked class="rounded">
-          Repair mode при неуспешен smoke test (AI поправка)
+          Repair mode on a failed smoke test (AI fix)
         </label>
       </div>
       <div class="flex gap-2 p-4 border-t border-gray-800 shrink-0">
         <button onclick="runRevive()" id="rev-go-btn"
           class="flex-1 px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium">
-          ⬇ Съживи
+          <span data-i18n="pg.reviveGo">⬇ Revive</span>
         </button>
-        <button onclick="closeReviveModal()" class="px-4 py-2 rounded bg-gray-800 text-gray-400 text-sm">Откажи</button>
+        <button onclick="closeReviveModal()" class="px-4 py-2 rounded bg-gray-800 text-gray-400 text-sm" data-i18n="pg.cancel">Cancel</button>
       </div>
     </div>
   </div>
@@ -437,17 +437,17 @@
   <!-- Post-revive wizard -->
   <div id="revive-wizard" class="hidden fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
     <div class="bg-gray-900 border border-emerald-600/40 rounded-xl w-full max-w-lg p-6 shadow-2xl">
-      <h3 class="text-white font-semibold text-lg mb-1">✅ Проектът е съживен!</h3>
+      <h3 class="text-white font-semibold text-lg mb-1" data-i18n="pg.revived">✅ Project revived!</h3>
       <p id="rw-summary" class="text-sm text-gray-400 mb-4"></p>
       <div id="rw-onboard-status" class="text-xs text-gray-500 mb-4 font-mono"></div>
-      <p class="text-xs text-gray-500 mb-3">Какво искаш да направиш?</p>
+      <p class="text-xs text-gray-500 mb-3" data-i18n="pg.whatNext">What do you want to do?</p>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <button onclick="reviveWizardAction('preview')" class="px-4 py-3 rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-sm text-left">👁 Preview<span class="block text-[10px] opacity-70">Виж как работи</span></button>
-        <button onclick="reviveWizardAction('chat')" class="px-4 py-3 rounded-lg bg-purple-700 hover:bg-purple-600 text-white text-sm text-left">💬 Chat<span class="block text-[10px] opacity-70">Промени с AI</span></button>
-        <button onclick="reviveWizardAction('autopilot')" class="px-4 py-3 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-sm text-left">🚀 Autopilot<span class="block text-[10px] opacity-70">Автономно доусъвършенстване</span></button>
-        <button onclick="reviveWizardAction('pipeline')" class="px-4 py-3 rounded-lg bg-cyan-700 hover:bg-cyan-600 text-white text-sm text-left">📦 Verify & Publish<span class="block text-[10px] opacity-70">One-click публикуване</span></button>
+        <button onclick="reviveWizardAction('preview')" class="px-4 py-3 rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-sm text-left">👁 Preview<span class="block text-[10px] opacity-70" data-i18n="pg.seeIt">See it run</span></button>
+        <button onclick="reviveWizardAction('chat')" class="px-4 py-3 rounded-lg bg-purple-700 hover:bg-purple-600 text-white text-sm text-left">💬 Chat<span class="block text-[10px] opacity-70" data-i18n="pg.changeAi">Change it with AI</span></button>
+        <button onclick="reviveWizardAction('autopilot')" class="px-4 py-3 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-sm text-left">🚀 Autopilot<span class="block text-[10px] opacity-70" data-i18n="pg.autoImprove">Autonomous polish</span></button>
+        <button onclick="reviveWizardAction('pipeline')" class="px-4 py-3 rounded-lg bg-cyan-700 hover:bg-cyan-600 text-white text-sm text-left">📦 Verify & Publish<span class="block text-[10px] opacity-70" data-i18n="pg.oneClickPub">One-click publish</span></button>
       </div>
-      <button onclick="closeReviveWizard()" class="mt-4 w-full text-xs text-gray-500 hover:text-gray-300">Пропусни — отиди към списъка</button>
+      <button onclick="closeReviveWizard()" class="mt-4 w-full text-xs text-gray-500 hover:text-gray-300" data-i18n="pg.skipList">Skip — go to the list</button>
     </div>
   </div>
 
@@ -460,28 +460,28 @@
       <div class="flex items-center justify-between p-3 border-b border-gray-700">
         <h2 class="text-sm font-bold text-white" id="pv-title">Preview</h2>
         <div class="flex gap-2 items-center">
-          <button onclick="toggleErrHistory()" id="pv-err-hist-btn" class="hidden text-xs px-2 py-1 rounded bg-red-900/60 hover:bg-red-800/80 text-red-300 font-mono" title="История на грешките">📋 <span id="pv-err-count">0</span></button>
-          <a id="pv-open" href="#" target="_blank" class="text-xs text-blue-400 hover:text-blue-300">↗ Нов таб</a>
+          <button onclick="toggleErrHistory()" id="pv-err-hist-btn" class="hidden text-xs px-2 py-1 rounded bg-red-900/60 hover:bg-red-800/80 text-red-300 font-mono" title="Error history" data-i18n-title="pg.errHistory">📋 <span id="pv-err-count">0</span></button>
+          <a id="pv-open" href="#" target="_blank" class="text-xs text-blue-400 hover:text-blue-300" data-i18n="pg.newTab">↗ New tab</a>
           <button onclick="closePreview()" class="text-gray-400 hover:text-white text-xl leading-none">✕</button>
         </div>
       </div>
       <!-- Kind-specific notice (Streamlit WS / FastAPI docs need a new tab) -->
       <div id="pv-iframe-banner" class="hidden px-3 py-2 bg-amber-950 border-b border-amber-700 text-xs text-amber-200">
         <span id="pv-iframe-banner-text"></span>
-        <a id="pv-iframe-banner-link" href="#" target="_blank" class="ml-2 text-amber-100 underline hover:text-white">↗ Отвори в нов таб</a>
+        <a id="pv-iframe-banner-link" href="#" target="_blank" class="ml-2 text-amber-100 underline hover:text-white" data-i18n="pg.openTab">↗ Open in a new tab</a>
       </div>
       <!-- Runtime error banner (shown when iframe sends pg-error via postMessage) -->
       <div id="pv-error-bar" class="hidden items-center gap-2 px-3 py-2 bg-red-950 border-b border-red-700 text-xs">
         <span class="text-red-300 flex-1 font-mono truncate" id="pv-error-msg"></span>
         <button id="pv-error-fix" onclick="fixPreviewError()"
-          class="shrink-0 px-3 py-1 rounded bg-red-700 hover:bg-red-600 text-white font-medium whitespace-nowrap">🔧 Fix с AI</button>
+          class="shrink-0 px-3 py-1 rounded bg-red-700 hover:bg-red-600 text-white font-medium whitespace-nowrap" data-i18n="pg.fixAi">🔧 Fix with AI</button>
         <button onclick="dismissError()" class="shrink-0 text-red-400 hover:text-red-200 text-base leading-none px-1">✕</button>
       </div>
       <!-- Error history panel -->
       <div id="pv-err-history" class="hidden border-b border-gray-700 bg-gray-950 max-h-48 overflow-auto">
         <div class="flex items-center justify-between px-3 py-1.5 border-b border-gray-800">
-          <span class="text-[10px] font-mono text-red-400">История на грешките</span>
-          <button onclick="clearErrHistory()" class="text-[10px] text-red-400 hover:text-red-200">🗑 Изчисти</button>
+          <span class="text-[10px] font-mono text-red-400" data-i18n="pg.errHistory">Error history</span>
+          <button onclick="clearErrHistory()" class="text-[10px] text-red-400 hover:text-red-200" data-i18n="pg.clear">🗑 Clear</button>
         </div>
         <div id="pv-err-history-body" class="p-2 space-y-1.5 text-[10px] font-mono text-gray-400"></div>
       </div>
@@ -501,11 +501,11 @@
         </div>
         <div class="flex items-center gap-1 flex-shrink-0 ml-2">
           <button onclick="setBuildMode('auto')" id="tab-auto"
-            class="text-[10px] px-2 py-1 rounded font-medium bg-emerald-700 text-white transition">🚀 Автопилот</button>
+            class="text-[10px] px-2 py-1 rounded font-medium bg-emerald-700 text-white transition" data-i18n="pg.autopilot">🚀 Autopilot</button>
           <button onclick="setBuildMode('chat')" id="tab-chat"
-            class="text-[10px] px-2 py-1 rounded font-medium bg-gray-700 text-gray-400 hover:text-white transition">💬 Чат</button>
+            class="text-[10px] px-2 py-1 rounded font-medium bg-gray-700 text-gray-400 hover:text-white transition" data-i18n="pg.chat">💬 Chat</button>
           <button onclick="setBuildMode('plan')" id="tab-plan"
-            class="text-[10px] px-2 py-1 rounded font-medium bg-gray-700 text-gray-400 hover:text-white transition">🗺️ План</button>
+            class="text-[10px] px-2 py-1 rounded font-medium bg-gray-700 text-gray-400 hover:text-white transition" data-i18n="pg.plan">🗺️ Plan</button>
           <button onclick="setBuildMode('raw')" id="tab-raw"
             class="text-[10px] px-2 py-1 rounded font-medium bg-gray-700 text-gray-400 hover:text-white transition">🔨 Raw</button>
           <button onclick="closeBuild()" id="bd-close" class="text-gray-400 hover:text-white text-lg leading-none ml-2">✕</button>
@@ -516,14 +516,14 @@
       <div id="auto-body" class="flex flex-col flex-1 min-h-0">
         <!-- Input zone (before run) -->
         <div id="auto-input-zone" class="p-4 border-b border-gray-800">
-          <p class="text-gray-400 text-xs mb-2">🚀 <span class="text-emerald-300 font-medium">Един автономен поток</span>: Дедал проучва → планира → генерира изображения → строи → тества → поправя — всичко в терминала отдолу.</p>
-          <div id="auto-ultra-badge" class="hidden mb-2 text-[9px] font-mono text-violet-300 px-2 py-1 rounded bg-violet-950/40 border border-violet-700/40">🔬 Ultra активен — LLM fragment_command + micro-етапи</div>
-          <div id="auto-studio-badge" class="hidden mb-2 text-[9px] font-mono text-amber-300 px-2 py-1 rounded bg-amber-950/40 border border-amber-700/40">🎬 Studio активен — milestones + context docs + AI роли</div>
+          <p class="text-gray-400 text-xs mb-2">🚀 <span class="text-emerald-300 font-medium" data-i18n="pg.oneFlow">One autonomous flow</span><span data-i18n="pg.oneFlowBody">: Daedalus researches → plans → generates images → builds → tests → repairs — all in the terminal below.</span></p>
+          <div id="auto-ultra-badge" class="hidden mb-2 text-[9px] font-mono text-violet-300 px-2 py-1 rounded bg-violet-950/40 border border-violet-700/40">🔬 Ultra on — LLM fragment_command + micro-stages</div>
+          <div id="auto-studio-badge" class="hidden mb-2 text-[9px] font-mono text-amber-300 px-2 py-1 rounded bg-amber-950/40 border border-amber-700/40">🎬 Studio on — milestones + context docs + AI roles</div>
           <textarea id="auto-desc-input" rows="3"
-            placeholder="напр. „Покемон файтър — 2 играча, удари, HP барове, реалистични pixel-art герои и фон, win екран""
+            data-i18n-placeholder="pg.autoPh" placeholder="e.g. “Pokémon fighter — 2 players, hits, HP bars, pixel-art heroes and a win screen”"
             class="w-full px-3 py-2 rounded bg-gray-800 text-white text-xs border border-emerald-700/50 resize-none focus:outline-none focus:border-emerald-500 font-mono placeholder-gray-600"></textarea>
           <div class="mt-2 flex gap-2 items-center">
-            <input id="auto-ref-input" placeholder="🔎 Референция: Flappy Bird / itch.io URL"
+            <input id="auto-ref-input" data-i18n-placeholder="pg.refPh" placeholder="🔎 Reference: Flappy Bird / itch.io URL"
               class="flex-1 px-2 py-1.5 rounded bg-gray-800 text-white text-[11px] border border-cyan-700/40 font-mono placeholder-gray-600">
             <button type="button" onclick="scoutAutopilotReference()" id="auto-ref-scout-btn"
               class="shrink-0 px-2 py-1.5 rounded text-[10px] bg-cyan-800 hover:bg-cyan-700 text-white">🔍 Scout</button>
@@ -531,9 +531,9 @@
           <div id="auto-ref-panel" class="hidden mt-1.5 p-2 rounded border border-cyan-700/30 bg-cyan-950/20 text-[10px] font-mono text-cyan-200/80"></div>
           <div class="flex gap-2 mt-2">
             <button onclick="runAutopilot()" id="auto-run-btn"
-              class="px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition">🚀 Стартирай Автопилот</button>
+              class="px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition" data-i18n="pg.startAuto">🚀 Start Autopilot</button>
             <button onclick="resetAutopilot()" id="auto-reset-btn"
-              class="hidden px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs transition">↺ Нов</button>
+              class="hidden px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs transition" data-i18n="pg.reset">↺ New</button>
           </div>
         </div>
         <!-- Status bar (running) -->
@@ -541,13 +541,13 @@
           <span id="auto-status-badge" class="text-[10px] font-mono flex items-center gap-1.5"></span>
           <div class="flex gap-1.5">
             <button onclick="pauseAutopilot()" id="auto-pause-btn"
-              class="px-2.5 py-1 rounded bg-amber-600/80 hover:bg-amber-500 text-white text-[10px] font-medium transition">⏸ Пауза</button>
+              class="px-2.5 py-1 rounded bg-amber-600/80 hover:bg-amber-500 text-white text-[10px] font-medium transition" data-i18n="pg.pause">⏸ Pause</button>
             <button onclick="resumeAutopilot()" id="auto-resume-btn"
-              class="hidden px-2.5 py-1 rounded bg-emerald-600/80 hover:bg-emerald-500 text-white text-[10px] font-medium transition">▶️ Продължи</button>
+              class="hidden px-2.5 py-1 rounded bg-emerald-600/80 hover:bg-emerald-500 text-white text-[10px] font-medium transition" data-i18n="pg.resume">▶️ Resume</button>
             <button onclick="stopAutopilot()" id="auto-stop-btn"
-              class="px-2.5 py-1 rounded bg-red-700/80 hover:bg-red-600 text-white text-[10px] font-medium transition">⏹ Спри</button>
+              class="px-2.5 py-1 rounded bg-red-700/80 hover:bg-red-600 text-white text-[10px] font-medium transition" data-i18n="pg.stop">⏹ Stop</button>
             <button onclick="_autoReconnect()" id="auto-reconnect-btn"
-              class="hidden px-2.5 py-1 rounded bg-amber-600/80 hover:bg-amber-500 text-white text-[10px] font-medium transition">🔄 Свържи пак</button>
+              class="hidden px-2.5 py-1 rounded bg-amber-600/80 hover:bg-amber-500 text-white text-[10px] font-medium transition" data-i18n="pg.reconnect">🔄 Reconnect</button>
           </div>
         </div>
         <!-- Phase strip -->
@@ -563,19 +563,19 @@
       <div id="plan-body" class="overflow-auto flex-1 p-4 hidden">
         <!-- Plan input (shown before plan is created) -->
         <div id="plan-input-zone">
-          <p class="text-gray-400 text-xs mb-3">Опиши проекта. Дедал ще направи <span class="text-yellow-300 font-medium">грануларен план</span>, после ще строи <span class="text-emerald-300 font-medium">етап по етап</span> — след всеки етап спираш, преглеждаш, избираш действие.</p>
-          <div id="plan-ultra-badge" class="hidden mb-2 text-[9px] font-mono text-violet-300 px-2 py-1 rounded bg-violet-950/40 border border-violet-700/40">🔬 Ultra активен — избран в wizard; LLM fragment_command + micro-етапи</div>
-          <div id="plan-studio-badge" class="hidden mb-2 text-[9px] font-mono text-amber-300 px-2 py-1 rounded bg-amber-950/40 border border-amber-700/40">🎬 Studio активен — milestones + studio/*.md context</div>
+          <p class="text-gray-400 text-xs mb-3"><span data-i18n="pg.planIntro1">Describe the project. Daedalus will make a </span><span class="text-yellow-300 font-medium" data-i18n="pg.planIntro2">granular plan</span><span data-i18n="pg.planIntro3">, then build </span><span class="text-emerald-300 font-medium" data-i18n="pg.planIntro4">stage by stage</span><span data-i18n="pg.planIntro5"> — after each stage you stop, review, and pick an action.</span></p>
+          <div id="plan-ultra-badge" class="hidden mb-2 text-[9px] font-mono text-violet-300 px-2 py-1 rounded bg-violet-950/40 border border-violet-700/40">🔬 Ultra on — chosen in the wizard; LLM fragment_command + micro-stages</div>
+          <div id="plan-studio-badge" class="hidden mb-2 text-[9px] font-mono text-amber-300 px-2 py-1 rounded bg-amber-950/40 border border-amber-700/40">🎬 Studio on — milestones + studio/*.md context</div>
           <textarea id="plan-desc-input" rows="4"
-            placeholder="напр. „Покемон файтър игра — 2 играча, удари, HP барове, pixel art герои, win екран""
+            data-i18n-placeholder="pg.planPh" placeholder="e.g. “Pokémon fighter — 2 players, hits, HP bars, pixel-art heroes, win screen”"
             class="w-full px-3 py-2 rounded bg-gray-800 text-white text-xs border border-yellow-700/50 resize-none focus:outline-none focus:border-yellow-500 font-mono placeholder-gray-600"></textarea>
           <button onclick="requestPlan()"
-            class="mt-2 px-4 py-2 rounded bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-medium transition">🗺️ Анализирай и създай план</button>
+            class="mt-2 px-4 py-2 rounded bg-yellow-600 hover:bg-yellow-500 text-white text-xs font-medium transition" data-i18n="pg.analyzePlan">🗺️ Analyze and create a plan</button>
         </div>
         <!-- Plan loading state -->
         <div id="plan-loading" class="hidden">
-          <div id="plan-loading-phase" class="text-yellow-400 text-xs font-mono animate-pulse mb-2">🔬 Фаза 1: Дедал проучва…</div>
-          <div class="text-gray-500 text-[10px]">Това може да отнеме 20–60 сек — Дедал търси в интернет и skill каталога.</div>
+          <div id="plan-loading-phase" class="text-yellow-400 text-xs font-mono animate-pulse mb-2" data-i18n="pg.phase1Dx">🔬 Phase 1: Daedalus is researching…</div>
+          <div class="text-gray-500 text-[10px]">This can take 20–60s — Daedalus searches the web and the skill catalog.</div>
         </div>
         <!-- Plan stages (shown after plan created) -->
         <div id="plan-stages-zone" class="hidden">
@@ -583,7 +583,7 @@
           <!-- Research summary -->
           <div id="plan-research-box" class="hidden mb-3 rounded-lg border border-blue-700/40 bg-blue-950/40 p-2.5">
             <div class="flex items-center gap-1.5 mb-1.5">
-              <span class="text-[10px] font-bold text-blue-300">🔬 Дедал проучи</span>
+              <span class="text-[10px] font-bold text-blue-300">🔬 Daedalus researched</span>
               <div id="plan-research-tools" class="flex gap-1 flex-wrap"></div>
             </div>
             <div id="plan-research-notes" class="text-[10px] text-blue-200 whitespace-pre-wrap leading-relaxed"></div>
@@ -591,26 +591,26 @@
           <div id="plan-stages" class="space-y-2 mb-4"></div>
           <div id="plan-exec-bar" class="flex gap-2 items-center flex-wrap">
             <button onclick="executeGuidedPlan()" id="plan-exec-btn"
-              class="px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition">▶ Контролирано строене</button>
-            <button onclick="expandPlanUltra()" id="plan-ultra-btn" class="hidden px-3 py-2 rounded bg-violet-800 hover:bg-violet-700 text-violet-100 text-xs transition">🔬 Ултра фрагментирай плана</button>
+              class="px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-medium transition" data-i18n="pg.guidedBuild">▶ Guided build</button>
+            <button onclick="expandPlanUltra()" id="plan-ultra-btn" class="hidden px-3 py-2 rounded bg-violet-800 hover:bg-violet-700 text-violet-100 text-xs transition" data-i18n="pg.ultraFragment">🔬 Ultra-fragment the plan</button>
             <button onclick="initUnityForPlan()" id="plan-unity-init-btn" class="hidden px-3 py-2 rounded bg-indigo-800 hover:bg-indigo-700 text-indigo-100 text-xs transition">🎮 Init Unity</button>
             <button onclick="generateUnityBuildScripts()" id="plan-unity-build-btn" class="hidden px-3 py-2 rounded bg-slate-700 hover:bg-slate-600 text-slate-100 text-xs transition">🛠 Unity Build Scripts</button>
             <button onclick="exportUnityBridge()" id="plan-unity-export-btn" class="hidden px-3 py-2 rounded bg-amber-800 hover:bg-amber-700 text-amber-100 text-xs transition">📦 Export Unity Bridge</button>
             <button onclick="initHybridForPlan()" id="plan-hybrid-init-btn" class="hidden px-3 py-2 rounded bg-emerald-800 hover:bg-emerald-700 text-emerald-100 text-xs transition">📱 Init Hybrid F7</button>
             <button onclick="exportHybridForPlan()" id="plan-hybrid-export-btn" class="hidden px-3 py-2 rounded bg-teal-800 hover:bg-teal-700 text-teal-100 text-xs transition">📦 Export PakePlus</button>
             <button onclick="configureFirebaseForPlan()" id="plan-firebase-btn" class="hidden px-3 py-2 rounded bg-orange-800 hover:bg-orange-700 text-orange-100 text-xs transition">🔥 Firebase Config</button>
-            <button onclick="resetPlan()" class="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs transition">↺ Нов план</button>
+            <button onclick="resetPlan()" class="px-3 py-2 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs transition" data-i18n="pg.newPlan">↺ New plan</button>
           </div>
-          <div id="plan-trunk-hint" class="hidden mt-2 text-[9px] text-violet-300/80 font-mono">🎛 Orchestrator: всеки файл → branch → валидация → merge към trunk (main)</div>
+          <div id="plan-trunk-hint" class="hidden mt-2 text-[9px] text-violet-300/80 font-mono">🎛 Orchestrator: each file → branch → validate → merge to trunk (main)</div>
           <div id="plan-checkpoint-zone" class="hidden mt-4 rounded-lg border border-amber-600/50 bg-amber-950/30 p-3 space-y-3">
-            <div class="text-amber-300 text-xs font-bold">⏸ Checkpoint — прегледай и избери</div>
+            <div class="text-amber-300 text-xs font-bold">⏸ Checkpoint — review and choose</div>
             <div id="plan-cp-review" class="text-[10px] text-gray-300 whitespace-pre-wrap max-h-32 overflow-auto"></div>
             <div id="plan-cp-files" class="text-[9px] font-mono text-gray-400"></div>
             <div id="plan-cp-trunk" class="hidden text-[9px] font-mono text-violet-300/90"></div>
-            <textarea id="plan-cp-notes" rows="2" placeholder="Бележки: преработка, edit_plan (JSON: goal/instructions/files), или свободен текст…"
+            <textarea id="plan-cp-notes" rows="2" data-i18n-placeholder="pg.cpNotes" placeholder="Notes: rework, edit_plan (JSON: goal/instructions/files), or free text…"
               class="w-full px-2 py-1.5 rounded bg-gray-800 text-white text-xs border border-gray-600 resize-none"></textarea>
             <div id="plan-cp-options" class="flex flex-col gap-1.5"></div>
-            <button onclick="guidedPreview()" class="text-[10px] text-sky-400 hover:underline">👁 Preview на проекта</button>
+            <button onclick="guidedPreview()" class="text-[10px] text-sky-400 hover:underline" data-i18n="pg.previewProj">👁 Preview the project</button>
           </div>
           <div id="plan-guided-log" class="hidden mt-3 max-h-40 overflow-auto rounded bg-gray-950 border border-gray-800 p-2 text-[9px] font-mono text-gray-400 space-y-0.5"></div>
           <div id="plan-complete-msg" class="hidden mt-3 px-3 py-2 rounded bg-emerald-900/60 border border-emerald-700/50 text-emerald-300 text-xs"></div>
@@ -624,13 +624,13 @@
       <div id="bd-chat-input" class="border-t border-gray-700 bg-gray-950 px-3 py-2 flex-shrink-0">
         <div class="flex gap-2">
           <textarea id="chat-msg-input" rows="2"
-            placeholder="Питай Дедал, опиши проблем или поискай функция… (Ctrl+Enter за изпращане)"
+            data-i18n-placeholder="pg.chatPh" placeholder="Ask Daedalus, describe a bug, or request a feature… (Ctrl+Enter to send)"
             class="flex-1 px-2 py-1.5 rounded bg-gray-800 text-white text-xs border border-gray-700 resize-none focus:outline-none focus:border-purple-600 font-mono placeholder-gray-600"
             onkeydown="if(event.ctrlKey&&event.key==='Enter'){event.preventDefault();sendChat();}"></textarea>
           <div class="flex flex-col gap-1 justify-end">
             <button onclick="sendChat()" id="chat-send-btn"
-              class="px-4 py-1.5 rounded text-xs font-medium bg-purple-700 hover:bg-purple-600 text-white transition whitespace-nowrap">Изпрати</button>
-            <button onclick="switchToRawBuild()" title="Принудителен raw build (пренапиши целия код)"
+              class="px-4 py-1.5 rounded text-xs font-medium bg-purple-700 hover:bg-purple-600 text-white transition whitespace-nowrap" data-i18n="pg.send">Send</button>
+            <button onclick="switchToRawBuild()" title="Force a raw build (rewrite the whole codebase)" data-i18n-title="pg.rawTitle"
               class="px-2 py-1 rounded text-[9px] font-medium bg-gray-700 hover:bg-gray-600 text-gray-300 transition whitespace-nowrap">🔨 Build</button>
           </div>
         </div>
@@ -639,28 +639,28 @@
       <!-- Raw build command panel (hidden by default) -->
       <div id="bd-cmd" class="border-t border-gray-700 bg-gray-950 px-3 py-2 space-y-2 flex-shrink-0 hidden">
         <div class="flex gap-2">
-          <textarea id="bd-cmd-input" rows="2" placeholder="Въведи корекция, нова идея или нови изисквания…"
+          <textarea id="bd-cmd-input" rows="2" data-i18n-placeholder="pg.rawPh" placeholder="Type a correction, a new idea, or new requirements…"
             class="flex-1 px-2 py-1.5 rounded bg-gray-800 text-white text-xs border border-gray-700 resize-none focus:outline-none focus:border-purple-600 font-mono placeholder-gray-600"></textarea>
           <button onclick="stopBuild()" id="bd-stop-btn"
-            class="self-end px-3 py-1.5 rounded text-xs font-medium bg-red-700 hover:bg-red-600 text-white whitespace-nowrap transition">■ Спри</button>
+            class="self-end px-3 py-1.5 rounded text-xs font-medium bg-red-700 hover:bg-red-600 text-white whitespace-nowrap transition" data-i18n="pg.stopShort">■ Stop</button>
         </div>
         <div class="flex gap-2 flex-wrap">
           <button onclick="resumeBuild()" id="bd-resume-btn"
-            class="px-3 py-1.5 rounded text-xs font-medium bg-gray-700 hover:bg-gray-600 text-gray-200 transition">▶ Поднови</button>
+            class="px-3 py-1.5 rounded text-xs font-medium bg-gray-700 hover:bg-gray-600 text-gray-200 transition" data-i18n="pg.resumeShort">▶ Resume</button>
           <button onclick="correctBuild()" id="bd-correct-btn"
-            class="px-3 py-1.5 rounded text-xs font-medium bg-yellow-700 hover:bg-yellow-600 text-white transition">🔧 Коригирай</button>
+            class="px-3 py-1.5 rounded text-xs font-medium bg-yellow-700 hover:bg-yellow-600 text-white transition" data-i18n="pg.correct">🔧 Correct</button>
           <button onclick="rewriteBuild()" id="bd-rewrite-btn"
-            class="px-3 py-1.5 rounded text-xs font-medium bg-indigo-700 hover:bg-indigo-600 text-white transition">🔁 Пренапиши</button>
-          <button onclick="setBuildMode('chat')" class="px-3 py-1.5 rounded text-xs font-medium bg-purple-900 hover:bg-purple-800 text-purple-300 transition">← Обратно в чат</button>
+            class="px-3 py-1.5 rounded text-xs font-medium bg-indigo-700 hover:bg-indigo-600 text-white transition" data-i18n="pg.rewrite">🔁 Rewrite</button>
+          <button onclick="setBuildMode('chat')" class="px-3 py-1.5 rounded text-xs font-medium bg-purple-900 hover:bg-purple-800 text-purple-300 transition" data-i18n="pg.backChat">← Back to chat</button>
         </div>
       </div>
 
       <!-- Footer (preview after build) -->
       <div id="bd-foot" class="p-3 border-t border-gray-700 hidden flex-shrink-0 flex flex-wrap gap-2">
-        <button onclick="previewBuildDiff()" id="bd-diff-btn" class="hidden px-4 py-2 rounded bg-indigo-700 hover:bg-indigo-600 text-white text-sm">📋 Промени</button>
-        <button onclick="buildPreview()" id="bd-preview-btn" class="px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-sm">👁 Виж резултата</button>
-        <button onclick="setBuildMode('chat')" class="px-4 py-2 rounded bg-purple-700 hover:bg-purple-600 text-white text-sm ml-2">← Обратно в чат</button>
-        <button onclick="closeBuild()" class="px-4 py-2 rounded bg-gray-700 text-gray-300 text-sm ml-2">Затвори</button>
+        <button onclick="previewBuildDiff()" id="bd-diff-btn" class="hidden px-4 py-2 rounded bg-indigo-700 hover:bg-indigo-600 text-white text-sm" data-i18n="pg.changes">📋 Changes</button>
+        <button onclick="buildPreview()" id="bd-preview-btn" class="px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-sm" data-i18n="pg.seeResult">👁 See the result</button>
+        <button onclick="setBuildMode('chat')" class="px-4 py-2 rounded bg-purple-700 hover:bg-purple-600 text-white text-sm ml-2" data-i18n="pg.backChat">← Back to chat</button>
+        <button onclick="closeBuild()" class="px-4 py-2 rounded bg-gray-700 text-gray-300 text-sm ml-2" data-i18n="pg.close">Close</button>
       </div>
     </div>
   </div>
@@ -673,7 +673,7 @@
         <button onclick="closeAssets()" class="text-gray-400 hover:text-white text-xl leading-none">✕</button>
       </div>
       <div class="p-4 border-b border-gray-800 space-y-3 shrink-0">
-        <p class="text-[11px] text-gray-400">Генерирай спрайтове, фонове и икони в <code class="text-pink-300">assets/</code>. Auto-pack и Автопилот ползват същия pipeline.</p>
+        <p class="text-[11px] text-gray-400">Generate sprites, backgrounds, and icons in <code class="text-pink-300">assets/</code>. Auto-pack and Autopilot use the same pipeline.</p>
         <div class="p-2.5 rounded-lg border border-cyan-700/30 bg-cyan-950/20 space-y-2">
           <div class="text-[10px] font-mono text-cyan-300 font-semibold">🔎 Reference Scout</div>
           <div class="flex gap-2">
@@ -686,8 +686,8 @@
         </div>
         <div class="flex flex-wrap gap-2">
           <button onclick="autoPackAssets()" id="as-autopack-btn"
-            class="px-3 py-1.5 rounded text-xs font-medium bg-pink-700 hover:bg-pink-600 text-white">📦 Auto-pack от описание</button>
-          <button onclick="loadAssets()" class="px-3 py-1.5 rounded text-xs font-medium bg-gray-700 hover:bg-gray-600 text-gray-200">↻ Обнови</button>
+            class="px-3 py-1.5 rounded text-xs font-medium bg-pink-700 hover:bg-pink-600 text-white" data-i18n="pg.autopack">📦 Auto-pack from description</button>
+          <button onclick="loadAssets()" class="px-3 py-1.5 rounded text-xs font-medium bg-gray-700 hover:bg-gray-600 text-gray-200" data-i18n="pg.refresh">↻ Refresh</button>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
           <input id="as-path" placeholder="assets/player.png" class="px-2 py-1.5 rounded bg-gray-800 text-white text-xs border border-gray-700 font-mono">
@@ -695,18 +695,18 @@
         </div>
         <div class="flex gap-2 items-center">
           <select id="as-size" class="px-2 py-1.5 rounded bg-gray-800 text-white text-xs border border-gray-700">
-            <option value="512x512">512×512 спрайт</option>
-            <option value="1024x768">1024×768 фон</option>
+            <option value="512x512" data-i18n="pg.sprite">512×512 sprite</option>
+            <option value="1024x768" data-i18n="pg.bgSize">1024×768 background</option>
             <option value="1024x1024">1024×1024</option>
           </select>
           <button onclick="generateOneAsset()" id="as-gen-btn"
-            class="px-3 py-1.5 rounded text-xs font-medium bg-emerald-700 hover:bg-emerald-600 text-white">🎨 Генерирай</button>
+            class="px-3 py-1.5 rounded text-xs font-medium bg-emerald-700 hover:bg-emerald-600 text-white" data-i18n="pg.genAsset">🎨 Generate</button>
         </div>
-        <textarea id="as-desc" rows="2" placeholder="Описание за Auto-pack (празно = описанието на проекта)"
+        <textarea id="as-desc" rows="2" data-i18n-placeholder="pg.autopackPh" placeholder="Auto-pack description (empty = the project description)"
           class="w-full px-2 py-1.5 rounded bg-gray-800 text-white text-xs border border-gray-700 resize-y font-mono"></textarea>
       </div>
       <div id="as-body" class="p-4 overflow-auto flex-1 grid grid-cols-2 sm:grid-cols-3 gap-3 content-start">
-        <p class="text-gray-500 text-xs col-span-full">Зареждане…</p>
+        <p class="text-gray-500 text-xs col-span-full" data-i18n="pg.loading">Loading…</p>
       </div>
     </div>
   </div>
@@ -715,11 +715,11 @@
   <div id="suggest-modal" class="fixed inset-0 bg-black bg-opacity-80 z-50 hidden flex items-center justify-center p-4">
     <div class="bg-gray-900 border border-yellow-600/50 rounded-xl w-full max-w-xl flex flex-col">
       <div class="flex items-center justify-between p-3 border-b border-gray-700">
-        <h2 class="text-sm font-bold text-white">💡 Идеи за подобрение — <span id="sg-title" class="text-yellow-300 font-normal"></span></h2>
+        <h2 class="text-sm font-bold text-white"><span data-i18n="pg.ideasTitle">💡 Ideas to improve —</span> <span id="sg-title" class="text-yellow-300 font-normal"></span></h2>
         <button onclick="closeSuggest()" class="text-gray-400 hover:text-white text-xl leading-none">✕</button>
       </div>
       <div id="sg-body" class="p-4 space-y-2 overflow-auto max-h-[70vh]">
-        <p class="text-gray-400 text-xs">Анализирам проекта…</p>
+        <p class="text-gray-400 text-xs" data-i18n="pg.analyzing">Analyzing the project…</p>
       </div>
     </div>
   </div>
@@ -728,7 +728,7 @@
   <div id="logs-modal" class="fixed inset-0 bg-black bg-opacity-80 z-50 hidden flex items-center justify-center p-4">
     <div class="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-4xl max-h-[80vh] flex flex-col">
       <div class="flex items-center justify-between p-3 border-b border-gray-700">
-        <h2 class="text-sm font-bold text-white" id="lg-title">Логове</h2>
+        <h2 class="text-sm font-bold text-white" id="lg-title" data-i18n="pg.logs">Logs</h2>
         <button onclick="closeLogs()" class="text-gray-400 hover:text-white text-xl leading-none">✕</button>
       </div>
       <pre id="lg-body" class="overflow-auto flex-1 p-4 text-xs text-green-300 font-mono whitespace-pre-wrap"></pre>
@@ -749,8 +749,8 @@
         <div data-dx-skeleton="lines:2"></div>
       </div>
       <div class="p-3 border-t border-gray-700 flex gap-2">
-        <input id="db-new-key" placeholder="ключ" class="w-36 px-2 py-1.5 rounded bg-gray-800 text-white text-xs border border-gray-700 focus:outline-none focus:border-cyan-600">
-        <input id="db-new-val" placeholder="стойност (JSON или текст)" class="flex-1 px-2 py-1.5 rounded bg-gray-800 text-white text-xs border border-gray-700 focus:outline-none focus:border-cyan-600">
+        <input id="db-new-key" data-i18n-placeholder="pg.dbKey" placeholder="key" class="w-36 px-2 py-1.5 rounded bg-gray-800 text-white text-xs border border-gray-700 focus:outline-none focus:border-cyan-600">
+        <input id="db-new-val" data-i18n-placeholder="pg.dbVal" placeholder="value (JSON or text)" class="flex-1 px-2 py-1.5 rounded bg-gray-800 text-white text-xs border border-gray-700 focus:outline-none focus:border-cyan-600">
         <button onclick="dbSetKey()" class="px-3 py-1.5 rounded bg-cyan-700 hover:bg-cyan-600 text-white text-xs font-medium">Set</button>
       </div>
     </div>
@@ -760,6 +760,9 @@
 
 <script>
 const $ = (id) => document.getElementById(id);
+function t(key, vars) {
+  return (window.DaedalusI18n && DaedalusI18n.t) ? DaedalusI18n.t(key, vars) : key;
+}
 let _logTimer = null;
 
 async function api(url, opts) {
@@ -777,30 +780,30 @@ async function loadGh() {
     const bits = [];
     if (gh.ok) {
       const pushNote = gh.can_push === false
-        ? ' <span class="text-amber-400">⚠ няма push/PR права</span>'
+        ? ' <span class="text-amber-400">' + t('pg.noPush') + '</span>'
         : '';
       bits.push(`GitHub ✅ <b class="text-emerald-400">${escHtml(gh.login || '?')}</b>${pushNote}`);
     } else if (gh.configured) {
-      bits.push(`GitHub ⚠️ <span class="text-red-400">${escHtml(gh.error || 'токен не работи')}</span>`);
+      bits.push(`GitHub ⚠️ <span class="text-red-400">${escHtml(gh.error || t('pg.tokenBad'))}</span>`);
     } else {
       bits.push('GitHub ❌');
     }
     if (gl.ok) {
       bits.push(`GitLab ✅ <b class="text-emerald-400">${escHtml(gl.username || gl.host || '?')}</b>`);
     } else if (gl.configured) {
-      bits.push(`GitLab ⚠️ <span class="text-red-400">${escHtml(gl.error || 'токен не работи')}</span>`);
+      bits.push(`GitLab ⚠️ <span class="text-red-400">${escHtml(gl.error || t('pg.tokenBad'))}</span>`);
     } else {
       bits.push('GitLab ❌');
     }
     const missing = !gh.configured && !gl.configured;
     el.innerHTML = bits.join(' · ') + (missing
-      ? ` — <a href="/admin/daedalus/connectors" class="text-indigo-400 underline">настрой Свързаност</a>`
+      ? ` — <a href="/admin/daedalus/connectors" class="text-indigo-400 underline">${t('pg.setupConn')}</a>`
       : '');
     $('gh-status').classList.toggle('border-amber-800', missing || gh.can_push === false);
     $('gh-status').classList.toggle('border-red-800', (gh.configured && !gh.ok) || (gl.configured && !gl.ok));
   } catch (e) {
     const el = $('gh-status-text');
-    if (el) el.textContent = 'Git: грешка';
+    if (el) el.textContent = t('pg.gitErr');
   }
 }
 
@@ -819,14 +822,14 @@ function statusBadge(s) {
 function modeBadge(m) {
   const map = {lite:'bg-emerald-900/60 text-emerald-300', pro:'bg-yellow-900/60 text-yellow-300', premium:'bg-red-900/60 text-red-300'};
   const labels = {lite:'🟢 Lite', pro:'🟡 Pro', premium:'🔴 Premium'};
-  return `<span class="text-[10px] px-2 py-0.5 rounded font-mono ${map[m]||'bg-gray-800 text-gray-400'}" title="Режим на кодиране">${labels[m]||m}</span>`;
+  return `<span class="text-[10px] px-2 py-0.5 rounded font-mono ${map[m]||'bg-gray-800 text-gray-400'}" title="${t('pg.codingModeTitle')}">${labels[m]||m}</span>`;
 }
 
 async function loadProjects() {
   const d = await api('/admin/daedalus/playground/api/projects');
   const list = $('project-list');
   if (!d.projects || !d.projects.length) {
-    list.innerHTML = '<p class="text-gray-500 text-sm">Няма проекти. Създай нов или clone от GitHub/GitLab.</p>';
+    list.innerHTML = '<p class="text-gray-500 text-sm">' + t('pg.noProjects') + '</p>';
     return;
   }
   list.innerHTML = d.projects.map(p => {
@@ -840,12 +843,12 @@ async function loadProjects() {
     const isPublishable = p.kind === 'static' || p.kind === 'vite' || p.kind === 'vite-react' || p.kind === 'expo';
     const runBtn = (isStatic || isLocalEditor) ? '' :
       (running
-        ? `<button onclick="stopProj('${p.slug}')" class="btn-sm bg-red-700 hover:bg-red-600">■ Стоп</button>`
+        ? `<button onclick="stopProj('${p.slug}')" class="btn-sm bg-red-700 hover:bg-red-600">${t('pg.stopBtn')}</button>`
         : `<button onclick="runProj('${p.slug}','${p.kind}')" class="btn-sm bg-blue-700 hover:bg-blue-600">▶ Run</button>`);
     const unityPushBtn = isLocalEditor
-      ? `<button onclick="pushProj('${p.slug}','gitlab')" class="btn-sm bg-orange-700 hover:bg-orange-600" title="Качи в GitLab и отвори в Unity Hub">⬆ GitLab</button>`
-        + `<button onclick="pushGithubOneClick('${p.slug}')" class="btn-sm bg-indigo-800 hover:bg-indigo-700" title="Нов GitHub repo + push (1 клик)">⬆ GitHub</button>`
-      : `<button onclick="pushGithubOneClick('${p.slug}')" class="btn-sm bg-indigo-800 hover:bg-indigo-700" title="Нов GitHub repo + push (1 клик)">⬆ GitHub</button>`;
+      ? `<button onclick="pushProj('${p.slug}','gitlab')" class="btn-sm bg-orange-700 hover:bg-orange-600" title="${t('pg.glHubTitle')}">⬆ GitLab</button>`
+        + `<button onclick="pushGithubOneClick('${p.slug}')" class="btn-sm bg-indigo-800 hover:bg-indigo-700" title="${t('pg.ghPushTitle')}">⬆ GitHub</button>`
+      : `<button onclick="pushGithubOneClick('${p.slug}')" class="btn-sm bg-indigo-800 hover:bg-indigo-700" title="${t('pg.ghPushTitle')}">⬆ GitHub</button>`;
     return `
     <div class="p-4 bg-gray-900 border border-gray-700 rounded-xl">
       <div class="flex items-start justify-between gap-2">
@@ -855,20 +858,20 @@ async function loadProjects() {
             ${kindBadge(p.kind)} ${statusBadge(running ? 'running' : p.status)}
           </div>
           <div class="text-xs text-gray-500 mt-1 font-mono truncate">${p.slug} · ${p.source}${p.compat_score ? ' · <span class="text-indigo-400" title="compat">'+Math.round(p.compat_score)+'%</span>' : ''}${p.gitlab_repo ? ' · <a href="'+p.gitlab_repo+'" target="_blank" class="text-orange-400">gitlab↗</a>' : ''}${p.github_repo ? ' · <a href="'+p.github_repo+'" target="_blank" class="text-indigo-400">github↗</a>' : ''}</div>
-          ${p.workspace_empty ? `<div class="mt-1 text-[10px] text-amber-400/90 border border-amber-700/40 bg-amber-950/30 rounded px-2 py-1">${escHtml(p.workspace_warning || 'Workspace празен — файловете може да са изгубени при redeploy')}</div>` : ''}
+          ${p.workspace_empty ? `<div class="mt-1 text-[10px] text-amber-400/90 border border-amber-700/40 bg-amber-950/30 rounded px-2 py-1">${escHtml(p.workspace_warning || t('pg.emptyWs'))}</div>` : ''}
           ${descBlock(p.description, p.slug)}
         </div>
         <div class="shrink-0">${modeSegment(p.slug, p.coding_mode)}</div>
       </div>
       <div class="flex flex-wrap items-center gap-2 mt-3">
-        <button onclick="preview('${p.slug}','${sn}','${p.kind}')" class="btn-sm bg-gray-700 hover:bg-gray-600">👁 Preview</button>
-        <button onclick="openAssets('${p.slug}','${sn}')" class="btn-sm bg-pink-800 hover:bg-pink-700">🎨 Studio</button>
-        <button onclick="openAutopilot('${p.slug}','${sn}')" class="btn-sm bg-emerald-700 hover:bg-emerald-600 font-medium">🚀 Авто</button>
-        <button id="resume-btn-${p.slug}" onclick="resumeFromPlan('${p.slug}','${sn}')" class="btn-sm bg-cyan-700 hover:bg-cyan-600 hidden">▶ Продължи</button>
+        <button onclick="preview('${p.slug}','${sn}','${p.kind}')" class="btn-sm bg-gray-700 hover:bg-gray-600">${t('pg.previewBtn')}</button>
+        <button onclick="openAssets('${p.slug}','${sn}')" class="btn-sm bg-pink-800 hover:bg-pink-700">${t('pg.studioBtn')}</button>
+        <button onclick="openAutopilot('${p.slug}','${sn}')" class="btn-sm bg-emerald-700 hover:bg-emerald-600 font-medium">${t('pg.autoShort')}</button>
+        <button id="resume-btn-${p.slug}" onclick="resumeFromPlan('${p.slug}','${sn}')" class="btn-sm bg-cyan-700 hover:bg-cyan-600 hidden">${t('pg.continue')}</button>
         ${runBtn}
         ${unityPushBtn}
         ${!isPublishable && !isUnity ? `<span class="text-[10px] font-mono text-yellow-500/80 px-2 py-1 rounded bg-yellow-900/20 border border-yellow-700/30">dev-only</span>` : ''}
-        ${isUnity ? `<span class="text-[10px] font-mono text-sky-400/90 px-2 py-1 rounded bg-sky-950/30 border border-sky-700/30" title="Unity Hub локално">Unity Hub</span>` : ''}
+        ${isUnity ? `<span class="text-[10px] font-mono text-sky-400/90 px-2 py-1 rounded bg-sky-950/30 border border-sky-700/30" title="Unity Hub">Unity Hub</span>` : ''}
         ${projectOverflowMenu(p, isStatic, isPublishable, running)}
       </div>
     </div>`;
@@ -889,7 +892,7 @@ async function _checkAllResumeInfo(projects) {
         const done = info.done_stages || 0;
         const total = info.total_stages || 0;
         btn.classList.remove('hidden');
-        btn.title = `Продължи от Stage ${done + 1}/${total}: «${info.next_stage || ''}»`;
+        btn.title = t('pg.continueFrom', {done: done + 1, total, next: info.next_stage || ''});
       } else {
         btn.classList.add('hidden');
       }
@@ -921,7 +924,7 @@ async function resumeFromPlan(slug, name) {
   const descInput = $('auto-desc-input');
   const descVal = descInput ? descInput.value.trim() : '';
   if (!descVal) {
-    _autoLog('⚠️ Няма описание — въведи го и натисни "Стартирай"', 'warn');
+    _autoLog(t('pg.noDescStart'), 'warn');
     return;
   }
   await runAutopilot(/*resume=*/true);
@@ -936,12 +939,12 @@ let _suggestions = [];
 async function showSuggestions(slug, name) {
   _suggestSlug = slug; _suggestName = name;
   $('sg-title').textContent = name;
-  $('sg-body').innerHTML = '<p class="text-gray-400 text-xs animate-pulse">💡 Анализирам проекта…</p>';
+  $('sg-body').innerHTML = '<p class="text-gray-400 text-xs animate-pulse">💡 ' + t('pg.analyzing') + '</p>';
   $('suggest-modal').classList.remove('hidden');
   try {
     const r = await api(`/admin/daedalus/playground/api/projects/${slug}/suggest`, {method:'POST', body:'{}'});
     if (!r.ok || !r.suggestions || !r.suggestions.length) {
-      $('sg-body').innerHTML = `<p class="text-red-400 text-xs">Грешка: ${r.error || 'без резултат'}</p>`;
+      $('sg-body').innerHTML = `<p class="text-red-400 text-xs">${t('pg.errPrefix')} ${escHtml(r.error || t('pg.noResult'))}</p>`;
       return;
     }
     _suggestions = r.suggestions;
@@ -951,12 +954,12 @@ async function showSuggestions(slug, name) {
         <span class="text-gray-200 text-sm flex-1">${escHtml(s)}</span>
         <button onclick="applySuggestion(${i})"
           class="shrink-0 px-3 py-1 rounded text-xs bg-purple-700 hover:bg-purple-600 text-white opacity-0 group-hover:opacity-100 transition whitespace-nowrap">
-          ▶ Приложи
+          ${t('pg.applyIdea')}
         </button>
       </div>`).join('') +
-      `<p class="text-[10px] text-gray-600 text-center pt-2">Натисни "▶ Приложи" върху идея — Дедал ще я реализира веднага</p>`;
+      `<p class="text-[10px] text-gray-600 text-center pt-2">${t('pg.clickIdea')}</p>`;
   } catch(e) {
-    $('sg-body').innerHTML = `<p class="text-red-400 text-xs">Грешка: ${e.message}</p>`;
+    $('sg-body').innerHTML = `<p class="text-red-400 text-xs">${t('pg.errPrefix')} ${escHtml(e.message)}</p>`;
   }
 }
 
@@ -976,11 +979,7 @@ function applySuggestion(idx) {
 
 // ── Coding mode (create form) ───────────────────────────────────
 let _newProjMode = 'lite';
-const _MODE_HINTS = {
-  lite:    'Прост HTML/JS — идеален за прототипи, mini-games, бързи инструменти',
-  pro:     'Tailwind/Alpine/React CDN — полиран UX, анимации, responsive',
-  premium: 'Three.js/GSAP/Babylon — 3D, шейдъри, cinematic качество',
-};
+function _MODE_HINTS(m) { return t('pg.modeHint.' + m); }
 function setNewMode(m) {
   _newProjMode = m;
   ['lite','pro','premium'].forEach(k => {
@@ -989,17 +988,13 @@ function setNewMode(m) {
     btn.classList.toggle('mode-active', k === m);
   });
   const hint = $('np-mode-hint');
-  if (hint) hint.textContent = _MODE_HINTS[m] || '';
+  if (hint) hint.textContent = _MODE_HINTS(m) || '';
 }
 setNewMode('lite');
 
 const PG_PROFILE_KEY = 'adn:buildProfile';
 let _buildProfile = 'quick';
-const _PROFILE_LABELS = {
-  quick: 'Бърз прототип',
-  balanced: 'Баланс',
-  studio: 'Studio Production',
-};
+function _PROFILE_LABELS(k) { return t('pg.prof.' + k); }
 
 function _paintProfileCards() {
   document.querySelectorAll('.dx-profile-card[data-profile]').forEach(el => {
@@ -1007,7 +1002,7 @@ function _paintProfileCards() {
   });
   const sum = $('np-profile-summary');
   if (sum) {
-    sum.textContent = `Profile: ${_PROFILE_LABELS[_buildProfile] || _buildProfile} — fine-tune по-долу или смени в стъпка ①`;
+    sum.textContent = t('pg.profileLine', {name: _PROFILE_LABELS(_buildProfile) || _buildProfile});
   }
 }
 
@@ -1041,7 +1036,7 @@ async function switchMode(slug, mode) {
     method: 'POST', body: JSON.stringify({mode})
   });
   if (r.ok) loadProjects();
-  else alert('Грешка при смяна на режим: ' + (r.error || 'unknown'));
+  else alert(t('pg.modeSwitchErr') + (r.error || 'unknown'));
 }
 
 // overflow menu
@@ -1070,11 +1065,11 @@ function paintWizStep() {
   if (prev) prev.classList.toggle('hidden', _wizStep === 1);
   if (next) {
     next.classList.toggle('hidden', _wizStep === 3);
-    next.textContent = _wizStep === 2 ? 'Към старт →' : 'Напред →';
+    next.textContent = _wizStep === 2 ? t('pg.toStart') : t('pg.next');
   }
 }
 function wizNext() {
-  if (_wizStep === 1 && !$('np-name').value.trim()) { alert('Въведи име на проекта'); return; }
+  if (_wizStep === 1 && !$('np-name').value.trim()) { alert(t('pg.enterProjName')); return; }
   if (_wizStep < 3) { _wizStep++; paintWizStep(); }
 }
 function wizPrev() { if (_wizStep > 1) { _wizStep--; paintWizStep(); } }
@@ -1104,7 +1099,7 @@ async function loadPublishedApps() {
     const r = await api('/admin/daedalus/playground/api/published');
     const apps = (r.apps || []).filter(a => a.enabled !== false);
     if (!apps.length) {
-      el.innerHTML = '<p class="text-gray-500">Няма публикувани приложения в /apps/.</p>';
+      el.innerHTML = '<p class="text-gray-500">' + t('pg.noPublished') + '</p>';
       return;
     }
     el.innerHTML = '<div class="space-y-2">' + apps.map(a => `
@@ -1114,14 +1109,14 @@ async function loadPublishedApps() {
           <div class="text-white font-medium truncate">${escHtml(a.name || a.slug)}</div>
           <div class="text-[10px] font-mono text-gray-500">${escHtml(a.slug)}</div>
         </div>
-        <a href="/apps/${encodeURIComponent(a.slug)}/" target="_blank" class="btn-sm bg-gray-700 hover:bg-gray-600">↗ Отвори</a>
-        <button type="button" data-unpublish="${escHtml(a.slug)}" class="btn-sm bg-red-900/50 hover:bg-red-800 text-red-300 border border-red-800">🗑 Изтрий</button>
+        <a href="/apps/${encodeURIComponent(a.slug)}/" target="_blank" class="btn-sm bg-gray-700 hover:bg-gray-600">${t('pg.open')}</a>
+        <button type="button" data-unpublish="${escHtml(a.slug)}" class="btn-sm bg-red-900/50 hover:bg-red-800 text-red-300 border border-red-800">${t('pg.delete')}</button>
       </div>`).join('') + '</div>';
     el.querySelectorAll('[data-unpublish]').forEach((btn) => {
       btn.addEventListener('click', () => deletePublishedProj(btn.getAttribute('data-unpublish')));
     });
   } catch (e) {
-    el.innerHTML = '<p class="text-red-400">Грешка: ' + escHtml(e.message) + '</p>';
+    el.innerHTML = '<p class="text-red-400">' + t('pg.errPrefix') + ' ' + escHtml(e.message) + '</p>';
   }
 }
 
@@ -1131,7 +1126,7 @@ function escHtml(s) {
 function descBlock(desc, slug) {
   if (!desc) return '';
   if (desc.length <= 140) return `<div class="text-xs text-gray-400 mt-1 line-clamp-2">${escHtml(desc)}</div>`;
-  return `<div class="text-xs text-gray-400 mt-1"><span id="desc-short-${slug}">${escHtml(desc.slice(0, 140))}…</span><span id="desc-full-${slug}" class="hidden">${escHtml(desc)}</span> <button type="button" onclick="toggleDesc('${slug}', this)" class="text-indigo-400 hover:text-indigo-300 text-[10px]">Виж повече</button></div>`;
+  return `<div class="text-xs text-gray-400 mt-1"><span id="desc-short-${slug}">${escHtml(desc.slice(0, 140))}…</span><span id="desc-full-${slug}" class="hidden">${escHtml(desc)}</span> <button type="button" onclick="toggleDesc('${slug}', this)" class="text-indigo-400 hover:text-indigo-300 text-[10px]">${t('pg.seeMore')}</button></div>`;
 }
 function toggleDesc(slug, btn) {
   const s = $('desc-short-' + slug), f = $('desc-full-' + slug);
@@ -1139,24 +1134,24 @@ function toggleDesc(slug, btn) {
   const showFull = f.classList.contains('hidden');
   s.classList.toggle('hidden', showFull);
   f.classList.toggle('hidden', !showFull);
-  if (btn) btn.textContent = showFull ? 'Скрий' : 'Виж повече';
+  if (btn) btn.textContent = showFull ? t('pg.hide') : t('pg.seeMore');
 }
 function projectOverflowMenu(p, isStatic, isPublishable, running) {
   const sn = p.name.replace(/'/g, "\\'");
   const items = [];
   items.push(`<button onclick="aiEdit('${p.slug}','${sn}')" class="pg-menu-item">🤖 AI edit</button>`);
-  items.push(`<button onclick="showSuggestions('${p.slug}','${sn}')" class="pg-menu-item">💡 Идеи</button>`);
+  items.push(`<button onclick="showSuggestions('${p.slug}','${sn}')" class="pg-menu-item">${t('pg.ideas')}</button>`);
   items.push(`<button onclick="openAssets('${p.slug}','${sn}')" class="pg-menu-item">🎨 Asset Studio</button>`);
-  if (!isStatic) items.push(`<button onclick="showLogs('${p.slug}')" class="pg-menu-item">📜 Логове</button>`);
+  if (!isStatic) items.push(`<button onclick="showLogs('${p.slug}')" class="pg-menu-item">${t('pg.logs')}</button>`);
   if (p.kind === 'vite' || p.kind === 'vite-react' || p.kind === 'expo')
     items.push(`<button onclick="rebuildProj('${p.slug}',this)" class="pg-menu-item">🔨 Rebuild</button>`);
   if (p.source === 'revived' || p.upstream_url) {
     items.push(`<button onclick="revivePipeline('${p.slug}')" class="pg-menu-item">📦 Verify & Publish</button>`);
     items.push(`<button onclick="showUpstreamDiff('${p.slug}')" class="pg-menu-item">↔ Upstream diff</button>`);
-    items.push(`<button onclick="createUpstreamPr('${p.slug}')" class="pg-menu-item">🔀 PR / MR към upstream</button>`);
+    items.push(`<button onclick="createUpstreamPr('${p.slug}')" class="pg-menu-item">${t('pg.prMr')}</button>`);
   }
   if (isPublishable) {
-    const pubLabel = p.kind === 'expo' ? '📦 Export' : (p.kind === 'vite' || p.kind === 'vite-react' ? '🔨 Build & Pub' : '🚀 Публикувай');
+    const pubLabel = p.kind === 'expo' ? '📦 Export' : (p.kind === 'vite' || p.kind === 'vite-react' ? '🔨 Build & Pub' : t('pg.publish'));
     items.push(`<button onclick="publishProj('${p.slug}')" class="pg-menu-item">${pubLabel}</button>`);
   }
   if (p.kind === 'expo') {
@@ -1166,21 +1161,21 @@ function projectOverflowMenu(p, isStatic, isPublishable, running) {
   }
   items.push(`<button onclick="backupWorkspace('${p.slug}')" class="pg-menu-item">💾 Backup workspace</button>`);
   items.push(`<button onclick="openDb('${p.slug}')" class="pg-menu-item">🗄 DB</button>`);
-  items.push(`<button onclick="pushProj('${p.slug}','gitlab')" class="pg-menu-item">⬆ GitLab (настрой repo)</button>`);
-  items.push(`<button onclick="pushGithubOneClick('${p.slug}')" class="pg-menu-item">⬆ GitHub (1 клик → нов repo)</button>`);
+  items.push(`<button onclick="pushProj('${p.slug}','gitlab')" class="pg-menu-item">${t('pg.glSetup')}</button>`);
+  items.push(`<button onclick="pushGithubOneClick('${p.slug}')" class="pg-menu-item">${t('pg.ghOneClick')}</button>`);
   if (p.status === 'published') {
-    items.push(`<button onclick="unpublishProj('${p.slug}')" class="pg-menu-item">↩ Скрий от /apps</button>`);
-    items.push(`<button onclick="deletePublishedProj('${p.slug}')" class="pg-menu-item text-red-400">🗑 Махни от /apps</button>`);
+    items.push(`<button onclick="unpublishProj('${p.slug}')" class="pg-menu-item">${t('pg.hideApps')}</button>`);
+    items.push(`<button onclick="deletePublishedProj('${p.slug}')" class="pg-menu-item text-red-400">${t('pg.removeApps')}</button>`);
   }
-  items.push(`<button onclick="delProj('${p.slug}')" class="pg-menu-item text-red-400">🗑 Изтрий проект</button>`);
+  items.push(`<button onclick="delProj('${p.slug}')" class="pg-menu-item text-red-400">${t('pg.deleteProj')}</button>`);
   return `<details class="relative pg-card-menu"><summary class="btn-sm bg-gray-800 hover:bg-gray-700 cursor-pointer list-none">⋮</summary><div class="absolute right-0 top-full mt-1 z-20 min-w-[10rem] py-1 rounded-lg border border-gray-700 bg-gray-900 shadow-xl">${items.join('')}</div></details>`;
 }
 function modeSegment(slug, mode) {
   const m = mode || 'lite';
   return `<div class="inline-flex rounded-lg border border-gray-700 overflow-hidden text-[10px]">
-    <button onclick="switchMode('${slug}','lite')" class="px-2 py-1 ${m==='lite'?'bg-emerald-700 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'}" title="Бързо">🟢</button>
-    <button onclick="switchMode('${slug}','pro')" class="px-2 py-1 ${m==='pro'?'bg-yellow-700 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'}" title="Баланс">🟡</button>
-    <button onclick="switchMode('${slug}','premium')" class="px-2 py-1 ${m==='premium'?'bg-red-700 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'}" title="Премиум">🔴</button>
+    <button onclick="switchMode('${slug}','lite')" class="px-2 py-1 ${m==='lite'?'bg-emerald-700 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'}" title="${t('pg.modeFast')}">🟢</button>
+    <button onclick="switchMode('${slug}','pro')" class="px-2 py-1 ${m==='pro'?'bg-yellow-700 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'}" title="${t('pg.modeBal')}">🟡</button>
+    <button onclick="switchMode('${slug}','premium')" class="px-2 py-1 ${m==='premium'?'bg-red-700 text-white':'bg-gray-800 text-gray-400 hover:bg-gray-700'}" title="${t('pg.modePrem')}">🔴</button>
   </div>`;
 }
 
@@ -1198,16 +1193,16 @@ async function loadLearning() {
     </div>`;
     html += `<div class="p-3 bg-gray-800 rounded-lg border border-gray-700">
       <div class="text-2xl font-bold text-blue-400">${stats.avg_attempts || 0}</div>
-      <div class="text-xs text-gray-500">Средно опити</div>
+      <div class="text-xs text-gray-500">${t('pg.avgAttempts')}</div>
     </div>`;
     html += `<div class="p-3 bg-gray-800 rounded-lg border border-gray-700">
       <div class="text-2xl font-bold text-purple-400">${stats.avg_duration_sec ? Math.round(stats.avg_duration_sec) : 0}s</div>
-      <div class="text-xs text-gray-500">Средно време</div>
+      <div class="text-xs text-gray-500">${t('pg.avgTime')}</div>
     </div>`;
     html += '</div>';
     // Patterns
     if (stats.patterns && stats.patterns.length) {
-      html += '<div class="mt-4"><h4 class="text-white font-medium mb-2">📈 Паттерни по тип/режим</h4><div class="space-y-2">';
+      html += '<div class="mt-4"><h4 class="text-white font-medium mb-2">' + t('pg.patterns') + '</h4><div class="space-y-2">';
       for (const p of stats.patterns) {
         const cls = p.success_rate >= 70 ? 'bg-emerald-900/30 border-emerald-700' : p.success_rate >= 40 ? 'bg-amber-900/30 border-amber-700' : 'bg-red-900/30 border-red-700';
         html += `<div class="p-2 rounded border ${cls} text-xs">
@@ -1221,7 +1216,7 @@ async function loadLearning() {
     }
     // Common errors
     if (stats.common_errors && stats.common_errors.length) {
-      html += '<div class="mt-4"><h4 class="text-white font-medium mb-2">⚠️ Чести грешки</h4><div class="space-y-1">';
+      html += '<div class="mt-4"><h4 class="text-white font-medium mb-2">' + t('pg.commonErrs') + '</h4><div class="space-y-1">';
       for (const e of stats.common_errors) {
         html += `<div class="p-2 rounded bg-red-900/20 border border-red-800 text-xs text-red-300">${e.error} <span class="text-gray-500">(${e.count}x)</span></div>`;
       }
@@ -1229,7 +1224,7 @@ async function loadLearning() {
     }
     // Recent records
     if (recent.records && recent.records.length) {
-      html += `<div class="mt-4"><h4 class="text-white font-medium mb-2">📝 Последни ${recent.records.length} билда</h4><div class="space-y-1">`;
+      html += `<div class="mt-4"><h4 class="text-white font-medium mb-2">${t('pg.recentBuilds', {n: recent.records.length})}</h4><div class="space-y-1">`;
       for (const r of recent.records) {
         const ok = r.success ? '✅' : '❌';
         const cls = r.success ? 'text-emerald-400' : 'text-red-400';
@@ -1238,19 +1233,19 @@ async function loadLearning() {
       html += '</div></div>';
     }
     if (!stats.total && !recent.records.length) {
-      html = '<p class="text-gray-500">Още няма записани данни. Статистиката се пълни при <b>Автопилот</b> или при <b>Публикувай / Build &amp; Publish</b>.</p>';
+      html = '<p class="text-gray-500">' + t('pg.noLearning') + '</p>';
     }
     el.innerHTML = html;
   } catch(e) {
-    el.innerHTML = '<p class="text-red-400">Грешка при зареждане: ' + e.message + '</p>';
+    el.innerHTML = '<p class="text-red-400">' + t('pg.loadErr') + e.message + '</p>';
   }
 }
 
 async function createProject() {
   const name = $('np-name').value.trim();
-  if (!name) { alert('Въведи име'); return; }
+  if (!name) { alert(t('pg.enterName')); return; }
   const btn = event.target;
-  btn.textContent = '⏳ Строи…'; btn.disabled = true;
+  btn.textContent = t('pg.building'); btn.disabled = true;
   try {
     const r = await api('/admin/daedalus/playground/api/projects', {method:'POST',
       body: JSON.stringify({name, kind: $('np-kind').value, description: $('np-desc').value, coding_mode: _newProjMode})});
@@ -1263,9 +1258,9 @@ async function createProject() {
         preview(r.project.slug, r.project.name, r.project.kind);
       }
     } else {
-      alert('Грешка: ' + r.error);
+      alert(t('pg.errPrefix') + ' ' + r.error);
     }
-  } finally { btn.textContent = 'Създай'; btn.disabled = false; }
+  } finally { btn.textContent = t('pg.create'); btn.disabled = false; }
 }
 
 // ── AI BUILD (streaming) ───────────────────────────────────────
@@ -1278,36 +1273,36 @@ let _autoRunning = false;
 async function createAndBuild() {
   const name = $('np-name').value.trim();
   const prompt = $('np-build').value.trim();
-  if (!name) { alert('Въведи име'); return; }
-  if (!prompt) { alert('Опиши какво да построи Дедал (или ползвай „Само създай")'); $('np-build').focus(); return; }
+  if (!name) { alert(t('pg.enterName')); return; }
+  if (!prompt) { alert(t('pg.needDesc')); $('np-build').focus(); return; }
   const kind = $('np-kind').value;
   const btn = event.target;
   btn.textContent = '⏳…'; btn.disabled = true;
   try {
     const r = await api('/admin/daedalus/playground/api/projects', {method:'POST',
       body: JSON.stringify({name, kind, description: $('np-desc').value, coding_mode: _newProjMode})});
-    if (!r.ok) { alert('Грешка: ' + r.error); return; }
+    if (!r.ok) { alert(t('pg.errPrefix') + ' ' + r.error); return; }
     hideCreate();
     $('np-name').value=''; $('np-desc').value=''; $('np-build').value='';
     await loadProjects();
     const autoPrompt = prompt || ($('np-desc')?.value || '').trim();
     const ref = ($('np-reference')?.value || '').trim();
     await openAutopilot(r.project.slug, r.project.name, autoPrompt, ref, r.project.kind);
-  } finally { btn.textContent = '🤖 Построй'; btn.disabled = false; }
+  } finally { btn.textContent = t('pg.build'); btn.disabled = false; }
 }
 
 async function createAndRaw() {
   const name   = $('np-name').value.trim();
   const prompt = $('np-build').value.trim();
-  if (!name) { alert('Въведи име'); return; }
-  if (!prompt) { alert('Опиши какво да построи Дедал (или ползвай „Само създай")'); $('np-build').focus(); return; }
+  if (!name) { alert(t('pg.enterName')); return; }
+  if (!prompt) { alert(t('pg.needDesc')); $('np-build').focus(); return; }
   const kind = $('np-kind').value;
   const btn  = event.target;
   btn.textContent = '⏳…'; btn.disabled = true;
   try {
     const r = await api('/admin/daedalus/playground/api/projects', {method:'POST',
       body: JSON.stringify({name, kind, description: $('np-desc').value, coding_mode: _newProjMode})});
-    if (!r.ok) { alert('Грешка: ' + r.error); return; }
+    if (!r.ok) { alert(t('pg.errPrefix') + ' ' + r.error); return; }
     hideCreate();
     $('np-name').value=''; $('np-desc').value=''; $('np-build').value='';
     await loadProjects();
@@ -1320,7 +1315,7 @@ async function createAndRaw() {
     setBuildMode('raw');
     const inp = $('bd-cmd-input');
     if (inp) { inp.value = prompt; setTimeout(() => inp.focus(), 80); }
-  } finally { btn.textContent = '< Строй в Raw'; btn.disabled = false; }
+  } finally { btn.textContent = t('pg.rawBuild'); btn.disabled = false; }
 }
 
 function aiEdit(slug, name) {
@@ -1409,7 +1404,7 @@ function onStudioPresetChange() {
     $('np-kind').value = hintKind;
     updateKindNote();
     const note = $('np-kind-note');
-    if (note) note.textContent = `🎬 Studio preset → kind: ${hintKind}`;
+    if (note) note.textContent = t('pg.studioPresetKind', {kind: hintKind});
   }
   const unityPanel = $('np-unity-panel');
   if (unityPanel) unityPanel.classList.toggle('hidden', hintKind !== 'unity' && _buildStudioPreset !== 'custom');
@@ -1543,14 +1538,14 @@ let _guidedOffset = 0;
 async function createAndPlan() {
   const name   = $('np-name').value.trim();
   const prompt = $('np-build').value.trim();
-  if (!name) { alert('Въведи ime'); return; }
+  if (!name) { alert(t('pg.enterName')); return; }
   const kind   = $('np-kind')?.value || 'static';
   const btn    = document.querySelector('button[onclick="createAndPlan()"]');
   btn.textContent = '⏳…'; btn.disabled = true;
   try {
     const r = await api('/admin/daedalus/playground/api/projects', {method:'POST',
       body: JSON.stringify({name, kind, description: $('np-desc')?.value || '', coding_mode: _newProjMode})});
-    if (!r.ok) { alert('Грешка: ' + r.error); return; }
+    if (!r.ok) { alert(t('pg.errPrefix') + ' ' + r.error); return; }
     if (isBuildStudio() && (kind === 'unity' || $('np-kind')?.value === 'unity')) {
       try { await initUnityProject(r.project.slug); } catch (e) { console.warn('unity init', e); }
     }
@@ -1562,20 +1557,20 @@ async function createAndPlan() {
     $('np-name').value=''; $('np-desc').value=''; $('np-build').value='';
     await loadProjects();
     openPlanMode(r.project.slug, r.project.name, autoPrompt);
-  } finally { btn.textContent = '🚀 Планирай & Строй'; btn.disabled = false; }
+  } finally { btn.textContent = t('pg.planBuild'); btn.disabled = false; }
 }
 
 async function createAndAutopilot() {
   const name   = $('np-name').value.trim();
   const prompt = $('np-build').value.trim();
-  if (!name) { alert('Въведи ime на проекта'); return; }
+  if (!name) { alert(t('pg.enterProjName')); return; }
   const kind   = $('np-kind')?.value || 'static';
   const btn    = document.querySelector('button[onclick="createAndAutopilot()"]');
   btn.textContent = '⏳…'; btn.disabled = true;
   try {
     const r = await api('/admin/daedalus/playground/api/projects', {method:'POST',
       body: JSON.stringify({name, kind, description: $('np-desc')?.value || '', coding_mode: _newProjMode})});
-    if (!r.ok) { alert('Грешка: ' + r.error); return; }
+    if (!r.ok) { alert(t('pg.errPrefix') + ' ' + r.error); return; }
     if (isBuildStudio() && (kind === 'unity' || $('np-kind')?.value === 'unity')) {
       try { await initUnityProject(r.project.slug); } catch (e) { console.warn('unity init', e); }
     }
@@ -1638,10 +1633,10 @@ async function requestPlan() {
 
   // Animate phase text during wait
   const phases = [
-    '🔬 Фаза 1: Дедал проучва в интернет…',
-    '📚 Фаза 1: Дедал търси в skill каталога…',
-    '🔍 Фаза 1: Дедал анализира референции…',
-    '📋 Фаза 2: Кристализира в строителен план…',
+    t('pg.phaseNet'),
+    t('pg.phaseSkills'),
+    t('pg.phaseRefs'),
+    t('pg.phasePlan'),
   ];
   let phaseIdx = 0;
   const phaseTimer = setInterval(() => {
@@ -1663,7 +1658,7 @@ async function requestPlan() {
 
     if (!r.ok) {
       $('plan-input-zone').classList.remove('hidden');
-      alert('Грешка: ' + (r.error || r.raw || 'unknown'));
+      alert(t('pg.errPrefix') + ' ' + (r.error || r.raw || 'unknown'));
       return;
     }
 
@@ -1694,9 +1689,9 @@ async function requestPlan() {
     clearInterval(phaseTimer);
     $('plan-loading').classList.add('hidden');
     $('plan-input-zone').classList.remove('hidden');
-    alert('Мрежова грешка: ' + e.message);
+    alert(t('pg.netErr') + e.message);
   } finally {
-    btn.textContent = '🗺️ Анализирай и създай план'; btn.disabled = false;
+    btn.textContent = t('pg.analyzePlan'); btn.disabled = false;
   }
 }
 
@@ -1802,7 +1797,7 @@ async function initUnityForPlan() {
 }
 
 function _renderPlanStages(plan) {
-  $('plan-title').textContent = '🗺️ ' + (plan.title || 'Строителен план');
+  $('plan-title').textContent = '🗺️ ' + (plan.title || t('pg.buildPlan'));
   if (plan.studio_preset) {
     $('plan-title').textContent += ` · 🎬 ${plan.studio_preset}`;
   }
@@ -1830,8 +1825,8 @@ function _renderPlanStages(plan) {
     div.innerHTML = `
       <div class="flex items-center gap-2 mb-1 flex-wrap">
         <span id="ps-icon-${s.id}" class="text-sm">⏳</span>
-        <span class="text-xs font-semibold text-white">Етап ${s.id}: ${escHtml(s.title)}</span>${micro}${role}
-        <span id="ps-badge-${s.id}" class="ml-auto text-[9px] font-mono px-1.5 py-0.5 rounded bg-gray-700 text-gray-400">Изчакване</span>
+        <span class="text-xs font-semibold text-white">${t('pg.stageN', {id: s.id, title: escHtml(s.title)})}</span>${micro}${role}
+        <span id="ps-badge-${s.id}" class="ml-auto text-[9px] font-mono px-1.5 py-0.5 rounded bg-gray-700 text-gray-400">${t('pg.waiting')}</span>
       </div>
       <div class="text-[10px] text-gray-400 mb-1">${escHtml(s.goal || '')}</div>
       ${files}
@@ -1854,7 +1849,7 @@ function _renderPlanStages(plan) {
     if (other.length) {
       const hdr = document.createElement('div');
       hdr.className = 'text-[10px] font-bold text-gray-400 mt-2 mb-1 px-1';
-      hdr.textContent = 'Други етапи';
+      hdr.textContent = t('pg.otherStages');
       container.appendChild(hdr);
       other.forEach(renderStage);
     }
@@ -1894,7 +1889,7 @@ async function expandPlanUltra() {
     _updateUltraUi(r.plan);
     _updateStudioUi(r.plan);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '🔬 Ултра фрагментирай плана'; }
+    if (btn) { btn.disabled = false; btn.textContent = t('pg.ultraFragment'); }
   }
 }
 
@@ -1902,12 +1897,12 @@ async function executeGuidedPlan() {
   if (!_planData || _planRunning) return;
   _planRunning = true;
   const btn = $('plan-exec-btn');
-  btn.disabled = true; btn.textContent = '⏳ Стартирам…';
+  btn.disabled = true; btn.textContent = t('pg.starting');
   $('plan-complete-msg').classList.add('hidden');
   $('plan-checkpoint-zone').classList.add('hidden');
   $('plan-guided-log').classList.remove('hidden');
   $('plan-guided-log').innerHTML = '';
-  (_planData.stages || []).forEach(s => _updateStageStatus(s.id, '⏳', 'Изчакване', 'bg-gray-700 text-gray-400'));
+  (_planData.stages || []).forEach(s => _updateStageStatus(s.id, '⏳', t('pg.waiting'), 'bg-gray-700 text-gray-400'));
 
   try {
     const start = await api(`/admin/daedalus/playground/api/projects/${_planSlug}/guided/start`, {
@@ -1918,13 +1913,13 @@ async function executeGuidedPlan() {
         ..._studioApiBody(),
       }),
     });
-    if (!start.ok) { alert('Грешка: ' + (start.error || 'start failed')); return; }
+    if (!start.ok) { alert(t('pg.errPrefix') + ' ' + (start.error || 'start failed')); return; }
     _guidedJobId = start.job_id;
     _guidedOffset = 0;
     await _guidedStreamLoop();
   } catch (err) {
-    alert('Грешка: ' + err.message);
-    btn.textContent = '▶ Контролирано строене'; btn.disabled = false;
+    alert(t('pg.errPrefix') + ' ' + err.message);
+    btn.textContent = t('pg.guidedBuild'); btn.disabled = false;
     _planRunning = false;
   }
 }
@@ -1971,11 +1966,11 @@ function _handleGuidedEvent(ev, d) {
       _guidedLog(d.line || '', d.level || 'info');
       break;
     case 'stage':
-      if (d.stage_id) _updateStageStatus(d.stage_id, '🔨', 'Строи…', 'bg-yellow-800/80 text-yellow-300');
+      if (d.stage_id) _updateStageStatus(d.stage_id, '🔨', t('pg.working'), 'bg-yellow-800/80 text-yellow-300');
       break;
     case 'stage_done':
       if (d.stage_id) {
-        _updateStageStatus(d.stage_id, d.ok ? '✅' : '⚠️', d.ok ? 'Готов' : 'Преглед', d.ok ? 'bg-emerald-800/80 text-emerald-300' : 'bg-amber-800/80 text-amber-300');
+        _updateStageStatus(d.stage_id, d.ok ? '✅' : '⚠️', d.ok ? t('pg.ready') : t('pg.review'), d.ok ? 'bg-emerald-800/80 text-emerald-300' : 'bg-amber-800/80 text-amber-300');
         if (d.files && d.files.length)
           _appendStageDetail(d.stage_id, `<div class="text-[9px] font-mono text-gray-400">📝 ${d.files.map(escHtml).join(' • ')}</div>`);
       }
@@ -1985,19 +1980,19 @@ function _handleGuidedEvent(ev, d) {
       break;
     case 'done': {
       const msg = $('plan-complete-msg');
-      msg.textContent = `✅ Guided build завършен — ${(d.files||[]).length} файла.`;
+      msg.textContent = t('pg.guidedDone', {n: (d.files||[]).length});
       msg.classList.remove('hidden');
       const btn = $('plan-exec-btn');
-      btn.textContent = '👁 Виж резултата';
+      btn.textContent = t('pg.seeResult');
       btn.disabled = false;
       btn.onclick = () => { closeBuild(); setTimeout(() => previewProject(_planSlug, _buildName || _planSlug), 100); };
       _planRunning = false;
       break;
     }
     case 'error':
-      alert('Грешка: ' + (d.message || 'unknown'));
+      alert(t('pg.errPrefix') + ' ' + (d.message || 'unknown'));
       $('plan-exec-btn').disabled = false;
-      $('plan-exec-btn').textContent = '▶ Контролирано строене';
+      $('plan-exec-btn').textContent = t('pg.guidedBuild');
       _planRunning = false;
       break;
   }
@@ -2019,7 +2014,7 @@ function _showCheckpoint(d) {
   const trunkEl = $('plan-cp-trunk');
   if (trunkEl && d.trunk) {
     const n = d.trunk.trunk_files || 0;
-    trunkEl.textContent = `🎛 Trunk: ${n} файла в main`;
+    trunkEl.textContent = t('pg.trunkFiles', {n});
     trunkEl.classList.remove('hidden');
   } else if (trunkEl) {
     trunkEl.classList.add('hidden');
@@ -2035,9 +2030,9 @@ function _showCheckpoint(d) {
     opts.appendChild(b);
   });
   if (d.micro) {
-    _guidedLog('🔬 Micro-task checkpoint — 1 артефакт на етап', 'dim');
+    _guidedLog(t('pg.microCp'), 'dim');
   }
-  $('plan-exec-btn').textContent = '⏸ На checkpoint';
+  $('plan-exec-btn').textContent = t('pg.atCheckpoint');
   $('plan-exec-btn').disabled = true;
 }
 
@@ -2051,7 +2046,7 @@ async function guidedContinue(action) {
     body: JSON.stringify({job_id: _guidedJobId, action, notes}),
   });
   if (!r.ok) { alert(r.error || 'continue failed'); return; }
-  $('plan-exec-btn').textContent = '⏳ Строи…';
+  $('plan-exec-btn').textContent = t('pg.workingBuild');
   await _guidedStreamLoop();
 }
 
@@ -2099,13 +2094,13 @@ async function previewChatFiles(applyId) {
     const diffs = await fetchPlaygroundDiff(pending.slug, pending.files);
     DaedalusUI.openDiffModal({
       eyebrow: 'Playground chat',
-      title: `${pending.files.length} файл(а)`,
-      metaHtml: `<span class="text-gray-400">Проект:</span> <span class="font-mono text-purple-300">${escHtml(pending.slug)}</span>`,
+      title: t('pg.nFiles', {n: pending.files.length}),
+      metaHtml: `<span class="text-gray-400">${t('pg.project')}</span> <span class="font-mono text-purple-300">${escHtml(pending.slug)}</span>`,
       diffs,
       actionsHtml: `
-        <button type="button" onclick="DaedalusUI.closeDiffModal()" class="px-4 py-2 rounded text-xs font-mono border border-gray-600 text-gray-300">Затвори</button>
+        <button type="button" onclick="DaedalusUI.closeDiffModal()" class="px-4 py-2 rounded text-xs font-mono border border-gray-600 text-gray-300">${t('pg.close')}</button>
         <div class="flex-1"></div>
-        <button type="button" id="dx-diff-apply-btn" class="px-4 py-2 rounded text-xs font-mono border border-emerald-500/40 bg-emerald-500/10 text-emerald-300">✓ Приложи</button>`,
+        <button type="button" id="dx-diff-apply-btn" class="px-4 py-2 rounded text-xs font-mono border border-emerald-500/40 bg-emerald-500/10 text-emerald-300">${t('pg.apply')}</button>`,
     });
     document.getElementById('dx-diff-apply-btn')?.addEventListener('click', () => {
       DaedalusUI.closeDiffModal();
@@ -2128,8 +2123,8 @@ async function previewBuildDiff() {
     const diffs = await fetchPlaygroundDiff(slug, files);
     DaedalusUI.openDiffModal({
       eyebrow: 'Build',
-      title: `${_buildWrittenPaths.length} записани файла`,
-      metaHtml: `<span class="text-gray-400">Проект:</span> <span class="font-mono text-purple-300">${escHtml(slug)}</span>`,
+      title: t('pg.writtenFiles', {n: _buildWrittenPaths.length}),
+      metaHtml: `<span class="text-gray-400">${t('pg.project')}</span> <span class="font-mono text-purple-300">${escHtml(slug)}</span>`,
       diffs,
     });
   } catch (e) {
@@ -2200,8 +2195,7 @@ async function _autoCheckActive(slug) {
     const a = await r.json();
     if (a && a.active && a.job_id) {
       _autoLog('', 'dim');
-      _autoLog(a.paused ? '⏸ Заварих задача на пауза — закачам се…'
-                        : '🔄 Заварих текуща задача — закачам се…', 'warn');
+      _autoLog(a.paused ? t('pg.foundPaused') : t('pg.foundRunning'), 'warn');
       _autoPaused = !!a.paused;
       _apPersist(a.job_id, 0);
       _autoJobId = a.job_id; _autoOffset = 0;
@@ -2230,13 +2224,13 @@ function _autoSetStatus(state) {
   const pauseBtn = $('auto-pause-btn'), resumeBtn = $('auto-resume-btn');
   if (!bar || !badge) return;
   const map = {
-    running:      ['<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Работи…', 'text-emerald-300'],
-    reconnecting: ['<span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span> Свързвам пак…', 'text-amber-300'],
-    paused:       ['⏸ На пауза', 'text-amber-300'],
-    done:         ['✅ Завършено', 'text-emerald-400'],
-    warn:         ['⚠️ Частичен успех', 'text-amber-300'],
-    error:        ['❌ Грешка', 'text-red-400'],
-    stopped:      ['⏹ Спряно', 'text-gray-400'],
+    running:      [t('pg.st.running'), 'text-emerald-300'],
+    reconnecting: [t('pg.st.reconnecting'), 'text-amber-300'],
+    paused:       [t('pg.st.paused'), 'text-amber-300'],
+    done:         [t('pg.st.done'), 'text-emerald-400'],
+    warn:         [t('pg.st.warn'), 'text-amber-300'],
+    error:        [t('pg.st.error'), 'text-red-400'],
+    stopped:      [t('pg.st.stopped'), 'text-gray-400'],
   };
   const [html, cls] = map[state] || map.running;
   bar.classList.remove('hidden');
@@ -2262,18 +2256,20 @@ async function resumeAutopilot() {
   try { await fetch(`/admin/daedalus/playground/api/projects/${_autoSlug}/autopilot/resume`, {method:'POST'}); } catch {}
 }
 
-const _AUTO_PHASES = ['Чете','Проучва','Планира','Assets','Строи','Верифицира','Качество'];
+function _autoPhases() {
+  return [t('pg.phase.read'), t('pg.phase.research'), t('pg.phase.plan'), t('pg.phase.assets'), t('pg.phase.build'), t('pg.phase.verify'), t('pg.phase.quality')];
+}
 function _autoRenderPhases(activeN) {
   const strip = $('auto-phase-strip');
   strip.innerHTML = '';
-  _AUTO_PHASES.forEach((label, i) => {
+  _autoPhases().forEach((label, i) => {
     const done = i < activeN, cur = i === activeN;
     const chip = document.createElement('span');
     chip.className = 'px-1.5 py-0.5 rounded whitespace-nowrap ' +
       (cur ? 'bg-emerald-600 text-white' : done ? 'bg-emerald-900/60 text-emerald-300' : 'bg-gray-800 text-gray-500');
     chip.textContent = (done ? '✓ ' : cur ? '▸ ' : '') + i + '. ' + label;
     strip.appendChild(chip);
-    if (i < _AUTO_PHASES.length - 1) {
+    if (i < _autoPhases().length - 1) {
       const sep = document.createElement('span');
       sep.className = 'text-gray-700'; sep.textContent = '→';
       strip.appendChild(sep);
@@ -2331,7 +2327,7 @@ async function runAutopilot(resume) {
   if (!desc) { $('auto-desc-input')?.focus(); return; }
   if (_autoRunning) return;
   if (!_autoSlug) _autoSlug = _buildSlug;
-  if (!_autoSlug) { alert('Няма активен проект — отвори проект и пробвай пак.'); return; }
+  if (!_autoSlug) { alert(t('pg.noActiveProj')); return; }
   _autoRunning = true;
   _autoJobId   = null;
   _autoOffset  = 0;
@@ -2366,11 +2362,11 @@ async function runAutopilot(resume) {
     await _autoConsumeStream(resp.body);
   } catch(e) {
     if (_autoJobId) {
-      _autoLog('⚠️ Връзката прекъсна — задачата продължава в background. Връщам се…', 'warn');
+      _autoLog(t('pg.connLost'), 'warn');
       _autoRunning = false;
       _scheduleReconnect();
     } else {
-      _autoLog('❌ Мрежова грешка: ' + e.message, 'err');
+      _autoLog('❌ ' + t('pg.netErr') + e.message, 'err');
       _autoFinish(true);
     }
   }
@@ -2418,7 +2414,7 @@ async function _autoReconnect() {
   _autoOffset  = saved.offset || 0;
   _autoSetStatus(_autoPaused ? 'paused' : 'reconnecting');
   _autoLog('', 'dim');
-  _autoLog(`🔄 Свързвам пак… (replay от ${_autoOffset})`, 'warn');
+  _autoLog(t('pg.reconnecting', {n: _autoOffset}), 'warn');
   $('auto-phase-strip').classList.remove('hidden');
   $('auto-terminal').classList.remove('hidden');
 
@@ -2427,7 +2423,7 @@ async function _autoReconnect() {
     const resp = await fetch(url);
     if (!resp.ok || !resp.body) {
       // Job expired / not found → stop retrying, clear stale state.
-      _autoLog('⚠️ Задачата вече не е достъпна (HTTP ' + resp.status + ') — започни наново.', 'warn');
+      _autoLog(t('pg.jobGone', {status: resp.status}), 'warn');
       _apClearPersist();
       _autoJobId = null;
       _autoSetStatus('error');
@@ -2436,7 +2432,7 @@ async function _autoReconnect() {
     }
     await _autoConsumeStream(resp.body);
   } catch(e) {
-    _autoLog('⚠️ Reconnect грешка: ' + e.message, 'warn');
+    _autoLog(t('pg.reconnectErr') + e.message, 'warn');
     _autoRunning = false;
     _scheduleReconnect();
   }
@@ -2460,20 +2456,20 @@ function _autoHandle(ev, d) {
   if (ev === 'phase') {
     _autoRenderPhases(d.n);
     _autoLog('', 'dim');
-    _autoLog(`▸ ФАЗА ${d.n}: ${d.label}`, 'info');
+    _autoLog(t('pg.phaseN', {n: d.n, label: d.label}), 'info');
   } else if (ev === 'log') {
     _autoLog(d.line, d.level || 'info');
   } else if (ev === 'research') {
     if (d.notes) { d.notes.split('\n').forEach(l => l.trim() && _autoLog('   ' + l, 'dim')); }
   } else if (ev === 'reference') {
-    if (d.title) _autoLog(`🔎 Референция: ${d.title}`, 'ok');
+    if (d.title) _autoLog(t('pg.refTitle', {title: d.title}), 'ok');
     if (d.summary) _autoLog('   ' + d.summary, 'dim');
   } else if (ev === 'asset') {
     /* log lines cover this */
   } else if (ev === 'kind_detected') {
     // Update the project card kind label if visible
     const kindLabels = { static:'HTML/JS', vite:'Vite', 'vite-react':'React', fastapi:'FastAPI', streamlit:'Streamlit', node:'Node', expo:'Expo' };
-    _autoLog(`🎯 Платформа избрана: ${d.kind}${d.reason ? ' — ' + d.reason : ''}`, 'ok');
+    _autoLog(t('pg.kindPicked', {kind: d.kind}) + (d.reason ? ' — ' + d.reason : ''), 'ok');
   } else if (ev === 'stage') {
     /* log lines cover this */
   } else if (ev === 'quality') {
@@ -2482,7 +2478,7 @@ function _autoHandle(ev, d) {
     const pass = d.passed ? '✅' : '⚠️';
     const lvl = d.passed ? 'ok' : 'warn';
     const passTxt = d.pass ? ` (polish ${d.pass})` : '';
-    _autoLog(`${pass} Quality: ${sc}/10 (праг ${thr})${passTxt}`, lvl);
+    _autoLog(`${pass} ` + t('pg.qualityLine', {sc, thr, passTxt}), lvl);
     if (d.summary) _autoLog('   ' + d.summary, 'dim');
     if (d.scores && Object.keys(d.scores).length) {
       const parts = Object.entries(d.scores).map(([k, v]) => `${k}:${v}`).join('  ');
@@ -2490,18 +2486,18 @@ function _autoHandle(ev, d) {
     }
     (d.issues || []).slice(0, 5).forEach(it => _autoLog('   • ' + it, 'dim'));
   } else if (ev === 'done') {
-    _autoRenderPhases(_AUTO_PHASES.length);
+    _autoRenderPhases(_autoPhases().length);
     _autoSetStatus('done');
     _autoLog('', 'dim');
-    _autoLog(`🎉 ГОТОВО — ${(d.files||[]).length} файла, ${(d.assets||[]).length} assets`, 'ok');
+    _autoLog(t('pg.autoDone', {files: (d.files||[]).length, assets: (d.assets||[]).length}), 'ok');
     if (typeof d.quality_score === 'number' && d.quality_score > 0) {
       const thr = (d.quality_detail && d.quality_detail.threshold) || 7;
       const ok = d.quality_score >= thr;
-      _autoLog(`${ok ? '🏅' : '🎨'} Финално качество: ${d.quality_score.toFixed(1)}/10`, ok ? 'ok' : 'warn');
+      _autoLog(`${ok ? '🏅' : '🎨'} ` + t('pg.finalQuality', {sc: d.quality_score.toFixed(1)}), ok ? 'ok' : 'warn');
     }
     if (d.browser_verify_skipped) {
       _autoLog(
-        '⏭️ Browser verify пропуснат: ' + (d.browser_verify_summary || 'Chromium/Playwright недостъпен'),
+        t('pg.bvSkip') + (d.browser_verify_summary || t('pg.bvSkipDefault')),
         'warn'
       );
     } else if (d.browser_verified) {
@@ -2509,39 +2505,39 @@ function _autoHandle(ev, d) {
     }
     const slug = _autoSlug || _buildSlug;
     if (slug) {
-      _autoLog('👁 Отварям Preview…', 'ok');
+      _autoLog(t('pg.openingPrev'), 'ok');
       setTimeout(() => _autoOpenPreview(slug, _buildName || slug, _buildKind), 600);
     } else {
-      _autoLog('Натисни „Преглед" на проекта, за да видиш резултата.', 'ok');
+      _autoLog(t('pg.pressPreview'), 'ok');
     }
     _apClearPersist();
     _autoJobId = null;
     loadProjects();
     _autoFinish(true);
   } else if (ev === 'error') {
-    _autoLog('❌ ' + (d.message || d.error || 'грешка'), 'err');
+    _autoLog('❌ ' + (d.message || d.error || t('pg.errFallback')), 'err');
     if (d.partial) {
       _autoSetStatus('warn');
-      _autoLog('⚠️ Частичен успех — файловете са на диска, но финалният deliverable gate не мина.', 'warn');
+      _autoLog(t('pg.partialOk'), 'warn');
       if (d.browser_verify_skipped) {
         _autoLog(
-          '⏭️ Browser verify пропуснат: ' + (d.browser_verify_summary || 'Chromium/Playwright недостъпен'),
+          t('pg.bvSkip') + (d.browser_verify_summary || t('pg.bvSkipDefault')),
           'warn'
         );
       }
       if ((d.files || []).length) {
-        _autoLog(`📁 ${d.files.length} файла записани — прегледай и оправи останалото.`, 'dim');
+        _autoLog(t('pg.filesWritten', {n: d.files.length}), 'dim');
       }
       const slug = _autoSlug || _buildSlug;
       if (slug) {
         _autoLogHtml(
           `<button type="button" onclick="_autoOpenPreview('${slug.replace(/'/g, "\\'")}','${(_buildName||slug).replace(/'/g, "\\'")}','${(_buildKind||'').replace(/'/g, "\\'")}')" `
-          + `class="px-3 py-1.5 rounded-lg bg-sky-700 hover:bg-sky-600 text-white text-xs font-medium">👁 Отвори Preview</button>`
+          + `class="px-3 py-1.5 rounded-lg bg-sky-700 hover:bg-sky-600 text-white text-xs font-medium">${t('pg.openPreview')}</button>`
         );
       }
     }
     if (d.interrupted) {
-      _autoLog('ℹ️ Сървърът рестартира по средата. Задачата е прекъсната — започни наново.', 'warn');
+      _autoLog(t('pg.serverRestart'), 'warn');
     }
     if (!d.partial) _autoSetStatus('error');
     _apClearPersist();
@@ -2565,7 +2561,7 @@ async function stopAutopilot() {
   _autoOffset = 0;
   if (_autoReader) { try { await _autoReader.cancel(); } catch {} }
   _autoSetStatus('stopped');
-  _autoLog('⏹ Спрян от потребителя.', 'warn');
+  _autoLog(t('pg.stoppedByUser'), 'warn');
   _autoFinish(true);
 }
 
@@ -2590,7 +2586,7 @@ function _renderChatHistory(slug) {
   body.innerHTML = '';
   const hist = _chatHistory[slug] || [];
   if (!hist.length) {
-    body.innerHTML = '<p class="text-gray-600 text-xs text-center mt-10 px-4">Питай Дедал нещо — той ще прочете проекта и ще помогне. Ctrl+Enter за изпращане.</p>';
+    body.innerHTML = '<p class="text-gray-600 text-xs text-center mt-10 px-4">' + t('pg.chatEmpty') + '</p>';
     return;
   }
   hist.forEach(m => _appendBubble(m));
@@ -2631,21 +2627,21 @@ function _appendBubble(msg) {
     if (msg.files && msg.files.length) {
       const fileList = msg.files.map(f => `<div class="text-[10px] font-mono text-emerald-400">• ${escHtml(f.path)}</div>`).join('');
       filesHtml = `<div class="mt-2 pt-2 border-t border-gray-700 space-y-1">
-        <div class="text-[10px] text-gray-400 font-mono">📝 Предложени промени (${msg.files.length} файл${msg.files.length > 1 ? 'а' : ''}):</div>
+        <div class="text-[10px] text-gray-400 font-mono">${t('pg.proposed', {n: msg.files.length})}:</div>
         ${fileList}
         <div class="flex gap-2 mt-1">
           <button onclick="previewChatFiles(${msg.applyId})"
             class="px-3 py-1 rounded text-xs font-medium bg-indigo-700 hover:bg-indigo-600 text-white transition">👁 Diff</button>
           <button id="apply-btn-${msg.applyId}" onclick="applyChatFiles(${msg.applyId})"
-            class="px-3 py-1 rounded text-xs font-medium bg-emerald-700 hover:bg-emerald-600 text-white transition">✅ Приложи</button>
+            class="px-3 py-1 rounded text-xs font-medium bg-emerald-700 hover:bg-emerald-600 text-white transition">${t('pg.applyOk')}</button>
         </div>
       </div>`;
     }
     wrap.className = 'flex justify-start';
     wrap.innerHTML = `<div class="max-w-[90%] px-3 py-2 rounded-2xl rounded-tl-sm bg-gray-800/80 border border-gray-700/50 text-gray-100 text-xs leading-relaxed">
       <div class="flex items-center mb-1.5">
-        <span class="text-purple-400 font-bold text-[10px]">🤖 ДЕДАЛ</span>
-        ${msg.tool_steps && msg.tool_steps.length ? `<span class="text-[9px] text-purple-500 font-mono ml-1.5">${msg.tool_steps.length} стъпки</span>` : ''}
+        <span class="text-purple-400 font-bold text-[10px]">${t('pg.dxName')}</span>
+        ${msg.tool_steps && msg.tool_steps.length ? `<span class="text-[9px] text-purple-500 font-mono ml-1.5">${t('pg.nSteps', {n: msg.tool_steps.length})}</span>` : ''}
       </div>
       ${stepsHtml}
       <div class="whitespace-pre-wrap break-words">${escHtml(msg.text)}</div>
@@ -2674,7 +2670,7 @@ async function sendChat(prefillText) {
   // Loading bubble
   const loadEl = document.createElement('div');
   loadEl.className = 'flex justify-start';
-  loadEl.innerHTML = `<div class="px-3 py-2 rounded-2xl rounded-tl-sm bg-gray-800/60 border border-gray-700/40 text-gray-400 text-xs animate-pulse">🤖 Дедал анализира…</div>`;
+  loadEl.innerHTML = `<div class="px-3 py-2 rounded-2xl rounded-tl-sm bg-gray-800/60 border border-gray-700/40 text-gray-400 text-xs animate-pulse">${t('pg.dxThinking')}</div>`;
   $('chat-body').appendChild(loadEl);
   $('chat-body').scrollTop = $('chat-body').scrollHeight;
 
@@ -2695,7 +2691,7 @@ async function sendChat(prefillText) {
     } else {
       const errEl = document.createElement('div');
       errEl.className = 'flex justify-start';
-      errEl.innerHTML = `<div class="px-3 py-2 rounded-xl bg-red-900/40 border border-red-700/40 text-red-300 text-xs">⚠ ${escHtml(d.error||'Грешка')}</div>`;
+      errEl.innerHTML = `<div class="px-3 py-2 rounded-xl bg-red-900/40 border border-red-700/40 text-red-300 text-xs">⚠ ${escHtml(d.error||t('common.error'))}</div>`;
       $('chat-body').appendChild(errEl);
       $('chat-body').scrollTop = $('chat-body').scrollHeight;
     }
@@ -2707,7 +2703,7 @@ async function sendChat(prefillText) {
     $('chat-body').appendChild(errEl);
   } finally {
     if (inp) { inp.disabled = false; inp.focus(); }
-    if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Изпрати'; }
+    if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = t('pg.send'); }
   }
 }
 
@@ -2715,7 +2711,7 @@ async function applyChatFiles(applyId) {
   const pending = _pendingFiles[applyId];
   if (!pending) return;
   const btn = document.getElementById('apply-btn-' + applyId);
-  if (btn) { btn.textContent = '⏳ Записва…'; btn.disabled = true; }
+  if (btn) { btn.textContent = t('pg.saving'); btn.disabled = true; }
   try {
     const r = await fetch(`/admin/daedalus/playground/api/projects/${pending.slug}/chat/apply`, {
       method: 'POST',
@@ -2724,11 +2720,11 @@ async function applyChatFiles(applyId) {
     });
     const d = await r.json();
     if (d.ok) {
-      if (btn) { btn.textContent = `✅ Записани ${d.written} файл(а)`; btn.className = btn.className.replace('emerald-700','gray-600').replace('hover:bg-emerald-600',''); }
+      if (btn) { btn.textContent = t('pg.savedN', {n: d.written}); btn.className = btn.className.replace('emerald-700','gray-600').replace('hover:bg-emerald-600',''); }
       delete _pendingFiles[applyId];
       loadProjects();
     } else {
-      if (btn) { btn.textContent = '❌ ' + (d.error||'Грешка'); btn.disabled = false; }
+      if (btn) { btn.textContent = '❌ ' + (d.error||t('common.error')); btn.disabled = false; }
     }
   } catch(e) {
     if (btn) { btn.textContent = '⚠ ' + e.message; btn.disabled = false; }
@@ -2741,7 +2737,7 @@ function switchToRawBuild() {
   const inp = $('chat-msg-input');
   const text = (inp?.value||'').trim();
   if (!text) {
-    alert('Въведи какво да построи Дедал в текстовото поле, после натисни 🔨 Build.');
+    alert(t('pg.buildNeedPrompt'));
     inp?.focus(); return;
   }
   if (inp) inp.value = '';
@@ -2753,7 +2749,7 @@ function openBuildModal() {
   $('build-modal').classList.remove('hidden');
   $('bd-foot').classList.add('hidden');
   $('bd-close').classList.remove('hidden');
-  $('bd-status').textContent = 'свързване…';
+  $('bd-status').textContent = t('pg.connecting');
   $('bd-body').textContent = '';
   setBuildMode('raw');
 }
@@ -2774,7 +2770,7 @@ async function aiBuildStream(slug, name, prompt, mode) {
 async function reconnectBuild(slug, name, jobId) {
   _buildSlug = slug; _buildName = name;
   openBuildModal();
-  $('bd-status').textContent = 'възстановяване…';
+  $('bd-status').textContent = t('pg.restoring');
   saveActiveBuild({slug, name, job_id: jobId});
   await streamBuild(
     `/admin/daedalus/playground/api/projects/${slug}/ai-build/stream?job_id=${encodeURIComponent(jobId)}&from=0`,
@@ -2790,7 +2786,7 @@ async function streamBuild(url, opts) {
   try {
     const resp = await fetch(url, opts);
     if (!resp.ok || !resp.body) {
-      $('bd-status').textContent = 'грешка (' + resp.status + ')';
+      $('bd-status').textContent = t('pg.errHttp', {status: resp.status});
       $('bd-close').classList.remove('hidden');
       return;
     }
@@ -2818,10 +2814,10 @@ async function streamBuild(url, opts) {
         } else if (ev.event === 'file') {
           const fpath = ev.data.path;
           if (fpath && !_buildWrittenPaths.includes(fpath)) _buildWrittenPaths.push(fpath);
-          buf += `\n\n✅ записан: ${fpath} (${ev.data.size}B)`;
+          buf += '\n\n' + t('pg.writtenPath', {path: fpath, size: ev.data.size});
           body.textContent = buf; body.scrollTop = body.scrollHeight;
         } else if (ev.event === 'done') {
-          $('bd-status').textContent = `✅ готово — ${ev.data.count} файл(а)`;
+          $('bd-status').textContent = t('pg.doneN', {n: ev.data.count});
           $('bd-foot').classList.remove('hidden');
           $('bd-close').classList.remove('hidden');
           const diffBtn = $('bd-diff-btn');
@@ -2830,7 +2826,7 @@ async function streamBuild(url, opts) {
           loadProjects();
         } else if (ev.event === 'error') {
           const intr = ev.data.interrupted;
-          $('bd-status').textContent = intr ? '⚠ прекъснат' : '❌ грешка';
+          $('bd-status').textContent = intr ? t('pg.interrupted') : t('pg.errMark');
           buf += `\n\n${intr ? '⚠' : '❌'} ${ev.data.error}`;
           body.textContent = buf;
           $('bd-close').classList.remove('hidden');
@@ -2841,7 +2837,7 @@ async function streamBuild(url, opts) {
     }
   } catch (e) {
     // Connection dropped — the build keeps running server-side; we re-attach on wake.
-    $('bd-status').textContent = '🔌 връзката прекъсна — build-ът продължава във фон…';
+    $('bd-status').textContent = t('pg.connLostBg');
     $('bd-close').classList.remove('hidden');
   } finally {
     _buildStreaming = false;
@@ -2898,24 +2894,24 @@ async function stopBuild() {
   btn.textContent = '⏳'; btn.disabled = true;
   try {
     await api(`/admin/daedalus/playground/api/projects/${_buildSlug}/ai-build/stop`, {method: 'POST'});
-    $('bd-status').textContent = '■ спрян';
+    $('bd-status').textContent = t('pg.stoppedMark');
     clearActiveBuild();
   } finally {
-    btn.textContent = '■ Спри'; btn.disabled = false;
+    btn.textContent = t('pg.stopShort'); btn.disabled = false;
   }
 }
 
 async function resumeBuild() {
   if (!_buildSlug) return;
-  if (_buildStreaming) { $('bd-status').textContent = 'вече е свързан…'; return; }
+  if (_buildStreaming) { $('bd-status').textContent = t('pg.alreadyConnected'); return; }
   try {
     const r = await api(`/admin/daedalus/playground/api/projects/${_buildSlug}/ai-build/active`);
     if (r && (r.active || r.status === 'interrupted') && r.job_id) {
       reconnectBuild(_buildSlug, _buildName || _buildSlug, r.job_id);
     } else {
-      $('bd-status').textContent = 'няма активен build';
+      $('bd-status').textContent = t('pg.noActiveBuild');
     }
-  } catch(e) { $('bd-status').textContent = '⚠ грешка при поднови'; }
+  } catch(e) { $('bd-status').textContent = t('pg.resumeErr'); }
 }
 
 function correctBuild() {
@@ -2975,7 +2971,7 @@ function fixPreviewError() {
   const name = _buildName || slug;
   if (!slug) return;
   const errMsg = $('pv-error-msg').textContent.replace(/^⚠ /, '');
-  const prompt = `Следната грешка се появи при изпълнение:\n\n${errMsg}${_pvErrorStack ? '\n\nStack:\n' + _pvErrorStack.slice(0, 600) : ''}\n\nАнализирай проблема и предложи поправка.`;
+  const prompt = t('pg.fixPrompt', {err: errMsg + (_pvErrorStack ? '\n\nStack:\n' + _pvErrorStack.slice(0, 600) : '')});
   dismissError();
   closePreview();
   openChatModal(slug, name, prompt);
@@ -2983,11 +2979,11 @@ function fixPreviewError() {
 
 async function cloneRepo() {
   const url = $('cl-url').value.trim();
-  if (!url) { alert('Въведи URL'); return; }
+  if (!url) { alert(t('pg.enterUrl')); return; }
   const r = await api('/admin/daedalus/playground/api/clone', {method:'POST',
     body: JSON.stringify({url, name: $('cl-name').value})});
   if (r.ok) { hideClone(); $('cl-url').value=''; $('cl-name').value=''; loadProjects(); }
-  else alert('Грешка: ' + r.error);
+  else alert(t('pg.errPrefix') + ' ' + r.error);
 }
 
 // ── Revive from GitHub ───────────────────────────────────────────
@@ -3021,7 +3017,7 @@ function setReviveTab(tab) {
 
 async function loadReviveRepos() {
   const el = $('rev-repo-list');
-  el.innerHTML = '<p class="text-gray-500 text-sm animate-pulse">Зареждам repos…</p>';
+  el.innerHTML = '<p class="text-gray-500 text-sm animate-pulse">' + t('pg.loadRepos') + '</p>';
   const [gh, gl] = await Promise.all([
     api('/admin/daedalus/playground/api/github/repos').catch(() => ({})),
     api('/admin/daedalus/playground/api/gitlab/projects').catch(() => ({})),
@@ -3046,9 +3042,9 @@ async function loadReviveRepos() {
     });
   }
   if (!rows.length) {
-    const err = gh.error || gl.error || 'Няма repos. Paste URL или отвори Свързаност за токен.';
+    const err = gh.error || gl.error || t('pg.noRepos');
     el.innerHTML = `<p class="text-amber-400 text-sm">${escHtml(err)}</p>
-      <p class="text-gray-500 text-xs mt-2">GitHub PAT / GITLAB_TOKEN → Studio → Свързаност. URL paste работи и без списък.</p>`;
+      <p class="text-gray-500 text-xs mt-2">${t('pg.tokenHint')}</p>`;
     return;
   }
   el.innerHTML = rows.map(repo => {
@@ -3134,10 +3130,10 @@ function renderCompatBadge(c) {
 
 async function runRevive() {
   const url = _revSelectedUrl || $('rev-url').value.trim();
-  if (!url) { alert('Избери repo или въведи URL'); return; }
+  if (!url) { alert(t('pg.pickRepo')); return; }
   const btn = $('rev-go-btn');
   btn.disabled = true;
-  btn.textContent = '⏳ Съживявам…';
+  btn.textContent = t('pg.reviving');
   try {
     const r = await api('/admin/daedalus/playground/api/revive', {
       method: 'POST',
@@ -3148,7 +3144,7 @@ async function runRevive() {
         repair_on_fail: $('rev-repair').checked,
       }),
     });
-    if (!r.ok) { alert('Грешка: ' + (r.error || 'неизвестна')); return; }
+    if (!r.ok) { alert(t('pg.errPrefix') + ' ' + (r.error || t('pg.unknown'))); return; }
     closeReviveModal();
     loadProjects();
     const p = r.project || {};
@@ -3163,7 +3159,7 @@ async function runRevive() {
     $('revive-wizard').classList.remove('hidden');
   } finally {
     btn.disabled = false;
-    btn.textContent = '⬇ Съживи';
+    btn.textContent = t('pg.reviveGo');
   }
 }
 
@@ -3185,18 +3181,18 @@ function reviveWizardAction(action) {
 }
 
 async function revivePipeline(slug) {
-  if (!confirm('Verify → Publish в /apps/?')) return;
+  if (!confirm(t('pg.verifyPublish'))) return;
   const r = await api(`/admin/daedalus/playground/api/projects/${slug}/revive-pipeline`, {
     method: 'POST', body: JSON.stringify({publish: true}),
   });
   if (r.ok) {
-    alert('✅ Pipeline завърши успешно!');
+    alert(t('pg.pipelineOk'));
     loadProjects();
   } else {
     const err = r.error || (r.steps && r.steps.find(s => !s.ok)?.error) || 'failed';
-    if (confirm('Verify failed: ' + err + '\n\nОпитай repair mode?')) {
+    if (confirm('Verify failed: ' + err + t('pg.tryRepair'))) {
       const rep = await api(`/admin/daedalus/playground/api/projects/${slug}/revive-repair`, {method:'POST'});
-      alert(rep.ok ? '✅ Repair успешен — опитай отново Publish' : 'Repair failed: ' + (rep.error || ''));
+      alert(rep.ok ? t('pg.repairOk') : 'Repair failed: ' + (rep.error || ''));
       loadProjects();
     }
   }
@@ -3204,40 +3200,40 @@ async function revivePipeline(slug) {
 
 async function showUpstreamDiff(slug) {
   const r = await api(`/admin/daedalus/playground/api/projects/${slug}/upstream-diff`);
-  if (!r.ok) { alert('Грешка: ' + r.error); return; }
-  if (!r.has_upstream) { alert(r.message || 'Няма upstream baseline'); return; }
-  const files = (r.changed_files || []).join('\n  ') || '(няма промени)';
-  alert(`Upstream diff (${r.upstream_sha?.slice(0,8) || '?'})\n\n${r.diff_stat || ''}\n\nФайлове:\n  ${files}`);
+  if (!r.ok) { alert(t('pg.errPrefix') + ' ' + r.error); return; }
+  if (!r.has_upstream) { alert(r.message || t('pg.noUpstream')); return; }
+  const files = (r.changed_files || []).join('\n  ') || t('pg.noChanges');
+  alert(t('pg.upstreamDiff', {sha: r.upstream_sha?.slice(0,8) || '?', stat: r.diff_stat || '', files}));
 }
 
 async function createUpstreamPr(slug) {
-  if (!confirm('Push branch + PR към оригиналния repo?')) return;
+  if (!confirm(t('pg.pushPr'))) return;
   const r = await api(`/admin/daedalus/playground/api/projects/${slug}/create-upstream-pr`, {
     method: 'POST', body: JSON.stringify({}),
   });
   if (r.ok && (r.pr || r.mr)) alert('✅ PR/MR: ' + ((r.pr && r.pr.url) || (r.mr && r.mr.url) || ''));
-  else alert('Грешка: ' + (r.error || 'неуспешно'));
+  else alert(t('pg.errPrefix') + ' ' + (r.error || t('pg.failed')));
 }
 
 async function runProj(slug, kind) {
   if (kind === 'unity') {
-    alert('Unity Editor не може да се пусне в cloud.\n\nКачи проекта с ⬆ GitHub и го отвори в Unity Hub на локална машина.');
+    alert(t('pg.unityCloud'));
     return;
   }
   if (kind === 'godot') {
-    alert('Godot Editor не може да се пусне в cloud.\n\nОтвори папката в Godot 4.3. Ако имаш CLI: godot --headless --path . --quit');
+    alert(t('pg.godotCloud'));
     return;
   }
   const btn = event.target;
-  btn.textContent = '⏳ Стартира…'; btn.disabled = true;
+  btn.textContent = t('pg.started'); btn.disabled = true;
   // Always install deps for vite/vite-react/node/expo (need node_modules); ask for others
   const install = (kind === 'vite' || kind === 'vite-react' || kind === 'node' || kind === 'expo')
     ? true
-    : confirm('Да инсталирам ли dependencies (pip install)? OK=да, Cancel=не');
+    : confirm(t('pg.pipAsk'));
   try {
     const r = await api(`/admin/daedalus/playground/api/projects/${slug}/run`, {method:'POST',
       body: JSON.stringify({install_deps: install})});
-    if (!r.ok) alert('Грешка при стартиране: ' + r.error);
+    if (!r.ok) alert(t('pg.startErr') + r.error);
     else {
       await loadProjects();
       // Auto-open preview after starting
@@ -3252,13 +3248,13 @@ async function stopProj(slug) {
 
 // ── Expo Tunnel + QR ────────────────────────────────────────────
 async function runExpoTunnel(slug) {
-  if (!confirm('Ще стартирам с --tunnel (Expo Go на телефон).\n⚠️ Изисква @expo/ngrok — първото стартиране инсталира ~5 мин.\nПродължаваш?')) return;
+  if (!confirm(t('pg.expoAsk'))) return;
   const btn = event.target;
   btn.textContent = '⏳ Tunnel…'; btn.disabled = true;
   try {
     const r = await api(`/admin/daedalus/playground/api/projects/${slug}/run`, {
       method:'POST', body: JSON.stringify({install_deps: true, tunnel: true})});
-    if (!r.ok) { alert('Грешка: ' + r.error); return; }
+    if (!r.ok) { alert(t('pg.errPrefix') + ' ' + r.error); return; }
     await loadProjects();
     const run = r.run || {};
     if (run.expo_url && run.qr_url) {
@@ -3278,7 +3274,7 @@ async function runExpoTunnel(slug) {
         return;
       }
     }
-    alert('Tunnel стартиран, но exp:// URL още не е в логовете. Опитай 🔳 QR след ~30с.');
+    alert(t('pg.tunnelNoUrl'));
   } finally { btn.textContent = '📱 Tunnel+QR'; btn.disabled = false; }
 }
 
@@ -3290,9 +3286,9 @@ function _showQrModal(expUrl, qrUrl) {
       <div style="font-size:1.5rem;margin-bottom:.5rem">📱 Expo Go QR</div>
       <img src="${qrUrl}" width="220" height="220" style="border-radius:8px;margin:.8rem 0" alt="QR" />
       <div style="font-size:.75rem;color:#94a3b8;word-break:break-all;margin-bottom:1rem">${expUrl}</div>
-      <div style="font-size:.8rem;color:#c4b5fd;margin-bottom:1.2rem">Сканирай с <b>Expo Go</b> (iOS/Android)</div>
+      <div style="font-size:.8rem;color:#c4b5fd;margin-bottom:1.2rem">${t('pg.scanExpo')}</div>
       <button onclick="this.closest('[style*=fixed]').remove()"
-        style="background:#4f46e5;color:#fff;border:none;border-radius:8px;padding:.5rem 1.5rem;cursor:pointer;font-size:.9rem">Затвори</button>
+        style="background:#4f46e5;color:#fff;border:none;border-radius:8px;padding:.5rem 1.5rem;cursor:pointer;font-size:.9rem">${t('pg.close')}</button>
     </div>`;
   modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
   document.body.appendChild(modal);
@@ -3305,18 +3301,18 @@ async function showQr(slug) {
     // Extract exp:// or https://...exp.direct URL from Metro output
     const match = logs.match(/exp:\/\/[^\s"']+/) || logs.match(/https:\/\/[a-z0-9-]+\.exp\.direct[^\s"']*/i);
     if (!match) {
-      alert('QR URL не е намерен в логовете. Изчакай Metro да зареди и опитай пак.');
+      alert(t('pg.qrNotFound'));
       return;
     }
     _showQrModal(match[0], `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(match[0])}`);
-  } catch(e) { alert('Грешка при зареждане на QR: ' + e.message); }
+  } catch(e) { alert(t('pg.qrLoadErr') + e.message); }
 }
 
 // ── EAS Cloud Build ─────────────────────────────────────────────
 async function easBuild(slug, platform) {
   const msg = platform === 'android'
-    ? 'Ще стартирам EAS Build за Android (APK/AAB).\nИзисква EXPO_TOKEN env var + expo.dev акаунт.\nBuild-ът се прави в Expo cloud (~10-20 мин).\nПродължаваш?'
-    : 'Ще стартирам EAS Build за iOS (IPA).\nИзисква EXPO_TOKEN + Apple Developer акаунт.\nПродължаваш?';
+    ? t('pg.easAndroid')
+    : t('pg.easIos');
   if (!confirm(msg)) return;
   const btn = event.target;
   btn.textContent = '⏳ EAS…'; btn.disabled = true;
@@ -3324,9 +3320,9 @@ async function easBuild(slug, platform) {
     const r = await api(`/admin/daedalus/playground/api/projects/${slug}/eas-build`, {
       method:'POST', body: JSON.stringify({platform})});
     if (r.ok) {
-      alert(`✅ EAS Build стартиран (${platform})!\n\nИзход:\n${r.output}\n\nСледи статуса на expo.dev/accounts/[username]/projects/[slug]/builds`);
+      alert(t('pg.easStarted', {platform, output: r.output}));
     } else {
-      alert('❌ EAS Build грешка:\n' + r.error + (r.output ? '\n\n' + r.output : ''));
+      alert(t('pg.easErr') + r.error + (r.output ? '\n\n' + r.output : ''));
     }
   } finally { btn.textContent = platform === 'android' ? '☁ EAS Android' : '☁ EAS iOS'; btn.disabled = false; }
 }
@@ -3334,22 +3330,22 @@ async function delProj(slug) {
   const proj = (await api('/admin/daedalus/playground/api/projects')).projects?.find(p => p.slug === slug);
   const isPublished = proj && proj.status === 'published';
   const msg = isPublished
-    ? `Изтрий проекта "${slug}" и ВСИЧКО свързано с него?\n\n⚠️ Това ще премахне и публикуваното приложение от /apps/`
-    : `Изтрий проекта "${slug}" и файловете?`;
+    ? `Delete project "${slug}" and everything tied to it?\n\n⚠️ This also removes the published app from /apps/`
+    : `Delete project "${slug}" and its files?`;
   if (!confirm(msg)) return;
   await api(`/admin/daedalus/playground/api/projects/${slug}/delete`, {method:'POST'});
   loadProjects();
 }
 async function deletePublishedProj(slug) {
-  if (!confirm(`Изтрий публикуването на "${slug}" от /apps/?\n\nПроектът в Playground (ако има) остава — можеш да публикуваш отново.`)) return;
+  if (!confirm(`Unpublish "${slug}" from /apps/?\n\nThe Playground project (if any) stays — you can publish again.`)) return;
   const r = await api(`/admin/daedalus/playground/api/projects/${slug}/delete-published`, {method:'POST'});
-  if (!r.ok) { alert('❌ Грешка: ' + (r.error || 'неизвестна')); return; }
+  if (!r.ok) { alert(t('pg.errBang') + (r.error || t('pg.unknown'))); return; }
   loadProjects();
   if (!$('published-panel').classList.contains('hidden')) loadPublishedApps();
 }
 
 async function publishProj(slug) {
-  const icon = prompt('Икона за менюто (emoji):', '🎮');
+  const icon = prompt(t('pg.menuIcon'), '🎮');
   if (icon === null) return;
   // Show build overlay for vite/expo projects (build can take time)
   const proj = (await api('/admin/daedalus/playground/api/projects')).projects?.find(p => p.slug === slug);
@@ -3360,8 +3356,8 @@ async function publishProj(slug) {
     overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center';
     const msg = isExpo
-      ? 'npm install + expo export --platform web (може да отнеме ~3-5 мин при първо пускане)'
-      : 'npm install + vite build + авто-поправка при compile грешки (до ~2 мин)';
+      ? t('pg.expoExportNote')
+      : t('pg.viteBuildNote');
     const icon = isExpo ? '📦' : '🔨';
     overlay.innerHTML = `<div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:2rem 3rem;text-align:center;color:#e2e8f0"><div style="font-size:2rem;margin-bottom:.8rem">${icon}</div><div style="font-weight:600;margin-bottom:.4rem">Building…</div><div style="color:#94a3b8;font-size:.85rem">${msg}</div></div>`;
     document.body.appendChild(overlay);
@@ -3371,12 +3367,12 @@ async function publishProj(slug) {
       body: JSON.stringify({icon})});
     if (r.ok) {
       const repaired = (r.repaired_files && r.repaired_files.length)
-        ? `\n🔧 Авто-поправени файлове: ${r.repaired_files.join(', ')}` : '';
-      const extra = r.built_from === 'dist' ? '\n✅ Vite build успешен — dist/ е публикуван' : '';
-      alert(`Публикувано! → ${r.url}${extra}${repaired}\nDurable: ${r.durable ? 'да' : 'не'}`);
+        ? t('pg.repairedFiles', {list: r.repaired_files.join(', ')}) : '';
+      const extra = r.built_from === 'dist' ? t('pg.viteOk') : '';
+      alert(t('pg.publishedTo', {url: r.url, extra, repaired, durable: r.durable ? t('pg.yes') : t('pg.no')}));
       loadProjects();
     } else {
-      alert('Грешка: ' + r.error);
+      alert(t('pg.errPrefix') + ' ' + r.error);
     }
   } finally {
     if (overlay) overlay.remove();
@@ -3384,19 +3380,19 @@ async function publishProj(slug) {
 }
 async function rebuildProj(slug, btn) {
   const prev = btn.textContent;
-  btn.textContent = '⏳ Строи…'; btn.disabled = true;
+  btn.textContent = t('pg.building'); btn.disabled = true;
   const overlay = document.createElement('div');
   overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center';
-  overlay.innerHTML = `<div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:2rem 3rem;text-align:center;color:#e2e8f0"><div style="font-size:2rem;margin-bottom:.8rem">🔨</div><div style="font-weight:600;margin-bottom:.4rem">Rebuild…</div><div style="color:#94a3b8;font-size:.85rem">npm install + vite build --base ./ (до ~60 сек)</div></div>`;
+  overlay.innerHTML = `<div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:2rem 3rem;text-align:center;color:#e2e8f0"><div style="font-size:2rem;margin-bottom:.8rem">🔨</div><div style="font-weight:600;margin-bottom:.4rem">Rebuild…</div><div style="color:#94a3b8;font-size:.85rem">${t('pg.rebuildHint')}</div></div>`;
   document.body.appendChild(overlay);
   try {
     const r = await api(`/admin/daedalus/playground/api/projects/${slug}/rebuild`, {method:'POST'});
     if (r.ok) {
-      alert('✅ Rebuild успешен! Провери Preview — белият екран трябва да е изчезнал.');
+      alert(t('pg.rebuildOk'));
     } else {
-      alert('❌ Rebuild неуспешен:\n' + (r.error || r.output || 'Неизвестна грешка'));
+      alert(t('pg.rebuildFail') + (r.error || r.output || t('pg.unknownErr')));
     }
-  } catch(e) { alert('Грешка: ' + e.message); }
+  } catch(e) { alert(t('pg.errPrefix') + ' ' + e.message); }
   finally { overlay.remove(); btn.textContent = prev; btn.disabled = false; }
 }
 async function unpublishProj(slug) {
@@ -3407,8 +3403,8 @@ async function unpublishProj(slug) {
 async function backupWorkspace(slug) {
   const r = await api(`/admin/daedalus/playground/api/projects/${slug}/backup-workspace`, {method:'POST'});
   if (r.ok) alert(`✅ Backup OK (${Math.round((r.size_bytes||0)/1024)} KB) → object storage`);
-  else if (r.skipped) alert('Пропуснато: ' + (r.reason || 'empty or no storage'));
-  else alert('Грешка: ' + (r.error || r.reason || 'failed'));
+  else if (r.skipped) alert(t('pg.skipped') + (r.reason || 'empty or no storage'));
+  else alert(t('pg.errPrefix') + ' ' + (r.error || r.reason || 'failed'));
 }
 
 async function pushGithubOneClick(slug) {
@@ -3416,15 +3412,7 @@ async function pushGithubOneClick(slug) {
 }
 
 function githubPushSetupMessage(gh) {
-  return (
-    'GitHub е свързан, но токенът НЯМА права за push/нов repo (403).\n\n' +
-    'Нужен е PAT с repo scope:\n\n' +
-    '1. github.com/settings/tokens → Generate new token (classic)\n' +
-    '2. Отметни: repo (пълен достъп)\n' +
-    '3. Studio → Свързаност → GitHub PAT\n' +
-    '4. Playground → ⬆ GitHub\n\n' +
-    (gh?.hint || 'Отвори /admin/daedalus/connectors за детайли.')
-  );
+  return t('pg.gh403') + (gh?.hint || t('pg.gh403Hint'));
 }
 
 async function pushProj(slug, provider, opts) {
@@ -3435,18 +3423,18 @@ async function pushProj(slug, provider, opts) {
   try {
     st = await api('/admin/daedalus/playground/api/git/status');
   } catch (e) {
-    alert('Не мога да проверя Git статус: ' + e.message);
+    alert(t('pg.gitStatusFail') + e.message);
     return;
   }
   const glOk = st?.gitlab?.configured;
   const gh = st?.github || {};
   const ghOk = gh.configured;
   if (prov === 'gitlab' && !glOk) {
-    alert('GitLab не е свързан.\n\nОтвори /admin/daedalus/connectors за настройка.');
+    alert(t('pg.glNotConn'));
     return;
   }
   if (prov === 'github' && !ghOk) {
-    alert('GitHub не е свързан.\n\nОтвори /admin/daedalus/connectors (Свързаност) и сложи GitHub PAT.');
+    alert(t('pg.ghNotConn'));
     window.open('/admin/daedalus/connectors', '_blank');
     return;
   }
@@ -3456,22 +3444,22 @@ async function pushProj(slug, provider, opts) {
     return;
   }
   if (prov === 'auto' && !glOk && !ghOk) {
-    alert('Няма конфигуриран Git.\n\nОтвори /admin/daedalus/connectors за GitHub/GitLab настройка.');
+    alert(t('pg.noGit'));
     window.open('/admin/daedalus/connectors', '_blank');
     return;
   }
   let repo = '';
-  let msg = `Дедал: publish ${slug}`;
+  let msg = t('pg.dxPublish', {slug});
   if (!oneClick) {
     const nsHint = st?.gitlab?.namespace ? ` (namespace: ${st.gitlab.namespace})` : '';
     repo = prompt(
       prov === 'gitlab'
-        ? `GitLab project (group/name)${nsHint} — празно = нов project:`
-        : 'GitHub repo (owner/repo) — празно = нов repo:',
+        ? t('pg.glProjectPh', {hint: nsHint})
+        : t('pg.ghRepoPh'),
       ''
     );
     if (repo === null) return;
-    const customMsg = prompt('Commit съобщение:', msg);
+    const customMsg = prompt(t('pg.commitMsg'), msg);
     if (customMsg === null) return;
     msg = customMsg || msg;
   }
@@ -3482,16 +3470,16 @@ async function pushProj(slug, provider, opts) {
     const r = await api(`/admin/daedalus/playground/api/projects/${slug}/push`, {method:'POST',
       body: JSON.stringify({repo, commit_msg: msg, provider: prov, create_if_missing: true})});
     if (r.ok) {
-      const created = r.created ? '\n(Нов repo е създаден)' : '';
-      alert(`Push успешен (${r.provider || prov})!${created}\n\n${r.html_url}`);
+      const created = r.created ? t('pg.newRepoCreated') : '';
+      alert(t('pg.pushOk', {prov: r.provider || prov, created, url: r.html_url}));
       if (r.html_url) window.open(r.html_url, '_blank');
       loadProjects();
     } else {
-      alert('Push грешка:\n' + (r.error || 'неизвестна грешка'));
+      alert(t('pg.pushErr') + (r.error || t('pg.unknownErr')));
       if (r.connectors_url) window.open(r.connectors_url, '_blank');
     }
   } catch (e) {
-    alert('Push грешка: ' + e.message);
+    alert(t('pg.pushErrShort') + e.message);
   } finally {
     if (btn) { btn.textContent = prev; btn.disabled = false; }
   }
@@ -3510,7 +3498,7 @@ function preview(slug, name, kind) {
   const noIframe = (kind === 'fastapi');
 
   if (noIframe) {
-    const msg = 'FastAPI Swagger UI — отвори в нов таб за пълен достъп до /docs.';
+    const msg = t('pg.swagger');
     $('pv-iframe-banner-text').textContent = msg;
     $('pv-iframe-banner-link').href = url;
     banner.classList.remove('hidden');
@@ -3568,7 +3556,7 @@ async function loadErrHistory() {
   try {
     const d = await api(`/admin/daedalus/playground/api/projects/${slug}/errors`);
     const errors = d.errors || [];
-    if (!errors.length) { body.innerHTML = '<p class="text-gray-500">Няма записани грешки.</p>'; return; }
+    if (!errors.length) { body.innerHTML = '<p class="text-gray-500">' + t('pg.noErrs') + '</p>'; return; }
     body.innerHTML = errors.map(e => {
       const dt = new Date(e.ts * 1000).toLocaleTimeString();
       return `<div class="border border-red-900/50 rounded px-2 py-1 bg-red-950/30">
@@ -3576,14 +3564,14 @@ async function loadErrHistory() {
         ${e.stack ? `<div class="text-gray-500 mt-0.5 truncate">${escHtml(e.stack.split('\n')[0] || '')}</div>` : ''}
       </div>`;
     }).join('');
-  } catch(e) { body.innerHTML = '<p class="text-red-500">Грешка при зареждане.</p>'; }
+  } catch(e) { body.innerHTML = '<p class="text-red-500">' + t('pg.loadFailShort') + '</p>'; }
 }
 async function clearErrHistory() {
   if (!_previewSlug) return;
   try {
     await api(`/admin/daedalus/playground/api/projects/${_previewSlug}/errors`, {method:'DELETE'});
   } catch(e) {}
-  $('pv-err-history-body').innerHTML = '<p class="text-gray-500">Изчистено.</p>';
+  $('pv-err-history-body').innerHTML = '<p class="text-gray-500">' + t('pg.cleared') + '</p>';
   $('pv-err-hist-btn').classList.add('hidden');
 }
 function escHtml(s) {
@@ -3610,7 +3598,7 @@ async function loadDbKeys() {
     const r = await fetch(`/apps/${slug}/db/`);
     const d = await r.json();
     const keys = d.keys || [];
-    if (!keys.length) { body.innerHTML = '<p class="text-gray-500 text-xs">(пусто — няма ключове)</p>'; return; }
+    if (!keys.length) { body.innerHTML = '<p class="text-gray-500 text-xs">' + t('pg.emptyKeys') + '</p>'; return; }
     // Fetch values in parallel
     const entries = await Promise.all(keys.map(async k => {
       try {
@@ -3620,14 +3608,14 @@ async function loadDbKeys() {
       } catch(e) { return {k, v: null}; }
     }));
     body.innerHTML = entries.map(({k, v}) => {
-      const vStr = v === null ? '<span class="text-gray-500">(нула)</span>' : `<span class="text-cyan-300">${escHtml(JSON.stringify(v).slice(0, 120))}</span>`;
+      const vStr = v === null ? '<span class="text-gray-500">' + t('pg.null') + '</span>' : `<span class="text-cyan-300">${escHtml(JSON.stringify(v).slice(0, 120))}</span>`;
       return `<div class="flex items-center gap-2 group">
         <span class="text-white font-mono text-[11px] truncate flex-1">${escHtml(k)}</span>
         <span class="text-[11px] truncate max-w-[200px]">${vStr}</span>
         <button onclick="dbDelKey('${escHtml(k).replace(/'/g,"\\'")}')\" class="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-200 text-xs px-1">✕</button>
       </div>`;
     }).join('');
-  } catch(e) { body.innerHTML = `<p class="text-red-400 text-xs">Грешка: ${e.message}</p>`; }
+  } catch(e) { body.innerHTML = `<p class="text-red-400 text-xs">${t('pg.errPrefix')} ${escHtml(e.message)}</p>`; }
 }
 async function dbSetKey() {
   const slug = _dbSlug; if (!slug) return;
@@ -3650,7 +3638,7 @@ async function dbDelKey(k) {
 }
 async function dbClearAll() {
   const slug = _dbSlug; if (!slug) return;
-  if (!confirm(`Изтрий ВСИЧКИ ключове на ${slug}?`)) return;
+  if (!confirm(t('pg.clearKeys', {slug}))) return;
   await fetch(`/apps/${slug}/db/`, {method:'DELETE'});
   loadDbKeys();
 }
@@ -3661,7 +3649,7 @@ function showLogs(slug) {
   $('logs-modal').classList.remove('hidden');
   const tick = async () => {
     const d = await api(`/admin/daedalus/playground/api/projects/${slug}/logs`);
-    $('lg-body').textContent = (d.logs || []).join('\n') || '(няма логове)';
+    $('lg-body').textContent = (d.logs || []).join('\n') || t('pg.noLogs');
   };
   tick();
   _logTimer = setInterval(tick, 2000);
@@ -3669,22 +3657,24 @@ function showLogs(slug) {
 function closeLogs() { $('logs-modal').classList.add('hidden'); if (_logTimer) clearInterval(_logTimer); }
 
 // ── Kind note ──────────────────────────────────────────────────
-const KIND_INFO = {
-  auto:      { pub: true,  note: '🧠 Дедал анализира описанието и избира оптималната платформа автоматично. Натисни <b>✨ Генерирай</b> за препоръка преди старт.', cls: 'text-indigo-400 bg-indigo-900/30 border border-indigo-700/40' },
-  static:    { pub: true,  note: '✅ Публикуем — ще живее на <b>/apps/{slug}</b>', cls: 'text-emerald-400 bg-emerald-900/30 border border-emerald-700/40' },
-  fastapi:   { pub: false, note: '⚙️ Dev test само — публикуване: Push GitHub → свържи с <b>Railway / Render</b>', cls: 'text-yellow-400 bg-yellow-900/20 border border-yellow-700/30' },
-  streamlit: { pub: false, note: '⚙️ Dev test само — Push GitHub → <b>Streamlit Community Cloud</b> (безплатно)', cls: 'text-yellow-400 bg-yellow-900/20 border border-yellow-700/30' },
-  vite:        { pub: true,  note: '✅ Публикуем — <b>🔨 Build &amp; Publish</b> ще build-не dist/ и го запише на <b>/apps/{slug}</b>', cls: 'text-emerald-400 bg-emerald-900/30 border border-emerald-700/40' },
-  'vite-react':{ pub: true,  note: '✅ Публикуем — React 18 + JSX. <b>🔨 Build &amp; Publish</b> ще build-не dist/ и го запише на <b>/apps/{slug}</b>', cls: 'text-cyan-400 bg-cyan-900/30 border border-cyan-700/40' },
-  node:        { pub: false, note: '⚙️ Dev test само — Push GitHub → <b>Railway / Render</b> (Node.js, безплатно)', cls: 'text-yellow-400 bg-yellow-900/20 border border-yellow-700/30' },
-  expo:        { pub: true,  note: '📱 React Native / Expo. Dev preview = Expo Web в браузъра. <b>🔨 Build &amp; Publish</b> = <code>expo export --platform web</code> → /apps/{slug}. ⚠️ Първа инсталация ~5 мин.', cls: 'text-pink-400 bg-pink-900/30 border border-pink-700/40' },
-  unity:       { pub: false, note: '🎮 Unity C# — не се пуска в cloud. Scaffold + Git → Unity Hub локално.', cls: 'text-amber-400 bg-amber-900/20 border border-amber-700/30' },
-  godot:       { pub: false, note: '🎮 Godot 4 — текстови .tscn/.gd. Отвори папката в Godot 4.3. Optional: <code>godot --headless --path . --quit</code>. GLB: blender jobs MCP.', cls: 'text-sky-400 bg-sky-900/20 border border-sky-700/30' },
-};
+function KIND_INFO() {
+  return {
+    auto:      { pub: true,  note: t('pg.kindNote.auto'), cls: 'text-indigo-400 bg-indigo-900/30 border border-indigo-700/40' },
+    static:    { pub: true,  note: t('pg.kindNote.static'), cls: 'text-emerald-400 bg-emerald-900/30 border border-emerald-700/40' },
+    fastapi:   { pub: false, note: t('pg.kindNote.fastapi'), cls: 'text-yellow-400 bg-yellow-900/20 border border-yellow-700/30' },
+    streamlit: { pub: false, note: t('pg.kindNote.streamlit'), cls: 'text-yellow-400 bg-yellow-900/20 border border-yellow-700/30' },
+    vite:        { pub: true,  note: t('pg.kindNote.vite'), cls: 'text-emerald-400 bg-emerald-900/30 border border-emerald-700/40' },
+    'vite-react':{ pub: true,  note: t('pg.kindNote.viteReact'), cls: 'text-cyan-400 bg-cyan-900/30 border border-cyan-700/40' },
+    node:        { pub: false, note: t('pg.kindNote.node'), cls: 'text-yellow-400 bg-yellow-900/20 border border-yellow-700/30' },
+    expo:        { pub: true,  note: t('pg.kindNote.expo'), cls: 'text-pink-400 bg-pink-900/30 border border-pink-700/40' },
+    unity:       { pub: false, note: t('pg.kindNote.unity'), cls: 'text-amber-400 bg-amber-900/20 border border-amber-700/30' },
+    godot:       { pub: false, note: t('pg.kindNote.godot'), cls: 'text-sky-400 bg-sky-900/20 border border-sky-700/30' },
+  };
+}
 
 function updateKindNote() {
   const kind = $('np-kind').value;
-  const info = KIND_INFO[kind] || {};
+  const info = KIND_INFO()[kind] || {};
   const el = $('np-kind-note');
   if (!info.note) { el.innerHTML = ''; return; }
   el.className = 'mt-2 text-[10px] font-mono px-2 py-1.5 rounded ' + info.cls;
@@ -3721,7 +3711,7 @@ async function refreshGameHints() {
     st.innerHTML = (res.staging || []).slice(0, 5).map(s => `<li>${s}</li>`).join('') || '';
     if (kind === 'auto' && res.effective_kind && res.reason) {
       $('np-game-hints-short').textContent =
-        `Препоръчана платформа: ${res.effective_kind} — ${res.reason}`;
+        t('pg.kindSuggest', {kind: res.effective_kind, reason: res.reason});
     }
   } catch { panel.classList.add('hidden'); }
 }
@@ -3742,11 +3732,11 @@ async function aiGenDesc() {
   const name = $('np-name').value.trim();
   const kind = $('np-kind').value;
   const criteria = $('np-desc').value.trim();
-  if (!name) { alert('Въведи първо Имe на проекта'); $('np-name').focus(); return; }
-  if (!criteria) { alert('Напиши основните критерии в полето отгоре'); $('np-desc').focus(); return; }
+  if (!name) { alert(t('pg.enterNameFirst')); $('np-name').focus(); return; }
+  if (!criteria) { alert(t('pg.enterCriteria')); $('np-desc').focus(); return; }
   const btn = $('ai-gen-btn');
   const had = ($('np-build').value || '').trim().length > 0;
-  btn.textContent = '⏳ генерира…';
+  btn.textContent = t('pg.generating');
   btn.disabled = true;
   $('np-kind-suggest').classList.add('hidden');
   try {
@@ -3780,10 +3770,10 @@ async function aiGenDesc() {
         if (res.game_hints?.is_game) refreshGameHints();
       }
     } else {
-      alert('LLM грешка: ' + (res.error || 'няма текст'));
+      alert(t('pg.llmErr') + (res.error || t('pg.noText')));
     }
-  } catch(e) { alert('Грешка при LLM: ' + e.message); }
-  finally { btn.textContent = (had ? '✨ Генерирай отново' : '✨ Генерирай'); btn.disabled = false; }
+  } catch(e) { alert(t('pg.llmCallErr') + e.message); }
+  finally { btn.textContent = (had ? t('pg.genAgain') : t('pg.generate')); btn.disabled = false; }
 }
 
 // ── Reference Scout (Phase C) ──────────────────────────────────
@@ -3812,9 +3802,9 @@ async function scoutWizardReference() {
         description: $('np-desc')?.value?.trim() || '',
       }),
     });
-    if (!res.ok) alert('Scout грешка: ' + (res.error || 'unknown'));
+    if (!res.ok) alert(t('pg.scoutErr') + (res.error || 'unknown'));
     else renderReferencePanel($('np-reference-panel'), res);
-  } catch (e) { alert('Грешка: ' + e.message); }
+  } catch (e) { alert(t('pg.errPrefix') + ' ' + e.message); }
   finally { if (btn) { btn.disabled = false; btn.textContent = '🔍 Scout'; } }
 }
 
@@ -3833,10 +3823,10 @@ async function dissectWizardReference() {
         live: true,
       }),
     });
-    if (!res.ok) alert('Дисекция: ' + (res.error || res.detail || 'unknown'));
+    if (!res.ok) alert(t('pg.dissectErr') + (res.error || res.detail || 'unknown'));
     else renderReferencePanel($('np-reference-panel'), res);
-  } catch (e) { alert('Грешка: ' + e.message); }
-  finally { if (btn) { btn.disabled = false; btn.textContent = '🔬 Дисекция'; } }
+  } catch (e) { alert(t('pg.errPrefix') + ' ' + e.message); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = t('pg.dissect'); } }
 }
 
 async function scoutAutopilotReference() {
@@ -3858,9 +3848,9 @@ async function scoutAutopilotReference() {
         body: JSON.stringify({ ...body, name: _buildName || '' }),
       });
     }
-    if (!res.ok) alert('Scout грешка: ' + (res.error || 'unknown'));
+    if (!res.ok) alert(t('pg.scoutErr') + (res.error || 'unknown'));
     else renderReferencePanel(panel, res);
-  } catch (e) { alert('Грешка: ' + e.message); }
+  } catch (e) { alert(t('pg.errPrefix') + ' ' + e.message); }
   finally { if (btn) { btn.disabled = false; btn.textContent = '🔍 Scout'; } }
 }
 
@@ -3885,7 +3875,7 @@ async function loadStudioReference(slug) {
 async function scoutStudioReference() {
   const slug = _assetsSlug;
   const reference = ($('as-reference')?.value || '').trim();
-  if (!slug || !reference) { alert('Въведи референция'); return; }
+  if (!slug || !reference) { alert(t('pg.enterRef')); return; }
   const btn = $('as-ref-scout-btn');
   if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
   try {
@@ -3896,9 +3886,9 @@ async function scoutStudioReference() {
         description: ($('as-desc')?.value || '').trim(),
       }),
     });
-    if (!r.ok) alert('Scout грешка: ' + (r.error || 'unknown'));
+    if (!r.ok) alert(t('pg.scoutErr') + (r.error || 'unknown'));
     else renderReferencePanel($('as-ref-panel'), r);
-  } catch (e) { alert('Грешка: ' + e.message); }
+  } catch (e) { alert(t('pg.errPrefix') + ' ' + e.message); }
   finally { if (btn) { btn.disabled = false; btn.textContent = '🔍 Scout'; } }
 }
 
@@ -3936,23 +3926,23 @@ async function loadAssets() {
   const slug = _assetsSlug;
   const body = $('as-body');
   if (!slug || !body) return;
-  body.innerHTML = '<p class="text-gray-500 text-xs col-span-full animate-pulse">Зареждане…</p>';
+  body.innerHTML = '<p class="text-gray-500 text-xs col-span-full animate-pulse">' + t('pg.loading') + '</p>';
   try {
     const r = await api(`/admin/daedalus/playground/api/projects/${slug}/assets`);
     if (!r.ok) {
-      body.innerHTML = `<p class="text-red-400 text-xs col-span-full">${escHtml(r.error || 'грешка')}</p>`;
+      body.innerHTML = `<p class="text-red-400 text-xs col-span-full">${escHtml(r.error || t('pg.errFallback'))}</p>`;
       return;
     }
     const assets = r.assets || [];
     if (!assets.length) {
-      body.innerHTML = '<p class="text-gray-500 text-xs col-span-full">Няма assets още. Използвай Auto-pack или генерирай единично.</p>';
+      body.innerHTML = '<p class="text-gray-500 text-xs col-span-full">' + t('pg.noAssets') + '</p>';
       return;
     }
     body.innerHTML = assets.map(a => {
       const missing = a.missing ? 'opacity-50 border-dashed' : '';
       const kb = a.bytes ? `${Math.round(a.bytes / 1024)} KB` : '';
       const thumb = a.missing
-        ? '<div class="h-24 flex items-center justify-center text-gray-600 text-xs">липсва</div>'
+        ? '<div class="h-24 flex items-center justify-center text-gray-600 text-xs">' + t('pg.missing') + '</div>'
         : `<img src="${assetThumbUrl(slug, a.path)}" alt="" class="w-full h-24 object-contain bg-gray-950 rounded" loading="lazy">`;
       return `<div class="p-2 rounded-lg border border-gray-700 bg-gray-800/60 ${missing}">
         ${thumb}
@@ -3972,7 +3962,7 @@ async function generateOneAsset() {
   const path = ($('as-path')?.value || 'assets/custom.png').trim();
   const prompt = ($('as-prompt')?.value || '').trim();
   const size = $('as-size')?.value || '512x512';
-  if (!prompt) { alert('Въведи prompt на английски'); return; }
+  if (!prompt) { alert(t('pg.enPrompt')); return; }
   const btn = $('as-gen-btn');
   if (btn) { btn.disabled = true; btn.textContent = '⏳…'; }
   try {
@@ -3980,21 +3970,21 @@ async function generateOneAsset() {
       method: 'POST',
       body: JSON.stringify({ path, prompt, size }),
     });
-    if (!r.ok) alert('Грешка: ' + (r.error || 'unknown'));
+    if (!r.ok) alert(t('pg.errPrefix') + ' ' + (r.error || 'unknown'));
     else {
       if ($('as-prompt')) $('as-prompt').value = '';
       await loadAssets();
     }
-  } catch (e) { alert('Грешка: ' + e.message); }
-  finally { if (btn) { btn.disabled = false; btn.textContent = '🎨 Генерирай'; } }
+  } catch (e) { alert(t('pg.errPrefix') + ' ' + e.message); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = t('pg.genAsset'); } }
 }
 
 async function autoPackAssets() {
   const slug = _assetsSlug;
   if (!slug) return;
   const description = ($('as-desc')?.value || '').trim();
-  if (!description) { alert('Въведи описание за Auto-pack'); return; }
-  if (!confirm('Auto-pack ще планира и генерира 3–6 изображения (SDXL). Продължаваме?')) return;
+  if (!description) { alert(t('pg.autopackNeed')); return; }
+  if (!confirm(t('pg.autopackAsk'))) return;
   const btn = $('as-autopack-btn');
   if (btn) { btn.disabled = true; btn.textContent = '⏳ Auto-pack…'; }
   try {
@@ -4002,33 +3992,32 @@ async function autoPackAssets() {
       method: 'POST',
       body: JSON.stringify({ description }),
     });
-    if (!r.ok) alert('Грешка: ' + (r.error || 'unknown'));
+    if (!r.ok) alert(t('pg.errPrefix') + ' ' + (r.error || 'unknown'));
     else {
       const n = (r.built || []).length;
       const err = (r.errors || []).length;
-      alert(`Готово: ${n} assets${err ? `, ${err} грешки` : ''}`);
+      alert(t('pg.assetsDone', {n, err: err ? t('pg.errN', {n: err}) : ''}));
       await loadAssets();
     }
-  } catch (e) { alert('Грешка: ' + e.message); }
-  finally { if (btn) { btn.disabled = false; btn.textContent = '📦 Auto-pack от описание'; } }
+  } catch (e) { alert(t('pg.errPrefix') + ' ' + e.message); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = t('pg.autopack'); } }
 }
 
 // ── Netlify deploy (за static проекти вече публикувани в ADN) ──
 async function netlifyDeploy(slug) {
   const token = prompt(
-    'Netlify Personal Access Token (от app.netlify.com → User settings → OAuth):\n' +
-    'Без токен — Push GitHub → свържи към Netlify/Vercel ръчно.'
+    t('pg.netlifyTok')
   );
   if (!token) return;
   const btn = event.target;
-  btn.textContent = '⏳ качване...'; btn.disabled = true;
+  btn.textContent = t('pg.uploading'); btn.disabled = true;
   try {
     const r = await api(`/admin/daedalus/playground/api/projects/${slug}/netlify-deploy`, {
       method: 'POST', body: JSON.stringify({ netlify_token: token })
     });
-    if (r.ok) alert(`🎉 Netlify Deploy успешен!\n🔗 ${r.url}\nSite ID: ${r.site_id}`);
-    else alert('Netlify грешка: ' + (r.error || JSON.stringify(r)));
-  } catch(e) { alert('Грешка: ' + e.message); }
+    if (r.ok) alert(t('pg.netlifyOk', {url: r.url, id: r.site_id}));
+    else alert(t('pg.netlifyErr') + (r.error || JSON.stringify(r)));
+  } catch(e) { alert(t('pg.errPrefix') + ' ' + e.message); }
   finally { btn.textContent = '🌐 Netlify'; btn.disabled = false; }
 }
 
@@ -4055,6 +4044,14 @@ loadGh();
 loadProjects();
 maybeReconnectBuild();  // re-attach to any build still running server-side
 if (new URLSearchParams(location.search).get('revive') === '1') openReviveModal();
+document.addEventListener('daedalus:langchange', () => {
+  if (window.DaedalusI18n && DaedalusI18n.apply) DaedalusI18n.apply();
+  loadGh();
+  loadProjects();
+  if (typeof updateKindNote === 'function') updateKindNote();
+  if (typeof _paintProfileCards === 'function') _paintProfileCards();
+  if (typeof setNewMode === 'function') setNewMode(_newProjMode);
+});
 
 async function maybeOpenFromGameStudio() {
   const params = new URLSearchParams(location.search);
@@ -4153,10 +4150,10 @@ async function skillCreatorStart() {
   _scShowPane('loading');
   _scSetStep(1);
   const phases = [
-    '🔬 Фаза 1: Проучване в skill каталога…',
-    '🌐 Фаза 1: Търсене в интернет…',
-    '📋 Фаза 2: Кристализиране на план…',
-    '❓ Фаза 2: Подготовка на въпроси…',
+    t('pg.scPhaseSkills'),
+    t('pg.scPhaseNet'),
+    t('pg.scPhasePlan'),
+    t('pg.scPhaseQ'),
   ];
   let pi = 0;
   _scLoadingTimer = setInterval(() => {
@@ -4172,7 +4169,7 @@ async function skillCreatorStart() {
     });
     clearInterval(_scLoadingTimer);
     if (!r.ok) {
-      alert('Грешка: ' + (r.error || r.raw || 'unknown'));
+      alert(t('pg.errPrefix') + ' ' + (r.error || r.raw || 'unknown'));
       _scShowPane('idea');
       return;
     }
@@ -4182,10 +4179,10 @@ async function skillCreatorStart() {
     _scSetStep(2);
   } catch (e) {
     clearInterval(_scLoadingTimer);
-    alert('Мрежова грешка: ' + e.message);
+    alert(t('pg.netErr') + e.message);
     _scShowPane('idea');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '🔬 Проучи и създай план'; }
+    if (btn) { btn.disabled = false; btn.textContent = t('pg.scResearch'); }
   }
 }
 
@@ -4197,8 +4194,8 @@ function _renderSkillCreatorSession(s) {
   const planLines = [
     s.display_title && `**${s.display_title}**`,
     s.summary && `Trigger: ${s.summary}`,
-    plan.objective && `Цел: ${plan.objective}`,
-    plan.audience && `Аудитория: ${plan.audience}`,
+    plan.objective && t('pg.goal', {v: plan.objective}),
+    plan.audience && t('pg.audience', {v: plan.audience}),
     ...(plan.workflow_steps || []).map((st, i) => `${i + 1}. ${st}`),
   ].filter(Boolean);
   const planEl = $('sc-plan-summary');
@@ -4247,7 +4244,7 @@ function _renderSkillCreatorSession(s) {
   if (hist && (s.history || []).length) {
     hist.innerHTML = (s.history || []).map(h =>
       `<div class="p-2 rounded ${h.role === 'user' ? 'bg-gray-800 ml-4' : 'bg-amber-950/20 mr-4'}">
-        <span class="text-[9px] font-mono text-gray-500">${h.role === 'user' ? 'ти' : 'Дедал'}</span>
+        <span class="text-[9px] font-mono text-gray-500">${h.role === 'user' ? t('pg.you') : t('pg.dx')}</span>
         <div class="text-gray-200 mt-0.5 whitespace-pre-wrap">${escHtml(h.content || '')}</div>
       </div>`
     ).join('');
@@ -4266,12 +4263,12 @@ async function skillCreatorRefine() {
       method: 'POST',
       body: JSON.stringify({ session_id: _scSession.session_id, message: msg }),
     });
-    if (!r.ok) { alert('Грешка: ' + (r.error || 'unknown')); return; }
+    if (!r.ok) { alert(t('pg.errPrefix') + ' ' + (r.error || 'unknown')); return; }
     _scSession = r;
     $('sc-refine-input').value = '';
     _renderSkillCreatorSession(r);
   } catch (e) {
-    alert('Мрежова грешка: ' + e.message);
+    alert(t('pg.netErr') + e.message);
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -4281,17 +4278,17 @@ async function skillCreatorGenerate(force) {
   if (!_scSession?.session_id) return;
   const btn = $('sc-generate-btn');
   const forceBtn = $('sc-force-generate-btn');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Генерира…'; }
+  if (btn) { btn.disabled = true; btn.textContent = t('pg.generating'); }
   if (forceBtn) forceBtn.disabled = true;
   _scShowPane('loading');
-  $('sc-loading-phase').textContent = '✍️ Генериране на SKILL.md…';
+  $('sc-loading-phase').textContent = t('pg.genSkill');
   try {
     const r = await api('/admin/daedalus/playground/api/skill-creator/generate', {
       method: 'POST',
       body: JSON.stringify({ session_id: _scSession.session_id, force: !!force }),
     });
     if (!r.ok) {
-      alert('Грешка: ' + (r.error || 'unknown'));
+      alert(t('pg.errPrefix') + ' ' + (r.error || 'unknown'));
       _scShowPane('refine');
       _renderSkillCreatorSession(_scSession);
       return;
@@ -4313,10 +4310,10 @@ async function skillCreatorGenerate(force) {
       warnEl.classList.remove('hidden');
     } else if (warnEl) warnEl.classList.add('hidden');
   } catch (e) {
-    alert('Мрежова грешка: ' + e.message);
+    alert(t('pg.netErr') + e.message);
     _scShowPane('refine');
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '✅ Генерирай SKILL.md'; }
+    if (btn) { btn.disabled = false; btn.textContent = t('pg.scGenerate'); }
     if (forceBtn) forceBtn.disabled = false;
   }
 }
@@ -4329,7 +4326,7 @@ function skillCreatorDownload() {
     if (p.endsWith('SKILL.md')) { content = _scFiles[p]; filename = p.split('/').pop() || 'SKILL.md'; break; }
   }
   if (!content && paths.length) { content = _scFiles[paths[0]]; filename = paths[0].split('/').pop() || 'SKILL.md'; }
-  if (!content) { alert('Няма генериран файл'); return; }
+  if (!content) { alert(t('pg.noFile')); return; }
   const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -4340,7 +4337,7 @@ function skillCreatorDownload() {
 
 function skillCreatorDownloadZip() {
   const paths = Object.keys(_scFiles);
-  if (!paths.length) { alert('Няма файлове'); return; }
+  if (!paths.length) { alert(t('pg.noFiles')); return; }
   if (paths.length === 1) { skillCreatorDownload(); return; }
   // Simple multi-file download via combined text bundle (no JSZip dependency)
   let bundle = `# Skill bundle: ${_scSession?.skill_name || 'skill'}\n\n`;
@@ -4366,7 +4363,7 @@ async function skillCreatorGist() {
     });
     if (!r.ok) { alert('Gist: ' + (r.error || 'unknown')); return; }
     if (r.gist_url) window.open(r.gist_url, '_blank');
-    alert('Публикувано: ' + (r.gist_url || r.gist_id));
+    alert(t('pg.publishedGist') + (r.gist_url || r.gist_id));
   } catch (e) {
     alert('Gist: ' + e.message);
   } finally {
