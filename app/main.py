@@ -144,7 +144,7 @@ async def capabilities() -> dict:
             "dissection", "play-lab",
             "offline-kit", "llm-wardrobe", "addons", "capsule",
             "evolution", "windows-desktop", "windows-gui", "live-publish",
-            "effort-routing", "world-kit", "long-horizon",
+            "effort-routing", "world-kit", "world-runtime", "long-horizon",
             "owner-token", "typed-tools", "atomic-router", "durable-runs",
             "one-builder", "quality-gate", "engine-runners", "godot-runtime",
             "gameplay-bot",

@@ -93,7 +93,7 @@ Data lives under `$DAEDALUS_DATA` (default `data/daedalus/` on the machine, `%LO
 | Chat (Bulgarian / English) | Studio `/` · `POST /api/v1/daedalus/chat` |
 | Files and projects | Playground `playground/projects/{slug}` |
 | Shell | Studio Shell · `POST /api/v1/daedalus/shell` (jail, secrets stripped from env) |
-| Native tools | `read_file`, `write_file`, `run_command`, `web_search`, `web_fetch`, `web_read`, `generate_image`, `remember`, `code_search`, `browser`, `mcp_call`, `spawn_subagent`, `playtest`, `play_lab`, `dissect_game` |
+| Native tools | `read_file`, `write_file`, `run_command`, `web_search`, `web_fetch`, `web_read`, `generate_image`, `remember`, `code_search`, `browser`, `mcp_call`, `spawn_subagent`, `playtest`, `play_lab`, `dissect_game`, `engine`, `world` |
 | Local LLM | Studio **wardrobe** — hardware profile + Ollama pull; or `DAEDALUS_PROVIDER=ollama` |
 | Offline kit | `DAEDALUS_OFFLINE=1` / Studio toggle — no search/images; local model + capsules still work |
 | Sub-agents | worker slots **and** `spawn_subagent` (files + shell, jailed) |

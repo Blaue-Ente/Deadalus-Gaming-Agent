@@ -347,6 +347,7 @@ def test_studio_asset_generate_route(isolated, monkeypatch):
     assert "engine-runners" in names
     assert "godot-runtime" in names
     assert "gameplay-bot" in names
+    assert "world-runtime" in names
     auto = client.get(f"/api/v1/playground/projects/{slug}/autopilot")
     assert auto.status_code == 200
     assert "checkpoint" in auto.json()

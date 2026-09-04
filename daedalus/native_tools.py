@@ -37,6 +37,7 @@ PERM_MAP: dict[str, str | None] = {
     "play_lab": None,
     "dissect_game": None,
     "engine": None,
+    "world": None,
 }
 
 NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
@@ -373,6 +374,30 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
                 "key": {"type": "string", "description": "Physical key W/A/S/D/Space"},
                 "pressed": {"type": "boolean"},
                 "frames": {"type": "integer"},
+            },
+            "required": ["action", "slug"],
+        },
+    },
+    {
+        "name": "world",
+        "description": (
+            "Campaign runtime: save, quests, dialogue, level graph. "
+            "action: status | prove | talk | travel | script. "
+            "Empty world/*.json is not a campaign."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "status | prove | talk | travel | script",
+                },
+                "slug": {"type": "string"},
+                "who": {"type": "string", "description": "Dialogue id for talk"},
+                "pick": {"description": "Choice index or substring"},
+                "to": {"type": "string", "description": "Region id for travel"},
+                "save": {"type": "object"},
+                "steps": {"description": "JSON list of script steps"},
             },
             "required": ["action", "slug"],
         },
@@ -727,6 +752,23 @@ async def execute_native_tool(
             status = "OK" if r.get("ok") else "FAILED"
             return (
                 f"── engine {args.get('action')} {status} {args.get('slug')} ──\n"
+                f"{json.dumps(r, ensure_ascii=False, default=str)[:6000]}"
+            )
+
+        if name == "world":
+            from .world_runtime import run_action as world_action
+            r = world_action(
+                str(args.get("action") or "status"),
+                str(args.get("slug") or ""),
+                who=str(args.get("who") or ""),
+                pick=args.get("pick"),
+                to=str(args.get("to") or ""),
+                save=args.get("save"),
+                steps=args.get("steps"),
+            )
+            status = "OK" if r.get("ok") else "FAILED"
+            return (
+                f"── world {args.get('action')} {status} {args.get('slug')} ──\n"
                 f"{json.dumps(r, ensure_ascii=False, default=str)[:6000]}"
             )
 
