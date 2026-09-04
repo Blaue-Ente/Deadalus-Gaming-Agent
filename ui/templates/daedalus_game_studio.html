@@ -831,7 +831,9 @@ async function refreshGsUnity(slug) {
     else if (promise === 'batchmode') label = 'batchmode · не е Play';
     box.textContent = 'unity · ' + promise + ' · ' + label;
     if (copy) {
-      copy.textContent = data.message || copy.textContent;
+      if (promise === 'mcp') copy.textContent = 'Локален Editor през MCP. Не вендорираме Unity.';
+      else if (promise === 'batchmode') copy.textContent = 'UNITY_PATH batchmode импортира — това не е Play.';
+      else copy.textContent = 'Няма Editor в този облак. Hub локално или DAEDALUS_UNITY_MCP. Scaffold не е Play.';
     }
   } catch (e) {
     box.textContent = 'unity: ' + e;
