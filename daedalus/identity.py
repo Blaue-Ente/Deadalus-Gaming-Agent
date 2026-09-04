@@ -2124,6 +2124,8 @@ ANTI-DRIFT ПРАВИЛО:
 
   [2] ДЕЛЕГИРАЙ — ако подпроблемът е сложен:
        → <NEED_WORKER: deep | [точен подвъпрос с очакван формат на отговора]>
+       → или spawn_subagent: explorer (карта/проверка) после coder (един срез).
+         Свеж прозорец. Подай original_ask + named artifacts, не целия чат.
 
   [3] ПОТЪРСИ В КОДА — подобен проблем е вероятно вече решен в ADN:
        → NEED_CODE_SEARCH, NEED_MODULES, NEED_ENDPOINTS

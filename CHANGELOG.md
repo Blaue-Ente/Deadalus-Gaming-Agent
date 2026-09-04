@@ -5,6 +5,10 @@ The version in `pyproject.toml` is the source of truth for the package.
 
 ## [Unreleased]
 
+### Agent
+
+- **Hard-job slices** — playground work that is already multi-file keeps a job ledger (`original ask`, acceptance, named artifacts) under `$DAEDALUS_DATA/jobs/`. `spawn_subagent` takes `role=explorer|coder|verify` (explorer/verify cannot write), injects only the asked artifacts, and refuses `TASK_COMPLETE` that contradicts a failure. Definition of Done blocks "готово" while slices remain or the reply admits it did not finish. Whisper chat and greenfield playable slices are unchanged.
+
 ### LLM
 
 - **OpenRouter Free** preset (`or_free`) — all slots on `$0` OpenRouter ids (`poolside/laguna-s-2.1:free` + `openrouter/free`). Applying any preset now also pins planner/coder/reviewer/analysis/claude to that preset’s core models, so an eco/free mix cannot silently call paid Claude defaults.

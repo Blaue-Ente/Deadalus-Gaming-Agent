@@ -1566,6 +1566,14 @@ class Daedalus:
         except Exception as _ts_exc:
             log.debug("task-state injection skipped: %s", _ts_exc)
 
+        try:
+            from .job_ledger import format_session_block as _job_block
+            _jb = _job_block(session_id or "")
+            if _jb:
+                user_content = _jb + "\n\n" + user_content
+        except Exception as _jb_exc:
+            log.debug("job ledger injection skipped: %s", _jb_exc)
+
         # Inject continuity context into system prompt (per-request, always fresh)
         # [Playground Isolation] session_id filters tasks/digests to this project only
         _continuity_block = _continuity.build_continuity_context(session_id=session_id)
@@ -3789,6 +3797,7 @@ class Daedalus:
                         "tool": "subagent",
                         "count": len(subagent_calls),
                         "ok": all(r.get("ok") for r in sub_results),
+                        "roles": [str(r.get("role") or "coder") for r in sub_results],
                     })
                 except Exception as exc:
                     log.warning("NEED_SUBAGENT failed: %s", exc)
@@ -3947,8 +3956,10 @@ class Daedalus:
                     "  <NEED_WORKER: balanced | task>           — same model as master\n"
                     "  <NEED_WORKER: deep | task>               — powerful model (Opus)\n"
                     "Multiple NEED_WORKER markers in one response run in parallel.\n"
-                    "For a bounded file task WITH tools, emit:\n"
-                    "  <NEED_SUBAGENT: slug | task>  — isolated agent, writes jailed to slug.\n"
+                    "For a bounded file slice WITH tools, emit:\n"
+                    "  <NEED_SUBAGENT: slug | task>\n"
+                    "  <NEED_SUBAGENT: slug | task | explorer>  — read-only map/verify.\n"
+                    "Explorer cannot write. Pass one slice, not the whole chat.\n"
                     "Workers are stateless — pass full context in the task description. "
                     "Wait for their results in the next tool iteration before synthesizing.\n\n"
                     "DATA CURATION REMINDER: For inserting trading_concepts / signal_criteria / "
@@ -4594,9 +4605,16 @@ class Daedalus:
         try:
             from .job_contract import evaluate, finish_nudge
             from .learned_skills import draft_from_failure
+            _open_slices = 0
+            try:
+                from .job_ledger import open_count_for_session
+                _open_slices = open_count_for_session(session_id or "")
+            except Exception:
+                _open_slices = 0
             dod = evaluate(
                 message, raw or "",
                 tool_calls=summary.get("tool_calls") or [],
+                open_slices=_open_slices,
             )
             if not dod.complete and dod.coding_task:
                 raw = (raw or "") + finish_nudge(dod)

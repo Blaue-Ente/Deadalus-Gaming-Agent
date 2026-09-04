@@ -233,8 +233,9 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
     {
         "name": "spawn_subagent",
         "description": (
-            "Run an isolated sub-agent that can read/write playground files and run commands. "
-            "Use for a bounded file task. Writes are jailed to slug."
+            "Run an isolated sub-agent with a fresh context window, jailed to a playground slug. "
+            "role=explorer|verify is read-only; role=coder may write. Pass return_contexts "
+            "so the sub-agent returns named artifacts; pass context_refs to inject prior artifacts."
         ),
         "input_schema": {
             "type": "object",
@@ -242,6 +243,31 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
                 "slug": {"type": "string"},
                 "task": {"type": "string"},
                 "max_rounds": {"type": "integer"},
+                "role": {
+                    "type": "string",
+                    "description": "explorer (read-only), coder (writes), or verify (read-only check)",
+                },
+                "job_id": {"type": "string"},
+                "original_ask": {"type": "string"},
+                "task_id": {"type": "string"},
+                "return_contexts": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "context_refs": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "context_bootstrap": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "path": {"type": "string"},
+                            "reason": {"type": "string"},
+                        },
+                    },
+                },
             },
             "required": ["slug", "task"],
         },
@@ -558,6 +584,9 @@ async def execute_native_tool(
 
         if name == "spawn_subagent":
             from .subagents import run_subagent
+            refs = args.get("context_refs")
+            wanted = args.get("return_contexts")
+            boot = args.get("context_bootstrap")
             r = await run_subagent(
                 str(args.get("slug") or ""),
                 str(args.get("task") or ""),
@@ -565,9 +594,26 @@ async def execute_native_tool(
                 session_id=session_id,
                 max_rounds=int(args.get("max_rounds") or 6),
                 read_file_fn=read_file_fn,
+                role=str(args.get("role") or "coder"),
+                job_id=str(args.get("job_id") or ""),
+                original_ask=str(args.get("original_ask") or ""),
+                return_contexts=list(wanted) if isinstance(wanted, list) else None,
+                context_refs=list(refs) if isinstance(refs, list) else None,
+                context_bootstrap=list(boot) if isinstance(boot, list) else None,
+                task_id=str(args.get("task_id") or ""),
             )
             status = "OK" if r.get("ok") else "FAILED"
-            return f"── spawn_subagent {status} {r.get('slug')} ──\n{r.get('summary') or r.get('error')}"
+            extra = f" {r.get('role') or ''} {r.get('verdict') or ''}".rstrip()
+            arts = r.get("artifacts") or []
+            art_line = ""
+            if arts:
+                art_line = "\nartifacts: " + ", ".join(
+                    a.get("id", "?") for a in arts if isinstance(a, dict)
+                )
+            return (
+                f"── spawn_subagent {status} {r.get('slug')}{extra} ──\n"
+                f"{r.get('summary') or r.get('error')}{art_line}"
+            )
 
         if name == "playtest":
             from .playtest import format_for_prompt, run_playtest
