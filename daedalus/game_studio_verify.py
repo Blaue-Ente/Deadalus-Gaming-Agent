@@ -582,7 +582,7 @@ async def run_milestone_verify(
         "has_canvas": bool(browser.get("has_canvas")),
         "gameplay_ok": gameplay_ok,
         "gameplay_attempts": gameplay_attempts,
-        "gameplay_checks": (gameplay.get("checks") or [])[:12],
+        "gameplay_checks": (gameplay.get("checks") or [])[:24],
         "gameplay_summary": (gameplay.get("summary") or "")[:500],
         "proof_incomplete": proof_incomplete,
         "unity_local_required": bool(gameplay.get("unity_local_required") or browser.get("unity_local_required")),

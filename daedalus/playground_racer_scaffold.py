@@ -487,6 +487,15 @@ async function boot() {
     hudIntegrity.classList.toggle('danger', vehicle.integrity < 35 || Math.abs(vehicle.offset) > track.halfWidth);
     failEl.hidden = !vehicle.failed;
     hintEl.hidden = vehicle.speed > 4;
+    window.__DAEDALUS_STATE__ = {
+      speed: vehicle.speed,
+      integrity: vehicle.integrity,
+      failed: vehicle.failed,
+      boost: vehicle.boost,
+      t: vehicle.t,
+      offset: vehicle.offset,
+    };
+    window.__GAME__ = window.__DAEDALUS_STATE__;
     renderer.render(scene, camera);
     requestAnimationFrame(tick);
   }
@@ -608,6 +617,8 @@ def racer_package_json(slug: str) -> str:
 
 def racer_scaffold_files(name: str, slug: str, description: str = "") -> dict[str, str]:
     title = (name or slug or "Racer").strip()
+    from .playtest_scenario import default_scenario, dumps_scenario
+
     files = {
         "index.html": _INDEX_HTML.replace("__NAME__", title),
         "vite.config.js": _VITE_CONFIG,
@@ -617,6 +628,7 @@ def racer_scaffold_files(name: str, slug: str, description: str = "") -> dict[st
         "src/racer/track.js": _TRACK_JS,
         "src/racer/vehicle.js": _VEHICLE_JS,
         "src/racer/world.js": _WORLD_JS,
+        "playtest/scenario.json": dumps_scenario(default_scenario("vite", racer=True)),
         "README.md": _README.replace("__NAME__", title),
     }
     if description:

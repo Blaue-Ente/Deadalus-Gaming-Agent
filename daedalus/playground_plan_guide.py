@@ -57,6 +57,7 @@ _KIND_ADDENDA: dict[str, str] = {
   4) modules/ui.js или components/*.js — отделни UI модули
   5) modules/game.js — gameplay (ако е игра)
 Игри: Canvas/WebGL в отделен файл; rAF loop; НЕ монолитен 500+ реда index.html.
+Държи playtest/scenario.json — ботът доказва движение (pixel-diff) и win/lose.
 """,
     "vite": """
 ━━━ VITE PLAN (Vanilla JS + npm) ━━━
@@ -69,6 +70,7 @@ _KIND_ADDENDA: dict[str, str] = {
 Игри 2D: Phaser boot в отделен файл; assets/*.png в uses_visuals етап.
 Игри 3D/racing: Three.js в src/racer/ (boot, track, vehicle, world) — НЕ Phaser, НЕ pixel-art.
 Ако проектът вече има racer scaffold, етап 1 е да го пуснеш, не да го триеш.
+Web игри: държи playtest/scenario.json (вход → canvas_changed / win / lose). Click-Start не е бот.
 """,
     "vite-react": """
 ━━━ VITE-REACT PLAN ━━━

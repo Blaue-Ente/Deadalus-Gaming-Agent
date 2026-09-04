@@ -626,6 +626,17 @@ async def run_project_gates(
 
     root = pg.project_dir(slug)
     ctx["workspace_stats"] = _workspace_stats(root)
+    verify_map = (ctx.get("config") or {}).get("verify") or ctx.get("verify") or {}
+    mid = (ctx.get("current_milestone") or {}).get("id") if isinstance(ctx.get("current_milestone"), dict) else ctx.get("current_milestone")
+    mid = mid or "M0"
+    last = verify_map.get(mid) if isinstance(verify_map, dict) else None
+    if isinstance(last, dict) and last.get("gameplay_checks") is not None:
+        ctx["gameplay"] = {
+            "ok": last.get("gameplay_ok"),
+            "skipped": bool(last.get("chromium_missing") or last.get("browser_skipped")),
+            "checks": last.get("gameplay_checks") or [],
+            "summary": last.get("gameplay_summary") or "",
+        }
     result = run_gates(ctx, gate_ids)
     cfg = load_config_from_root(root) or {}
     cfg["gates"] = result["gates"]
