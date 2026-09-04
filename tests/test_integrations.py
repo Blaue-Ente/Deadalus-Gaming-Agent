@@ -147,7 +147,7 @@ def test_connectors_and_playtest_http(harness_tmp):
     from app.main import app
     client = TestClient(app)
     home = client.get("/")
-    assert "Свят" in home.text
+    assert "World" in home.text
 
     reach = client.get("/api/v1/daedalus/reach")
     assert reach.status_code == 200

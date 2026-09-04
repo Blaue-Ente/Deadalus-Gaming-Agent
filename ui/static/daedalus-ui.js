@@ -24,7 +24,7 @@
         lines.push(`<div class="dx-skel dx-skel-line ${w}" aria-hidden="true"></div>`);
       }
     }
-    return `<div class="dx-skel-wrap" role="status" aria-label="Зареждане">${lines.join('')}</div>`;
+    return `<div class="dx-skel-wrap" role="status" aria-label="Loading">${lines.join('')}</div>`;
   }
 
   function ensureToastContainer() {

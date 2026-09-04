@@ -153,6 +153,27 @@ button.chip {
   color: var(--gold-2);
 }
 
+.dx-lang {
+  display: inline-flex;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.dx-lang button {
+  border: 0;
+  border-radius: 0;
+  padding: 0.32rem 0.55rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  background: transparent;
+  color: var(--muted);
+}
+.dx-lang button[aria-pressed="true"] {
+  background: rgba(201, 162, 39, 0.16);
+  color: var(--gold-2);
+}
+
 .pills {
   margin-left: auto;
   display: flex;

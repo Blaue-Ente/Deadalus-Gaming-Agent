@@ -273,5 +273,8 @@ def test_studio_js_attaches_auth_helpers(auth_tmp):
     assert 'value="unity"' in html
     assert 'value="node"' in html
     assert 'value="auto"' in html
-    assert "Разговор" in nav
+    assert "Studio" in nav
+    assert "Playground" in nav
+    assert "Setup" in nav
+    assert "Разговор" not in nav
     assert "owner-auth.js" in nav

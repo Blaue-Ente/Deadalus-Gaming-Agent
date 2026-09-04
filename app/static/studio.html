@@ -1,12 +1,13 @@
 <!DOCTYPE html>
-<html lang="bg">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Дедал — Daedalus</title>
+  <title data-i18n="studio.title">Daedalus</title>
   <link rel="icon" href="/static/favicon.ico" sizes="any" />
   <link rel="icon" href="/static/daedalus-mark.png" type="image/png" />
   <link rel="stylesheet" href="/static/studio.css" />
+  <script src="/static/i18n.js"></script>
   <script src="/static/owner-auth.js"></script>
 </head>
 <body>
@@ -14,32 +15,40 @@
     <header class="app">
       <img class="mark" src="/static/daedalus-mark.png" alt="Daedalus" />
       <div class="brand">
-        <h1>Дедал <em>/ Daedalus</em></h1>
-        <div class="sub">Игри първо · говори нормално · <a href="/admin/daedalus/proposals">Одобрения</a> · <a href="/admin/daedalus/hub">център</a></div>
+        <h1 data-i18n="studio.brand">Daedalus</h1>
+        <div class="sub">
+          <span data-i18n="studio.tagline">Games first · speak plainly</span>
+          · <a href="/admin/daedalus/proposals" data-i18n="nav.proposals">Proposals</a>
+          · <a href="/admin/daedalus/hub" data-i18n="nav.hub">Hub</a>
+        </div>
       </div>
-      <button type="button" class="chip empty" id="projchip">Няма избран проект</button>
-      <div class="effort" role="group" aria-label="Усилие">
-        <button type="button" data-effort="auto" aria-pressed="true">Авто</button>
-        <button type="button" data-effort="whisper" aria-pressed="false">Шепот</button>
-        <button type="button" data-effort="craft" aria-pressed="false">Занаят</button>
-        <button type="button" data-effort="epic" aria-pressed="false">Епос</button>
+      <button type="button" class="chip empty" id="projchip" data-i18n="studio.noProject">No project selected</button>
+      <div class="effort" role="group" data-i18n-aria="studio.effortAria" aria-label="Effort">
+        <button type="button" data-effort="auto" aria-pressed="true" data-i18n="studio.effort.auto">Auto</button>
+        <button type="button" data-effort="whisper" aria-pressed="false" data-i18n="studio.effort.whisper">Whisper</button>
+        <button type="button" data-effort="craft" aria-pressed="false" data-i18n="studio.effort.craft">Craft</button>
+        <button type="button" data-effort="epic" aria-pressed="false" data-i18n="studio.effort.epic">Epic</button>
+      </div>
+      <div class="dx-lang" role="group" data-i18n-aria="lang.aria" aria-label="Language">
+        <button type="button" data-lang="en" aria-pressed="true">EN</button>
+        <button type="button" data-lang="bg" aria-pressed="false">BG</button>
       </div>
       <div class="pills" id="pills"></div>
     </header>
 
     <aside>
       <div>
-        <p class="kicker">Проект</p>
-        <p class="hint">Епос пише world kit. Занаят — една среза. Името е на играта, не на презентацията.</p>
-        <label class="sr-only" for="pname">Име на проект</label>
-        <input id="pname" placeholder="Име на игра / приложение" autocomplete="off" aria-label="Име на игра или приложение" />
-        <label class="sr-only" for="pdesc">Описание</label>
-        <textarea id="pdesc" rows="2" placeholder="Какво строиш? Тон, играч, първа среза. Епосът чете това." aria-label="Описание на проекта"></textarea>
+        <p class="kicker" data-i18n="studio.project">Project</p>
+        <p class="hint" data-i18n="studio.projectHint">Epic writes a world kit. Craft is one slice. The name is the game, not the pitch deck.</p>
+        <label class="sr-only" for="pname" data-i18n="studio.nameAria">Project name</label>
+        <input id="pname" data-i18n-placeholder="studio.namePh" placeholder="Game / app name" autocomplete="off" data-i18n-aria="studio.nameAria" aria-label="Game or app name" />
+        <label class="sr-only" for="pdesc" data-i18n="studio.descAria">Description</label>
+        <textarea id="pdesc" rows="2" data-i18n-placeholder="studio.descPh" placeholder="What are you building? Tone, player, first slice. Epic reads this." data-i18n-aria="studio.descAria" aria-label="Project description"></textarea>
         <div class="row tight">
-          <label class="sr-only" for="pkind">Вид проект</label>
-          <select id="pkind" aria-label="Вид проект">
-            <option value="auto">auto — Дедал избира</option>
-            <option value="static">игра / static</option>
+          <label class="sr-only" for="pkind" data-i18n="studio.kindAria">Project kind</label>
+          <select id="pkind" data-i18n-aria="studio.kindAria" aria-label="Project kind">
+            <option value="auto" data-i18n="studio.kind.auto">auto — Daedalus chooses</option>
+            <option value="static" data-i18n="studio.kind.static">game / static</option>
             <option value="vite">vite</option>
             <option value="vite-react">vite-react</option>
             <option value="fastapi">fastapi</option>
@@ -49,107 +58,107 @@
             <option value="godot">godot</option>
             <option value="unity">unity</option>
           </select>
-          <button class="primary" id="pcreate" type="button">Нов</button>
+          <button class="primary" id="pcreate" type="button" data-i18n="studio.new">New</button>
         </div>
         <div class="row">
-          <button id="pcapsule" type="button" disabled>Капсула</button>
+          <button id="pcapsule" type="button" disabled data-i18n="studio.capsule">Capsule</button>
           <button id="ppub" type="button" disabled>/apps/</button>
-          <button class="primary" id="plive" type="button" disabled>Наживо</button>
+          <button class="primary" id="plive" type="button" disabled data-i18n="studio.live">Live</button>
         </div>
         <div class="list" id="plist"></div>
       </div>
       <div class="prefs">
-        <p class="kicker">Предпочитания</p>
-        <p class="hint">Или в чата: „запомни, че предпочитам Phaser“.</p>
-        <input id="preftext" placeholder="Запомни…" aria-label="Ново предпочитание" />
-        <div class="row tight"><button id="prefadd" type="button">Запиши</button></div>
+        <p class="kicker" data-i18n="studio.prefs">Preferences</p>
+        <p class="hint" data-i18n="studio.prefsHint">Or in chat: “remember I prefer Phaser”.</p>
+        <input id="preftext" data-i18n-placeholder="studio.prefPh" placeholder="Remember…" data-i18n-aria="studio.prefAria" aria-label="New preference" />
+        <div class="row tight"><button id="prefadd" type="button" data-i18n="studio.save">Save</button></div>
         <div class="list" id="preflist"></div>
       </div>
       <div class="lessons">
-        <p class="kicker">Уроци</p>
-        <p class="hint">Провалите чакат <b>Одобри</b>. Агентът не ги вкарва сам в следващия ход.</p>
+        <p class="kicker" data-i18n="studio.lessons">Lessons</p>
+        <p class="hint" data-i18n="studio.lessonsHint" data-i18n-html>Failures wait for <b>Approve</b>. The agent does not inject them into the next turn.</p>
         <div class="list" id="lessonlist"></div>
       </div>
     </aside>
 
     <main>
-      <p class="kicker">Разговор</p>
+      <p class="kicker" data-i18n="studio.chat">Chat</p>
       <div class="msgs" id="msgs"></div>
       <div class="composer">
-        <textarea id="prompt" placeholder="Пиши свободно. Shift+Enter за нов ред. Авто избира шепот / занаят / епос." aria-label="Съобщение към Дедал"></textarea>
+        <textarea id="prompt" data-i18n-placeholder="studio.promptPh" placeholder="Write freely. Shift+Enter for a new line. Auto picks whisper / craft / epic." data-i18n-aria="studio.promptAria" aria-label="Message to Daedalus"></textarea>
         <div class="meta-row">
           <span class="effort-note" id="effortnote"></span>
           <div class="row">
-            <button id="build" type="button" disabled>Полет</button>
-            <button id="stop" type="button" hidden>Спри</button>
-            <button class="primary" id="send" type="button">Изпрати</button>
+            <button id="build" type="button" disabled data-i18n="studio.flightBtn">Flight</button>
+            <button id="stop" type="button" hidden data-i18n="studio.stop">Stop</button>
+            <button class="primary" id="send" type="button" data-i18n="studio.send">Send</button>
           </div>
         </div>
       </div>
     </main>
 
     <section class="rail">
-      <div class="tabs" role="tablist" aria-label="Странични панели">
-        <button class="on" data-pane="shell" type="button" role="tab" aria-selected="true">Shell</button>
-        <button data-pane="flight" type="button" role="tab" aria-selected="false">Полет</button>
-        <button data-pane="llm" type="button" role="tab" aria-selected="false">LLM</button>
-        <button data-pane="evo" type="button" role="tab" aria-selected="false">Еволюция</button>
-        <button data-pane="world" type="button" role="tab" aria-selected="false">Свят</button>
+      <div class="tabs" role="tablist" data-i18n-aria="studio.railAria" aria-label="Side panels">
+        <button class="on" data-pane="shell" type="button" role="tab" aria-selected="true" data-i18n="studio.tab.shell">Shell</button>
+        <button data-pane="flight" type="button" role="tab" aria-selected="false" data-i18n="studio.tab.flight">Flight</button>
+        <button data-pane="llm" type="button" role="tab" aria-selected="false" data-i18n="studio.tab.llm">LLM</button>
+        <button data-pane="evo" type="button" role="tab" aria-selected="false" data-i18n="studio.tab.evo">Evolution</button>
+        <button data-pane="world" type="button" role="tab" aria-selected="false" data-i18n="studio.tab.world">World</button>
       </div>
       <div class="pane on" id="pane-shell">
-        <p class="kicker">Команди</p>
-        <p class="hint">Jail: продукт / playground / данни. Избран проект сменя cwd. Ключовете не влизат в процеса.</p>
-        <p class="cwd" id="cwd">cwd · продукт</p>
-        <input id="shcmd" placeholder="ls · pytest · python -m compileall" aria-label="Команда за shell" />
-        <div class="row tight"><button class="primary" id="shrun" type="button">Изпълни</button></div>
-        <pre id="shout">Готов.</pre>
+        <p class="kicker" data-i18n="studio.commands">Commands</p>
+        <p class="hint" data-i18n="studio.shellHint">Jail: product / playground / data. A selected project changes cwd. Keys never enter the process.</p>
+        <p class="cwd" id="cwd" data-i18n="studio.cwdProduct">cwd · product</p>
+        <input id="shcmd" data-i18n-placeholder="studio.shellPh" placeholder="ls · pytest · python -m compileall" data-i18n-aria="studio.shellAria" aria-label="Shell command" />
+        <div class="row tight"><button class="primary" id="shrun" type="button" data-i18n="studio.run">Run</button></div>
+        <pre id="shout" data-i18n="studio.ready">Ready.</pre>
       </div>
       <div class="pane" id="pane-flight">
-        <p class="kicker">Полет</p>
-        <p class="hint">Лог на текущия полет. Епосът първо пише bible, после среза.</p>
-        <pre id="log">Няма активен autopilot.</pre>
+        <p class="kicker" data-i18n="studio.flight">Flight</p>
+        <p class="hint" data-i18n="studio.flightHint">Log of the current flight. Epic writes the bible first, then a slice.</p>
+        <pre id="log" data-i18n="studio.noAutopilot">No active autopilot.</pre>
       </div>
       <div class="pane" id="pane-llm">
-        <p class="kicker">Гардероб</p>
-        <p class="hint">Ти избираш какво се дърпа. Авто само препоръчва роля за този ход.</p>
+        <p class="kicker" data-i18n="studio.wardrobe">Wardrobe</p>
+        <p class="hint" data-i18n="studio.wardrobeHint">You choose what is pulled. Auto only recommends a role for this turn.</p>
         <div class="row tight">
-          <button id="offon" type="button">Офлайн кит</button>
-          <button id="usecloud" type="button">Облак</button>
+          <button id="offon" type="button" data-i18n="studio.offlineKit">Offline kit</button>
+          <button id="usecloud" type="button" data-i18n="studio.cloud">Cloud</button>
         </div>
         <div id="wardrobe"></div>
-        <pre id="llmbox">Зареждане…</pre>
+        <pre id="llmbox" data-i18n="studio.loading">Loading…</pre>
       </div>
       <div class="pane" id="pane-evo">
-        <p class="kicker">Еволюция</p>
-        <p class="hint">Изключено по подразбиране. Пачове чакат Approve.</p>
+        <p class="kicker" data-i18n="studio.evolution">Evolution</p>
+        <p class="hint" data-i18n="studio.evoHint">Off by default. Patches wait for Approve.</p>
         <div class="row">
-          <button class="primary" id="evoon" type="button">Включи</button>
-          <button id="evocycle" type="button">Един цикъл</button>
+          <button class="primary" id="evoon" type="button" data-i18n="studio.enable">Enable</button>
+          <button id="evocycle" type="button" data-i18n="studio.oneCycle">One cycle</button>
         </div>
-        <label class="field-num">Интервал (сек, мин 300)
+        <label class="field-num"><span data-i18n="studio.interval">Interval (sec, min 300)</span>
           <input id="evointerval" type="number" min="300" max="86400" step="300" value="1800" />
         </label>
-        <label class="hint"><input id="evoclone" type="checkbox" /> Плитък clone в data/</label>
-        <pre id="evobox">Зареждане…</pre>
+        <label class="hint"><input id="evoclone" type="checkbox" /> <span data-i18n="studio.shallowClone">Shallow clone into data/</span></label>
+        <pre id="evobox" data-i18n="studio.loading">Loading…</pre>
       </div>
       <div class="pane" id="pane-world">
-        <p class="kicker">World kit</p>
-        <p class="hint">Епосът е папка + runtime: save, квест, диалог, граф. Празен JSON не е кампания. M0–M3 е прототип — празен systems.json не е продукционен слой. Unity е Hub или MCP, не Editor в този облак. Честност е suite върху този harness, не bake-off срещу други продукти.</p>
+        <p class="kicker" data-i18n="studio.worldKit">World kit</p>
+        <p class="hint" data-i18n="studio.worldHint">Epic is a folder + runtime: save, quest, dialog, graph. Empty JSON is not a campaign. M0–M3 is a prototype — empty systems.json is not a production layer. Unity is Hub or MCP, not Editor in this cloud. Honesty is a suite on this harness, not a bake-off against other products.</p>
         <div class="list" id="worldkit"></div>
-        <p class="kicker stack-mt">Канали</p>
-        <p class="hint">Reach · MiroFish sidecar · MCP · playtest · дисекция.</p>
+        <p class="kicker stack-mt" data-i18n="studio.channels">Channels</p>
+        <p class="hint" data-i18n="studio.channelsHint">Reach · MiroFish sidecar · MCP · playtest · dissection.</p>
         <div class="row">
-          <button id="cxrefresh" type="button">Опресни</button>
-          <button class="primary" id="ptest" type="button" disabled>Playtest</button>
+          <button id="cxrefresh" type="button" data-i18n="studio.refresh">Refresh</button>
+          <button class="primary" id="ptest" type="button" disabled data-i18n="studio.playtest">Playtest</button>
         </div>
-        <p class="kicker stack-mt">Дисекция</p>
-        <p class="hint">Име, линк или път. Лабораторията е виртуалният компютър на Дедал за мострата.</p>
-        <input id="dissectsrc" placeholder="Flappy Bird · https://itch.io/… · път към zip" aria-label="Източник за дисекция" />
+        <p class="kicker stack-mt" data-i18n="studio.dissect">Dissection</p>
+        <p class="hint" data-i18n="studio.dissectHint">Name, link, or path. The lab is Daedalus’s virtual machine for the specimen.</p>
+        <input id="dissectsrc" data-i18n-placeholder="studio.dissectPh" placeholder="Flappy Bird · https://itch.io/… · path to zip" data-i18n-aria="studio.dissectAria" aria-label="Dissection source" />
         <div class="row tight">
-          <button class="primary" id="dissectbtn" type="button" disabled>Дисекция</button>
-          <button id="labbtn" type="button">Лаборатория</button>
+          <button class="primary" id="dissectbtn" type="button" disabled data-i18n="studio.dissect">Dissection</button>
+          <button id="labbtn" type="button" data-i18n="studio.lab">Lab</button>
         </div>
-        <pre id="worldbox">Зареждане…</pre>
+        <pre id="worldbox" data-i18n="studio.loading">Loading…</pre>
       </div>
     </section>
   </div>

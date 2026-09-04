@@ -176,3 +176,19 @@ def test_cc_escapes_skill_fields():
     hub = (ROOT / "ui" / "templates" / "daedalus_hub.html").read_text(encoding="utf-8")
     assert "ArgosDataNexus" not in hub
     assert "cdn.tailwindcss.com" not in (ROOT / "ui" / "templates" / "base.html").read_text(encoding="utf-8")
+    nav = (ROOT / "ui" / "templates" / "_daedalus_nav.html").read_text(encoding="utf-8")
+    assert "data-i18n=\"nav.studio\"" in nav
+    assert "Model Registry" not in nav
+    assert "Worker Named Configs" not in nav
+    assert "dx-lang" in nav
+    css = (ROOT / "ui" / "static" / "admin.css").read_text(encoding="utf-8")
+    assert "--argos-accent: #c9a227" in css
+    assert "dx-shell-sidebar" in css
+    i18n = (ROOT / "app" / "static" / "i18n.js").read_text(encoding="utf-8")
+    assert '"en"' in i18n and '"bg"' in i18n
+    assert "dx.lang" in i18n
+    html = (ROOT / "app" / "static" / "studio.html").read_text(encoding="utf-8")
+    assert 'lang="en"' in html
+    assert "/static/i18n.js" in html
+    assert "Дедал / Daedalus" not in html
+    assert "Умения — Skills" not in (ROOT / "ui" / "templates" / "skills.html").read_text(encoding="utf-8")

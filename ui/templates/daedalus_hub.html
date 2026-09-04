@@ -1,104 +1,72 @@
 {% extends "_shell.html" %}
 {% set page = 'daedalus_hub' %}
 {% set daedalus_tab = 'hub' %}
-{% block title %}Дедал · Daedalus{% endblock %}
-{% block eyebrow %}Персистентен агент-инженер{% endblock %}
-{% block heading %}Дедал{% endblock %}
-{% block mob_title %}Дедал{% endblock %}
-{% block eyebrow_mob %}Персистентен агент{% endblock %}
-{% block heading_mob %}Дедал{% endblock %}
+{% block title %}Daedalus{% endblock %}
+{% block eyebrow %}<span data-i18n="hub.eyebrow">Persistent coding agent</span>{% endblock %}
+{% block heading %}<span data-i18n="hub.title">Daedalus</span>{% endblock %}
+{% block mob_title %}Daedalus{% endblock %}
+{% block eyebrow_mob %}<span data-i18n="hub.eyebrow">Persistent coding agent</span>{% endblock %}
+{% block heading_mob %}<span data-i18n="hub.title">Daedalus</span>{% endblock %}
 
 {% block content %}
 {% include "_daedalus_nav.html" %}
 
 <div class="space-y-6">
-  <p class="text-sm text-argos-dim max-w-2xl">
-    Команден център на <strong class="text-white">Дедал</strong> —
-    одобрения, GDD и playground. Разговорът и строежът са в
-    <a href="/" class="text-argos-accent2 hover:underline">Studio</a>.
+  <p class="text-sm text-argos-dim max-w-2xl" data-i18n="hub.intro">
+    Command Center for proposals, GDD, and playground. Chat and build live in Studio.
   </p>
 
-  <!-- Quick access cards -->
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
     <a href="/"
       class="group block bg-argos-panel border border-argos-border hover:border-argos-accent2/50 rounded-xl p-5 transition">
       <div class="text-2xl mb-2">🏛</div>
-      <h2 class="text-sm font-semibold text-white group-hover:text-argos-accent2 transition">Studio + Shell</h2>
-      <p class="text-xs text-argos-dim mt-1.5 leading-relaxed">Каноничният разговор, проекти, LLM и команди на една страница.</p>
-    </a>
-
-    <a href="/admin/daedalus/connectors"
-      class="group block bg-argos-panel border border-argos-border hover:border-indigo-500/50 rounded-xl p-5 transition">
-      <div class="text-2xl mb-2">🔗</div>
-      <h2 class="text-sm font-semibold text-white group-hover:text-indigo-300 transition">Свързаност</h2>
-      <p class="text-xs text-argos-dim mt-1.5 leading-relaxed">LLM ключове, GitHub/GitLab, MCP, publish — целият външен свят на едно място.</p>
-    </a>
-
-    <a href="/admin/daedalus/playground?revive=1"
-      class="group block bg-argos-panel border border-argos-border hover:border-indigo-500/50 rounded-xl p-5 transition">
-      <div class="text-2xl mb-2">⬇</div>
-      <h2 class="text-sm font-semibold text-white group-hover:text-indigo-300 transition">Съживи от Git</h2>
-      <p class="text-xs text-argos-dim mt-1.5 leading-relaxed">Import & Evolve — clone GitHub или GitLab, оценка, repair, публикувай.</p>
-    </a>
-
-    <a href="/admin/daedalus/game-studio?new=1"
-      class="group block bg-argos-panel border border-argos-border hover:border-purple-500/50 rounded-xl p-5 transition">
-      <div class="text-2xl mb-2">🎮</div>
-      <h2 class="text-sm font-semibold text-white group-hover:text-purple-300 transition">Game Studio</h2>
-      <p class="text-xs text-argos-dim mt-1.5 leading-relaxed">Brainstorm → GDD → Studio milestones → guided или autopilot build.</p>
+      <h2 class="text-sm font-semibold text-white group-hover:text-argos-accent2 transition" data-i18n="hub.studioTitle">Studio</h2>
+      <p class="text-xs text-argos-dim mt-1.5 leading-relaxed" data-i18n="hub.studioBody">Canonical chat, projects, LLM, and shell on one page.</p>
     </a>
 
     <a href="/admin/daedalus/playground"
-      class="group block bg-argos-panel border border-argos-border hover:border-emerald-500/50 rounded-xl p-5 transition">
+      class="group block bg-argos-panel border border-argos-border hover:border-argos-accent2/50 rounded-xl p-5 transition">
       <div class="text-2xl mb-2">🎮</div>
-      <h2 class="text-sm font-semibold text-white group-hover:text-emerald-400 transition">App Builder Playground</h2>
-      <p class="text-xs text-argos-dim mt-1.5 leading-relaxed">Създай, тествай и публикувай приложения — Autopilot, планове, preview.</p>
+      <h2 class="text-sm font-semibold text-white group-hover:text-argos-accent2 transition" data-i18n="hub.playTitle">Playground</h2>
+      <p class="text-xs text-argos-dim mt-1.5 leading-relaxed" data-i18n="hub.playBody">Create, test, and publish apps — sandbox, plans, preview.</p>
+    </a>
+
+    <a href="/admin/daedalus/game-studio"
+      class="group block bg-argos-panel border border-argos-border hover:border-argos-accent2/50 rounded-xl p-5 transition">
+      <div class="text-2xl mb-2">🎬</div>
+      <h2 class="text-sm font-semibold text-white group-hover:text-argos-accent2 transition" data-i18n="hub.gameTitle">Game Studio</h2>
+      <p class="text-xs text-argos-dim mt-1.5 leading-relaxed" data-i18n="hub.gameBody">Brainstorm → GDD → milestones → guided or autopilot build.</p>
     </a>
 
     <a href="/admin/daedalus/proposals"
-      class="group block bg-argos-panel border border-argos-border hover:border-argos-warn/50 rounded-xl p-5 transition">
+      class="group block bg-argos-panel border border-argos-border hover:border-argos-accent2/50 rounded-xl p-5 transition">
       <div class="text-2xl mb-2">📋</div>
-      <h2 class="text-sm font-semibold text-white group-hover:text-argos-warn transition">Code Proposals</h2>
-      <p class="text-xs text-argos-dim mt-1.5 leading-relaxed">Предложения за подобрения на кода — одобри или отхвърли промените.</p>
+      <h2 class="text-sm font-semibold text-white group-hover:text-argos-accent2 transition" data-i18n="hub.propTitle">Proposals</h2>
+      <p class="text-xs text-argos-dim mt-1.5 leading-relaxed" data-i18n="hub.propBody">Code-change proposals — approve or reject. Skills live here too.</p>
       <span id="hub-prop-badge" class="hidden mt-2 inline-block px-2 py-0.5 rounded-full bg-argos-warn text-black text-[10px] font-bold">0 pending</span>
     </a>
 
-    <a href="/admin/daedalus/skills"
-      class="group block bg-argos-panel border border-argos-border hover:border-purple-500/50 rounded-xl p-5 transition">
-      <div class="text-2xl mb-2">🔐</div>
-      <h2 class="text-sm font-semibold text-white group-hover:text-purple-300 transition">Skills & Gates</h2>
-      <p class="text-xs text-argos-dim mt-1.5 leading-relaxed">Permission gates — кои инструменти Дедал може да ползва.</p>
-    </a>
-
-    <a href="/admin/llm-router"
-      class="group block bg-argos-panel border border-argos-border hover:border-emerald-500/50 rounded-xl p-5 transition">
-      <div class="text-2xl mb-2">⚡</div>
-      <h2 class="text-sm font-semibold text-white group-hover:text-emerald-300 transition">LLM Router</h2>
-      <p class="text-xs text-argos-dim mt-1.5 leading-relaxed">Модели, routing, prompt cache, изображения и Model Registry.</p>
-    </a>
-
-    <a href="/apps/" target="_blank"
-      class="group block bg-argos-panel border border-argos-border hover:border-cyan-500/50 rounded-xl p-5 transition">
-      <div class="text-2xl mb-2">🌐</div>
-      <h2 class="text-sm font-semibold text-white group-hover:text-cyan-300 transition">Публикувани приложения ↗</h2>
-      <p class="text-xs text-argos-dim mt-1.5 leading-relaxed">Виж live preview на проекти от Playground на <code class="text-cyan-400">/apps/</code>.</p>
+    <a href="/admin/daedalus/connectors"
+      class="group block bg-argos-panel border border-argos-border hover:border-argos-accent2/50 rounded-xl p-5 transition">
+      <div class="text-2xl mb-2">⚙️</div>
+      <h2 class="text-sm font-semibold text-white group-hover:text-argos-accent2 transition" data-i18n="hub.setupTitle">Setup</h2>
+      <p class="text-xs text-argos-dim mt-1.5 leading-relaxed" data-i18n="hub.setupBody">LLM keys, GitHub/GitLab, MCP, bundles — the outside world in one place.</p>
     </a>
   </div>
 
-  <!-- Live status strip -->
   <div class="bg-argos-panel border border-argos-border rounded-xl p-4">
     <div class="flex flex-wrap items-center gap-4 text-xs font-mono">
       <div class="flex items-center gap-2">
         <span class="w-2 h-2 rounded-full bg-argos-accent2 animate-pulse"></span>
-        <span class="text-argos-dim">Агент:</span>
+        <span class="text-argos-dim" data-i18n="hub.agent">Agent</span>
         <span id="hub-agent-mode" class="text-white"><span class="inline-block w-16 h-4 dx-skel rounded" aria-hidden="true"></span></span>
       </div>
       <div class="flex items-center gap-2">
-        <span class="text-argos-dim">Проекти:</span>
-        <span id="hub-project-count" class="text-emerald-400"><span class="inline-block w-6 h-4 dx-skel rounded" aria-hidden="true"></span></span>
+        <span class="text-argos-dim" data-i18n="hub.projects">Projects</span>
+        <span id="hub-project-count" class="text-argos-accent2"><span class="inline-block w-6 h-4 dx-skel rounded" aria-hidden="true"></span></span>
       </div>
       <div class="flex items-center gap-2">
-        <span class="text-argos-dim">Pending proposals:</span>
+        <span class="text-argos-dim" data-i18n="hub.pending">Pending proposals</span>
         <span id="hub-prop-count" class="text-argos-warn"><span class="inline-block w-6 h-4 dx-skel rounded" aria-hidden="true"></span></span>
       </div>
     </div>
@@ -106,7 +74,10 @@
 </div>
 
 <script>
-(async function loadHubStats() {
+function t(key, vars) {
+  return (window.DaedalusI18n && DaedalusI18n.t) ? DaedalusI18n.t(key, vars) : key;
+}
+async function loadHubStats() {
   try {
     const [modeR, projR, propR] = await Promise.all([
       fetch('/admin/daedalus/mode').then(r => r.ok ? r.json() : null),
@@ -114,7 +85,7 @@
       fetch('/admin/daedalus/proposals/stats').then(r => r.ok ? r.json() : null),
     ]);
     if (modeR?.mode) {
-      const labels = { talk: '💬 Разговор', build: '🔨 Строеж', auto: '🔀 Авто' };
+      const labels = { talk: t('hub.modeTalk'), build: t('hub.modeBuild'), auto: t('hub.modeAuto') };
       document.getElementById('hub-agent-mode').textContent = labels[modeR.mode] || modeR.mode;
     }
     if (projR?.projects) {
@@ -125,11 +96,13 @@
       document.getElementById('hub-prop-count').textContent = pending;
       if (pending > 0) {
         const badge = document.getElementById('hub-prop-badge');
-        badge.textContent = pending + ' pending';
+        badge.textContent = t('hub.pendingN', { n: pending });
         badge.classList.remove('hidden');
       }
     }
   } catch (_) {}
-})();
+}
+loadHubStats();
+document.addEventListener('daedalus:langchange', loadHubStats);
 </script>
 {% endblock %}

@@ -11,4 +11,4 @@ Games first. Apps second. Verify is part of building.
 - Studio: `app/static/studio.html` + `studio.css` + `studio.js`.
 - Do not silent-edit the harness. Self-improve patches wait for Approve.
 - Public docs (README, ARCHITECTURE, DEPLOY, CONTRIBUTING) are English and describe only Daedalus.
-- Mark: `assets/logo/` (labyrinth + compass-bird). Studio UI copy stays Bulgarian for the owner.
+- Mark: `assets/logo/` (labyrinth + compass-bird). UI copy is English by default; Bulgarian only when the owner picks **BG**.
