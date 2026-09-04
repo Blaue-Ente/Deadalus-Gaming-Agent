@@ -1,7 +1,7 @@
 # Environment variables
 
 Copy `.env.example` → `.env`. Daedalus reads `.env` when the CLI starts.
-Studio → **Свързаност** writes the same keys to `$DAEDALUS_DATA/secrets.env`
+Studio → **Connectors** writes the same keys to `$DAEDALUS_DATA/secrets.env`
 (applied on boot, overwrites process env for those names). Do not commit that file.
 
 ## Required for a cloud LLM
@@ -54,7 +54,7 @@ Optional: `OPENROUTER_HTTP_REFERER`, `OPENROUTER_APP_TITLE` (sent on OpenRouter 
 | `DAEDALUS_LAB_DOCKER` | `0` — never start a Docker lab; local HTTP only |
 | `DAEDALUS_LAB_INSTALL_ROOT` | extra allowed root for `play_lab` install paths |
 
-Studio → LLM (wardrobe) can switch models without editing `.env` (`wardrobe.json` under the data dir).
+Studio → Connectors **Brain** (or Studio → Brain wardrobe) switches models without editing `.env` (`wardrobe.json` under the data dir). That choice is the process-wide brain: chat, workers, autopilot, and CLI all read it. `OLLAMA_HOST` is an advanced Connectors field if the daemon is not on `127.0.0.1:11434`.
 
 ## Agent behaviour
 
@@ -94,7 +94,7 @@ Without a mesh key: `assets({action:mesh})` returns `need_key`. Greybox (`action
 
 ## MCP and sidecar
 
-- MCP servers: `$DAEDALUS_DATA/mcp.json` (Studio → Свързаност writes it).
+- MCP servers: `$DAEDALUS_DATA/mcp.json` (Studio → Connectors writes it).
 - Optional GitHub/GitLab MCP addons reuse `GITHUB_TOKEN` / `GITLAB_TOKEN`. Native `git_forge` already opens PR/MR without those addons.
 - `MIROFISH_URL` / `MIROFISH_UI` — only if you run the AGPL sidecar yourself. It is not vendored here.
 

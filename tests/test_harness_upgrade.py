@@ -11,6 +11,7 @@ def harness_tmp(tmp_path, monkeypatch):
     monkeypatch.setenv("DAEDALUS_DATA", str(tmp_path / "data"))
     monkeypatch.setenv("DAEDALUS_PLAYGROUND", str(tmp_path / "projects"))
     monkeypatch.delenv("DAEDALUS_PROVIDER", raising=False)
+    monkeypatch.delenv("DAEDALUS_MODEL", raising=False)
     monkeypatch.delenv("DAEDALUS_LOCAL_LLM", raising=False)
     monkeypatch.delenv("DAEDALUS_USE_ADN_DB", raising=False)
     from daedalus.paths import data_root, playground_projects_dir, product_root, repo_root
@@ -34,7 +35,7 @@ def test_local_provider_helpers():
     assert _ensure_v1("http://localhost:11434/v1") == "http://localhost:11434/v1"
 
 
-def test_get_config_prefers_explicit_ollama(monkeypatch):
+def test_get_config_prefers_explicit_ollama(harness_tmp, monkeypatch):
     monkeypatch.setenv("DAEDALUS_PROVIDER", "ollama")
     monkeypatch.setenv("DAEDALUS_MODEL", "qwen2.5-coder:7b")
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
