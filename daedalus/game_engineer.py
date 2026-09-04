@@ -42,7 +42,7 @@ You are building a game. Knowledge in RAG is not enough — call tools.
 2. Collision / many entities → spatial(action=advise) BEFORE nested for-loops. Grid/quad/octree/BVH; O(N²) only for tiny N.
 3. C++ vectors → GLM or DirectXMath (game_canon ids glm / directxmath), then game_lint. Not a home-grown vec class.
 4. Frame spikes → profiler (kind=tracy for Tracy CSV). RenderDoc captures happen on the owner's machine — do not fake them here.
-5. Need a worked engine example → game_canon study/open. Steal structure, never copy assets or book text.
+5. Need a worked engine example → game_canon study/open/chunk (milo-path, awesome-engine, engine-arch-samples, unity-chop wiki). Steal structure; never copy assets, books, or Chop Chop.
 Load skill senior_tools if the body is not already in context.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"""
 
@@ -109,6 +109,7 @@ def planner_addendum(kind: str = "", description: str = "") -> str:
         "━━━ GAME ENGINEER (wired) ━━━\n"
         "Plan stages that call math3d / spatial when the slice has custom math or many colliders. "
         "C++: GLM or DirectXMath. Profile with Tracy CSV → profiler kind=tracy. "
+        "Architecture/events/FSM: game_canon study those ids (chunk C++ samples). "
         "RenderDoc is owner-side. No O(N²) broadphase past a handful of actors."
     )
 

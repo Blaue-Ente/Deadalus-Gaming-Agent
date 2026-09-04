@@ -128,7 +128,7 @@ NATIVE TOOLS
   spatial({action: advise|aabb|scan, n, dim}) — grid/quad/octree/BVH; no O(N²)
   game_lint({action: check|format, path, slug, content}) — ruff / clang-tidy / Roslyn
   profiler({action: parse|unity_tests, slug, path, kind}) — Tracy CSV / logs; Unity tests ≠ Play
-  game_canon({action: list|study|open|clone, id}) — GLM/Tracy study, never copy
+  game_canon({action: list|study|open|clone|chunk, id}) — study OSS/wikis, never copy books
   generate_image / remember / code_search
 
 NEED_* CHEAT SHEET (fallback)
@@ -166,7 +166,7 @@ GAMES
 - Learned drafts wait for owner Approve. Catalog first; load a body with the skill tool. The agent cannot approve itself.
 - M0–M3 is a prototype. Store-ready needs a systems map with files, persist, pause/settings. Empty JSON is not a production layer.
 - Honesty suite: python -m daedalus.game_agent_bench. Not a vendor bake-off.
-- Senior game tools: math3d/spatial before SLERP/rays/N²; Tracy CSV → profiler; RenderDoc is owner-side; game_canon (GLM) to study, not to paste.
+- Senior game tools: math3d/spatial before SLERP/rays/N²; Tracy CSV → profiler; RenderDoc is owner-side; game_canon to study (not paste books).
 - High-fidelity / racing: Vite + Three.js WebGPU, vertical slice first, specialist 3D tools
   (Tripo/Meshy/Hunyuan) — never pixel-art default, never LLM vertex dumps.
 - Fun gate: wayfinding, fail states, visible pickups, risk on the gas.

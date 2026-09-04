@@ -106,7 +106,7 @@ Data lives under `$DAEDALUS_DATA` (default `data/daedalus/` on the machine, `%LO
 | Cloud LLM | AllToken / OpenRouter / Novita / NVIDIA |
 | Games — browser | Phaser, canvas, Vite; 3D arcade / racing → Vite + Three.js WebGPU (`src/racer/`) |
 | Games — Godot 4 | kind `godot`: `.tscn` + GDScript; 2D scaffold or 3D greybox room |
-| Games — senior tools | `math3d` (SLERP / rays / look-at), `spatial` (grid / quad / octree / BVH vs O(N²)), `game_lint` (ruff / clang-tidy / Roslyn heuristics), `profiler` (NUnit / Chrome / Tracy CSV / FPS logs), `game_canon` (study OSS trees including GLM and Tracy, never copy). RenderDoc captures are owner-side. |
+| Games — senior tools | `math3d` (SLERP / rays / look-at), `spatial` (grid / quad / octree / BVH vs O(N²)), `game_lint` (ruff / clang-tidy / Roslyn heuristics), `profiler` (NUnit / Chrome / Tracy CSV / FPS logs), `game_canon` (study OSS trees, roadmaps, Chop Chop wiki; `chunk` for RAG; never copy books or assets). RenderDoc captures are owner-side. |
 | Dissection | name / URL / git / Play Lab install → specimen used as a **мостра** (loop, feel, stack — not a clone) |
 | Play Lab | virtual computer: `$DAEDALUS_DATA/labs/{id}/` + local HTTP; optional SmolVM guest browser (live viewer); optional Docker |
 | Meshes | `python -m daedalus.blender_mcp` or `blender_jobs.emit_job` (no `bpy` in the cloud) |

@@ -10,6 +10,13 @@ References the agent may read (clone on demand under ``$DAEDALUS_DATA/canon/``):
 * g-truc/glm — GLSL-shaped C++ math (do not vendor the tree into the harness)
 * microsoft/DirectXMath — SIMD vectors for Windows / D3D
 * wolfpld/tracy — C++ profiler; parse exports with ``profiler`` kind=tracy
+* miloyip/game-programmer — study path (readme + isbn.csv; not the PDFs)
+* CIS-Team/Game-Development-Roadmap-2024 — modern stack README
+* stevinz/awesome-game-engine-dev — engine-dev awesome list (README, truncated)
+* Azurelol/GameEngineArchitectureSamples — C++ OOP samples; ``chunk`` by class
+* UnityTechnologies/open-project-1 — Chop Chop wiki (events, FSM); do not clone the Unity tree into a game
+
+kurong00/GameProgramBooks is listed only to refuse clone/open — it is a copyrighted ebook dump.
 
 RenderDoc is owner-side frame capture — study notes in knowledge, do not claim a cloud GUI.
 
@@ -243,11 +250,194 @@ CANON: tuple[dict[str, Any], ...] = (
             "README.md",
         ),
     },
+    {
+        "id": "milo-path",
+        "title": "A Study Path for Game Programmer (Milo Yip)",
+        "repo": "https://github.com/miloyip/game-programmer",
+        "owner_repo": "miloyip/game-programmer",
+        "branch": "master",
+        "license": "CC BY-SA (check repo)",
+        "kind": "roadmap",
+        "large": False,
+        "study": [
+            "Curriculum graph: math → physics → graphics → engine systems",
+            "isbn.csv is titles and ISBNs — buy the books; do not ingest scans",
+            "readme.md explains how the DOT/PDF posters were built",
+        ],
+        "steal": [
+            "Use the path as a reading order, not as a dump into RAG",
+            "When a formula shows up, verify it with math3d before C++",
+        ],
+        "do_not_copy": [
+            "Do not fetch game-programmer.pdf / huge PNG posters into the harness",
+            "Do not vendor book scans; isbn.csv is bibliography only",
+        ],
+        "files": (
+            "readme.md",
+            "isbn.csv",
+        ),
+    },
+    {
+        "id": "game-program-books",
+        "title": "GameProgramBooks (ebook dump — refused)",
+        "repo": "https://github.com/kurong00/GameProgramBooks",
+        "owner_repo": "kurong00/GameProgramBooks",
+        "branch": "master",
+        "license": "not ingested — copyrighted ebooks",
+        "kind": "books-refuse",
+        "large": True,
+        "no_clone": True,
+        "no_open": True,
+        "study": [
+            "This GitHub tree is a collection of pirated textbooks aligned to Milo Yip's path",
+            "Daedalus will not clone it, open PDFs, or index book text into RAG",
+            "Legal study: milo-path isbn.csv + buy the titles; patterns: game-programming-patterns",
+        ],
+        "steal": [
+            "Follow the Milo Yip order; implement original code after you read a legally obtained book",
+        ],
+        "do_not_copy": [
+            "Never clone, fetch, or paste ebook PDFs into Daedalus, Playground, or RAG",
+        ],
+        "files": (),
+        "refuse": (
+            "kurong00/GameProgramBooks is a dump of copyrighted ebooks. "
+            "Daedalus will not clone, open PDFs, or ingest book text. "
+            "Use milo-path (isbn.csv) for titles, then buy the books. "
+            "Named patterns: game-programming-patterns."
+        ),
+    },
+    {
+        "id": "cis-roadmap",
+        "title": "Game Development Roadmap 2024 (CIS-Team)",
+        "repo": "https://github.com/CIS-Team/Game-Development-Roadmap-2024",
+        "owner_repo": "CIS-Team/Game-Development-Roadmap-2024",
+        "branch": "main",
+        "license": "check repo LICENSE",
+        "kind": "roadmap",
+        "large": False,
+        "study": [
+            "Modern stack notes: algorithms, Unity-oriented books, architecture pointers",
+            "README.md only — chunk headings for RAG, do not vendor the file into daedalus/",
+        ],
+        "steal": [
+            "Treat it as a checklist of topics, then write original systems in the Playground slug",
+        ],
+        "do_not_copy": [
+            "Do not paste the whole README into a game or the harness",
+        ],
+        "files": (
+            "README.md",
+        ),
+    },
+    {
+        "id": "awesome-engine",
+        "title": "awesome-game-engine-dev (stevinz)",
+        "repo": "https://github.com/stevinz/awesome-game-engine-dev",
+        "owner_repo": "stevinz/awesome-game-engine-dev",
+        "branch": "main",
+        "license": "CC0 / check repo LICENSE",
+        "kind": "architecture",
+        "large": False,
+        "study": [
+            "Curated links for low-level core, audio, geometry, graphics, tools",
+            "open README.md (truncated at 80k) then chunk by heading",
+            "ARCHIVE.md holds retired links",
+        ],
+        "steal": [
+            "Follow a link, study that project's structure, write original code",
+            "Do not scrape the list into a Playground slug as content",
+        ],
+        "do_not_copy": [
+            "Do not vendor the 140k README into daedalus/knowledge",
+        ],
+        "files": (
+            "README.md",
+            "ARCHIVE.md",
+        ),
+    },
+    {
+        "id": "engine-arch-samples",
+        "title": "Game Engine Architecture Samples (Azurelol)",
+        "repo": "https://github.com/Azurelol/GameEngineArchitectureSamples",
+        "owner_repo": "Azurelol/GameEngineArchitectureSamples",
+        "branch": "master",
+        "license": "check repo (educational C++)",
+        "kind": "architecture",
+        "large": False,
+        "study": [
+            "Small C++ samples: events, ECS-ish architecture, factory, audio, serialization",
+            "action=chunk splits class/struct with a Context comment for RAG",
+            "Read SampleEventSystem headers before inventing a singleton EventManager",
+        ],
+        "steal": [
+            "Name the pattern (event, component, factory) and write original types",
+            "Keep samples in $DAEDALUS_DATA/canon/ — never copy them into a Playground game",
+        ],
+        "do_not_copy": [
+            "Do not drop SampleZilchEngine or VS projects into a player-facing slug",
+        ],
+        "files": (
+            "README.md",
+            "SampleArchitecture/README.md",
+            "SampleEventSystem/README.md",
+            "SampleEventSystem/SampleEvent/Event.h",
+            "SampleEventSystem/SampleEvent/Event.cpp",
+            "SampleEventSystem/SampleEvent/EventDelegate.h",
+            "SampleEventSystem/SampleEvent/EventInterface.h",
+            "SampleEventSystem/SampleEvent/Component.h",
+            "SampleEventSystem/SampleEvent/Entity.h",
+            "SampleArchitecture/SampleECS/Main.cpp",
+        ),
+    },
+    {
+        "id": "unity-chop",
+        "title": "Unity Open Project 1 — Chop Chop (architecture wiki)",
+        "repo": "https://github.com/UnityTechnologies/open-project-1",
+        "owner_repo": "UnityTechnologies/open-project-1",
+        "branch": "main",
+        "license": "Unity companion license / check repo",
+        "kind": "architecture",
+        "large": True,
+        "study": [
+            "Wiki: additive scenes, PersistentManagers, ScriptableObject Event Channels, SO-driven FSM",
+            "open wiki/Game-architecture-overview.md then Event-system and State-Machine",
+            "This cloud has no Unity Editor — scaffold is not Play; do not clone UOP1_Project into Playground",
+        ],
+        "steal": [
+            "Event channels instead of a scene-wide singleton for cross-scene talk",
+            "Data in ScriptableObjects; runtime classes execute; name the pattern in a comment",
+        ],
+        "do_not_copy": [
+            "Chop Chop art, audio, characters, trademarks, or UOP1_Project scripts into a Daedalus game",
+            "Do not treat Docs/ screenshots as a code dump",
+        ],
+        "files": (
+            "README.md",
+            "wiki/Game-architecture-overview.md",
+            "wiki/Event-system.md",
+            "wiki/State-Machine.md",
+        ),
+    },
 )
 
 _ID_INDEX = {str(row["id"]): row for row in CANON}
 _MAX_FILE = 80_000
 _TIMEOUT = 20.0
+_CHUNK_LIMIT = 12
+_CHUNK_CHARS = 3_500
+_CODE_SUFFIX = {".h", ".hpp", ".c", ".cc", ".cpp", ".cs"}
+_MD_SUFFIX = {".md", ".markdown"}
+_CLASS_RE = re.compile(r"(?m)^(class|struct)\s+(\w+)\b")
+_HEADING_RE = re.compile(r"^(#{1,3})\s+(.+)$")
+_FOLDER_CONTEXT: tuple[tuple[str, str], ...] = (
+    ("SampleEventSystem", "Event System Pattern"),
+    ("SampleArchitecture", "Engine Architecture / ECS"),
+    ("SampleFactory", "Factory Pattern"),
+    ("SampleActions", "Command / Action Pattern"),
+    ("wiki/", "Unity Chop Chop architecture"),
+    ("book/", "Game Programming Patterns (study, do not paste)"),
+)
 
 
 def canon_root() -> Path:
@@ -285,36 +475,48 @@ def list_canon() -> dict[str, Any]:
             "title": item["title"],
             "repo": item["repo"],
             "license": item["license"],
+            "kind": item.get("kind") or "engine",
             "large": bool(item.get("large")),
+            "no_clone": bool(item.get("no_clone")),
             "cloned": (dest / ".git").is_dir() or (dest / "README.md").is_file(),
             "files": list(item["files"]),
         })
     return {
         "ok": True,
         "canon": rows,
-        "note": "Study and write original code. Never copy assets or paste the book into a game.",
+        "note": (
+            "Study and write original code. Never copy assets, paste books, "
+            "or clone GameProgramBooks / Chop Chop into a Playground game. "
+            "action=chunk splits allowlisted C++/markdown for RAG."
+        ),
     }
 
 
 def study(entry_id: str) -> dict[str, Any]:
     item = get(entry_id)
     dest = local_dir(str(item["id"]))
-    return {
+    payload: dict[str, Any] = {
         "ok": True,
         "id": item["id"],
         "title": item["title"],
         "repo": item["repo"],
         "license": item["license"],
+        "kind": item.get("kind") or "engine",
         "study": list(item["study"]),
         "steal": list(item["steal"]),
         "do_not_copy": list(item["do_not_copy"]),
         "files": list(item["files"]),
         "cloned": (dest / ".git").is_dir(),
+        "no_clone": bool(item.get("no_clone")),
         "how": (
-            "open a listed file (local clone or GitHub raw). "
-            "math3d-check formulas. Write new code in the Playground slug."
+            "open a listed file (local clone, GitHub raw, or wiki/). "
+            "chunk C++/markdown for RAG. math3d-check formulas. "
+            "Write new code in the Playground slug."
         ),
     }
+    if item.get("refuse"):
+        payload["refuse"] = item["refuse"]
+    return payload
 
 
 def _allowed_file(item: dict[str, Any], rel: str) -> str:
@@ -327,6 +529,112 @@ def _allowed_file(item: dict[str, Any], rel: str) -> str:
     return rel
 
 
+def _refuse_ingest(item: dict[str, Any]) -> dict[str, Any] | None:
+    if item.get("no_open") or (item.get("no_clone") and not item.get("files")):
+        return {
+            "ok": False,
+            "id": item["id"],
+            "error": str(item.get("refuse") or "ingest refused for this canon id"),
+        }
+    return None
+
+
+def folder_context(rel: str) -> str:
+    path = (rel or "").replace("\\", "/")
+    for prefix, label in _FOLDER_CONTEXT:
+        if prefix in path:
+            return label
+    return Path(path).parent.as_posix() or Path(path).stem
+
+
+def raw_url(item: dict[str, Any], rel: str) -> str:
+    """GitHub raw URL. wiki/Foo.md maps to the repo wiki, not the git tree."""
+    path = (rel or "").replace("\\", "/").lstrip("/")
+    owner = item["owner_repo"]
+    if path.startswith("wiki/"):
+        page = path[5:]
+        return f"https://raw.githubusercontent.com/wiki/{owner}/{page}"
+    return f"https://raw.githubusercontent.com/{owner}/{item['branch']}/{path}"
+
+
+def chunk_cpp(text: str, rel: str, *, context: str = "", limit: int = _CHUNK_LIMIT) -> list[dict[str, Any]]:
+    """Split C/C++/C# by class/struct. Adds a Context comment for RAG metadata."""
+    ctx = context or folder_context(rel)
+    matches = list(_CLASS_RE.finditer(text or ""))
+    if not matches:
+        body = (text or "").strip()
+        if not body:
+            return []
+        return [{
+            "kind": "file",
+            "name": Path(rel).stem,
+            "context": ctx,
+            "file": rel,
+            "text": f"// Context: {ctx}\n{body[:_CHUNK_CHARS]}",
+        }]
+    out: list[dict[str, Any]] = []
+    for i, match in enumerate(matches):
+        start = match.start()
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        body = (text[start:end] or "").strip()
+        if len(body) < 20:
+            continue
+        out.append({
+            "kind": match.group(1),
+            "name": match.group(2),
+            "context": ctx,
+            "file": rel,
+            "text": f"// Context: {ctx}\n{body[:_CHUNK_CHARS]}",
+        })
+        if len(out) >= limit:
+            break
+    return out
+
+
+def chunk_markdown(text: str, rel: str, *, context: str = "", limit: int = _CHUNK_LIMIT) -> list[dict[str, Any]]:
+    """Split markdown on ATX headings for RAG (READMEs / wiki pages)."""
+    ctx = context or folder_context(rel)
+    sections: list[tuple[str, str]] = []
+    title = Path(rel).stem
+    buf: list[str] = []
+    for line in (text or "").splitlines(keepends=True):
+        heading = _HEADING_RE.match(line.rstrip("\r\n"))
+        if heading and buf:
+            sections.append((title, "".join(buf)))
+            title = heading.group(2).strip()
+            buf = [line]
+        else:
+            buf.append(line)
+    if buf:
+        sections.append((title, "".join(buf)))
+    out: list[dict[str, Any]] = []
+    for name, body in sections:
+        body = body.strip()
+        if len(body) < 40:
+            continue
+        out.append({
+            "kind": "heading",
+            "name": name[:120],
+            "context": ctx,
+            "file": rel,
+            "text": f"<!-- Context: {ctx} / {name} -->\n{body[:_CHUNK_CHARS]}",
+        })
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _chunk_targets(item: dict[str, Any], rel: str) -> list[str]:
+    files = [str(f) for f in item.get("files") or ()]
+    if rel:
+        return [_allowed_file(item, rel)]
+    code = [f for f in files if Path(f).suffix.lower() in _CODE_SUFFIX]
+    md = [f for f in files if Path(f).suffix.lower() in _MD_SUFFIX]
+    if code:
+        return code[:6]
+    return md[:3]
+
+
 def _offline() -> bool:
     try:
         from .offline import enabled
@@ -336,7 +644,7 @@ def _offline() -> bool:
 
 
 def _fetch_raw(item: dict[str, Any], rel: str) -> str:
-    url = f"https://raw.githubusercontent.com/{item['owner_repo']}/{item['branch']}/{rel}"
+    url = raw_url(item, rel)
     with httpx.Client(timeout=_TIMEOUT, follow_redirects=True) as client:
         resp = client.get(url)
         resp.raise_for_status()
@@ -348,6 +656,11 @@ def _fetch_raw(item: dict[str, Any], rel: str) -> str:
 
 def open_file(entry_id: str, rel: str = "") -> dict[str, Any]:
     item = get(entry_id)
+    blocked = _refuse_ingest(item)
+    if blocked:
+        return blocked
+    if not item.get("files"):
+        return {"ok": False, "id": item["id"], "error": "no allowlisted files"}
     path = _allowed_file(item, rel or item["files"][0])
     dest = local_dir(str(item["id"])) / path
     source = "local"
@@ -365,7 +678,7 @@ def open_file(entry_id: str, rel: str = "") -> dict[str, Any]:
             }
         try:
             text = _fetch_raw(item, path)
-            source = "github-raw"
+            source = "github-wiki" if path.startswith("wiki/") else "github-raw"
         except Exception as exc:
             return {"ok": False, "error": f"fetch failed: {exc}"[:300], "id": item["id"], "path": path}
     return {
@@ -381,6 +694,12 @@ def open_file(entry_id: str, rel: str = "") -> dict[str, Any]:
 
 def clone(entry_id: str, *, timeout: int = 180) -> dict[str, Any]:
     item = get(entry_id)
+    if item.get("no_clone"):
+        return {
+            "ok": False,
+            "id": item["id"],
+            "error": str(item.get("refuse") or "clone refused for this canon id"),
+        }
     if _offline():
         return {"ok": False, "error": "offline: clone disabled", "id": item["id"]}
     dest = local_dir(str(item["id"]))
@@ -403,8 +722,49 @@ def clone(entry_id: str, *, timeout: int = 180) -> dict[str, Any]:
     return {"ok": True, "id": item["id"], "path": str(dest), "log": (proc.stdout or "")[-400:]}
 
 
+def chunk(entry_id: str, rel: str = "", *, limit: int = _CHUNK_LIMIT) -> dict[str, Any]:
+    """Fetch allowlisted files and split them for RAG (class/struct or markdown headings)."""
+    item = get(entry_id)
+    blocked = _refuse_ingest(item)
+    if blocked:
+        return blocked
+    cap = max(1, min(int(limit or _CHUNK_LIMIT), 24))
+    targets = _chunk_targets(item, rel)
+    chunks: list[dict[str, Any]] = []
+    remaining = cap
+    for path in targets:
+        opened = open_file(entry_id, path)
+        if not opened.get("ok"):
+            continue
+        text = str(opened.get("text") or "")
+        suffix = Path(path).suffix.lower()
+        ctx = folder_context(path)
+        if suffix in _CODE_SUFFIX:
+            pieces = chunk_cpp(text, path, context=ctx, limit=remaining)
+        else:
+            pieces = chunk_markdown(text, path, context=ctx, limit=remaining)
+        chunks.extend(pieces)
+        remaining = cap - len(chunks)
+        if remaining <= 0:
+            break
+    return {
+        "ok": True,
+        "id": item["id"],
+        "chunks": chunks,
+        "count": len(chunks),
+        "note": "Context comments are RAG metadata. Write original code; do not paste chunks into a Playground game.",
+        "do_not_copy": list(item["do_not_copy"]),
+    }
+
+
 def search_local(entry_id: str, query: str, *, limit: int = 20) -> dict[str, Any]:
     item = get(entry_id)
+    if item.get("no_clone"):
+        return {
+            "ok": False,
+            "id": item["id"],
+            "error": str(item.get("refuse") or "search refused for this canon id"),
+        }
     root = local_dir(str(item["id"]))
     if not root.is_dir():
         return {"ok": False, "error": "not cloned; call action=clone first", "id": item["id"]}
@@ -418,7 +778,7 @@ def search_local(entry_id: str, query: str, *, limit: int = 20) -> dict[str, Any
             continue
         if ".git" in path.parts:
             continue
-        if path.suffix.lower() not in {".h", ".hpp", ".c", ".cc", ".cpp", ".java", ".md", ".markdown", ".cs", ".gd"}:
+        if path.suffix.lower() not in {".h", ".hpp", ".c", ".cc", ".cpp", ".java", ".md", ".markdown", ".cs", ".gd", ".csv"}:
             continue
         try:
             text = path.read_text(encoding="utf-8", errors="replace")
@@ -456,6 +816,17 @@ def run_action(action: str = "list", **fields: Any) -> dict[str, Any]:
             return clone(entry_id)
         except Exception as exc:
             return {"ok": False, "error": str(exc)[:300]}
+    if act in ("chunk", "chunks", "rag"):
+        try:
+            raw_limit = fields.get("limit")
+            cap = int(raw_limit) if raw_limit not in (None, "") else _CHUNK_LIMIT
+            return chunk(
+                entry_id,
+                str(fields.get("path") or fields.get("file") or ""),
+                limit=cap,
+            )
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)[:300]}
     if act in ("search", "grep"):
         try:
             return search_local(entry_id, str(fields.get("query") or fields.get("q") or ""))
@@ -478,7 +849,7 @@ def main(argv: list[str] | None = None) -> int:
         if len(args) > 1:
             payload["id"] = args[1]
         if len(args) > 2:
-            payload["path" if action in ("open", "read") else "query"] = args[2]
+            payload["path" if action in ("open", "read", "chunk") else "query"] = args[2]
         result = run_action(action, **payload)
     print(json.dumps(result, ensure_ascii=False, indent=2)[:20000])
     return 0 if result.get("ok") else 1

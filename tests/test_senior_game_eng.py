@@ -227,10 +227,12 @@ def test_game_canon_list_study_allowlist(harness_tmp):
     assert ids == {
         "doom3-bfg", "mindustry", "game-programming-patterns", "tinyrenderer", "stb",
         "glm", "directxmath", "tracy",
+        "milo-path", "game-program-books", "cis-roadmap", "awesome-engine",
+        "engine-arch-samples", "unity-chop",
     }
     listing = run_action("list")
     assert listing["ok"] is True
-    assert len(listing["canon"]) == 8
+    assert len(listing["canon"]) == 14
     brief = run_action("study", id="doom3-bfg")
     assert "idLib" in " ".join(brief["study"])
     assert brief["do_not_copy"]
@@ -250,7 +252,10 @@ def test_knowledge_and_skills_exist():
     cats = {c for _, c in _knowledge_sources()}
     assert "game-eng" in cats
     know = package_root() / "knowledge"
-    for name in ("data_oriented_design.md", "transform_math.md", "netcode.md", "game_canon.md", "game_dev_agent_knowledge_base.md"):
+    for name in (
+        "data_oriented_design.md", "transform_math.md", "netcode.md", "game_canon.md",
+        "game_dev_agent_knowledge_base.md", "game_roadmaps.md",
+    ):
         text = (know / name).read_text(encoding="utf-8")
         assert len(text) > 400
         assert "Iyveris" not in text
@@ -272,6 +277,8 @@ def test_select_skills_hits_math_and_netcode():
     assert "netcode" in net
     dod = select_skills("fix cpu cache misses with SoA layout", "code")
     assert "data_oriented_design" in dod
+    arch = select_skills("chop chop event channel game architecture", "code")
+    assert "game_canon" in arch
 
 
 def test_native_execute_math3d_and_canon(harness_tmp):
@@ -367,7 +374,7 @@ def test_canon_includes_glm_tracy():
     from daedalus.game_canon import list_canon
 
     ids = {row["id"] for row in list_canon()["canon"]}
-    for cid in ("glm", "directxmath", "tracy", "tinyrenderer"):
+    for cid in ("glm", "directxmath", "tracy", "tinyrenderer", "milo-path", "unity-chop"):
         assert cid in ids
 
 
@@ -448,4 +455,71 @@ def test_native_execute_spatial(harness_tmp):
     )
     assert "FAILED" not in text
     assert "quadtree" in text.lower() or "uniform_grid" in text.lower() or "grid" in text.lower()
+
+
+def test_canon_roadmaps_refuse_books_wiki_and_chunk(harness_tmp):
+    from daedalus.game_canon import (
+        CANON,
+        chunk_cpp,
+        chunk_markdown,
+        folder_context,
+        local_dir,
+        raw_url,
+        run_action,
+    )
+
+    books = run_action("clone", id="game-program-books")
+    assert books["ok"] is False
+    err = (books.get("error") or "").lower()
+    assert "ebook" in err or "copyright" in err
+    assert run_action("open", id="game-program-books")["ok"] is False
+    assert run_action("chunk", id="game-program-books")["ok"] is False
+    assert run_action("search", id="game-program-books", query="primer")["ok"] is False
+
+    milo = run_action("study", id="milo-path")
+    assert milo["ok"] is True
+    assert "isbn.csv" in milo["files"]
+    assert "readme.md" in milo["files"]
+    chop = run_action("study", id="unity-chop")
+    assert chop["ok"] is True
+    assert any("wiki/" in f for f in chop["files"])
+    assert any("Event" in s or "wiki" in s.lower() for s in chop["study"])
+
+    item = next(row for row in CANON if row["id"] == "unity-chop")
+    wiki = raw_url(item, "wiki/Event-system.md")
+    assert wiki == (
+        "https://raw.githubusercontent.com/wiki/UnityTechnologies/open-project-1/Event-system.md"
+    )
+    assert raw_url(item, "README.md").endswith("/main/README.md")
+
+    src = (
+        "class EventInterface {\npublic:\n  void Raise();\n};\n"
+        "struct EventDelegate {\n  int id;\n};\n"
+    )
+    pieces = chunk_cpp(src, "SampleEventSystem/SampleEvent/Event.h")
+    names = {p["name"] for p in pieces}
+    assert names == {"EventInterface", "EventDelegate"}
+    assert all("// Context: Event System Pattern" in p["text"] for p in pieces)
+    assert folder_context("SampleArchitecture/SampleECS/Main.cpp") == "Engine Architecture / ECS"
+
+    md = (
+        "# Title\n\nIntro paragraph that is long enough to keep as a RAG chunk.\n\n"
+        "## Events\n\nEvent channels connect scenes without a singleton manager.\n"
+    )
+    heads = chunk_markdown(md, "README.md", context="Engine architecture")
+    assert len(heads) >= 1
+    assert all("Context:" in h["text"] for h in heads)
+
+    dest = local_dir("engine-arch-samples")
+    header = dest / "SampleEventSystem" / "SampleEvent" / "Event.h"
+    header.parent.mkdir(parents=True, exist_ok=True)
+    header.write_text(src, encoding="utf-8")
+    chunked = run_action(
+        "chunk",
+        id="engine-arch-samples",
+        path="SampleEventSystem/SampleEvent/Event.h",
+    )
+    assert chunked["ok"] is True
+    assert chunked["count"] >= 2
+    assert any(c["name"] == "EventInterface" for c in chunked["chunks"])
 
