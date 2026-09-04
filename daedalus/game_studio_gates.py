@@ -5,6 +5,7 @@ CCGS-inspired checks before guided/autopilot build. No LLM dependency.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Literal
 
 GateLevel = Literal["pass", "warn", "fail"]
@@ -205,8 +206,28 @@ def run_scope_check(ctx: dict[str, Any]) -> dict[str, Any]:
 
 
 def run_balance_check(ctx: dict[str, Any]) -> dict[str, Any]:
-    """Heuristic economy/progression balance — warn only (GS-C)."""
+    """Economy/combat sim when playtest/balance.json exists; else keyword warn-only."""
     checks: list[dict[str, Any]] = []
+    root = _project_root(ctx)
+    sim = None
+    if root is not None:
+        from .balance_sim import run_for_project
+        sim = run_for_project(root)
+    if sim and not sim.get("skipped"):
+        level: GateLevel = "pass" if sim.get("ok") else "fail"
+        checks.append(_check(
+            "sim",
+            "Balance sim (1000 rounds)",
+            level,
+            sim.get("detail") or "",
+        ))
+        return {
+            "gate": "balance-check",
+            "label": "Balance Check",
+            "at": datetime.now(timezone.utc).isoformat(),
+            **_aggregate(checks),
+        }
+
     config = ctx.get("config") or {}
     brainstorm = config.get("brainstorm") or {}
     gdd = (ctx.get("gdd") or "").lower()
@@ -215,6 +236,8 @@ def run_balance_check(ctx: dict[str, Any]) -> dict[str, Any]:
         checks.append(_check("monetization", "Монетизация", "warn", "Сложна икономика — балансирай рано"))
     if "currency" in blob and "upgrade" not in blob and "progression" not in blob:
         checks.append(_check("progression", "Прогресия", "warn", "Currency без ясен upgrade path"))
+    if sim and sim.get("skipped"):
+        checks.append(_check("sim", "Balance sim", "warn", sim.get("detail") or "skipped"))
     if not checks:
         checks.append(_check("balance", "Balance heuristic", "pass", "Няма очевидни red flags"))
     return {
@@ -328,19 +351,142 @@ def run_craft_check(ctx: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _project_root(ctx: dict[str, Any]) -> Path | None:
+    """Resolve on-disk project only when the caller pointed at a workspace or stats show files.
+
+    Pre-build gate runs (no files yet) must not touch the real playground tree.
+    """
+    ws = ctx.get("workspace")
+    if ws:
+        path = Path(ws)
+        return path if path.is_dir() else None
+    stats = ctx.get("workspace_stats") or {}
+    if int(stats.get("file_count") or 0) < 1:
+        return None
+    slug = (ctx.get("project") or {}).get("slug") or ""
+    if not slug:
+        return None
+    from . import playground as pg
+    root = pg.project_dir(slug)
+    return root if root.is_dir() else None
+
+
+def _has_game_files(ctx: dict[str, Any], root: Path | None) -> bool:
+    stats = ctx.get("workspace_stats") or {}
+    if int(stats.get("file_count") or 0) > 0:
+        return True
+    if root is None or not root.is_dir():
+        return False
+    return (
+        (root / "index.html").is_file()
+        or (root / "src").is_dir()
+        or (root / "playtest").is_dir()
+    )
+
+
+def run_play_check(ctx: dict[str, Any]) -> dict[str, Any]:
+    """Scenario bot presence + live FPS/win/lose when gameplay results are attached."""
+    checks: list[dict[str, Any]] = []
+    config = ctx.get("config") or {}
+    kind = (config.get("kind") or (ctx.get("project") or {}).get("kind") or "").strip().lower()
+    preset = config.get("studio_preset") or ctx.get("studio_preset") or ""
+    if kind in ("godot", "unity"):
+        checks.append(_check(
+            "engine",
+            "Engine playtest",
+            "pass",
+            f"{kind} използва engine runner, не Chromium bot",
+        ))
+        return {
+            "gate": "play-check",
+            "label": "Play Check",
+            "at": datetime.now(timezone.utc).isoformat(),
+            **_aggregate(checks),
+        }
+
+    root = _project_root(ctx)
+    has_files = _has_game_files(ctx, root)
+    racer = bool(root and (root / "src" / "racer" / "vehicle.js").is_file())
+    racing = preset == "racing" or racer
+    scenario_path = (root / "playtest" / "scenario.json") if root else None
+
+    if not has_files:
+        checks.append(_check(
+            "scenario",
+            "playtest/scenario.json",
+            "warn",
+            "ще се изисква след M0 файлове — не блокира планирането",
+        ))
+    elif scenario_path is not None and scenario_path.is_file():
+        from .playtest_scenario import load_scenario
+        _sc, err = load_scenario(root)
+        if err and err != "missing":
+            checks.append(_check("scenario", "scenario schema", "fail", err))
+        else:
+            checks.append(_check("scenario", "playtest/scenario.json", "pass", "валиден bot script"))
+    elif racing:
+        checks.append(_check(
+            "scenario",
+            "playtest/scenario.json",
+            "fail",
+            "racer без scenario — ботът не може да докаже движение/провал",
+        ))
+    else:
+        checks.append(_check(
+            "scenario",
+            "playtest/scenario.json",
+            "warn",
+            "липсва — verify ще запише default",
+        ))
+
+    gameplay = ctx.get("gameplay") or ctx.get("gameplay_result") or {}
+    live = isinstance(gameplay, dict) and (gameplay.get("checks") or []) and not gameplay.get("skipped")
+    if live:
+        by_id = {c.get("id"): c for c in (gameplay.get("checks") or []) if isinstance(c, dict)}
+        mapping = (
+            ("scenario_canvas_changed", "Платното се промени (pixel-diff)"),
+            ("scenario_lose", "Ботът достигна lose"),
+            ("scenario_win", "Ботът достигна win"),
+            ("fps_budget", "FPS бюджет"),
+            ("memory_budget", "Memory бюджет"),
+        )
+        for cid, label in mapping:
+            row = by_id.get(cid)
+            if not row:
+                continue
+            if row.get("warn") and row.get("ok"):
+                level: GateLevel = "warn"
+            elif row.get("ok"):
+                level = "pass"
+            else:
+                level = "fail"
+            checks.append(_check(cid, label, level, str(row.get("detail") or "")))
+
+    if not checks:
+        checks.append(_check("play", "Play check", "pass", "няма web bot за този kind"))
+
+    return {
+        "gate": "play-check",
+        "label": "Play Check",
+        "at": datetime.now(timezone.utc).isoformat(),
+        **_aggregate(checks),
+    }
+
+
 GATE_RUNNERS = {
     "gate-check": run_gate_check,
     "scope-check": run_scope_check,
     "smoke-check": run_smoke_check,
     "balance-check": run_balance_check,
     "craft-check": run_craft_check,
+    "play-check": run_play_check,
 }
 
 
 def gates_for_build_mode(build_mode: str) -> list[str]:
     if build_mode == "prototype":
-        return ["smoke-check", "gate-check", "scope-check", "craft-check"]
-    return ["gate-check", "scope-check", "balance-check", "craft-check"]
+        return ["smoke-check", "gate-check", "scope-check", "craft-check", "play-check"]
+    return ["gate-check", "scope-check", "balance-check", "craft-check", "play-check"]
 
 
 def run_gates(ctx: dict[str, Any], gate_ids: list[str] | None = None) -> dict[str, Any]:

@@ -147,6 +147,7 @@ async def capabilities() -> dict:
             "effort-routing", "world-kit", "long-horizon",
             "owner-token", "typed-tools", "atomic-router", "durable-runs",
             "one-builder", "quality-gate", "engine-runners", "godot-runtime",
+            "gameplay-bot",
         ],
         "mesh_endpoint": "/api/iyveris",
         "studio": "/",

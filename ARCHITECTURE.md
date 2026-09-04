@@ -70,7 +70,7 @@ Defaults:
 ## Game doctrine
 
 - Asset gate: generated `assets/*.png` must be referenced (`load.image` / `<img>`).
-- Verify: smoke + browser render-and-see + playtest + quality critic.
+- Verify: smoke + browser + scenario bot (`playtest/scenario.json`, pixel-diff, FPS/memory) + playtest personas + quality critic.
 - Unity is scaffold + Git, not an in-cloud Editor.
 - Arcade craft (`arcade_craft.py` + `studio_shelf.py` + `playground_racer_scaffold.py`): 3D arcade uses Vite + Three.js WebGPU/TSL. A racing brief boots a playable M0 in `src/racer/` (not Phaser).
 - Dissection: analyze a reference (link, name, git, or files in Play Lab) and inject a specimen into GDD/planner/builder. Do not copy proprietary assets or code.

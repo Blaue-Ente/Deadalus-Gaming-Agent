@@ -9,7 +9,7 @@ Independent coding agent. **Games first**, apps second, verify is part of buildi
 [![pipeline status](https://gitlab.com/Blaue-Ente/deadalus-agent-0/badges/main/pipeline.svg)](https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/pipelines)
 [![Latest Release](https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/badges/release.svg)](https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/releases)
 
-Daedalus writes real files, runs a shell, builds games and apps, then **checks** that they work — smoke, browser, playtest. It is not an advice chatbot. It runs on a laptop, Docker, or a VPS, with SQLite and a direct LLM (cloud or local Ollama).
+Daedalus writes real files, runs a shell, builds games and apps, then **checks** that they work — smoke, browser, scenario bot, playtest. It is not an advice chatbot. It runs on a laptop, Docker, or a VPS, with SQLite and a direct LLM (cloud or local Ollama).
 
 | | |
 |---|---|

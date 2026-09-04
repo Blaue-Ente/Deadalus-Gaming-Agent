@@ -1,10 +1,17 @@
-"""Gameplay interaction verify — click Start, canvas/game probes (GS-E)."""
+"""Gameplay interaction verify — scenario bot, pixel-diff, FPS/memory (F2)."""
 from __future__ import annotations
 
 import logging
 from typing import Any
 
 from . import playground as pg
+from .playtest_scenario import (
+    is_racer_tree,
+    load_scenario,
+    run_scenario_on_page,
+    scenario_checks,
+    write_default_if_missing,
+)
 from .playground_browser import VISUAL_KINDS, _find_chrome, _serve_static
 from .playground_runtime import verify_unity_scaffold
 
@@ -175,8 +182,16 @@ def _aggregate_checks(
 def gameplay_passed(checks: list[dict[str, Any]], milestone_id: str = "M0") -> bool:
     if not checks:
         return False
-    required = ("canvas_or_visual", "post_start_state")
+    required = ["canvas_or_visual", "post_start_state"]
+    for c in checks:
+        cid = c.get("id")
+        if c.get("required") and cid and cid not in required:
+            required.append(str(cid))
+    seen: set[str] = set()
     for rid in required:
+        if rid in seen:
+            continue
+        seen.add(rid)
         row = next((c for c in checks if c.get("id") == rid), None)
         if not row or not row.get("ok"):
             return False
@@ -184,7 +199,7 @@ def gameplay_passed(checks: list[dict[str, Any]], milestone_id: str = "M0") -> b
         kb = next((c for c in checks if c.get("id") == "keyboard_input"), None)
         if kb and not kb.get("ok"):
             return False
-    return sum(1 for c in checks if c.get("ok")) >= max(2, len(checks) - 1)
+    return True
 
 
 async def _run_gameplay_on_url(
@@ -216,8 +231,11 @@ async def _run_gameplay_on_url(
             "proof_incomplete": True,
         }
 
+    root = pg.project_dir(slug)
+    scenario, scenario_err = load_scenario(root)
     checks: list[dict[str, Any]] = []
     screenshot_path = None
+    bot: dict[str, Any] = {}
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(
@@ -237,8 +255,19 @@ async def _run_gameplay_on_url(
             after = await page.evaluate(_gameplay_js_after_wait())
             keyboard = await _simulate_keyboard(page)
             checks = _aggregate_checks(before, after, milestone_id, keyboard=keyboard)
+            if scenario is None and scenario_err not in ("", "missing"):
+                checks.append({
+                    "id": "scenario_file",
+                    "ok": False,
+                    "detail": scenario_err,
+                    "required": True,
+                    "phase": "scenario",
+                })
+            elif scenario is not None:
+                bot = await run_scenario_on_page(page, scenario)
+                checks.extend(scenario_checks(bot, scenario))
             try:
-                shot_dir = pg.project_dir(slug) / "assets"
+                shot_dir = root / "assets"
                 shot_dir.mkdir(parents=True, exist_ok=True)
                 shot_file = shot_dir / "_gameplay_screenshot.png"
                 await page.screenshot(path=str(shot_file), full_page=False)
@@ -267,6 +296,14 @@ async def _run_gameplay_on_url(
         "kind": kind,
         "milestone_id": milestone_id,
         "proof_incomplete": False,
+        "bot": {
+            "saw_lose": bot.get("saw_lose"),
+            "saw_win": bot.get("saw_win"),
+            "saw_canvas_changed": bot.get("saw_canvas_changed"),
+            "fps": bot.get("fps"),
+            "frames": bot.get("frames"),
+            "memory_mb": bot.get("memory_mb"),
+        } if bot else {},
     }
 
 
@@ -306,6 +343,7 @@ async def gameplay_verify_app(
         return {"ok": True, "skipped": True, "summary": f"gameplay skip ({kind})", "checks": []}
 
     root = pg.project_dir(slug)
+    write_default_if_missing(root, kind, racer=is_racer_tree(root))
 
     if kind == "static":
         base, stop = _serve_static(root)

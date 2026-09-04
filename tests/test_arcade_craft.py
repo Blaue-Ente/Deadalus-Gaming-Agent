@@ -114,6 +114,9 @@ def test_craft_check_warns_but_does_not_block():
     assert row["blocking"] is False
     combined = run_gates(ctx)
     assert "craft-check" in combined["gates"]
+    assert "play-check" in combined["gates"]
+    assert combined["blocking"] is False
+    assert combined["gates"]["play-check"]["passed"] is True
 
 
 def test_campaign_bible_is_a_warning_not_a_template():
@@ -167,6 +170,7 @@ def test_planner_prompt_sees_fzero_brief():
     assert "WebGPU" in sys
     assert "STUDIO SHELF" in sys
     assert "tripo" in sys.lower() or "Tripo" in sys
+    assert "scenario.json" in sys
 
 
 def test_skill_select_arcade_craft():
@@ -188,6 +192,12 @@ def test_racer_scaffold_not_for_todo_tracker(tmp_path):
 
     written = write_racer_scaffold(tmp_path / "mist", "Mist Run", "mist-run", "F-Zero")
     assert "src/racer/vehicle.js" in written
+    assert "playtest/scenario.json" in written
+    scenario = json.loads((tmp_path / "mist" / "playtest" / "scenario.json").read_text(encoding="utf-8"))
+    assert scenario["require_lose"] is True
+    assert scenario["require_win"] is False
+    main_js = (tmp_path / "mist" / "src" / "main.js").read_text(encoding="utf-8")
+    assert "__DAEDALUS_STATE__" in main_js
     pkg = json.loads((tmp_path / "mist" / "package.json").read_text(encoding="utf-8"))
     assert "three" in pkg["dependencies"]
     assert "phaser" not in pkg.get("dependencies", {})
