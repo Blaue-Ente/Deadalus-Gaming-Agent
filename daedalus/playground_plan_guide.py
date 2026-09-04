@@ -256,6 +256,13 @@ def build_planner_system_prompt(
             from .studio_shelf import prompt_block as _shelf_block
             desc = f"{studio_preset} {kind} {description} {extra_addendum}"
             parts.extend(["", _craft_plan(kind, desc), _shelf_block(desc, limit=8)])
+            try:
+                from .game_engineer import planner_addendum as _eng_plan
+                eng = _eng_plan(kind, desc)
+                if eng and eng not in "\n".join(parts):
+                    parts.append(eng)
+            except Exception:
+                pass
             if kind == "godot":
                 from .godot_platform_guide import pipeline_prompt
                 from .blender_jobs import prompt_block as _blend

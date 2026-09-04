@@ -1511,7 +1511,19 @@ class Daedalus:
             _intent_for_skills = (briefing_dict or {}).get("intent", "") if briefing_dict else ""
             _hint_for_skills = (briefing_dict or {}).get("hint", "") if briefing_dict else ""
             _skill_names = select_skills(user_message, _intent_for_skills, _hint_for_skills)
-            _skill_block = _disclose(user_message, extra_ids=_skill_names)
+            try:
+                from .game_engineer import extra_skill_ids, prefer_skill_id
+                _skill_names = list(dict.fromkeys(
+                    list(_skill_names) + extra_skill_ids(
+                        user_message, _intent_for_skills, _hint_for_skills,
+                    )
+                ))
+                _prefer = prefer_skill_id(user_message, intent=_intent_for_skills)
+            except Exception:
+                _prefer = None
+            _skill_block = _disclose(
+                user_message, extra_ids=_skill_names, prefer_id=_prefer,
+            )
             if _skill_block:
                 parts.append(_skill_block)
                 log.info("skills disclosed: %s (session=%s)", _skill_names, session_id[:10])
@@ -1554,6 +1566,15 @@ class Daedalus:
                 user_content = user_content + "\n\n" + _dod.generate_dod_block(user_message, _dod_intent)
         except Exception as _dod_exc:
             log.debug("DoD injection skipped: %s", _dod_exc)
+
+        try:
+            from .game_engineer import prompt_block as _eng_block
+            _eng_intent = (briefing_dict or {}).get("intent", "") if briefing_dict else ""
+            _eng = _eng_block(user_message, intent=_eng_intent)
+            if _eng:
+                user_content = user_content + "\n\n" + _eng
+        except Exception as _eng_exc:
+            log.debug("game engineer contract skipped: %s", _eng_exc)
 
         # [Phase 17B] Task state injection — ако има активна cross-session задача
         try:

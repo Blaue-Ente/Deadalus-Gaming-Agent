@@ -171,7 +171,7 @@ async def capabilities() -> dict:
             "one-builder", "quality-gate", "engine-runners", "godot-runtime",
             "gameplay-bot", "asset-pipeline-v2", "skill-memory", "production-layer",
             "unity-mcp", "game-agent-bench",
-            "math3d", "game-lint", "profiler", "game-canon",
+            "math3d", "game-lint", "profiler", "game-canon", "spatial",
         ],
         "mesh_endpoint": "/api/iyveris",
         "studio": "/",

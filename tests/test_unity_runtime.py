@@ -119,6 +119,7 @@ def test_unity_check_does_not_block_racing():
     assert combined["blocking"] is False
     assert combined["gates"]["unity-check"]["passed"] is True
     assert combined["gates"]["production-check"]["passed"] is True
+    assert combined["gates"]["eng-check"]["passed"] is True
 
 
 def test_unity_mcp_tool_mapping():

@@ -1,12 +1,17 @@
 """Curated open-source game canon — study well-written engines, never clone them into a product.
 
-Five references the agent may read (clone on demand under ``$DAEDALUS_DATA/canon/``):
+References the agent may read (clone on demand under ``$DAEDALUS_DATA/canon/``):
 
 * id-Software/DOOM-3-BFG — idLib math, SIMD, game physics layout
 * Anuken/Mindustry — lockstep-ish net, entity comps, Java game loop
 * munificent/game-programming-patterns — named patterns (study, do not paste the book)
 * ssloy/tinyrenderer — software rasterizer taught in small files
 * nothings/stb — single-header C, data-oriented helpers
+* g-truc/glm — GLSL-shaped C++ math (do not vendor the tree into the harness)
+* microsoft/DirectXMath — SIMD vectors for Windows / D3D
+* wolfpld/tracy — C++ profiler; parse exports with ``profiler`` kind=tracy
+
+RenderDoc is owner-side frame capture — study notes in knowledge, do not claim a cloud GUI.
 
 Inspiration only. Do not copy assets, trademarks, or paste large excerpts into Playground games.
 
@@ -164,6 +169,78 @@ CANON: tuple[dict[str, Any], ...] = (
         "files": (
             "README.md",
             "stb_ds.h",
+        ),
+    },
+    {
+        "id": "glm",
+        "title": "OpenGL Mathematics (GLM)",
+        "repo": "https://github.com/g-truc/glm",
+        "owner_repo": "g-truc/glm",
+        "branch": "master",
+        "license": "MIT / Happy Bunny (check repo)",
+        "large": False,
+        "study": [
+            "GLSL-shaped types: vec3, mat4, quat, lookAt, perspective, mix/slerp",
+            "Header-only; column-major like GLSL",
+            "Default C++ math for a native engine or shader-side CPU code",
+        ],
+        "steal": [
+            "Use GLM (or the engine's Vector3) instead of a home-grown vec class",
+            "Still verify a suspicious SLERP or ray with math3d claimed",
+        ],
+        "do_not_copy": [
+            "Do not vendor the whole GLM tree into the Daedalus harness",
+        ],
+        "files": (
+            "readme.md",
+            "manual.md",
+        ),
+    },
+    {
+        "id": "directxmath",
+        "title": "DirectXMath (Microsoft)",
+        "repo": "https://github.com/microsoft/DirectXMath",
+        "owner_repo": "microsoft/DirectXMath",
+        "branch": "main",
+        "license": "MIT",
+        "large": False,
+        "study": [
+            "XMVECTOR / XMMATRIX SIMD types, 16-byte alignment",
+            "Use on Windows / Xbox / D3D — not as the Godot or Three.js default",
+        ],
+        "steal": [
+            "Call XMVector3Dot / XMMatrixLookAtRH instead of scalar loops",
+            "Keep hot data aligned; don't mix with GLM types in the same struct",
+        ],
+        "do_not_copy": [
+            "Do not gulp Inc/ into the harness; vendor into a Win64 game with the license",
+        ],
+        "files": (
+            "README.md",
+        ),
+    },
+    {
+        "id": "tracy",
+        "title": "Tracy Profiler",
+        "repo": "https://github.com/wolfpld/tracy",
+        "owner_repo": "wolfpld/tracy",
+        "branch": "master",
+        "license": "BSD-3-Clause (check repo)",
+        "large": False,
+        "study": [
+            "ZoneScoped instrumentation on C++ hot paths",
+            "Export CSV/trace and parse with profiler kind=tracy",
+            "RenderDoc is a separate owner-side GPU capture — not this repo",
+        ],
+        "steal": [
+            "Instrument after a measured spike, not as decoration in a Vite racer",
+            "Fix the heaviest named zones first",
+        ],
+        "do_not_copy": [
+            "Do not ship the Tracy GUI into a Playground slug",
+        ],
+        "files": (
+            "README.md",
         ),
     },
 )

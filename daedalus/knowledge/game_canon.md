@@ -1,4 +1,4 @@
-# Game canon — five repositories to study
+# Game canon — OSS trees to study
 
 Daedalus does not vendor these trees. `game_canon` lists them, can shallow-clone into `$DAEDALUS_DATA/canon/{id}/`, and may open an allowlisted file (local or GitHub raw). Use them as a мостра of structure. Write original code. Do not copy assets, trademarks, or book text into Playground games or this harness.
 
@@ -22,6 +22,18 @@ Small software rasterizer. Lesson files stay tiny: barycentric fill, z-buffer, t
 
 Single-header C. `stb_ds.h` is the DOD cousin: stretchy buffers, caller-owned memory. `README.md` states licenses per file. Do not gulp 8k-line headers into the harness; vendor into a game only with the license comment intact.
 
+## glm — https://github.com/g-truc/glm
+
+GLSL-shaped C++ math (`vec3`, `mat4`, `quat`). Default when Daedalus writes a native engine or shader-side CPU code. Pair with `math3d` `claimed`. Do not vendor the whole tree into this harness.
+
+## directxmath — https://github.com/microsoft/DirectXMath
+
+SIMD `XMVECTOR` / `XMMATRIX` for Windows / D3D. Not the Godot or Three.js default.
+
+## tracy — https://github.com/wolfpld/tracy
+
+C++ zone profiler. Export CSV → `profiler` `kind=tracy`. RenderDoc frame captures are owner-side; Daedalus does not run that GUI in this cloud.
+
 ## Workflow
 
-`list` → `study` → `open` a file → write new code in the slug → `game_lint` / `math3d` / `profiler`. `clone` is optional. Offline: study notes still work; fetch/clone do not.
+`list` → `study` → `open` a file → write new code in the slug → `spatial` / `game_lint` / `math3d` / `profiler`. `clone` is optional. Offline: study notes still work; fetch/clone do not.

@@ -168,7 +168,11 @@ def planner_addendum(kind: str = "", description: str = "") -> str:
     """Injected into the autopilot planner for game (especially 3D/racing) jobs."""
     hi = wants_high_fidelity(description) or looks_like_racer(description)
     if not hi and not description:
-        return ""
+        try:
+            from .game_engineer import planner_addendum as _eng
+            return _eng(kind, description)
+        except Exception:
+            return ""
     lines = [
         "━━━ ARCADE CRAFT (FM1 / vibe-racer field notes) ━━━",
         "Never 'build me this game'. Hundreds of tiny verified steps. Plan with a strong model; implement cheaply.",
@@ -193,7 +197,15 @@ def planner_addendum(kind: str = "", description: str = "") -> str:
     lines.append("Assets: " + "; ".join(f"{k}={v}" for k, v in route.items()))
     if kind:
         lines.append(f"Playground kind in this job: {kind}")
-    return "\n".join(lines)
+    text = "\n".join(lines)
+    try:
+        from .game_engineer import planner_addendum as _eng
+        extra = _eng(kind, description)
+        if extra and extra not in text:
+            text = f"{text}\n{extra}"
+    except Exception:
+        pass
+    return text
 
 
 def gdd_section(brainstorm: dict[str, Any] | None) -> str:
