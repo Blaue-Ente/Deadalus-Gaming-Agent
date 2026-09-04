@@ -94,9 +94,9 @@ Data lives under `$DAEDALUS_DATA` (default `data/daedalus/` on the machine, `%LO
 | Files and projects | Playground `playground/projects/{slug}` |
 | Shell | Studio Shell · `POST /api/v1/daedalus/shell` (jail, secrets stripped from env) |
 | Native tools | `read_file`, `write_file`, `run_command`, `web_search`, `web_fetch`, `web_read`, `generate_image`, `remember`, `code_search`, `browser`, `mcp_call`, `spawn_subagent`, `playtest`, `play_lab`, `dissect_game`, `engine`, `world`, `assets`, `skill`, `production`, `git_forge` |
-| MCP | Studio → **Свързаност** (`$DAEDALUS_DATA/mcp.json` + `secrets.env`) |
+| MCP | Studio → **Connectors** (`$DAEDALUS_DATA/mcp.json` + `secrets.env`) |
 | Honesty suite | `python -m daedalus.game_agent_bench` · `GET /api/v1/daedalus/bench` — this harness, not a vendor bake-off |
-| Local LLM | Studio **wardrobe** — hardware profile + Ollama pull; or `DAEDALUS_PROVIDER=ollama` |
+| Local LLM | Connectors **Brain** (`/admin/daedalus/connectors#brain`) — Ollama wardrobe for the **whole process** (chat, workers, autopilot, CLI), not Studio-only. Or `DAEDALUS_PROVIDER=ollama` |
 | Offline kit | `DAEDALUS_OFFLINE=1` / Studio toggle — no search/images; local model + capsules still work |
 | Sub-agents | worker slots **and** `spawn_subagent` (files + shell, jailed) |
 | Autopilot | kernel `full_autopilot` + Definition of Done + playtest |
@@ -222,7 +222,7 @@ Cloud (fly.io, Render, GitLab Registry): see [DEPLOY.md](DEPLOY.md).
 
 Open http://127.0.0.1:8787 — that is **Studio** (chat, shell, wardrobe, mark).
 
-Command Center (same process):
+Command Center (same process, same brain):
 
 | Page | URL |
 |---|---|
@@ -231,16 +231,17 @@ Command Center (same process):
 | Game Studio | http://127.0.0.1:8787/admin/daedalus/game-studio |
 | Proposals (Approve) | http://127.0.0.1:8787/admin/daedalus/proposals |
 | Skills | http://127.0.0.1:8787/admin/daedalus/skills |
+| Connectors (brain, keys, MCP) | http://127.0.0.1:8787/admin/daedalus/connectors |
 | OpenAPI | http://127.0.0.1:8787/docs |
 | Health | http://127.0.0.1:8787/health |
 
-LLM presets, workers, memory, tasks, and blockers share the same `/admin/daedalus/*` URLs.
+LLM presets, workers, memory, tasks, and blockers share the same `/admin/daedalus/*` URLs. The brain is set once in Connectors — not a second form in Studio.
 
 ---
 
 ## LLM — cloud and local
 
-Fill **at least one** in `.env` (see [docs/ENV.md](docs/ENV.md)):
+Fill **at least one** in `.env` or Connectors (see [docs/ENV.md](docs/ENV.md)):
 
 ```
 ALLTOKEN_API_KEY=
@@ -249,12 +250,12 @@ NOVITA_API_KEY=
 NVIDIA_API_KEY=
 ```
 
-Local, no key:
+Local, no key — this is the brain for **all of Daedalus**, not only Studio games:
 
 ```bash
 export DAEDALUS_PROVIDER=ollama
 export DAEDALUS_MODEL=qwen2.5-coder:7b
-# or click a recommended row in Studio → LLM (pull + activate)
+# or click a recommended row in Connectors → Brain / Studio → Brain (pull + activate)
 ```
 
 `python -m app.cli models` prints the machine class and what to pull.
@@ -298,7 +299,7 @@ Each project is `playground/projects/{slug}/` with a kind:
    - **Capsule** — zip (USB / send a file). Static: unzip, open `index.html`.
    - **Local /apps/** — Studio “To /apps/”.
    - **Live** — public `https`: Netlify token → GitLab Pages → 1-hour Netlify preview. Static / vite / expo-web only.
-   - **Git** — push to GitLab if `GITLAB_TOKEN` is set, else GitHub. Clone from either host. Open a GitHub Pull Request or GitLab Merge Request from Playground (🔀 PR / MR) or the `git_forge` tool. Tokens live in Studio → **Свързаност**.
+   - **Git** — push to GitLab if `GITLAB_TOKEN` is set, else GitHub. Clone from either host. Open a GitHub Pull Request or GitLab Merge Request from Playground (🔀 PR / MR) or the `git_forge` tool. Tokens live in Studio → **Connectors**.
    - Unity and Godot: open the folder in the matching Editor.
 
 ---

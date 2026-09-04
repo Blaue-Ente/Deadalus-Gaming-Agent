@@ -13,6 +13,8 @@ def harness_tmp(tmp_path, monkeypatch):
     monkeypatch.delenv("DAEDALUS_PROVIDER", raising=False)
     monkeypatch.delenv("DAEDALUS_MODEL", raising=False)
     monkeypatch.delenv("DAEDALUS_API_KEY", raising=False)
+    monkeypatch.delenv("DAEDALUS_LOCAL_LLM", raising=False)
+    monkeypatch.delenv("DAEDALUS_OFFLINE", raising=False)
     from daedalus.paths import data_root, playground_projects_dir
     data_root.cache_clear()
     playground_projects_dir.cache_clear()
