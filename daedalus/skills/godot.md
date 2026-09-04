@@ -12,7 +12,8 @@ description: Build Godot 4 games as text (.tscn / GDScript) — vertical slice, 
 2. One `.tscn` or `.gd` per stage. Use `godot_tools.scene_tscn` / `script_template` / `signal_connect_snippet`.
 3. Roles (not a CrewAI process): architect → gameplay → ui → npc_ai → vfx → audio → assets → tester.
 4. Hero meshes: `blender_jobs.emit_job` → GLB in `assets/`. Mixamo for humanoid clips.
-5. Cloud: do not `NEED_PLAYGROUND_RUN`. Owner opens the folder in Godot 4.3. If `godot` is on PATH: `godot --headless --path . --quit`.
+5. Cloud: do not `NEED_PLAYGROUND_RUN`. Owner opens the folder in Godot 4.3. If `godot` is on PATH: `engine({action: run, slug})` or `godot --headless --path . -- --daedalus-bridge <port>`.
+6. API pin: Godot 4.3 only (`CharacterBody2D`, typed `.connect`). See skill `godot_api`.
 
 **Anti-patterns**:
 - Phaser / React / HTML gameplay in this kind.

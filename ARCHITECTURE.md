@@ -41,6 +41,7 @@ Daedalus is **one product**: coding agent + Studio + Playground. One FastAPI pro
 | Dissection | `dissection.py` + `play_lab.py` | Specimen from name/URL/git/install; Play Lab is the VM |
 | MiroFish | `mirofish_client.py` | HTTP-only to a sidecar — never vendor |
 | MCP | `mcp_client.py` | JSON-RPC stdio/HTTP from `mcp.json` |
+| Engine session | `engine_session.py`, `godot_bridge.py` | Headless Godot TCP bridge; optional Godot MCP adapter |
 | Browser | `playground_browser.py`, `browser_session.py` | Smoke + interactive session |
 | Playground | `playground*.py`, `game_*.py` | static, vite, phaser-via-vite, expo, unity, godot |
 | Autopilot | `builder_runtime.py` + `kernel/full_autopilot.py` | Kernel loop |
@@ -74,7 +75,7 @@ Defaults:
 - Arcade craft (`arcade_craft.py` + `studio_shelf.py` + `playground_racer_scaffold.py`): 3D arcade uses Vite + Three.js WebGPU/TSL. A racing brief boots a playable M0 in `src/racer/` (not Phaser).
 - Dissection: analyze a reference (link, name, git, or files in Play Lab) and inject a specimen into GDD/planner/builder. Do not copy proprietary assets or code.
 - Play Lab (`$DAEDALUS_DATA/labs/{id}/`): jailed install tree + local HTTP. Optional Docker. Not QEMU Windows and not Steam.
-- Godot 4 (`playground_godot_scaffold.py`, `playground_godot3d_scaffold.py`, `godot_tools.py`): text `.tscn`/GDScript, local Editor. 3D M0 is a greybox room with a plate and a door.
+- Godot 4 (`playground_godot_scaffold.py`, `playground_godot3d_scaffold.py`, `godot_tools.py`, `godot_bridge.py`): text `.tscn`/GDScript. When `GODOT_BIN` exists, a TCP autoload (`DaedalusBridge`) is the playtest — scene tree, input, errors — not only file DoD. Optional `DAEDALUS_GODOT_MCP` adapter; we do not vendor an Editor.
 - Blender jobs (`blender_jobs.py`, `python -m daedalus.blender_mcp`) **emit** a bpy script — they do not import `bpy` in the Daedalus process.
 - Not: own engine, own 3D foundation model, five parallel Godot MCP servers, silent self-editing, “one sentence → finished game”.
 
