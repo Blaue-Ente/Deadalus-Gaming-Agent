@@ -14,6 +14,10 @@ _DONE_WORDS = (
     "готово", "done", "завърших", "shipped", "completed", "fixed",
     "поправих", "публикувах",
 )
+_CONTRADICTION_PHRASES = (
+    "не мога", "не можах", "could not complete", "cannot be automated",
+    "requires manual", "needs human", "task_blocked", "blocked:",
+)
 _VISUAL_KINDS = frozenset({"static", "vite", "vite-react", "streamlit", "expo", "phaser"})
 
 
@@ -37,12 +41,19 @@ def _tools_ok(tool_calls: list[dict[str, Any]] | None) -> tuple[bool, bool, bool
             "edit_file", "propose_patch", "NEED_PROPOSE", "NEED_EDIT",
         }
         or "write" in str(c.get("tool") or "").lower()
+        or (
+            str(c.get("tool") or "") in {"spawn_subagent", "subagent"}
+            and any(
+                str(role).lower() == "coder"
+                for role in (c.get("roles") or [c.get("role") or "coder"])
+            )
+        )
         for c in calls
     )
     ran = any(
         str(c.get("tool") or "") in {
             "NEED_PLAYGROUND_RUN", "NEED_SANDBOX", "NEED_VERIFY", "run_command",
-            "NEED_TDD",
+            "NEED_TDD", "spawn_subagent", "subagent",
         }
         or "sandbox" in str(c.get("tool") or "").lower()
         or "verify" in str(c.get("tool") or "").lower()
@@ -50,6 +61,13 @@ def _tools_ok(tool_calls: list[dict[str, Any]] | None) -> tuple[bool, bool, bool
     )
     failed = any(c.get("ok") is False for c in calls)
     return wrote, ran, failed
+
+
+def _contradicts_done(reply: str) -> bool:
+    low = (reply or "").lower()
+    if not any(w in low for w in _DONE_WORDS):
+        return False
+    return any(p in low for p in _CONTRADICTION_PHRASES)
 
 
 def evaluate(
@@ -61,10 +79,12 @@ def evaluate(
     browser_ok: bool | None = None,
     kind: str = "",
     intent: str = "",
+    open_slices: int = 0,
 ) -> JobContract:
     coding = is_coding_task(user_message, intent)
     wrote, ran, failed = _tools_ok(tool_calls)
     claims_done = any(w in (reply or "").lower() for w in _DONE_WORDS)
+    honest_fail = _contradicts_done(reply)
 
     checks = {
         "coding_task": coding,
@@ -72,6 +92,8 @@ def evaluate(
         "verified": (test_ok if test_ok is not None else ran) if coding else True,
         "no_failed_tools": not failed,
         "browser": True,
+        "no_false_done": not (coding and honest_fail),
+        "slices_closed": not (coding and open_slices > 0 and claims_done),
     }
     if coding and kind in _VISUAL_KINDS and browser_ok is not None:
         checks["browser"] = bool(browser_ok)
@@ -85,6 +107,12 @@ def evaluate(
         blockers.append("Има неуспешни tool calls — поправи ги преди край.")
     if coding and not checks["browser"]:
         blockers.append("Browser verify не мина за визуален проект.")
+    if coding and not checks["no_false_done"]:
+        blockers.append("Каза готово, но отговорът признава провал — срезовете не са затворени.")
+    if coding and not checks["slices_closed"]:
+        blockers.append(
+            f"Има {open_slices} незавършени среза в job ledger — не казвай готово."
+        )
 
     complete = (not coding) or (not blockers)
     if coding and claims_done and blockers:

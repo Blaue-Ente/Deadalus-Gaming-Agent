@@ -1,12 +1,13 @@
 """Tool-using sub-agents — isolated loops with files + shell, then return.
 
 ``workers.py`` slots are stateless LLM calls that must never emit NEED_*.
-These sub-agents *do* get ``read_file`` / ``list_dir`` / ``write_file`` /
-``run_command``, jailed to a Playground slug, with a hard round cap.
+These sub-agents *do* get tools, jailed to a Playground slug, with a hard
+round cap. Explorer cannot write files. Each spawn starts a fresh window.
 
 Master emits::
 
-    <NEED_SUBAGENT: slug | task description>
+    <NEED_SUBAGENT: slug | task>
+    <NEED_SUBAGENT: slug | task | explorer>
 
 or the native tool ``spawn_subagent``.
 """
@@ -20,34 +21,124 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 _SUB_RE = re.compile(
-    r"<NEED_SUBAGENT:\s*([^|>]{1,80})\s*\|\s*(.+?)\s*>",
-    re.DOTALL,
+    r"<NEED_SUBAGENT:\s*([^|>]{1,80})\s*\|\s*([^|>]+?)(?:\s*\|\s*(explorer|coder|verify))?\s*>",
+    re.DOTALL | re.IGNORECASE,
 )
 
 MAX_PARALLEL = 3
 DEFAULT_ROUNDS = 6
-SUBAGENT_TOOLS = ("read_file", "list_dir", "write_file", "run_command")
+CODER_TOOLS = ("read_file", "list_dir", "write_file", "run_command")
+EXPLORER_TOOLS = ("read_file", "list_dir", "run_command")
+VERIFY_TOOLS = EXPLORER_TOOLS
 
-_SYSTEM = """You are a Daedalus sub-agent. You have tools. The master agent
+_BASE_SYSTEM = """You are a Daedalus sub-agent. You have tools. The master agent
 delegated ONE concrete task. Finish it, then stop.
 
 Rules:
-- write_file ONLY inside the given playground slug.
+- Stay inside the given playground slug.
 - run_command is jailed; no sudo, no secrets.
-- Do not chat. Do the work. When done, reply with a short summary (no tools).
-- If blocked, say BLOCKED: reason.
+- Do not chat. Do the work.
+- End with TASK_COMPLETE or TASK_BLOCKED: reason.
+- If you discovered a reusable fact, emit:
+  ===ARTIFACT: snake_case_id===
+  the fact
+  ===END===
+- Never claim TASK_COMPLETE if you did not finish, or if a human must intervene.
 """
+
+_EXPLORER_SYSTEM = """
+Role: explorer (read-only). You MUST NOT write or edit project files.
+Investigate, map, and verify. Return named artifacts the coder will need.
+If asked to verify, check the original ask / acceptance, not a weaker proxy.
+"""
+
+_CODER_SYSTEM = """
+Role: coder. Implement exactly this slice — no extra features.
+Use injected artifacts instead of rediscovering the tree.
+"""
+
+_VERIFY_SYSTEM = """
+Role: verify. Read-only. Confirm the slice matches the original ask.
+Say TASK_COMPLETE only if evidence supports it; otherwise TASK_BLOCKED.
+"""
+
+
+def tools_for_role(role: str) -> tuple[str, ...]:
+    r = (role or "coder").strip().lower()
+    if r == "explorer":
+        return EXPLORER_TOOLS
+    if r == "verify":
+        return VERIFY_TOOLS
+    return CODER_TOOLS
 
 
 def parse_subagent_markers(raw: str) -> list[dict[str, str]]:
     if not raw or "NEED_SUBAGENT" not in raw:
         return []
-    return [{"slug": s.strip(), "task": t.strip()} for s, t in _SUB_RE.findall(raw)][:MAX_PARALLEL]
+    out: list[dict[str, str]] = []
+    for slug, task, role in _SUB_RE.findall(raw):
+        item = {"slug": slug.strip(), "task": task.strip()}
+        if role:
+            item["role"] = role.strip().lower()
+        out.append(item)
+    return out[:MAX_PARALLEL]
 
 
-def _specs() -> list[dict[str, Any]]:
+def _specs_for(role: str) -> list[dict[str, Any]]:
     from .native_tools import NATIVE_TOOL_SPECS
-    return [t for t in NATIVE_TOOL_SPECS if t["name"] in SUBAGENT_TOOLS]
+    allowed = set(tools_for_role(role))
+    return [t for t in NATIVE_TOOL_SPECS if t["name"] in allowed]
+
+
+def _role_system(role: str) -> str:
+    r = (role or "coder").strip().lower()
+    extra = _CODER_SYSTEM
+    if r == "explorer":
+        extra = _EXPLORER_SYSTEM
+    elif r == "verify":
+        extra = _VERIFY_SYSTEM
+    return _BASE_SYSTEM + extra
+
+
+async def _bootstrap_block(
+    slug: str,
+    items: list[Any] | None,
+    read_file_fn: Any,
+) -> str:
+    if not items:
+        return ""
+    chunks: list[str] = []
+    from . import playground as pg
+
+    for raw in list(items)[:8]:
+        if isinstance(raw, dict):
+            path = str(raw.get("path") or "").strip()
+            reason = str(raw.get("reason") or "").strip()
+        else:
+            path = str(raw or "").strip()
+            reason = ""
+        if not path:
+            continue
+        body = ""
+        try:
+            body = pg.read_file(slug, path, max_bytes=6000)
+        except Exception:
+            body = ""
+        if not body and read_file_fn is not None:
+            try:
+                result = read_file_fn(path)
+                if isinstance(result, dict):
+                    body = str(result.get("content") or result.get("error") or "")
+                else:
+                    body = str(result or "")
+            except Exception as exc:
+                body = f"(read failed: {exc})"
+        chunks.append(
+            f"### {path}\n{reason}\n{(body or '(empty)')[:4000]}"
+        )
+    if not chunks:
+        return ""
+    return "### Bootstrapped files\n" + "\n\n".join(chunks)
 
 
 async def run_subagent(
@@ -58,9 +149,19 @@ async def run_subagent(
     session_id: str = "",
     max_rounds: int = DEFAULT_ROUNDS,
     read_file_fn: Any = None,
+    role: str = "coder",
+    job_id: str = "",
+    original_ask: str = "",
+    return_contexts: list[str] | None = None,
+    context_refs: list[str] | None = None,
+    context_bootstrap: list[Any] | None = None,
+    task_id: str = "",
 ) -> dict[str, Any]:
     slug = (slug or "").strip()
     task = (task or "").strip()
+    role = (role or "coder").strip().lower()
+    if role not in ("explorer", "coder", "verify"):
+        role = "coder"
     if not slug or not task:
         return {"ok": False, "error": "slug and task required"}
     if read_file_fn is None:
@@ -69,19 +170,51 @@ async def run_subagent(
 
     from .agent import _call_claude_with_tools
     from .native_tools import execute_native_tool
+    from . import job_ledger
 
-    system = _SYSTEM + f"\nPlayground slug: {slug}\n"
-    user = f"Task:\n{task}\n\nAlways pass slug={slug!r} to write_file and run_command."
-    messages: list[dict[str, Any]] = [{"role": "user", "content": user}]
+    job = None
+    try:
+        job = job_ledger.ensure_job(
+            slug=slug,
+            original_ask=original_ask or task,
+            session_id=session_id,
+            job_id=job_id,
+        )
+        job_id = str(job.get("job_id") or job_id)
+    except Exception as exc:
+        log.debug("job ledger skipped: %s", exc)
+        job = None
+
+    wanted = [c.strip() for c in (return_contexts or []) if c and str(c).strip()]
+    system = _role_system(role) + f"\nPlayground slug: {slug}\nRole: {role}\n"
+    if wanted:
+        system += "Return these artifacts by id: " + ", ".join(wanted[:12]) + "\n"
+
+    pack = ""
+    if job:
+        pack = job_ledger.format_pack(job, refs=list(context_refs or wanted), include_progress=True)
+    boot = await _bootstrap_block(slug, context_bootstrap, read_file_fn)
+    user_parts = [f"Task:\n{task}", "Always pass slug=" + repr(slug) + " to write_file and run_command."]
+    if pack:
+        user_parts.append(pack)
+    if boot:
+        user_parts.append(boot)
+    user_parts.append(
+        "When done, TASK_COMPLETE or TASK_BLOCKED. "
+        "Named artifacts use ===ARTIFACT: id=== ... ===END===."
+    )
+    messages: list[dict[str, Any]] = [{"role": "user", "content": "\n\n".join(user_parts)}]
     log_rows: list[dict[str, Any]] = []
     final = ""
     rounds = max(1, min(int(max_rounds or DEFAULT_ROUNDS), 12))
+    specs = _specs_for(role)
+    allowed = set(tools_for_role(role))
 
     for _ in range(rounds):
         try:
-            resp = await _call_claude_with_tools(system, messages, _specs())
+            resp = await _call_claude_with_tools(system, messages, specs)
         except Exception as exc:
-            return {"ok": False, "slug": slug, "error": str(exc)[:240], "log": log_rows}
+            return {"ok": False, "slug": slug, "role": role, "error": str(exc)[:240], "log": log_rows}
         content = resp.get("content") or []
         assistant: list[dict[str, Any]] = []
         uses: list[dict[str, Any]] = []
@@ -108,14 +241,16 @@ async def run_subagent(
                     args = {"raw": args}
             if not isinstance(args, dict):
                 args = {}
-            # Jail writes/commands to the delegated slug.
-            if name in ("write_file", "run_command"):
-                args["slug"] = slug
-            text = await execute_native_tool(
-                name, args,
-                memory=memory, session_id=session_id or "",
-                read_file_fn=read_file_fn,
-            )
+            if name not in allowed:
+                text = f"FAILED: role={role} cannot call {name}"
+            else:
+                if name in ("write_file", "run_command"):
+                    args["slug"] = slug
+                text = await execute_native_tool(
+                    name, args,
+                    memory=memory, session_id=session_id or "",
+                    read_file_fn=read_file_fn,
+                )
             log_rows.append({"tool": name, "ok": "FAILED" not in text and "ERROR" not in text})
             results.append({
                 "type": "tool_result",
@@ -126,24 +261,41 @@ async def run_subagent(
     else:
         final = final or "(round cap reached)"
 
-    return {
-        "ok": True,
+    verdict = job_ledger.completion_verdict(final)
+    artifacts = job_ledger.parse_artifacts(final)
+    ok = True
+    if verdict == "contradiction":
+        ok = False
+    report = {
+        "ok": ok,
         "slug": slug,
+        "role": role,
         "task": task[:200],
+        "task_id": task_id,
+        "job_id": job_id,
         "summary": final[:4000],
+        "verdict": verdict,
+        "artifacts": [{"id": a, "chars": len(b)} for a, b in artifacts],
         "tool_calls": log_rows,
         "rounds": len(log_rows),
     }
+    if job_id:
+        try:
+            job_ledger.ingest_report(job_id, report, task_id=task_id)
+        except Exception as exc:
+            log.debug("job ingest skipped: %s", exc)
+    return report
 
 
 async def run_subagents_parallel(
-    calls: list[dict[str, str]],
+    calls: list[dict[str, Any]],
     *,
     memory: Any = None,
     session_id: str = "",
     read_file_fn: Any = None,
 ) -> list[dict[str, Any]]:
     import asyncio
+
     jobs = [
         run_subagent(
             c.get("slug") or "",
@@ -151,6 +303,14 @@ async def run_subagents_parallel(
             memory=memory,
             session_id=session_id,
             read_file_fn=read_file_fn,
+            max_rounds=int(c.get("max_rounds") or DEFAULT_ROUNDS),
+            role=str(c.get("role") or "coder"),
+            job_id=str(c.get("job_id") or ""),
+            original_ask=str(c.get("original_ask") or ""),
+            return_contexts=list(c.get("return_contexts") or []) or None,
+            context_refs=list(c.get("context_refs") or []) or None,
+            context_bootstrap=list(c.get("context_bootstrap") or []) or None,
+            task_id=str(c.get("task_id") or ""),
         )
         for c in (calls or [])[:MAX_PARALLEL]
     ]
@@ -162,7 +322,14 @@ async def run_subagents_parallel(
 def format_subagent_results(results: list[dict[str, Any]]) -> str:
     parts = []
     for r in results:
-        head = f"[{r.get('slug')}] {'OK' if r.get('ok') else 'FAIL'}"
+        role = r.get("role") or "coder"
+        verdict = r.get("verdict") or ""
+        head = f"[{r.get('slug')}/{role}] {'OK' if r.get('ok') else 'FAIL'}"
+        if verdict:
+            head += f" {verdict}"
         body = r.get("summary") or r.get("error") or ""
+        arts = r.get("artifacts") or []
+        if arts:
+            body += "\nartifacts: " + ", ".join(a.get("id", "?") for a in arts)
         parts.append(f"{head}\n{body}")
     return "\n\n".join(parts)

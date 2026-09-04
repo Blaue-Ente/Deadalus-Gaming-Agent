@@ -24,7 +24,8 @@ Daedalus is **one product**: coding agent + Studio + Playground. One FastAPI pro
 |------|------|---------|
 | Identity | `daedalus/identity.py` + `identity_standalone.py` | Compact tool contract in this product |
 | Memory | `memory.py`, `knowledge.py` | Chroma collections under `$DAEDALUS_DATA` |
-| Agent loop | `agent.py`, `native_tools.py`, `tools.py`, `workers.py`, `subagents.py` | Native tools by default; jailed sub-agents |
+| Agent loop | `agent.py`, `native_tools.py`, `tools.py`, `workers.py`, `subagents.py` | Native tools by default; jailed explorer/coder/verify sub-agents |
+| Job ledger | `job_ledger.py` | Original ask, acceptance, slices, named artifacts on disk |
 | Shell | `shell_center.py` | Argv-first runner; cwd jail; strip secrets. Not a container. |
 | Owner auth | `owner_auth.py` | Bearer token on mutations; loopback bootstrap |
 | Local LLM | `local_llm.py` + `llm_wardrobe.py` + `machine_profile.py` | Probe + hardware catalog |
