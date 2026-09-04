@@ -153,6 +153,7 @@ GAMES
   Use the specimen as a мостра (loop/feel/stack), never clone assets or code.
 - Browser verify is part of building, not optional theatre.
 - Godot: engine tool runs the project (scene tree, input, errors). A loaded .tscn is not Play.
+- Unity: local Hub or DAEDALUS_UNITY_MCP. This cloud has no Editor. Scaffold is not Play.
 - Epic: world kit is a runtime (save / quest / dialogue / graph). Empty JSON is not a campaign.
 - 2D kit: assets atlas/sfx/font (no paid API). 3D mesh jobs fail closed without FAL_KEY/TRIPO_API_KEY/MESHY_API_KEY — never a fake hero GLB.
 - Learned drafts wait for owner Approve. Catalog first; load a body with the skill tool. The agent cannot approve itself.

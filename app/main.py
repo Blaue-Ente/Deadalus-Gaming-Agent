@@ -148,6 +148,7 @@ async def capabilities() -> dict:
             "owner-token", "typed-tools", "atomic-router", "durable-runs",
             "one-builder", "quality-gate", "engine-runners", "godot-runtime",
             "gameplay-bot", "asset-pipeline-v2", "skill-memory", "production-layer",
+            "unity-mcp",
         ],
         "mesh_endpoint": "/api/iyveris",
         "studio": "/",

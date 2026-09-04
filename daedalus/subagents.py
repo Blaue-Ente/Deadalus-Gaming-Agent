@@ -59,6 +59,7 @@ Role: coder. Implement exactly this slice — no extra features.
 Use injected artifacts instead of rediscovering the tree.
 2D kit: assets({action: atlas|sfx|font, slug}) — no paid API. 3D mesh jobs
 fail closed without FAL_KEY/TRIPO_API_KEY/MESHY_API_KEY; greybox is a cube, not a hero.
+Do not vendor a Unity Editor. engine(action=run) on Unity is MCP or batchmode or honest refuse.
 production(action=seed, slug) writes design/systems.json only. Do not inject
 src/layer/runtime.js into the Vite racer M0.
 """
@@ -66,6 +67,8 @@ src/layer/runtime.js into the Vite racer M0.
 _VERIFY_SYSTEM = """
 Role: verify. Read-only for files. Confirm the slice matches the original ask.
 For Godot: engine({action: run|inspect|input|errors, slug}) — files are not Play.
+Unity: engine(action=run, slug) needs UNITY_PATH or DAEDALUS_UNITY_MCP.
+Scaffold is not Play. This cloud does not vendor a Unity Editor.
 For campaigns: world({action: prove, slug}) — empty JSON is not a campaign.
 production(action=prove, slug) — empty map is not a production layer;
 store-ready on a prototype hits the wall.

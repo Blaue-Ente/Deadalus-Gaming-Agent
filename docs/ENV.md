@@ -63,7 +63,8 @@ Studio → LLM (wardrobe) can switch models without editing `.env` (`wardrobe.js
 | `DAEDALUS_EVOLUTION` | `1` turns the gardener on at boot; `0` is a kill switch |
 | `GODOT_BIN` | Path to Godot 4.3. Missing binary fails Godot kinds. When set, the TCP runtime bridge (player must move) is required — static files are not a playtest. |
 | `DAEDALUS_GODOT_MCP` | Optional name of a Godot MCP server in `$DAEDALUS_DATA/mcp.json`. Headless bridge is the default; MCP is an adapter, not a second Editor. |
-| `UNITY_PATH` | Path to the Unity Editor. Missing Editor fails Unity kinds (batchmode). |
+| `UNITY_PATH` | Path to the Unity Editor. Missing Editor fails Unity kinds (batchmode). Batchmode import is not Play mode. |
+| `DAEDALUS_UNITY_MCP` | Optional name of a Unity MCP server in `$DAEDALUS_DATA/mcp.json`. Local Editor plugin — we do not vendor Unity. Without this or `UNITY_PATH`, `engine` on a Unity project refuses honestly. |
 
 Web visual kinds need Chromium on PATH for the `playtest/scenario.json` bot (pixel-diff, FPS). Missing Chromium fails closed — it is not a skip-pass.
 
