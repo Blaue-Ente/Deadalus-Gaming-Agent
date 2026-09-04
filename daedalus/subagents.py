@@ -27,7 +27,7 @@ _SUB_RE = re.compile(
 
 MAX_PARALLEL = 3
 DEFAULT_ROUNDS = 6
-CODER_TOOLS = ("read_file", "list_dir", "write_file", "run_command", "engine", "world", "assets", "skill", "production", "math3d", "spatial", "game_lint", "profiler", "game_canon")
+CODER_TOOLS = ("read_file", "list_dir", "write_file", "playground_new", "run_command", "engine", "world", "assets", "skill", "production", "math3d", "spatial", "game_lint", "profiler", "game_canon")
 EXPLORER_TOOLS = ("read_file", "list_dir", "run_command", "engine", "world", "skill", "production", "math3d", "spatial", "game_lint", "profiler", "game_canon")
 VERIFY_TOOLS = EXPLORER_TOOLS
 

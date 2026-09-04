@@ -37,9 +37,8 @@ from .navigator_vocab import (
 
 log = logging.getLogger(__name__)
 
-# Cheap model: Ling 2.6 Flash (Novita) or Llama 3.3 70B (OpenRouter) — replaces Claude Haiku
-_HAIKU_MODEL = "inclusionai/ling-2.6-flash"   # Novita primary
-_HAIKU_MODEL_OR = "meta-llama/llama-3.3-70b-instruct"  # OpenRouter fallback
+# Cheap wrap-up / navigator model is resolved in cheap_llm.resolve_cheap_openai
+# (NVIDIA lightning → OpenRouter :free → Novita DeepSeek). Never Claude.
 _HAIKU_MAX_TOKENS = 400
 _HAIKU_TIMEOUT_S = 5.0
 
@@ -145,7 +144,8 @@ _INTENT_SIGNALS: list[tuple[str, list[str]]] = [
     ]),
     ("code_change", [
         "промени", "поправи", "напиши", "добави към", "редактирай",
-        "change", "fix", "implement", "refactor", "edit",
+        "направи", "създай", "playground", "игра",
+        "change", "fix", "implement", "refactor", "edit", "create",
     ]),
     ("debug", [
         "грешка", "не работи", "счупено", "error", "broken", "doesn't work",
@@ -229,6 +229,35 @@ def _fast_path(user_msg: str) -> Briefing | None:
             fast_path=True,
         )
     return None
+
+
+_ACTION_RE = re.compile(
+    r"(направи|създай|напиши|поправи|playground|игра|"
+    r"create|build|implement|fix|write)\b",
+    re.I,
+)
+
+
+def _unavailable_briefing(user_msg: str) -> Briefing:
+    """When cheap Navigator LLM is down, do not classify build work as chat.
+
+    intent=chat skips native tools (math3d / spatial / game_canon) in agent.py.
+    """
+    msg = user_msg or ""
+    if _ACTION_RE.search(msg) or len(msg) > 120:
+        return Briefing(
+            intent="code_change",
+            tools=["NEED_READ_FILE"],
+            budget="normal",
+            hint="(navigator unavailable — treat as build, keep tools)",
+            fast_path=True,
+        )
+    return Briefing(
+        intent="chat",
+        budget="normal",
+        hint="(navigator unavailable — Sonnet acting alone with full context)",
+        fast_path=True,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -390,12 +419,7 @@ async def navigate(
     if not haiku_ok:
         # Minimal fallback briefing — count as fast-path (no Haiku saving)
         _stats["fast_path_calls"] += 1
-        return Briefing(
-            intent="chat",
-            budget="normal",
-            hint="(navigator unavailable — Sonnet acting alone with full context)",
-            fast_path=True,
-        )
+        return _unavailable_briefing(user_msg)
 
     _stats["haiku_calls"] += 1
     _stats["estimated_tokens_saved"] += _TOKENS_SAVED_HAIKU_PATH
@@ -504,17 +528,13 @@ def _call_haiku_sync(system: str, user_content: str) -> str:
     """Direct SDK fallback when mesh_router is disabled or unavailable."""
     try:
         from openai import OpenAI
-        nv_key = os.environ.get("NOVITA_API_KEY", "")
-        or_key = os.environ.get("OPENROUTER_API_KEY", "")
-        if nv_key:
-            api_key, base_url, model = nv_key, "https://api.novita.ai/v3/openai", _HAIKU_MODEL
-        elif or_key:
-            api_key, base_url, model = or_key, "https://openrouter.ai/api/v1", _HAIKU_MODEL_OR
-        else:
+        from .cheap_llm import resolve_cheap_openai
+        cheap = resolve_cheap_openai()
+        if not cheap:
             return ""
-        client = OpenAI(api_key=api_key, base_url=base_url)
+        client = OpenAI(api_key=cheap["api_key"], base_url=cheap["base_url"])
         resp = client.chat.completions.create(
-            model=model,
+            model=cheap["model"],
             max_tokens=_HAIKU_MAX_TOKENS,
             messages=[
                 {"role": "system", "content": system},

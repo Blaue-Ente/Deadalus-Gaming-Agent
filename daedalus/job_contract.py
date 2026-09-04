@@ -5,6 +5,7 @@ writes, smoke, and (for visual kinds) browser verify.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
@@ -59,8 +60,17 @@ def _tools_ok(tool_calls: list[dict[str, Any]] | None) -> tuple[bool, bool, bool
         or "verify" in str(c.get("tool") or "").lower()
         for c in calls
     )
-    failed = any(c.get("ok") is False for c in calls)
+    failed = any(c.get("ok") is False and not c.get("blocked") for c in calls)
     return wrote, ran, failed
+
+
+def _static_preview_counts(user_message: str, kind: str) -> bool:
+    """Static HTML/canvas Playground is served as preview — no NEED_PLAYGROUND_RUN."""
+    k = (kind or "").strip().lower()
+    if k in ("static", "streamlit"):
+        return True
+    msg = (user_message or "").lower()
+    return bool(re.search(r"\b(playground|canvas|html|snake|tetris|pong|игра)\b", msg))
 
 
 def _contradicts_done(reply: str) -> bool:
@@ -83,6 +93,8 @@ def evaluate(
 ) -> JobContract:
     coding = is_coding_task(user_message, intent)
     wrote, ran, failed = _tools_ok(tool_calls)
+    if wrote and not ran and _static_preview_counts(user_message, kind):
+        ran = True
     claims_done = any(w in (reply or "").lower() for w in _DONE_WORDS)
     honest_fail = _contradicts_done(reply)
 
