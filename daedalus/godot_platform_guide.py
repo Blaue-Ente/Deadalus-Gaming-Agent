@@ -73,7 +73,7 @@ def kind_rules_block() -> str:
 • Input: ui_* defaults OK в M0; после custom actions в project.godot.
 • Physics layers: world=1 player=2 enemies=3 pickups=4
 • Autoload Game = scripts/autoload/game.gd
-• 3D hero meshes: assets({action:mesh}) with a key, or Blender jobs → GLB в assets/ — не raw vertices. Greybox is a cube, not a hero.
+• 3D hero meshes: assets({{action:mesh}}) with a key, or Blender jobs → GLB в assets/ — не raw vertices. Greybox is a cube, not a hero.
 • QA: _exit_tree + queue_free + disconnect; cache nodes (без get_node в _process);
   type hints; pooling за bullets/VFX; coyote time + jump buffer на CharacterBody2D.
 • AGENT не пуска Godot Editor в cloud. Локално: Godot 4.3 → Open folder.
