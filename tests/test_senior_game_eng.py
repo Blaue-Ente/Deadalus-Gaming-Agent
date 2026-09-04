@@ -29,7 +29,7 @@ def harness_tmp(tmp_path, monkeypatch):
 
 def test_native_specs_include_senior_tools():
     names = {t["name"] for t in NATIVE_TOOL_SPECS}
-    for n in ("math3d", "spatial", "game_lint", "profiler", "game_canon"):
+    for n in ("math3d", "spatial", "game_lint", "profiler", "game_canon", "playground_new"):
         assert n in names
 
 
@@ -45,6 +45,7 @@ def test_subagents_get_read_tools_not_write():
         assert "game_canon" in tools
         assert "write_file" not in tools
     assert "write_file" in tools_for_role("coder")
+    assert "playground_new" in tools_for_role("coder")
     assert "math3d" in tools_for_role("coder")
     assert "spatial" in tools_for_role("coder")
 
@@ -79,6 +80,9 @@ def test_quat_slerp_and_claimed_mismatch():
     bad = run_op("quat_slerp", {"q0": q0, "q1": q1, "t": 0.5, "claimed": [0, 0, 0, 1]})
     assert bad["verdict"] == "mismatch"
     assert bad["ok"] is True
+    as_str = run_op("quat_slerp", {"q0": "[0,0,0,1]", "q1": "[0,0,1,0]", "t": 0.5, "claimed": "prose note"})
+    assert as_str["ok"] is True
+    assert "verdict" not in as_str
 
 
 def test_ray_triangle_hit_and_miss():

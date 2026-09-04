@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from typing import Any, Awaitable, Callable
 
 log = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ PERM_MAP: dict[str, str | None] = {
     "list_modules": None,
     "run_command": None,
     "write_file": None,
+    "playground_new": None,
     "generate_image": None,
     "remember": None,
     "browser": None,
@@ -77,6 +79,8 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
         "name": "write_file",
         "description": (
             "Write a file in a Playground project (slug required). "
+            "Call playground_new first if the slug does not exist — "
+            "otherwise a static project is created. "
             "Do not use this to patch the Daedalus harness — propose instead."
         ),
         "input_schema": {
@@ -87,6 +91,24 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
                 "content": {"type": "string"},
             },
             "required": ["slug", "path", "content"],
+        },
+    },
+    {
+        "name": "playground_new",
+        "description": (
+            "Create a Playground project and return its slug. "
+            "kind=static for HTML/canvas; vite / vite-react / godot / unity / expo when asked. "
+            "Then write_file with that slug. Do not map the Daedalus harness."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "kind": {"type": "string", "description": "static | vite | vite-react | godot | unity | expo"},
+                "description": {"type": "string"},
+                "slug": {"type": "string"},
+            },
+            "required": ["name"],
         },
     },
     {
@@ -668,6 +690,43 @@ def native_tools_enabled() -> bool:
     return True
 
 
+_PLAYGROUND_BUILD_NAMES = frozenset({
+    "playground_new", "write_file", "read_file", "list_dir",
+    "math3d", "spatial", "game_canon", "game_lint", "profiler",
+    "assets", "generate_image", "playtest", "browser",
+    "run_command", "skill", "engine", "world",
+})
+
+_HARNESS_JAIL = (
+    "PLAYGROUND JAIL: do not map the Daedalus harness. "
+    "Create/write the game with playground_new + write_file. "
+    "Call math3d / spatial / game_canon when the slice needs them."
+)
+
+
+def playground_build_specs() -> list[dict[str, Any]]:
+    """Tools for Playground/game builds — no harness code_search archaeology."""
+    return [t for t in NATIVE_TOOL_SPECS if t["name"] in _PLAYGROUND_BUILD_NAMES]
+
+
+def _playground_session(session_id: str) -> bool:
+    sid = (session_id or "").strip().lower()
+    return sid.startswith(("playground:", "pg-", "pg_auto", "autopilot", "pg-auto"))
+
+
+def _harness_target(path: str) -> bool:
+    p = (path or "").replace("\\", "/").lower().strip()
+    if not p:
+        return False
+    if "daedalus/agent" in p or "daedalus/kernel" in p or "daedalus/native_tools" in p:
+        return True
+    if p.rstrip("/") in {".", "/workspace", "/workspace/daedalus", "daedalus"}:
+        return True
+    if p.startswith("/workspace/daedalus") and "playground" not in p:
+        return True
+    return False
+
+
 def openai_tool_specs(specs: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     out = []
     for t in specs or NATIVE_TOOL_SPECS:
@@ -768,6 +827,8 @@ async def execute_native_tool(
     try:
         if name == "read_file":
             path = str(args.get("path", ""))
+            if _playground_session(session_id) and _harness_target(path):
+                return f"── read_file BLOCKED ──\n{_HARNESS_JAIL}"
             ls = args.get("line_start")
             le = args.get("line_end")
             r = read_file_fn(path, int(ls) if ls else None, int(le) if le else None)
@@ -779,6 +840,18 @@ async def execute_native_tool(
         if name == "list_dir":
             from .shell_center import resolve_cwd
             rel = str(args.get("path") or ".")
+            if _playground_session(session_id) and _harness_target(rel):
+                from .paths import playground_projects_dir
+                root = playground_projects_dir()
+                names = []
+                if root.is_dir():
+                    for p in sorted(root.iterdir())[:80]:
+                        names.append(p.name + ("/" if p.is_dir() else ""))
+                listing = "\n".join(names) or "(empty playground)"
+                return (
+                    f"── list_dir playground (harness listing refused) ──\n"
+                    f"{listing}\n{_HARNESS_JAIL}"
+                )
             try:
                 root = resolve_cwd(rel)
             except ValueError as exc:
@@ -788,6 +861,23 @@ async def execute_native_tool(
                 names.append(p.name + ("/" if p.is_dir() else ""))
             return f"── list_dir {root} ──\n" + "\n".join(names)
 
+        if name == "playground_new":
+            from . import playground as pg
+            name_ = str(args.get("name") or args.get("slug") or "").strip()
+            if not name_:
+                return "── playground_new FAILED: name required ──"
+            kind = str(args.get("kind") or "static").strip() or "static"
+            desc = str(args.get("description") or "")
+            slug_in = str(args.get("slug") or "")
+            proj = await pg.create_project(
+                name_, kind=kind, source="built", description=desc, slug=slug_in,
+            )
+            slug = (proj or {}).get("slug") or ""
+            return (
+                f"── playground_new OK slug={slug} kind={(proj or {}).get('kind')} ──\n"
+                f"Write files with write_file slug={slug}."
+            )
+
         if name == "write_file":
             from . import playground as pg
             slug = str(args.get("slug") or "")
@@ -795,13 +885,25 @@ async def execute_native_tool(
             content = str(args.get("content") or "")
             if not slug or not path:
                 return "── write_file FAILED: slug and path required ──"
+            existing = None
+            try:
+                existing = await pg.get_project(slug)
+            except Exception:
+                existing = None
+            if not existing:
+                await pg.create_project(
+                    slug, kind="static", source="built", description="auto-created on write", slug=slug,
+                )
             pg.write_file(slug, path, content)
             return f"── write_file OK {slug}/{path} ({len(content)} chars) ──"
 
         if name == "run_command":
+            cmd = str(args.get("command") or "")
+            if _playground_session(session_id) and re.search(r"\bfind\s+/", cmd):
+                return f"── run_command BLOCKED ──\n{_HARNESS_JAIL}"
             from .shell_center import run_command
             r = run_command(
-                str(args.get("command") or ""),
+                cmd,
                 cwd=str(args.get("cwd") or "") or None,
                 slug=str(args.get("slug") or ""),
                 timeout=args.get("timeout"),
@@ -1215,13 +1317,21 @@ async def execute_native_tool(
             return f"── postgres FAILED: {r.get('error')} ──"
 
         if name == "code_search":
+            if _playground_session(session_id):
+                return f"── code_search BLOCKED ──\n{_HARNESS_JAIL}"
             q = str(args.get("query", ""))
             r = await search_code_tool(q)
             lines = [f"── code_search: {q} ──"]
             for m in (r.get("semantic_matches") or [])[:5]:
-                lines.append(f"  [sem] {m.get('filepath', '')} → {m.get('qualified_name', '')}")
+                if isinstance(m, dict):
+                    lines.append(f"  [sem] {m.get('filepath', '')} → {m.get('qualified_name', '')}")
+                else:
+                    lines.append(f"  [sem] {m}")
             for m in (r.get("keyword_matches") or [])[:5]:
-                lines.append(f"  [kw] {m.get('file', '')}:{m.get('line', '')}")
+                if isinstance(m, dict):
+                    lines.append(f"  [kw] {m.get('file', '')}:{m.get('line', '')}")
+                else:
+                    lines.append(f"  [kw] {m}")
             return "\n".join(lines)
 
         if name == "list_endpoints":
@@ -1319,17 +1429,22 @@ async def run_native_discovery_pass(
     session_id: str,
     read_file_fn: Callable[..., dict],
     max_rounds: int = 8,
+    tools: list[dict[str, Any]] | None = None,
 ) -> tuple[str | None, list[dict[str, Any]]]:
     """Run native tool rounds. Returns (result_text, tool_log).
 
     Returns (None, []) if no tools were called — caller uses the marker path.
+    JSON/XML tool dumps in assistant text are executed like native tool_calls.
     """
+    from .tool_dumps import extract_tool_dumps
+
+    specs = tools or NATIVE_TOOL_SPECS
     messages: list[dict[str, Any]] = [{"role": "user", "content": user_content}]
     tool_log: list[dict[str, Any]] = []
     all_results: list[str] = []
 
     for _round in range(max_rounds):
-        resp = await call_with_tools_fn(system, messages, NATIVE_TOOL_SPECS)
+        resp = await call_with_tools_fn(system, messages, specs)
         content_blocks = resp.get("content", [])
 
         assistant_content: list[dict[str, Any]] = []
@@ -1343,6 +1458,16 @@ async def run_native_discovery_pass(
             elif block.get("type") == "tool_use":
                 tool_uses.append(block)
                 assistant_content.append(block)
+
+        if not tool_uses:
+            for i, dump in enumerate(extract_tool_dumps("\n".join(text_parts))):
+                tool_uses.append({
+                    "type": "tool_use",
+                    "id": f"dump_{_round}_{i}",
+                    "name": dump.name,
+                    "input": dump.args,
+                })
+                assistant_content.append(tool_uses[-1])
 
         if not tool_uses:
             final = "\n".join(text_parts).strip()
@@ -1374,10 +1499,12 @@ async def run_native_discovery_pass(
                 read_file_fn=read_file_fn,
             )
             all_results.append(result_text)
+            blocked = "BLOCKED" in result_text
             tool_log.append({
                 "tool": tname,
-                "input": {k: v for k, v in tinput.items() if k != "content"},
-                "ok": "FAILED" not in result_text and "ERROR" not in result_text,
+                "input": {k: v for k, v in tinput.items() if k != "content"} if isinstance(tinput, dict) else {},
+                "ok": blocked or ("FAILED" not in result_text and "ERROR" not in result_text),
+                "blocked": blocked,
             })
             tool_result_blocks.append({
                 "type": "tool_result",
