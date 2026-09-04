@@ -50,6 +50,12 @@ class ProductionBody(BaseModel):
     build_mode: str = Field(default="", max_length=32)
 
 
+class UnityBody(BaseModel):
+    action: str = Field(default="status", min_length=1, max_length=32)
+    claim: str = Field(default="", max_length=8000)
+    kind: str = Field(default="", max_length=40)
+
+
 def _jsonable(row: dict[str, Any]) -> dict[str, Any]:
     out = {}
     for k, v in row.items():
@@ -131,6 +137,31 @@ async def post_project_production(slug: str, body: ProductionBody) -> dict:
         layer=body.layer,
         build_mode=body.build_mode,
     )
+
+
+@router.get("/projects/{slug}/unity")
+async def get_project_unity(slug: str) -> dict:
+    from daedalus import playground as pg
+    from daedalus.unity_runtime import status as unity_status
+    proj = await pg.get_project(slug)
+    if not proj:
+        raise HTTPException(status_code=404, detail="project not found")
+    return {"ok": True, "slug": slug, **unity_status(pg.project_dir(slug), slug=slug)}
+
+
+@router.post("/projects/{slug}/unity")
+async def post_project_unity(slug: str, body: UnityBody) -> dict:
+    from daedalus import playground as pg
+    from daedalus.unity_runtime import prove_unity, run_engine_action, status as unity_status
+    proj = await pg.get_project(slug)
+    if not proj:
+        raise HTTPException(status_code=404, detail="project not found")
+    action = (body.action or "status").strip().lower()
+    if action == "status":
+        return {"ok": True, "slug": slug, **unity_status(pg.project_dir(slug), slug=slug)}
+    if action == "prove":
+        return prove_unity(pg.project_dir(slug), claim=body.claim, kind=body.kind or proj.get("kind") or "")
+    return await run_engine_action(action, slug)
 
 
 @router.delete("/projects/{slug}")

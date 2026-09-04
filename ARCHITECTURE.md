@@ -71,7 +71,7 @@ Defaults:
 
 - Asset gate: generated `assets/*.png` must be referenced (`load.image` / `<img>`).
 - Verify: smoke + browser + scenario bot (`playtest/scenario.json`, pixel-diff, FPS/memory) + playtest personas + quality critic.
-- Unity is scaffold + Git, not an in-cloud Editor.
+- Unity is scaffold + Git, not an in-cloud Editor. Native `engine` on a Unity slug uses `DAEDALUS_UNITY_MCP` (local Editor plugin) or `UNITY_PATH` batchmode (import ≠ Play). Without either it refuses honestly. We do not vendor Unity. Gate `unity-check` does not block guided racing.
 - Arcade craft (`arcade_craft.py` + `studio_shelf.py` + `playground_racer_scaffold.py`): 3D arcade uses Vite + Three.js WebGPU/TSL. A racing brief boots a playable M0 in `src/racer/` (not Phaser).
 - Dissection: analyze a reference (link, name, git, or files in Play Lab) and inject a specimen into GDD/planner/builder. Do not copy proprietary assets or code.
 - Play Lab (`$DAEDALUS_DATA/labs/{id}/`): jailed install tree + local HTTP. Optional Docker. Not QEMU Windows and not Steam.

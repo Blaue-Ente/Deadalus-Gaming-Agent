@@ -702,6 +702,9 @@ def select_skills(user_message: str, intent: str, hint: str = "") -> list[str]:
         "production_layer": ["production-check", "prototype wall", "store-ready",
                              "системи", "продукционен слой", "systems.json",
                              "готово за стора"],
+        "unity_runtime": ["unity-check", "unity mcp", "DAEDALUS_UNITY_MCP",
+                          "unity hub", "batchmode", "не вендорираме unity",
+                          "unity editor in the cloud"],
         "dissection": ["дисекция", "dissect", "мостра", "play lab",
                        "лаборатория", "разглоби играта", "specimen game"],
     }

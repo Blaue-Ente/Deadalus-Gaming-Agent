@@ -1,11 +1,12 @@
-"""Engine session facade — Godot headless first, optional MCP editor.
+"""Engine session facade — Godot headless first, Unity MCP or honest refuse.
 
-One interface so native ``engine`` and the Godot runner share ops:
-scene_tree, inspect, input, screenshot, errors, fps, quit.
+One interface so native ``engine`` shares ops: scene_tree, inspect, input,
+screenshot, errors, fps, quit.
 
-``DAEDALUS_GODOT_MCP`` names a server in ``$DAEDALUS_DATA/mcp.json``.
-If that call fails, we fall back to the headless TCP bridge.
-We do not vendor a Godot Editor or a third-party MCP server.
+``DAEDALUS_GODOT_MCP`` / ``DAEDALUS_UNITY_MCP`` name servers in
+``$DAEDALUS_DATA/mcp.json``. Godot falls back to the headless TCP bridge.
+Unity falls back to ``UNITY_PATH`` batchmode (not Play), else an honest
+non-promise. We do not vendor an Editor.
 """
 from __future__ import annotations
 
@@ -208,6 +209,10 @@ async def mcp_action(action: str, slug: str, **fields: Any) -> dict[str, Any]:
 
 
 async def run_action(action: str, slug: str, **fields: Any) -> dict[str, Any]:
+    from .unity_runtime import is_unity_slug, run_engine_action as unity_engine
+
+    if is_unity_slug(slug):
+        return await unity_engine(action, slug, **fields)
     if mcp_server_name():
         try:
             mcp = await mcp_action(action, slug, **fields)

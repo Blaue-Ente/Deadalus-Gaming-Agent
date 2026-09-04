@@ -355,17 +355,19 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
     {
         "name": "engine",
         "description": (
-            "Drive a running Godot project. Headless TCP bridge by default; "
-            "optional MCP editor if DAEDALUS_GODOT_MCP is set. "
-            "action: run | inspect | input | screenshot | tree | errors | fps | wait | quit. "
-            "Files are not Play — use this to see the game."
+            "Drive a running Godot or Unity project. "
+            "Godot: headless TCP bridge; optional DAEDALUS_GODOT_MCP. "
+            "Unity: DAEDALUS_UNITY_MCP for a local Editor, else UNITY_PATH batchmode "
+            "(import is not Play). Without either: honest refuse — we do not vendor Unity. "
+            "action: run | inspect | input | screenshot | tree | errors | fps | wait | quit | status. "
+            "Files are not Play."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "action": {
                     "type": "string",
-                    "description": "run | inspect | input | screenshot | tree | errors | fps | wait | quit | set | call",
+                    "description": "run | inspect | input | screenshot | tree | errors | fps | wait | quit | set | call | status",
                 },
                 "slug": {"type": "string"},
                 "path": {"type": "string", "description": "Node path for inspect/set/call"},
