@@ -652,14 +652,14 @@
       </div>
     </div>
 
-    <!-- ── LLM Config Panel (read-only — manage via LLM Router) ── -->
+    <!-- ── LLM Config Panel (read-only — manage via Connectors) ── -->
     <div class="bg-argos-panel border border-argos-border rounded-lg p-4 mobile-panel-section" data-panel="llm">
-      <div class="mb-3 px-3 py-2 rounded border border-emerald-500/40 bg-emerald-500/10">
-        <div class="text-[11px] font-semibold text-emerald-300 mb-1">🎯 LLM Router е единственият контролен пункт</div>
+      <div class="mb-3 px-3 py-2 rounded border border-argos-accent/40 bg-argos-accent/10">
+        <div class="text-[11px] font-semibold text-argos-accent2 mb-1">Connectors is the only place for the brain</div>
         <div class="text-[10px] text-argos-dim font-mono leading-relaxed">
-          Master + workers се променят само от
-          <a href="/admin/llm-router" class="text-emerald-400 hover:underline">LLM Router</a>
-          (Registry / MIX / Presets). Тук виждаш текущото състояние — без конфликти.
+          Ollama, cloud keys, and MCP are set in
+          <a href="/admin/daedalus/connectors#brain" class="text-argos-accent hover:underline">Connectors</a>.
+          This panel shows current state — the same brain drives chat, workers, and autopilot.
         </div>
       </div>
       <div class="flex items-center justify-between mb-3">
@@ -673,14 +673,14 @@
 
       <!-- Current model display -->
       <div class="mb-3 px-2 py-1.5 rounded bg-argos-bg/60 border border-argos-border/60 flex items-center gap-2">
-        <span class="text-[10px] text-argos-dim font-mono">Модел:</span>
+        <span class="text-[10px] text-argos-dim font-mono">Model:</span>
         <span id="llm-current-model" class="text-[11px] font-mono text-white truncate flex-1">…</span>
         <span id="llm-cache-badge" class="text-[9px] font-mono hidden px-1 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-400">cache ✓</span>
       </div>
 
       <!-- Provider selector (read-only) -->
       <div class="mb-2">
-        <label class="block text-[10px] text-argos-dim font-mono uppercase tracking-wider mb-1">Провайдър</label>
+        <label class="block text-[10px] text-argos-dim font-mono uppercase tracking-wider mb-1">Provider</label>
         <select id="llm-provider" onchange="onLlmProviderChange()" disabled
           class="w-full bg-argos-bg border border-argos-border rounded px-2 py-1.5 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-purple-500/50">
           <option value="anthropic">Anthropic</option>
@@ -689,18 +689,22 @@
           <option value="gemini">Google Gemini</option>
           <option value="novita">Novita AI 💰</option>
           <option value="openrouter">OpenRouter</option>
-          <option value="alltoken">AllToken 🟡</option>
+          <option value="alltoken">AllToken</option>
+          <option value="ollama">Ollama (local)</option>
+          <option value="lmstudio">LM Studio (local)</option>
+          <option value="llamacpp">llama.cpp (local)</option>
+          <option value="vllm">vLLM (local)</option>
           <option value="custom">Custom (base_url)</option>
         </select>
       </div>
 
       <!-- Preset models -->
       <div class="mb-2">
-        <label class="block text-[10px] text-argos-dim font-mono uppercase tracking-wider mb-1">Модел</label>
+        <label class="block text-[10px] text-argos-dim font-mono uppercase tracking-wider mb-1">Model</label>
         <select id="llm-model-preset" onchange="onLlmModelPresetChange()" disabled
           class="w-full bg-argos-bg border border-argos-border rounded px-2 py-1.5 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-purple-500/50">
         </select>
-        <input id="llm-model-custom" type="text" placeholder="или въведи custom model id…"
+        <input id="llm-model-custom" type="text" placeholder="or a custom model id…"
           class="mt-1 w-full bg-argos-bg border border-argos-border rounded px-2 py-1.5 text-xs text-white font-mono focus:outline-none focus:ring-1 focus:ring-purple-500/50 hidden" />
       </div>
 
@@ -729,9 +733,9 @@
 
       <!-- Action buttons (read-only panel — test only) -->
       <div class="flex gap-2">
-        <a href="/admin/llm-router"
-          class="flex-1 px-3 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/50 text-emerald-300 text-[11px] font-semibold rounded uppercase tracking-wider transition text-center">
-          🎯 Отвори LLM Router
+        <a href="/admin/daedalus/connectors#brain"
+          class="flex-1 px-3 py-1.5 bg-argos-accent/20 hover:bg-argos-accent/30 border border-argos-accent/50 text-argos-accent2 text-[11px] font-semibold rounded uppercase tracking-wider transition text-center">
+          Open Connectors
         </a>
         <button onclick="testCurrentProvider()" title="Изпраща 1 тест съобщение и показва отговора"
           class="px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 text-cyan-400 text-[11px] rounded transition">
@@ -763,9 +767,9 @@
             <div><span class="text-argos-dim">deep:</span> <span id="llm-preset-deep" class="text-purple-300"></span></div>
           </div>
         </div>
-        <button onclick="applyLlmPreset()" id="llm-preset-apply-btn" disabled title="Само от LLM Router"
+        <button onclick="applyLlmPreset()" id="llm-preset-apply-btn" disabled title="Connectors only"
           class="w-full px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 text-amber-400/50 text-[11px] font-semibold rounded uppercase tracking-wider cursor-not-allowed">
-          ✨ Приложи в LLM Router →
+          Apply in Connectors →
         </button>
         <div id="llm-preset-msg" class="text-[10px] font-mono mt-2 hidden"></div>
       </div>
@@ -774,7 +778,7 @@
       <div class="mt-4 border-t border-argos-border/50 pt-3">
         <div class="flex items-center justify-between mb-2">
           <span class="text-[10px] font-mono uppercase tracking-wider text-purple-400">⚙ Worker Агенти</span>
-          <a href="/admin/llm-router" class="text-[9px] font-mono text-emerald-400 hover:underline uppercase">LLM Router →</a>
+          <a href="/admin/daedalus/connectors#brain" class="text-[9px] font-mono text-argos-accent hover:underline uppercase">Connectors →</a>
         </div>
         <div id="worker-slots-container" class="space-y-3">
           <!-- rendered by JS -->
@@ -4670,13 +4674,13 @@
   };
 
   window.saveLlmConfig = async function() {
-    showToast('Промени само от LLM Router (/admin/llm-router)', 'warn');
-    window.location.href = '/admin/llm-router';
+    showToast('Change this in Connectors (/admin/daedalus/connectors)', 'warn');
+    window.location.href = '/admin/daedalus/connectors#brain';
   };
 
   window.clearLlmConfig = async function() {
-    showToast('Reset само от LLM Router', 'warn');
-    window.location.href = '/admin/llm-router';
+    showToast('Reset from Connectors', 'warn');
+    window.location.href = '/admin/daedalus/connectors#brain';
   };
 
   window.testCurrentProvider = async function() {
@@ -4758,8 +4762,8 @@
   };
 
   window.applyLlmPreset = async function() {
-    showToast('Приложи preset от LLM Router › Registry', 'warn');
-    window.location.href = '/admin/llm-router';
+    showToast('Apply preset from Connectors', 'warn');
+    window.location.href = '/admin/daedalus/connectors#brain';
   };
 
   // ════════════════════════════════════════════════════════════
@@ -4827,13 +4831,13 @@
   };
 
   window.saveWorkerSlot = async function(slot) {
-    showToast('Worker слотове — само от LLM Router', 'warn');
-    window.location.href = '/admin/llm-router';
+    showToast('Worker slots — from Connectors', 'warn');
+    window.location.href = '/admin/daedalus/connectors#brain';
   };
 
   window.clearWorkerConfig = async function() {
-    showToast('Worker reset — само от LLM Router', 'warn');
-    window.location.href = '/admin/llm-router';
+    showToast('Worker reset — from Connectors', 'warn');
+    window.location.href = '/admin/daedalus/connectors#brain';
   };
 
   // ── Init ─────────────────────────────────────────────────────

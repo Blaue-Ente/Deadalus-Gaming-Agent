@@ -452,6 +452,11 @@ def apply_preset(preset_id: str, master_api_key: str = "") -> dict:
     # Apply master (include base_url so AI-integrations proxy URL is stored in DB)
     set_config(model=master["model"], api_key=master_key, provider=master_provider,
                base_url=master_base_url)
+    try:
+        from .llm_wardrobe import apply_provider_hint
+        apply_provider_hint(master_provider)
+    except Exception:
+        pass
 
     # Apply workers — resolve key per-slot. If worker's provider matches master,
     # we share the master key; else we resolve from that provider's env var.
@@ -563,7 +568,7 @@ def apply_mix_config(
         if not master_key:
             raise ValueError(
                 f"Няма API ключ за master provider '{master_provider}' — "
-                f"задай {provider_env_hint(master_provider)} в Studio → Свързаност или `.env`."
+                f"задай {provider_env_hint(master_provider)} в Studio → Connectors или `.env`."
             )
         set_config(
             model=master_model,
@@ -572,6 +577,11 @@ def apply_mix_config(
             base_url=master_base_url,
             persona_via_master=persona_via_master,
         )
+        try:
+            from .llm_wardrobe import apply_provider_hint
+            apply_provider_hint(master_provider)
+        except Exception:
+            pass
         applied.append("master")
 
     for slot, sc in (slots or {}).items():

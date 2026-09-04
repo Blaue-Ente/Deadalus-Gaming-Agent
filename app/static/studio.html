@@ -101,7 +101,7 @@
       <div class="tabs" role="tablist" data-i18n-aria="studio.railAria" aria-label="Side panels">
         <button class="on" data-pane="shell" type="button" role="tab" aria-selected="true" data-i18n="studio.tab.shell">Shell</button>
         <button data-pane="flight" type="button" role="tab" aria-selected="false" data-i18n="studio.tab.flight">Flight</button>
-        <button data-pane="llm" type="button" role="tab" aria-selected="false" data-i18n="studio.tab.llm">LLM</button>
+        <button data-pane="llm" type="button" role="tab" aria-selected="false" data-i18n="studio.tab.llm">Brain</button>
         <button data-pane="evo" type="button" role="tab" aria-selected="false" data-i18n="studio.tab.evo">Evolution</button>
         <button data-pane="world" type="button" role="tab" aria-selected="false" data-i18n="studio.tab.world">World</button>
       </div>
@@ -120,10 +120,11 @@
       </div>
       <div class="pane" id="pane-llm">
         <p class="kicker" data-i18n="studio.wardrobe">Wardrobe</p>
-        <p class="hint" data-i18n="studio.wardrobeHint">You choose what is pulled. Auto only recommends a role for this turn.</p>
+        <p class="hint" data-i18n="studio.wardrobeHint" data-i18n-html>Same brain for chat, flight, workers, and Command Center. Full keys: <a href="/admin/daedalus/connectors#brain">Connectors</a>.</p>
         <div class="row tight">
-          <button id="offon" type="button" data-i18n="studio.offlineKit">Offline kit</button>
+          <button id="uselocal" type="button">Ollama</button>
           <button id="usecloud" type="button" data-i18n="studio.cloud">Cloud</button>
+          <button id="offon" type="button" data-i18n="studio.offlineKit">Offline kit</button>
         </div>
         <div id="wardrobe"></div>
         <pre id="llmbox" data-i18n="studio.loading">Loading…</pre>
