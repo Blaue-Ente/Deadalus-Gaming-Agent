@@ -32,7 +32,20 @@ def _num(v: Any, default: float = 0.0) -> float:
         return default
 
 
+def _maybe_parse(v: Any) -> Any:
+    """Models often pass vec/quat as the string '[0,0,0,1]' instead of a JSON array."""
+    if isinstance(v, str):
+        s = v.strip()
+        if s[:1] in "[{":
+            try:
+                return json.loads(s)
+            except json.JSONDecodeError:
+                return v
+    return v
+
+
 def vec3(v: Any) -> tuple[float, float, float]:
+    v = _maybe_parse(v)
     if v is None:
         return (0.0, 0.0, 0.0)
     if isinstance(v, dict):
@@ -44,6 +57,7 @@ def vec3(v: Any) -> tuple[float, float, float]:
 
 def quat(v: Any) -> tuple[float, float, float, float]:
     """Quaternion as (x, y, z, w) — same as glm / Unity."""
+    v = _maybe_parse(v)
     if v is None:
         return (0.0, 0.0, 0.0, 1.0)
     if isinstance(v, dict):
@@ -54,6 +68,7 @@ def quat(v: Any) -> tuple[float, float, float, float]:
 
 
 def mat4(v: Any) -> tuple[float, ...]:
+    v = _maybe_parse(v)
     if v is None:
         return identity()
     if isinstance(v, (list, tuple)) and len(v) == 16:
@@ -437,7 +452,12 @@ def run_op(op: str, args: dict[str, Any] | None = None) -> dict[str, Any]:
     if name in ("catalog", "help", "ops"):
         return {"ok": True, "ops": list(OPS), "convention": "quat xyzw, mat4 row-major, OpenGL Y-up"}
     claimed = fields.pop("claimed", None)
+    if isinstance(claimed, str) and not claimed.strip().startswith(("[", "{")):
+        claimed = None  # prose note, not a numeric claim
+    else:
+        claimed = _maybe_parse(claimed)
     atol = _num(fields.pop("atol", ATOL), ATOL)
+    fields = {k: _maybe_parse(v) for k, v in fields.items()}
     try:
         value = _compute(name, fields)
     except Exception as exc:

@@ -86,7 +86,7 @@ The owner talks like a person, not an API. Short Bulgarian or English is enough.
 - Never stall with "не мога". Split, search, shell, then finish or report a blocker.
 
 Native tools (preferred over NEED_* markers when the model supports them):
-read_file, list_dir, write_file (playground slug), run_command, web_search,
+read_file, list_dir, playground_new, write_file (playground slug), run_command, web_search,
 web_fetch, web_read (Jina Reader), reach_status, generate_image, remember,
 code_search, browser, mcp_call, spawn_subagent, playtest, mirofish,
 play_lab, dissect_game, engine, world, assets, skill, production, git_forge,
@@ -111,7 +111,7 @@ TALK vs BUILD
 - <NEED_MODE: talk|build|auto> only when switching mode.
 
 NATIVE TOOLS
-  read_file / list_dir / write_file(slug,path,content) / run_command
+  playground_new / read_file / list_dir / write_file(slug,path,content) / run_command
   web_search / web_fetch / web_read(url) / reach_status
   browser({action: goto|click|type|extract|screenshot|close, url, selector, text})
   mcp_call({server, tool, arguments})

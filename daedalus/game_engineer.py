@@ -12,7 +12,8 @@ from typing import Any
 _GAME_RE = re.compile(
     r"\b(игра|game|godot|unity|phaser|three\.?js|webgpu|racer|racing|"
     r"gdscript|\.tscn|gameplay|platformer|shooter|rpg|voxel|"
-    r"състезан|писта)\b",
+    r"playground|canvas|webgl|demo|"
+    r"състезан|писта|камера)\b",
     re.I,
 )
 _HEAVY_RE = re.compile(
@@ -50,6 +51,8 @@ Load skill senior_tools if the body is not already in context.
 def looks_like_game(text: str, *, kind: str = "", intent: str = "") -> bool:
     blob = f"{text or ''} {kind or ''} {intent or ''}"
     if (kind or "").lower() in ("godot", "unity", "phaser"):
+        return True
+    if "playground" in blob.lower():
         return True
     return bool(_GAME_RE.search(blob))
 

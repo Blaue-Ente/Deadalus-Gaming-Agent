@@ -1461,15 +1461,16 @@ class Daedalus:
                         log.debug("chat fast-path master-config fallback failed: %s", _cfg_exc)
                 if not _haiku_reply:
                     from openai import AsyncOpenAI
-                    _cheap_key = os.environ.get("NOVITA_API_KEY") or os.environ.get("OPENROUTER_API_KEY", "")
-                    _cheap_url = ("https://api.novita.ai/v3/openai" if os.environ.get("NOVITA_API_KEY")
-                                  else "https://openrouter.ai/api/v1")
-                    _cheap_model = ("inclusionai/ling-2.6-flash" if os.environ.get("NOVITA_API_KEY")
-                                    else "meta-llama/llama-3.3-70b-instruct")
-                    if _cheap_key:
-                        _hc = AsyncOpenAI(api_key=_cheap_key, base_url=_cheap_url, max_retries=1)
+                    from .cheap_llm import resolve_cheap_openai
+                    _cheap = resolve_cheap_openai()
+                    if _cheap:
+                        _hc = AsyncOpenAI(
+                            api_key=_cheap["api_key"],
+                            base_url=_cheap["base_url"],
+                            max_retries=1,
+                        )
                         _hr = await _hc.chat.completions.create(
-                            model=_cheap_model,
+                            model=_cheap["model"],
                             max_tokens=_chat_max_tokens,
                             messages=[
                                 {"role": "system", "content": _chat_system},
@@ -1694,7 +1695,8 @@ class Daedalus:
             except Exception as _pe:
                 log.warning("daedalus planning-turn failed (non-fatal): %s", _pe)
 
-        # Phase 2 — native tool API discovery (canonical; NEED_* is fallback)
+        # Phase 2 — native tool API. Playground/game: BUILD with a tight tool
+        # subset. Everything else: recon over the full catalog.
         _native_log: list[dict[str, Any]] = []
         if (
             not _planning_succeeded
@@ -1702,19 +1704,44 @@ class Daedalus:
             and native_tools_enabled()
         ):
             try:
-                _set_live(session_id, "native_tools", 0, "Native tool discovery…")
+                from .game_engineer import looks_like_game as _looks_game
+                from .native_tools import playground_build_specs
+                from .playground_agent_routing import native_build_system
+                _pg_build = is_playground_work_session(session_id, user_message) or _looks_game(
+                    user_message
+                )
+                _nt_specs = playground_build_specs() if _pg_build else None
+                _nt_sys = (
+                    native_build_system(user_message)
+                    if _pg_build
+                    else (
+                        "You are Daedalus tool-discovery. Use tools to gather context. "
+                        "When done, summarize findings briefly."
+                    )
+                )
+                _set_live(session_id, "native_tools", 0, "Native tools…")
                 _native_text, _native_log = await run_native_discovery_pass(
-                    "You are Daedalus tool-discovery. Use tools to gather context. "
-                    "When done, summarize findings briefly.",
-                    user_content[:6000],
+                    _nt_sys,
+                    user_content[:8000],
                     _call_claude_with_tools,
                     memory=self.memory,
                     session_id=session_id or "",
                     read_file_fn=_read_file_tool,
-                    max_rounds=8,
+                    max_rounds=10 if _pg_build else 8,
+                    tools=_nt_specs,
                 )
                 if _native_text:
                     user_content = user_content + "\n\n" + _native_text
+                    if _pg_build and any(
+                        (t.get("tool") in {"write_file", "playground_new"} and t.get("ok"))
+                        for t in _native_log
+                    ):
+                        user_content += (
+                            "\n\n━━━ NATIVE BUILD ALREADY ACTED ━━━\n"
+                            "You already created/wrote Playground files. "
+                            "Reply with a short summary of the slice. "
+                            "Do NOT emit NEED_* markers, JSON {\"tool\":...} dumps, or SQL.\n"
+                        )
                     log.info(
                         "daedalus native-tools: %d tool calls — enriched context",
                         len(_native_log),
@@ -1846,7 +1873,9 @@ class Daedalus:
             _bundle_start_title = hit.bundle_start_title
             _stage_blocks = hit.stage_blocks
             _bundle_commit = hit.bundle_commit
-            has_markers = bool(propose_result_text) or hit.has_markers
+            from .tool_dumps import extract_tool_dumps, strip_tool_dumps
+            _json_dumps = extract_tool_dumps(raw)
+            has_markers = bool(propose_result_text) or hit.has_markers or bool(_json_dumps)
             if not has_markers:
                 # ── Promise-without-marker guard (no-silent-stall) ──
                 # До 3 re-roll-а с нарастваща принуда — моделите да emit-нат
@@ -1968,6 +1997,32 @@ class Daedalus:
 
             tool_results_text_parts: list[str] = []
             vision_blocks: list[dict] = []   # base64 images for vision injection
+            if _json_dumps:
+                from .native_tools import execute_native_tool as _exec_dump
+                dump_bits: list[str] = []
+                _dump_skip = {"postgres_query", "mcp_call", "spawn_subagent"}
+                for dump in _json_dumps:
+                    if dump.name in _dump_skip:
+                        continue
+                    result_text = await _exec_dump(
+                        dump.name, dump.args,
+                        memory=self.memory, session_id=session_id or "",
+                        read_file_fn=_read_file_tool,
+                    )
+                    blocked = "BLOCKED" in result_text
+                    ok = blocked or ("FAILED" not in result_text and "ERROR" not in result_text)
+                    tool_calls_used.append({
+                        "tool": dump.name,
+                        "ok": ok,
+                        "blocked": blocked,
+                        "source": "dump",
+                    })
+                    dump_bits.append(result_text)
+                if dump_bits:
+                    tool_results_text_parts.append(
+                        "━━━ TOOL RESULTS — DUMPED CALLS ━━━\n" + "\n\n".join(dump_bits)
+                    )
+                raw = strip_tool_dumps(raw, _json_dumps)
             if propose_result_text:
                 tool_results_text_parts.append(propose_result_text)
             if search_q:
@@ -2169,7 +2224,15 @@ class Daedalus:
                     tool_results_text_parts.append(f"━━━ TOOL RESULTS — DOCUMENT GENERATION FAILED ━━━\nError: {exc}")
                     tool_calls_used.append({"tool": "generate_document", "ok": False})
 
-            if pg_q:
+            if pg_q and is_playground_work_session(session_id, user_message):
+                tool_results_text_parts.append(
+                    "━━━ TOOL RESULTS — PostgreSQL SKIPPED ━━━\n"
+                    "Playground session — write the game with playground_new / write_file. No SQL."
+                )
+                tool_calls_used.append({
+                    "tool": "postgres_query", "ok": True, "blocked": True, "reason": "playground",
+                })
+            elif pg_q:
                 try:
                     pg_res = await postgres_query_tool(pg_q, session_id=session_id)
                     if pg_res.get("ok"):
@@ -3247,10 +3310,15 @@ class Daedalus:
                     _static_block = playground_run_block_reason(_kind)
                     if _static_block:
                         tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — PLAYGROUND RUN BLOCKED ━━━\n"
+                            f"━━━ TOOL RESULTS — PLAYGROUND RUN (static preview) ━━━\n"
                             f"{_static_block.replace('{slug}', _slug)}"
                         )
-                        tool_calls_used.append({"tool": "playground_run", "ok": False, "blocked": True})
+                        tool_calls_used.append({
+                            "tool": "playground_run",
+                            "ok": True,
+                            "blocked": True,
+                            "reason": "static_preview",
+                        })
                     elif _proj and is_local_only_kind(_kind):
                         tool_results_text_parts.append(
                             f"━━━ TOOL RESULTS — PLAYGROUND RUN BLOCKED ━━━\n"
@@ -4174,15 +4242,16 @@ class Daedalus:
                         log.debug("empty-reply guard mesh_router failed: %s", _wrm_exc)
                 if not raw:
                     from openai import AsyncOpenAI
-                    _wrap_key = os.environ.get("NOVITA_API_KEY") or os.environ.get("OPENROUTER_API_KEY", "")
-                    _wrap_url = ("https://api.novita.ai/v3/openai" if os.environ.get("NOVITA_API_KEY")
-                                 else "https://openrouter.ai/api/v1")
-                    _wrap_model = ("inclusionai/ling-2.6-flash" if os.environ.get("NOVITA_API_KEY")
-                                   else "meta-llama/llama-3.3-70b-instruct")
-                    if _wrap_key:
-                        _hc = AsyncOpenAI(api_key=_wrap_key, base_url=_wrap_url, max_retries=1)
+                    from .cheap_llm import resolve_cheap_openai
+                    _cheap = resolve_cheap_openai()
+                    if _cheap:
+                        _hc = AsyncOpenAI(
+                            api_key=_cheap["api_key"],
+                            base_url=_cheap["base_url"],
+                            max_retries=1,
+                        )
                         _hr = await _hc.chat.completions.create(
-                            model=_wrap_model,
+                            model=_cheap["model"],
                             max_tokens=600,
                             messages=[
                                 {"role": "system", "content": _wrap_system},
@@ -4190,7 +4259,7 @@ class Daedalus:
                             ],
                         )
                         raw = _hr.choices[0].message.content or ""
-                        log.info("empty-reply guard: cheap-llm (%s) produced %d chars", _wrap_model, len(raw))
+                        log.info("empty-reply guard: cheap-llm (%s) produced %d chars", _cheap["model"], len(raw))
                 if not (raw or "").strip():
                     # Haiku creds missing OR Haiku returned empty → deterministic fallback
                     raw = (

@@ -37,9 +37,8 @@ from .navigator_vocab import (
 
 log = logging.getLogger(__name__)
 
-# Cheap model: Ling 2.6 Flash (Novita) or Llama 3.3 70B (OpenRouter) — replaces Claude Haiku
-_HAIKU_MODEL = "inclusionai/ling-2.6-flash"   # Novita primary
-_HAIKU_MODEL_OR = "meta-llama/llama-3.3-70b-instruct"  # OpenRouter fallback
+# Cheap wrap-up / navigator model is resolved in cheap_llm.resolve_cheap_openai
+# (NVIDIA lightning → OpenRouter :free → Novita DeepSeek). Never Claude.
 _HAIKU_MAX_TOKENS = 400
 _HAIKU_TIMEOUT_S = 5.0
 
@@ -529,17 +528,13 @@ def _call_haiku_sync(system: str, user_content: str) -> str:
     """Direct SDK fallback when mesh_router is disabled or unavailable."""
     try:
         from openai import OpenAI
-        nv_key = os.environ.get("NOVITA_API_KEY", "")
-        or_key = os.environ.get("OPENROUTER_API_KEY", "")
-        if nv_key:
-            api_key, base_url, model = nv_key, "https://api.novita.ai/v3/openai", _HAIKU_MODEL
-        elif or_key:
-            api_key, base_url, model = or_key, "https://openrouter.ai/api/v1", _HAIKU_MODEL_OR
-        else:
+        from .cheap_llm import resolve_cheap_openai
+        cheap = resolve_cheap_openai()
+        if not cheap:
             return ""
-        client = OpenAI(api_key=api_key, base_url=base_url)
+        client = OpenAI(api_key=cheap["api_key"], base_url=cheap["base_url"])
         resp = client.chat.completions.create(
-            model=model,
+            model=cheap["model"],
             max_tokens=_HAIKU_MAX_TOKENS,
             messages=[
                 {"role": "system", "content": system},

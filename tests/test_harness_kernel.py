@@ -165,7 +165,9 @@ def test_game_agent_bench_gates():
 def test_wiring_in_source():
     agent = (ROOT / "daedalus" / "agent.py").read_text(encoding="utf-8")
     assert "scan_need_markers" in agent
-    assert "max_rounds=8" in agent
+    assert "max_rounds=10 if _pg_build else 8" in agent
+    assert "extract_tool_dumps" in agent
+    assert "playground_build_specs" in agent
     cfg = (ROOT / "daedalus" / "llm_config.py").read_text(encoding="utf-8")
     assert "overlay_effort" in cfg
     kernel = (ROOT / "daedalus" / "kernel" / "full_autopilot.py").read_text(encoding="utf-8")
