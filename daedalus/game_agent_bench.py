@@ -21,6 +21,7 @@ GATES: dict[str, bool] = {
     "godot_headless_required": True,
     "unity_runner": True,
     "asset_pipeline": True,
+    "asset_pipeline_v2": True,
     "ci_ruff": True,
     "uv_lock": True,
 }

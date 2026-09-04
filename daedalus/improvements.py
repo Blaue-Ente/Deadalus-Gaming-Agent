@@ -695,6 +695,8 @@ def select_skills(user_message: str, intent: str, hint: str = "") -> list[str]:
         "playtest": ["playtest", "тествай играта", "готови ли сме"],
         "gameplay_bot": ["scenario.json", "gameplay bot", "pixel-diff", "fps budget",
                          "play-check", "balance.json"],
+        "asset_pipeline": ["sprite atlas", "tileset", "sfx kit", "bitmap font", "tripo",
+                           "meshy", "hunyuan", "glb job", "asset-check", "greybox"],
         "dissection": ["дисекция", "dissect", "мостра", "play lab",
                        "лаборатория", "разглоби играта", "specimen game"],
     }
