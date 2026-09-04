@@ -145,7 +145,8 @@ _INTENT_SIGNALS: list[tuple[str, list[str]]] = [
     ]),
     ("code_change", [
         "промени", "поправи", "напиши", "добави към", "редактирай",
-        "change", "fix", "implement", "refactor", "edit",
+        "направи", "създай", "playground", "игра",
+        "change", "fix", "implement", "refactor", "edit", "create",
     ]),
     ("debug", [
         "грешка", "не работи", "счупено", "error", "broken", "doesn't work",
@@ -229,6 +230,35 @@ def _fast_path(user_msg: str) -> Briefing | None:
             fast_path=True,
         )
     return None
+
+
+_ACTION_RE = re.compile(
+    r"(направи|създай|напиши|поправи|playground|игра|"
+    r"create|build|implement|fix|write)\b",
+    re.I,
+)
+
+
+def _unavailable_briefing(user_msg: str) -> Briefing:
+    """When cheap Navigator LLM is down, do not classify build work as chat.
+
+    intent=chat skips native tools (math3d / spatial / game_canon) in agent.py.
+    """
+    msg = user_msg or ""
+    if _ACTION_RE.search(msg) or len(msg) > 120:
+        return Briefing(
+            intent="code_change",
+            tools=["NEED_READ_FILE"],
+            budget="normal",
+            hint="(navigator unavailable — treat as build, keep tools)",
+            fast_path=True,
+        )
+    return Briefing(
+        intent="chat",
+        budget="normal",
+        hint="(navigator unavailable — Sonnet acting alone with full context)",
+        fast_path=True,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -390,12 +420,7 @@ async def navigate(
     if not haiku_ok:
         # Minimal fallback briefing — count as fast-path (no Haiku saving)
         _stats["fast_path_calls"] += 1
-        return Briefing(
-            intent="chat",
-            budget="normal",
-            hint="(navigator unavailable — Sonnet acting alone with full context)",
-            fast_path=True,
-        )
+        return _unavailable_briefing(user_msg)
 
     _stats["haiku_calls"] += 1
     _stats["estimated_tokens_saved"] += _TOKENS_SAVED_HAIKU_PATH

@@ -1367,7 +1367,10 @@ class Daedalus:
             _conv_mode = _mode.get_mode()
         except Exception:
             _conv_mode = "auto"
-        from .playground_agent_routing import is_playground_work_session
+        from .playground_agent_routing import (
+            is_playground_work_session,
+            treat_as_conversational,
+        )
         _force_chat = (_conv_mode == "talk")
         _block_chat = (
             _conv_mode == "build"
@@ -1661,14 +1664,13 @@ class Daedalus:
         )
         _planning_succeeded = False
         raw = ""
-        # Skip planning for chat intents (Navigator already classified these as no-tool)
-        _nav_is_chat = (briefing_dict or {}).get("intent") == "chat" if briefing_dict else False
-        _is_conversational = _nav_is_chat or len(user_message) < 40 or any(
-            kw in user_message.lower()
-            for kw in ("здравей", "как си", "добър ден", "hi", "hello",
-                       "благодар", "thanks", "супер", "добре", "окей", "ок",
-                       "мислиш ли", "какво смяташ", "не ми харесва", "защо е така",
-                       "общоприети", "как се настройва", "поговорим")
+        # Skip planning for chat intents (Navigator already classified these as no-tool).
+        # Playground / build must still run native tools even if Navigator said chat
+        # (cheap Haiku down → fallback used to be intent=chat).
+        _is_conversational = treat_as_conversational(
+            user_message,
+            nav_intent=(briefing_dict or {}).get("intent") or "",
+            block_chat=_block_chat,
         )
         # Native tools are the discovery path. NEED_BATCH planning is leftover
         # text encoding — skip it when the typed protocol is on.
