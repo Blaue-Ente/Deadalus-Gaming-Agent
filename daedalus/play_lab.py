@@ -209,7 +209,7 @@ def list_labs() -> list[dict[str, Any]]:
                 vm["status"] = "running"
                 vm["backend"] = vm.get("backend") or "local-http"
                 vm["port"] = live.get("port") or vm.get("port")
-                vm["url"] = f"http://127.0.0.1:{live['port']}/"
+                vm["url"] = _local_http_url(int(live["port"]), str(meta.get("playable") or ""))
                 meta["vm"] = vm
             try:
                 from .computer_smolvm import session_for
@@ -474,10 +474,8 @@ def start_local_http(lab_id: str) -> dict[str, Any]:
         raise ValueError("lab not found")
     existing = _HTTP.get(lab_id)
     if existing and existing.get("port"):
-        url = f"http://127.0.0.1:{existing['port']}/"
-        playable = meta.get("playable") or ""
-        if playable and playable.endswith((".html", ".htm")):
-            url = f"http://127.0.0.1:{existing['port']}/{playable}"
+        playable = str(meta.get("playable") or "")
+        url = _local_http_url(int(existing["port"]), playable)
         return {
             "ok": True,
             "backend": "local-http",
@@ -502,9 +500,7 @@ def start_local_http(lab_id: str) -> dict[str, Any]:
     thread.start()
     _HTTP[lab_id] = {"httpd": httpd, "thread": thread, "port": port}
     playable = meta.get("playable") or _pick_playable(install)
-    url = f"http://127.0.0.1:{port}/"
-    if playable and str(playable).endswith((".html", ".htm")):
-        url = f"http://127.0.0.1:{port}/{playable}"
+    url = _local_http_url(port, str(playable or ""))
     vm = dict(meta.get("vm") or {})
     vm.update({"backend": "local-http", "status": "running", "port": port, "url": url, "container": ""})
     meta["vm"] = vm
@@ -524,6 +520,13 @@ def stop_local_http(lab_id: str) -> None:
             httpd.server_close()
     except Exception as exc:
         log.debug("lab http stop %s: %s", lab_id, exc)
+
+
+def _local_http_url(port: int, playable: str = "") -> str:
+    url = f"http://127.0.0.1:{int(port)}/"
+    if playable and str(playable).endswith((".html", ".htm")):
+        url = f"http://127.0.0.1:{int(port)}/{str(playable).lstrip('/')}"
+    return url
 
 
 def stop_all_http() -> None:
@@ -700,10 +703,7 @@ def serve_url(lab_id: str) -> str | None:
     live = _HTTP.get(lab_id)
     if live and live.get("port"):
         meta = load_lab(lab_id) or {}
-        playable = meta.get("playable") or ""
-        if playable and str(playable).endswith((".html", ".htm")):
-            return f"http://127.0.0.1:{live['port']}/{playable}"
-        return f"http://127.0.0.1:{live['port']}/"
+        return _local_http_url(int(live["port"]), str(meta.get("playable") or ""))
     meta = load_lab(lab_id) or {}
     vm = meta.get("vm") or {}
     if vm.get("status") == "running" and vm.get("url"):

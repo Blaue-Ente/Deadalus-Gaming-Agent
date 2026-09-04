@@ -155,6 +155,7 @@ def test_open_project_skips_node_modules(harness_tmp, monkeypatch):
     lab_id = started["lab_id"]
     assert not (install_dir(lab_id) / "node_modules").exists()
     assert (install_dir(lab_id) / "index.html").is_file()
+    assert "index.html" in (started.get("url") or "")
     stop_vm(lab_id)
 
 
@@ -186,6 +187,7 @@ def test_computer_http(harness_tmp, monkeypatch):
     assert body.get("computer", {}).get("viewer_url")
     live = client.get("/api/v1/daedalus/computer").json()["live"]
     assert live and live[0]["viewer_url"]
+    assert "index.html" in (live[0].get("url") or "")
 
     stopped = client.post("/api/v1/daedalus/computer/stop", json={})
     assert stopped.status_code == 200
@@ -222,4 +224,5 @@ def test_local_backend_skips_smolvm(harness_tmp, monkeypatch):
     assert started["backend"] == "local-http"
     assert started.get("lab_id") == lab["id"]
     assert not started.get("computer")
+    assert started["url"].endswith("index.html")
     stop_vm(lab["id"])

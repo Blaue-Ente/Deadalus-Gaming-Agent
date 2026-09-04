@@ -755,12 +755,15 @@
         links.appendChild(a);
       }
       if (links.childNodes.length) card.appendChild(links);
-      if (row.viewer_url && loopbackViewer(row.viewer_url)) {
+      const embed = (row.viewer_url && loopbackViewer(row.viewer_url))
+        ? row.viewer_url
+        : (row.url && loopbackViewer(row.url) ? row.url : "");
+      if (embed) {
         const frame = document.createElement("div");
         frame.className = "computer-frame";
         const ifr = document.createElement("iframe");
-        ifr.src = row.viewer_url;
-        ifr.title = t("studio.computerGuest");
+        ifr.src = embed;
+        ifr.title = row.viewer_url ? t("studio.computerGuest") : t("studio.computerLocal");
         ifr.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms");
         frame.appendChild(ifr);
         card.appendChild(frame);
