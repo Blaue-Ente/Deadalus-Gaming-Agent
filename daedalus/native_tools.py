@@ -36,6 +36,7 @@ PERM_MAP: dict[str, str | None] = {
     "mirofish": None,
     "play_lab": None,
     "dissect_game": None,
+    "engine": None,
 }
 
 NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
@@ -345,6 +346,35 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
                 "live": {"type": "boolean", "description": "Chromium probe when possible"},
                 "description": {"type": "string", "description": "What the owner wants to build"},
             },
+        },
+    },
+    {
+        "name": "engine",
+        "description": (
+            "Drive a running Godot project. Headless TCP bridge by default; "
+            "optional MCP editor if DAEDALUS_GODOT_MCP is set. "
+            "action: run | inspect | input | screenshot | tree | errors | fps | wait | quit. "
+            "Files are not Play — use this to see the game."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "run | inspect | input | screenshot | tree | errors | fps | wait | quit | set | call",
+                },
+                "slug": {"type": "string"},
+                "path": {"type": "string", "description": "Node path for inspect/set/call"},
+                "prop": {"type": "string"},
+                "value": {"description": "JSON property value for action=set"},
+                "method": {"type": "string"},
+                "args": {"type": "array"},
+                "action_name": {"type": "string", "description": "InputMap action, e.g. ui_right"},
+                "key": {"type": "string", "description": "Physical key W/A/S/D/Space"},
+                "pressed": {"type": "boolean"},
+                "frames": {"type": "integer"},
+            },
+            "required": ["action", "slug"],
         },
     },
 ]
@@ -677,6 +707,27 @@ async def execute_native_tool(
             return (
                 f"── dissect_game ──\n{json.dumps(compact, ensure_ascii=False, default=str)[:2500]}\n\n"
                 f"{block}"
+            )
+
+        if name == "engine":
+            from .engine_session import run_action
+            r = await run_action(
+                str(args.get("action") or "run"),
+                str(args.get("slug") or ""),
+                path=str(args.get("path") or ""),
+                prop=str(args.get("prop") or ""),
+                value=args.get("value"),
+                method=str(args.get("method") or ""),
+                args=args.get("args"),
+                action_name=str(args.get("action_name") or ""),
+                key=str(args.get("key") or ""),
+                pressed=args.get("pressed"),
+                frames=args.get("frames"),
+            )
+            status = "OK" if r.get("ok") else "FAILED"
+            return (
+                f"── engine {args.get('action')} {status} {args.get('slug')} ──\n"
+                f"{json.dumps(r, ensure_ascii=False, default=str)[:6000]}"
             )
 
         if name == "mirofish":

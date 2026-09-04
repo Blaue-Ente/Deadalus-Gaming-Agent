@@ -21,6 +21,7 @@ config/icon="res://icon.svg"
 
 [autoload]
 Game="*res://scripts/autoload/game.gd"
+DaedalusBridge="*res://scripts/autoload/daedalus_bridge.gd"
 
 [display]
 window/size/viewport_width=1280
@@ -209,7 +210,6 @@ _GITIGNORE = """\
 *.translation
 export.cfg
 export_presets.cfg
-*.import
 """
 
 
@@ -257,6 +257,12 @@ def write_godot_scaffold(pdir: Path, name: str, slug: str, description: str = ""
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content, encoding="utf-8")
         written.append(rel)
+    from .godot_bridge import BRIDGE_REL, ensure_bridge, ensure_import_sidecars
+
+    ensure_bridge(pdir)
+    if BRIDGE_REL not in written:
+        written.append(BRIDGE_REL)
+    ensure_import_sidecars(pdir)
     if written:
         log.info("godot scaffold: %s → %s", slug, written)
     return written

@@ -17,7 +17,8 @@ GODOT_PLAN_ADDENDUM = """
 Един .tscn ИЛИ един .gd на етап. НЕ цял проект в един prompt.
 ЗАБРАНЕНО: Phaser, React, HTML gameplay, C# Unity в този kind.
 Cloud: Godot Editor не се пуска тук. Scaffold + Git → локален Godot 4.3.
-Ако `godot` е в PATH: godot --headless --path . --quit  (syntax check).
+Ако `godot` е в PATH: native tool engine({action: run, slug}) — TCP bridge, не само --probe.
+Godot 4.3 API: CharacterBody2D, typed .connect, .import sidecar за PNG/GLB.
 """
 
 GODOT_FOLDER_STRUCTURE = """
@@ -57,8 +58,8 @@ GODOT_PHASES: tuple[dict[str, str], ...] = (
         "id": "M7",
         "title": "QA",
         "goal": (
-            "Headless check if godot in PATH; _exit_tree/disconnect; no get_node in _process; "
-            "type hints; pooling"
+            "Runtime DoD if godot in PATH (engine run: ping, player moves, 0 SCRIPT ERROR); "
+            "_exit_tree/disconnect; no get_node in _process; type hints; pooling"
         ),
     },
 )
@@ -94,7 +95,7 @@ def pipeline_prompt() -> str:
     ]
     for phase, role in zip(GODOT_PHASES, GODOT_CREW_ROLES):
         lines.append(f"- {phase['id']} [{role}]: {phase['goal']}")
-    lines.append("Verify after M1: player can move, fail exists, HUD readable.")
+    lines.append("Verify after M1: engine run — player moves, fail exists, HUD readable.")
     lines.append(
         "QA notes: _exit_tree / queue_free / signal disconnect; "
         "never get_node() in _process; type hints; object pooling; coyote + jump buffer."

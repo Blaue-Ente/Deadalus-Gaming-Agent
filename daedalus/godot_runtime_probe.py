@@ -1,8 +1,9 @@
 """Godot runtime probe — headless first, skip if no binary.
 
-Runs the main scene briefly, captures stdout, optional probe.json.
-Screenshots/FPS from a live Editor are later; planted-defect static checks
-run even in the cloud.
+Static DoD always runs. When ``GODOT_BIN`` (or ``godot`` on PATH) exists,
+the TCP bridge must also ping, move the player, and show a clean console.
+The old ``--quit-after --probe`` path remains as a fallback if the bridge
+cannot connect.
 """
 from __future__ import annotations
 
@@ -12,7 +13,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from .godot_dod import dod_v2_static
+from .godot_dod import dod_v2_static, merge_runtime
 
 # Headless dummy renderer / shutdown noise is not a script bug.
 _IGNORE_SUBSTR = (
@@ -84,6 +85,68 @@ def run_probe(pdir: Path, *, frames: int = 180) -> dict[str, Any]:
     probe_file = root / "studio" / "probe.json"
     if probe_file.is_file():
         info["probe_json"] = probe_file.as_posix()
+    return info
+
+
+def run_runtime(pdir: Path, *, frames: int = 24) -> dict[str, Any]:
+    """Static + signal DoD, then live bridge when Godot is installed."""
+    root = Path(pdir)
+    static = dod_v2_static(root)
+    info: dict[str, Any] = {
+        "ok": static["ok"],
+        "ran": False,
+        "bridge": False,
+        "dod": static,
+        "command": "",
+        "skipped": "",
+    }
+    binary = godot_bin()
+    if not binary:
+        info["skipped"] = "Godot not on PATH; static DoD only. Owner: GODOT_BIN or godot in PATH."
+        return info
+
+    from .godot_bridge import GodotSession, ensure_bridge, ensure_import_sidecars, live_dod, run_import
+
+    ensure_bridge(root)
+    ensure_import_sidecars(root)
+    imported = run_import(root, binary)
+    info["import"] = {"ok": imported.get("ok"), "command": imported.get("command")}
+
+    session = GodotSession(root)
+    started = session.start(binary=binary)
+    info["command"] = started.get("command") or session.command
+    if started.get("ok"):
+        info["ran"] = True
+        info["bridge"] = True
+        live = live_dod(session)
+        flags = _script_errors(session.stdout_tail(80), "")
+        info["console_flags"] = flags
+        info["console_clean"] = not flags
+        info["dod"] = merge_runtime(static, live, flags)
+        info["ok"] = bool(info["dod"]["ok"])
+        info["live"] = live
+        session.close()
+        return info
+
+    session.close()
+    info["bridge_error"] = started.get("error")
+    fallback = run_probe(root, frames=max(60, frames * 4))
+    info["ran"] = bool(fallback.get("ran"))
+    info["fallback_probe"] = True
+    flags = list(fallback.get("console_flags") or [])
+    live_fail = {
+        "ok": False,
+        "blocking": ["bridge_ping", "player_moved"],
+        "checks": [
+            {"id": "bridge_ping", "ok": False, "detail": started.get("error")},
+            {"id": "player_moved", "ok": False, "detail": "bridge unavailable"},
+        ],
+        "stdout": started.get("stdout") or fallback.get("stdout"),
+    }
+    info["dod"] = merge_runtime(static, live_fail, flags)
+    info["ok"] = False
+    info["console_flags"] = flags
+    info["stdout"] = (started.get("stdout") or "")[-1500:] or fallback.get("stdout")
     return info
 
 
