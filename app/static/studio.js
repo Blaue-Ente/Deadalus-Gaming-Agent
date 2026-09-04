@@ -155,7 +155,7 @@
         "&q=" + encodeURIComponent(q.slice(0, 500)),
         { timeoutMs: 8000 }
       );
-      text($("effortnote"), (data.label || "") + " — " + (data.note || ""));
+      text($("effortnote"), t("studio.effort." + (data.tier || "auto")) + " — " + t("studio.effortNote." + (data.tier || "whisper")));
     } catch {
       text($("effortnote"), "");
     }
@@ -921,6 +921,7 @@
     refreshLessons();
     refreshEvolution();
     refreshWorld();
+    previewEffort();
     const shout = $("shout");
     if (shout && !state.lastCwd && (shout.textContent === "Ready." || shout.textContent === "Готов." || shout.textContent === t("studio.ready"))) {
       text(shout, t("studio.ready"));
