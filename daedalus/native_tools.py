@@ -40,6 +40,7 @@ PERM_MAP: dict[str, str | None] = {
     "world": None,
     "assets": None,
     "skill": None,
+    "production": None,
 }
 
 NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
@@ -454,6 +455,36 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
             "required": ["action"],
         },
     },
+    {
+        "name": "production",
+        "description": (
+            "Production layer vs the prototype wall. "
+            "action: status | prove | seed | runtime | map | promote. "
+            "Empty systems map is not a production layer. "
+            "store-ready / готово за стора on a prototype fails. "
+            "seed writes design/systems.json only — do not inject into the Vite racer M0."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "description": "status | prove | seed | runtime | map | promote",
+                },
+                "slug": {"type": "string"},
+                "claim": {
+                    "type": "string",
+                    "description": "Owner/GDD text for prove (store-ready language)",
+                },
+                "systems": {
+                    "description": "System ids or objects for seed/map",
+                },
+                "layer": {"type": "string", "description": "prototype | production"},
+                "build_mode": {"type": "string"},
+            },
+            "required": ["action", "slug"],
+        },
+    },
 ]
 
 
@@ -852,6 +883,22 @@ async def execute_native_tool(
             status = "OK" if r.get("ok") else "FAILED"
             return (
                 f"── skill {args.get('action')} {status} ──\n"
+                f"{json.dumps(r, ensure_ascii=False, default=str)[:6000]}"
+            )
+
+        if name == "production":
+            from .production_layer import run_action as production_action
+            r = production_action(
+                str(args.get("action") or "status"),
+                str(args.get("slug") or ""),
+                claim=str(args.get("claim") or ""),
+                systems=args.get("systems"),
+                layer=str(args.get("layer") or ""),
+                build_mode=str(args.get("build_mode") or ""),
+            )
+            status = "OK" if r.get("ok") else "FAILED"
+            return (
+                f"── production {args.get('action')} {status} {args.get('slug')} ──\n"
                 f"{json.dumps(r, ensure_ascii=False, default=str)[:6000]}"
             )
 
