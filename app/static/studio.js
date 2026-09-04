@@ -394,6 +394,18 @@
     if (ev.key === "Enter") { ev.preventDefault(); $("shrun").click(); }
   });
 
+  async function appendLayer(box) {
+    if (!state.slug) return;
+    try {
+      const prod = await (await fetch("/api/v1/playground/projects/" + state.slug + "/production")).json();
+      const layer = prod.layer || "prototype";
+      const wall = prod.wall || "prototype";
+      box.appendChild(itemEl("слой", layer + " · " + wall, layer === "production" && wall === "clear"));
+    } catch (e) {
+      box.appendChild(itemEl("слой", String(e), false));
+    }
+  }
+
   async function refreshWorld() {
     const box = $("worldkit");
     if (!box) return;
@@ -414,6 +426,7 @@
         empty.className = "empty";
         text(empty, "Няма kit. Епос + ново име, или Autopilot с кампания.");
         box.appendChild(empty);
+        await appendLayer(box);
         return;
       }
       keys.forEach((k) => {
@@ -421,6 +434,7 @@
       });
       const runtime = !!(data.world && data.world.runtime);
       box.appendChild(itemEl("runtime", runtime ? "жив" : "кух JSON", runtime));
+      await appendLayer(box);
     } catch (e) {
       const empty = document.createElement("div");
       empty.className = "empty";

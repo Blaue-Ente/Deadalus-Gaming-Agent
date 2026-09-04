@@ -42,6 +42,14 @@ class AssetPipelineBody(BaseModel):
     job_id: str = Field(default="", max_length=80)
 
 
+class ProductionBody(BaseModel):
+    action: str = Field(..., min_length=1, max_length=32)
+    claim: str = Field(default="", max_length=8000)
+    systems: Any = None
+    layer: str = Field(default="", max_length=32)
+    build_mode: str = Field(default="", max_length=32)
+
+
 def _jsonable(row: dict[str, Any]) -> dict[str, Any]:
     out = {}
     for k, v in row.items():
@@ -96,6 +104,33 @@ async def get_project_world(slug: str) -> dict:
     if not proj:
         raise HTTPException(status_code=404, detail="project not found")
     return {"ok": True, "slug": slug, "world": world_status(pg.project_dir(slug))}
+
+
+@router.get("/projects/{slug}/production")
+async def get_project_production(slug: str) -> dict:
+    from daedalus import playground as pg
+    from daedalus.production_layer import status as production_status
+    proj = await pg.get_project(slug)
+    if not proj:
+        raise HTTPException(status_code=404, detail="project not found")
+    return {"ok": True, "slug": slug, **production_status(pg.project_dir(slug))}
+
+
+@router.post("/projects/{slug}/production")
+async def post_project_production(slug: str, body: ProductionBody) -> dict:
+    from daedalus import playground as pg
+    from daedalus.production_layer import run_action
+    proj = await pg.get_project(slug)
+    if not proj:
+        raise HTTPException(status_code=404, detail="project not found")
+    return run_action(
+        body.action,
+        slug,
+        claim=body.claim,
+        systems=body.systems,
+        layer=body.layer,
+        build_mode=body.build_mode,
+    )
 
 
 @router.delete("/projects/{slug}")
