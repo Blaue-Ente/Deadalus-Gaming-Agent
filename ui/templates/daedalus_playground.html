@@ -216,7 +216,7 @@
             <button id="np-kind-suggest-apply" onclick="applyKindSuggestion()" class="ml-auto px-2 py-0.5 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-[10px]" data-i18n="pg.apply">✓ Apply</button>
           </div>
           <div>
-            <label class="text-[11px] font-mono text-gray-400 mb-1.5 block">⚙️ Build profile</label>
+            <label class="text-[11px] font-mono text-gray-400 mb-1.5 block" data-i18n="pg.buildProfile">⚙️ Build profile</label>
             <div class="dx-profile-cards" id="np-profile-cards">
               <button type="button" class="dx-profile-card" data-profile="quick" onclick="setBuildProfile('quick')">
                 <div class="dx-profile-card-title" data-i18n="pg.profQuick">🟢 Quick prototype</div>
@@ -227,7 +227,7 @@
                 <div class="dx-profile-card-desc" data-i18n="pg.profBalDesc">Pro — Tailwind, responsive, polished UX</div>
               </button>
               <button type="button" class="dx-profile-card" data-profile="studio" onclick="setBuildProfile('studio')">
-                <div class="dx-profile-card-title">🎬 Studio Production</div>
+                <div class="dx-profile-card-title" data-i18n="pg.profStudio">🎬 Studio Production</div>
                 <div class="dx-profile-card-desc" data-i18n="pg.profStudioDesc">Milestones M0–M8, 16 AI roles, Ultra merge</div>
               </button>
             </div>
@@ -864,8 +864,8 @@ async function loadProjects() {
         <div class="shrink-0">${modeSegment(p.slug, p.coding_mode)}</div>
       </div>
       <div class="flex flex-wrap items-center gap-2 mt-3">
-        <button onclick="preview('${p.slug}','${sn}','${p.kind}')" class="btn-sm bg-gray-700 hover:bg-gray-600">👁 Preview</button>
-        <button onclick="openAssets('${p.slug}','${sn}')" class="btn-sm bg-pink-800 hover:bg-pink-700">🎨 Studio</button>
+        <button onclick="preview('${p.slug}','${sn}','${p.kind}')" class="btn-sm bg-gray-700 hover:bg-gray-600">${t('pg.previewBtn')}</button>
+        <button onclick="openAssets('${p.slug}','${sn}')" class="btn-sm bg-pink-800 hover:bg-pink-700">${t('pg.studioBtn')}</button>
         <button onclick="openAutopilot('${p.slug}','${sn}')" class="btn-sm bg-emerald-700 hover:bg-emerald-600 font-medium">${t('pg.autoShort')}</button>
         <button id="resume-btn-${p.slug}" onclick="resumeFromPlan('${p.slug}','${sn}')" class="btn-sm bg-cyan-700 hover:bg-cyan-600 hidden">${t('pg.continue')}</button>
         ${runBtn}
@@ -1404,7 +1404,7 @@ function onStudioPresetChange() {
     $('np-kind').value = hintKind;
     updateKindNote();
     const note = $('np-kind-note');
-    if (note) note.textContent = `🎬 Studio preset → kind: ${hintKind}`;
+    if (note) note.textContent = t('pg.studioPresetKind', {kind: hintKind});
   }
   const unityPanel = $('np-unity-panel');
   if (unityPanel) unityPanel.classList.toggle('hidden', hintKind !== 'unity' && _buildStudioPreset !== 'custom');
@@ -4048,6 +4048,9 @@ document.addEventListener('daedalus:langchange', () => {
   if (window.DaedalusI18n && DaedalusI18n.apply) DaedalusI18n.apply();
   loadGh();
   loadProjects();
+  if (typeof updateKindNote === 'function') updateKindNote();
+  if (typeof _paintProfileCards === 'function') _paintProfileCards();
+  if (typeof setNewMode === 'function') setNewMode(_newProjMode);
 });
 
 async function maybeOpenFromGameStudio() {
