@@ -34,6 +34,10 @@ SIMD `XMVECTOR` / `XMMATRIX` for Windows / D3D. Not the Godot or Three.js defaul
 
 C++ zone profiler. Export CSV → `profiler` `kind=tracy`. RenderDoc frame captures are owner-side; Daedalus does not run that GUI in this cloud.
 
+## milo-path / cis-roadmap / awesome-engine / engine-arch-samples / unity-chop
+
+Roadmaps and architecture lists. Compact notes: `game_roadmaps.md`. Open READMEs and Chop Chop **wiki** pages on demand. `chunk` splits C++ class/struct (with a Context comment) or markdown headings. `game-program-books` is listed only to **refuse** clone/PDF ingest.
+
 ## Workflow
 
-`list` → `study` → `open` a file → write new code in the slug → `spatial` / `game_lint` / `math3d` / `profiler`. `clone` is optional. Offline: study notes still work; fetch/clone do not.
+`list` → `study` → `open` or `chunk` → write new code in the slug → `spatial` / `game_lint` / `math3d` / `profiler`. `clone` is optional. Offline: study notes still work; fetch/clone do not. Wiki paths (`wiki/…`) fetch the GitHub wiki, not the git tree.

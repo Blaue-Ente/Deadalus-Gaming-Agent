@@ -69,4 +69,4 @@ JavaScript/TypeScript games: no AVX. Use typed arrays and avoid pointer graphs; 
 3. Many entities / physics / rays → `spatial` advise, then grid/quad/octree/BVH in *original* code.
 4. C++ vectors → GLM or DirectXMath, then `game_lint`.
 5. Slow frame → `profiler` (Tracy CSV if the owner produced one). RenderDoc is owner-side capture.
-6. Need a worked example → `game_canon` `study`/`open`. Never copy assets or book text into a Playground game.
+6. Need a worked example → `game_canon` `study`/`open`/`chunk`. Roadmaps: `milo-path`, `cis-roadmap`. Architecture: `awesome-engine`, `engine-arch-samples`, `unity-chop` wiki. Never clone GameProgramBooks or Chop Chop into a Playground game.
