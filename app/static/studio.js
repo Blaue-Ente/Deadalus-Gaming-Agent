@@ -705,6 +705,123 @@
     }
   }
 
+  function loopbackViewer(u) {
+    try {
+      const x = new URL(u, location.origin);
+      return x.hostname === "127.0.0.1" || x.hostname === "localhost";
+    } catch {
+      return false;
+    }
+  }
+
+  function renderComputer(data) {
+    const box = $("computerbox");
+    if (!box) return;
+    box.replaceChildren();
+    const live = (data && data.live) || [];
+    const host = (data && data.host) || {};
+    const smol = host.smolvm || {};
+    if (!live.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      const bits = [t("studio.computerIdle")];
+      if (smol.note) bits.push(String(smol.note));
+      text(empty, bits.join(" "));
+      box.appendChild(empty);
+      return;
+    }
+    live.forEach((row) => {
+      const card = document.createElement("div");
+      card.className = "card";
+      const title = document.createElement("b");
+      text(title, (row.title || row.lab_id || "lab") + " · " + (row.backend || "local"));
+      card.appendChild(title);
+      const links = document.createElement("div");
+      if (row.url) {
+        const a = document.createElement("a");
+        a.href = row.url;
+        a.target = "_blank";
+        a.rel = "noopener";
+        text(a, t("studio.playHere"));
+        links.appendChild(a);
+      }
+      if (row.viewer_url) {
+        const a = document.createElement("a");
+        a.href = row.viewer_url;
+        a.target = "_blank";
+        a.rel = "noopener";
+        if (links.childNodes.length) a.style.marginLeft = "0.7rem";
+        text(a, t("studio.watch"));
+        links.appendChild(a);
+      }
+      if (links.childNodes.length) card.appendChild(links);
+      if (row.viewer_url && loopbackViewer(row.viewer_url)) {
+        const frame = document.createElement("div");
+        frame.className = "computer-frame";
+        const ifr = document.createElement("iframe");
+        ifr.src = row.viewer_url;
+        ifr.title = t("studio.computerGuest");
+        ifr.setAttribute("sandbox", "allow-scripts allow-same-origin allow-forms");
+        frame.appendChild(ifr);
+        card.appendChild(frame);
+      }
+      if (row.warning) {
+        const small = document.createElement("small");
+        text(small, row.warning);
+        card.appendChild(small);
+      }
+      box.appendChild(card);
+    });
+  }
+
+  async function refreshComputer() {
+    const box = $("computerbox");
+    if (!box) return;
+    try {
+      const data = await api("/api/v1/daedalus/computer", { timeoutMs: 8000 });
+      renderComputer(data);
+    } catch (e) {
+      box.replaceChildren();
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      text(empty, t("studio.computerErr") + ": " + errText(e));
+      box.appendChild(empty);
+    }
+  }
+  if ($("pcputer")) {
+    $("pcputer").onclick = async () => {
+      document.querySelector('[data-pane="world"]').click();
+      if (!state.slug) {
+        add("bot", t("studio.noProject"));
+        return;
+      }
+      try {
+        const data = await api("/api/v1/daedalus/computer", {
+          method: "POST",
+          body: JSON.stringify({ slug: state.slug }),
+          timeoutMs: 180000,
+        });
+        add("bot", t("studio.computerOk", { id: data.lab_id || data.id || state.slug }));
+        await refreshComputer();
+      } catch (e) {
+        add("bot", t("studio.computerErr") + ": " + errText(e));
+      }
+    };
+  }
+  if ($("pcputerstop")) {
+    $("pcputerstop").onclick = async () => {
+      try {
+        await api("/api/v1/daedalus/computer/stop", {
+          method: "POST",
+          body: JSON.stringify({}),
+        });
+        await refreshComputer();
+      } catch (e) {
+        add("bot", t("studio.computerErr") + ": " + errText(e));
+      }
+    };
+  }
+
   async function refreshConnectors() {
     try {
       const data = await api("/api/v1/daedalus/connectors");
@@ -910,6 +1027,7 @@
       const host = await api("/api/v1/daedalus/labs/status");
       text($("worldbox"), JSON.stringify({ lab: data, host }, null, 2));
       add("bot", data.ok ? t("studio.labOk", { id: data.id }) : (data.detail || t("studio.labFail")));
+      refreshComputer();
     } catch (e) {
       text($("worldbox"), t("studio.lab") + ": " + errText(e));
     }
@@ -932,6 +1050,7 @@
     refreshLessons();
     refreshEvolution();
     refreshWorld();
+    refreshComputer();
     previewEffort();
     const shout = $("shout");
     if (shout && !state.lastCwd && (shout.textContent === "Ready." || shout.textContent === "Готов." || shout.textContent === t("studio.ready"))) {
@@ -950,4 +1069,5 @@
   refreshLessons();
   refreshConnectors();
   refreshEvolution();
+  refreshComputer();
 })();

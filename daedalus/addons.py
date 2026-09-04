@@ -127,6 +127,15 @@ CATALOG: list[dict[str, Any]] = [
         "offline_ok": True,
         "native": "godot_runtime_probe",
     },
+    {
+        "id": "smolvm",
+        "kind": "native",
+        "label": "SmolVM guest computer",
+        "blurb": "Optional microVM browser (pip install smolvm). Live viewer for Play Lab. Not vendored. Windows guests off.",
+        "offline_ok": True,
+        "native": "play_lab_smolvm",
+        "docs": "https://github.com/CelestoAI/SmolVM",
+    },
 ]
 
 

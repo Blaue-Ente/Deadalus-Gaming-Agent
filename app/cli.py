@@ -54,6 +54,7 @@ def main(argv: list[str] | None = None) -> None:
     )
 
     models = sub.add_parser("models", help="Show configured LLM + probe local backends")
+    sub.add_parser("computer", help="Show Play Lab / SmolVM computer backends")
 
     desk = sub.add_parser(
         "desktop",
@@ -125,8 +126,35 @@ def main(argv: list[str] | None = None) -> None:
                 print(f"  - {row.get('role')}: {row.get('ollama')}  ({row.get('label')})")
             if w.get("wardrobe", {}).get("active"):
                 print(f"wardrobe active={w['wardrobe']['active']} backend={w['wardrobe'].get('backend')}")
-        except Exception as exc:
-            print(f"wardrobe: {exc}")
+        except Exception as extra:
+            print(f"wardrobe: {extra}")
+        return
+    if args.cmd == "computer":
+        os.environ.setdefault("DAEDALUS_STANDALONE", "1")
+        from daedalus.play_lab import probe_host
+        from daedalus.computer import live_computers
+        host = probe_host()
+        print(f"backend={host.get('backend_requested')} local_http={host.get('local_http')}")
+        docker = host.get("docker") or {}
+        print(
+            f"docker ready={docker.get('ready')} image={docker.get('image')} "
+            f"present={docker.get('image_present')}"
+        )
+        smol = host.get("smolvm") or {}
+        print(
+            f"smolvm ok={smol.get('ok')} import={smol.get('import')} "
+            f"bin={smol.get('bin') or '-'} kvm={smol.get('kvm')}"
+        )
+        if smol.get("note"):
+            print(f"  {smol['note']}")
+        live = live_computers()
+        if not live:
+            print("live: none")
+        for row in live:
+            print(
+                f"live {row.get('lab_id')} url={row.get('url') or '-'} "
+                f"viewer={row.get('viewer_url') or '-'}"
+            )
         return
     if args.cmd == "ping":
         os.environ.setdefault("DAEDALUS_STANDALONE", "1")

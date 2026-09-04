@@ -95,10 +95,11 @@ GROUPS: list[dict[str, Any]] = [
     {
         "id": "lab",
         "title": "Lab / engines",
-        "blurb": "Play Lab is the virtual machine for specimens. Godot/Unity are on this machine, not in the cloud.",
+        "blurb": "Play Lab is the virtual computer. Local HTTP always; optional SmolVM guest browser to watch.",
         "pick": (
-            "Local HTTP is enough for HTML5 specimens. Docker lab — only if the image is already local "
-            "or you enable pull. QEMU/Wine are detected, not launched."
+            "Local HTTP is enough for HTML5. SmolVM (optional, pip install smolvm) "
+            "gives a guest browser you can watch. Docker lab — only if the image is already local. "
+            "Windows guests are not started."
         ),
     },
     {
@@ -234,6 +235,18 @@ FIELDS: list[dict[str, Any]] = [
         "why": "X-Iyveris-Mesh-Key for POST /api/iyveris (chat/capabilities from another agent).",
     },
     # Lab / engines
+    {
+        "key": "DAEDALUS_LAB_BACKEND", "group": "lab", "secret": False,
+        "label": "Lab computer backend",
+        "why": "auto (default) | local | smolvm | docker. SmolVM is optional and not vendored.",
+        "placeholder": "auto",
+    },
+    {
+        "key": "DAEDALUS_SMOLVM", "group": "lab", "secret": False,
+        "label": "SmolVM guest",
+        "why": "0 = never boot SmolVM even if installed. Default: allow when DAEDALUS_LAB_BACKEND is auto or smolvm.",
+        "placeholder": "1",
+    },
     {
         "key": "DAEDALUS_LAB_IMAGE", "group": "lab", "secret": False,
         "label": "Docker lab image",

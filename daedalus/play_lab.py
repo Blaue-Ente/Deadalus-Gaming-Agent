@@ -3,12 +3,13 @@
 A lab is a jailed workspace under ``$DAEDALUS_DATA/labs/{id}/``. It can host
 an HTML5 / cloned / extracted game so dissection can probe it.
 
-Backends, in order:
-1. Docker container (optional) — isolated HTTP server for the install tree.
-2. Local HTTP on 127.0.0.1 — always available; not a full OS VM.
-3. Filesystem only — install + inspect without serving.
+Backends (``DAEDALUS_LAB_BACKEND=auto|local|docker|smolvm``):
+1. SmolVM (optional) — guest Chromium + live viewer. Not vendored.
+2. Docker container (optional) — isolated HTTP server for the install tree.
+3. Local HTTP on 127.0.0.1 — always available; not a full OS VM.
+4. Filesystem only — install + inspect without serving.
 
-This is not QEMU Windows and not Steam. Native installers (.exe / .msi / .dmg)
+This is not a Windows guest and not Steam. Native installers (.exe / .msi / .dmg)
 are refused unless the owner drops extracted HTML5/git into the lab.
 """
 from __future__ import annotations
@@ -39,6 +40,7 @@ DOCKER_IMAGE_DEFAULT = "python:3.12-alpine"
 _NATIVE_SUFFIXES = {
     ".exe", ".msi", ".dmg", ".pkg", ".appimage", ".apk", ".ipa", ".deb", ".rpm",
 }
+_SKIP_COPY = {".git", "node_modules", "__pycache__", ".venv", "dist", ".godot"}
 _MAX_INSTALL_BYTES = 200 * 1024 * 1024
 
 # lab_id → {httpd, thread, port}
@@ -104,6 +106,8 @@ def load_lab(lab_id: str) -> dict[str, Any] | None:
 
 def probe_host() -> dict[str, Any]:
     """What this machine can actually run — no network, no pulls."""
+    from .computer import probe as computer_probe, requested_backend
+
     docker_bin = shutil.which("docker")
     qemu_bin = shutil.which("qemu-system-x86_64") or shutil.which("qemu-system-aarch64")
     wine_bin = shutil.which("wine")
@@ -117,10 +121,13 @@ def probe_host() -> dict[str, Any]:
     image_present = False
     if docker_ready:
         image_present = _docker_image_present(image)
+    computer = computer_probe()
+    smol = computer.get("smolvm") or {}
     return {
         "ok": True,
         "filesystem": True,
         "local_http": True,
+        "backend_requested": requested_backend(),
         "docker": {
             "bin": docker_bin,
             "ready": docker_ready,
@@ -128,12 +135,15 @@ def probe_host() -> dict[str, Any]:
             "image_present": image_present,
             "pull_opt_in": _env_flag("DAEDALUS_LAB_PULL"),
         },
+        "smolvm": smol,
+        "computer": computer,
         "chromium": chrome,
         "qemu": qemu_bin,
         "wine": wine_bin,
         "note": (
-            "Play Lab is a jailed install tree + HTTP. Docker is an optional VM. "
-            "QEMU/Wine are detected but not auto-started."
+            "Play Lab is a jailed install tree + HTTP. "
+            "SmolVM is an optional guest browser with a live viewer (not vendored). "
+            "Docker is an optional HTTP VM. Windows guests are not started."
         ),
     }
 
@@ -201,6 +211,21 @@ def list_labs() -> list[dict[str, Any]]:
                 vm["port"] = live.get("port") or vm.get("port")
                 vm["url"] = f"http://127.0.0.1:{live['port']}/"
                 meta["vm"] = vm
+            try:
+                from .computer_smolvm import session_for
+                extra = session_for(child.name)
+            except Exception:
+                extra = None
+            if extra:
+                meta = dict(meta)
+                vm = dict(meta.get("vm") or {})
+                vm["viewer_url"] = extra.get("viewer_url") or ""
+                vm["cdp_url"] = extra.get("cdp_url") or ""
+                vm["display_url"] = extra.get("display_url") or ""
+                vm["guest_url"] = extra.get("guest_url") or ""
+                if extra.get("backend"):
+                    vm["computer"] = extra.get("backend")
+                meta["vm"] = vm
             out.append(meta)
     return out
 
@@ -248,7 +273,7 @@ def _tree_size(path: Path) -> int:
     if path.is_file():
         return path.stat().st_size
     total = 0
-    skip = {".git", "node_modules", "__pycache__", ".venv"}
+    skip = _SKIP_COPY
     for p in path.rglob("*"):
         if p.is_file() and not any(part in skip for part in p.parts):
             try:
@@ -319,11 +344,18 @@ def install_into_lab(lab_id: str, src: str | Path) -> dict[str, Any]:
             pass
     elif path.is_dir():
         for child in path.iterdir():
+            if child.name in _SKIP_COPY:
+                continue
             target = dest / child.name
             if child.is_dir():
                 if target.exists():
                     shutil.rmtree(target)
-                shutil.copytree(child, target, dirs_exist_ok=True)
+                shutil.copytree(
+                    child,
+                    target,
+                    dirs_exist_ok=True,
+                    ignore=lambda _d, names: [n for n in names if n in _SKIP_COPY],
+                )
             else:
                 shutil.copy2(child, target)
     else:
@@ -344,7 +376,7 @@ def install_into_lab(lab_id: str, src: str | Path) -> dict[str, Any]:
 
 def _list_install_files(install: Path) -> list[str]:
     out: list[str] = []
-    skip = {".git", "node_modules", "__pycache__"}
+    skip = _SKIP_COPY
     for p in sorted(install.rglob("*")):
         if not p.is_file() or any(part in skip for part in p.parts):
             continue
@@ -446,7 +478,14 @@ def start_local_http(lab_id: str) -> dict[str, Any]:
         playable = meta.get("playable") or ""
         if playable and playable.endswith((".html", ".htm")):
             url = f"http://127.0.0.1:{existing['port']}/{playable}"
-        return {"ok": True, "backend": "local-http", "url": url, "port": existing["port"], "reused": True}
+        return {
+            "ok": True,
+            "backend": "local-http",
+            "url": url,
+            "port": existing["port"],
+            "lab_id": lab_id,
+            "reused": True,
+        }
 
     install = install_dir(lab_id)
     install.mkdir(parents=True, exist_ok=True)
@@ -490,6 +529,11 @@ def stop_local_http(lab_id: str) -> None:
 def stop_all_http() -> None:
     for lab_id in list(_HTTP):
         stop_local_http(lab_id)
+    try:
+        from .computer_smolvm import stop_all as stop_smol
+        stop_smol()
+    except Exception as extra:
+        log.debug("smolvm stop all: %s", extra)
 
 
 def start_docker_vm(lab_id: str) -> dict[str, Any]:
@@ -564,8 +608,19 @@ def stop_docker_vm(lab_id: str) -> None:
 
 
 def start_vm(lab_id: str, *, prefer_docker: bool = True) -> dict[str, Any]:
-    """Boot the lab. Docker if ready; otherwise local HTTP."""
-    if prefer_docker:
+    """Boot the lab: local HTTP, optional SmolVM viewer, optional Docker."""
+    from .computer import requested_backend, smolvm_allowed
+    from .computer_smolvm import available as smol_ready, start_lab_browser
+
+    want = requested_backend()
+    meta = load_lab(lab_id)
+    if not meta:
+        raise ValueError("lab not found")
+
+    if want == "docker":
+        return start_docker_vm(lab_id)
+
+    if want == "auto" and prefer_docker and not (smolvm_allowed() and smol_ready()):
         try:
             host = probe_host()
             docker = host.get("docker") or {}
@@ -573,11 +628,57 @@ def start_vm(lab_id: str, *, prefer_docker: bool = True) -> dict[str, Any]:
                 return start_docker_vm(lab_id)
         except Exception as exc:
             log.info("docker lab fallback to local-http: %s", exc)
-    return start_local_http(lab_id)
+
+    if want == "smolvm" and not smol_ready():
+        raise ValueError(
+            "SmolVM is not installed. pip install smolvm && smolvm setup, "
+            "or set DAEDALUS_LAB_BACKEND=local."
+        )
+
+    served = start_local_http(lab_id)
+    computer: dict[str, Any] = {}
+    want_smol = want == "smolvm" or (want == "auto" and smolvm_allowed() and smol_ready())
+    if want_smol:
+        try:
+            computer = start_lab_browser(
+                lab_id,
+                serve_url=str(served.get("url") or ""),
+                mount=install_dir(lab_id),
+                playable=str(meta.get("playable") or ""),
+                live=True,
+            )
+        except Exception as extra:
+            log.info("smolvm lab fallback to local-http: %s", extra)
+            if want == "smolvm":
+                stop_local_http(lab_id)
+                raise ValueError(f"SmolVM failed to start: {extra}") from extra
+            computer = {"ok": False, "backend": "smolvm", "warning": str(extra)[:300]}
+        else:
+            meta = load_lab(lab_id) or meta
+            vm = dict(meta.get("vm") or {})
+            vm["computer"] = "smolvm"
+            vm["viewer_url"] = computer.get("viewer_url") or ""
+            vm["cdp_url"] = computer.get("cdp_url") or ""
+            vm["display_url"] = computer.get("display_url") or ""
+            vm["guest_url"] = computer.get("guest_url") or ""
+            if computer.get("warning"):
+                vm["warning"] = computer["warning"]
+            meta["vm"] = vm
+            _write_meta(lab_id, meta)
+    served = dict(served)
+    served["lab_id"] = lab_id
+    if computer:
+        served["computer"] = computer
+    return served
 
 
 def stop_vm(lab_id: str) -> dict[str, Any]:
     stop_local_http(lab_id)
+    try:
+        from .computer_smolvm import stop_lab as stop_smol
+        stop_smol(lab_id)
+    except Exception as exc:
+        log.debug("smolvm stop %s: %s", lab_id, exc)
     try:
         stop_docker_vm(lab_id)
     except Exception as exc:
@@ -587,6 +688,9 @@ def stop_vm(lab_id: str) -> dict[str, Any]:
         vm = dict(meta.get("vm") or {})
         vm["status"] = "stopped"
         vm["url"] = ""
+        vm["viewer_url"] = ""
+        vm["cdp_url"] = ""
+        vm["guest_url"] = ""
         meta["vm"] = vm
         _write_meta(lab_id, meta)
     return {"ok": True, "lab_id": lab_id, "status": "stopped"}
