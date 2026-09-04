@@ -25,6 +25,8 @@ The version in `pyproject.toml` is the source of truth for the package.
 - Command Center list pages escape `innerHTML`. Markdown links in the old chat only allow `http(s):`.
 - Owner-facing copy no longer points at Replit Secrets or a foreign product name in titles.
 - Command Center CSS is local (`/admin/static/admin.css`) — no Tailwind CDN, no Google Fonts.
+- One top nav (Studio / Playground / Game Studio / Proposals / Setup). Desktop sidebar is gone; mobile uses the same five items. Command Center uses Studio gold instead of cyan.
+- UI language is English by default. Bulgarian is an explicit EN|BG choice (`localStorage dx.lang`) and does not mix with English on the same screen.
 
 ### Delivery
 

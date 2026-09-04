@@ -249,7 +249,7 @@ def test_http_without_tokens(forge_tmp):
     )
     assert push.status_code == 500
     err = push.json().get("error") or ""
-    assert "Свързаност" in err or "GITHUB_TOKEN" in err or "не е конфигуриран" in err.lower()
+    assert "Connectors" in err or "GITHUB_TOKEN" in err or "not configured" in err.lower() or "не е конфигуриран" in err.lower()
 
     pr = client.post(
         f"/admin/daedalus/playground/api/projects/{slug}/create-upstream-pr",

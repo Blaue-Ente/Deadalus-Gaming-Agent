@@ -177,8 +177,11 @@ def test_http_approve_reject_and_studio_copy(harness_tmp):
     client = TestClient(app)
     home = client.get("/")
     assert home.status_code == 200
-    assert "Уроци" in home.text
-    assert "Одобри" in home.text
+    assert "Lessons" in home.text
+    assert "Approve" in home.text
+    i18n = client.get("/static/i18n.js")
+    assert "Уроци" in i18n.text
+    assert "Одобри" in i18n.text
 
     listed = client.get("/api/v1/daedalus/learned-skills")
     assert listed.status_code == 200
@@ -207,7 +210,7 @@ def test_http_approve_reject_and_studio_copy(harness_tmp):
 
     cc = client.get("/admin/daedalus/skills")
     assert cc.status_code == 200
-    assert "Уроци" in cc.text
+    assert "Lessons" in cc.text or "data-i18n=\"skills.lessons\"" in cc.text
 
 
 def test_persona_still_compact_with_skill_tool(monkeypatch):

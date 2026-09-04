@@ -91,10 +91,12 @@ def test_http_bench_and_studio_copy(tmp_path, monkeypatch):
     client = TestClient(app)
     home = client.get("/")
     assert home.status_code == 200
-    assert "не bake-off" in home.text or "Честност е suite" in home.text
+    assert "not a bake-off" in home.text or "Honesty is a suite" in home.text
     js = client.get("/static/studio.js")
     assert "/api/v1/daedalus/bench" in js.text
-    assert "честност" in js.text
+    assert "studio.honesty" in js.text
+    i18n = client.get("/static/i18n.js")
+    assert "не bake-off" in i18n.text
 
     listed = client.get("/api/v1/daedalus/bench")
     assert listed.status_code == 200
