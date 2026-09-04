@@ -7,8 +7,9 @@ The owner should not have to know Ollama flags. Daedalus:
 3. Installs via ``ollama pull`` only after confirm (never surprise 10 GB).
 4. Persists the active model in ``$DAEDALUS_DATA/wardrobe.json``.
 
-Cloud keys stay optional. Switching to a local model is a Studio click,
-not a restart — ``get_config()`` reads this file every call.
+Cloud keys stay optional. Switching to a local model is a Свързаност /
+Studio click, not a restart — ``get_config()`` and worker slots read this
+file every call so Ollama is the brain for the whole process, not just chat.
 """
 from __future__ import annotations
 
@@ -245,6 +246,19 @@ def set_offline(flag: bool) -> dict[str, Any]:
     return {"ok": True, "offline": data["offline"], "backend": data.get("backend")}
 
 
+def use_local(backend: str = "ollama") -> dict[str, Any]:
+    """Pin the whole app to a local backend without picking a catalog row yet."""
+    from .local_llm import is_local_provider, normalize_provider
+
+    p = normalize_provider(backend or "ollama")
+    if not is_local_provider(p):
+        p = "ollama"
+    data = load()
+    data["backend"] = p
+    save(data)
+    return {"ok": True, "backend": data["backend"], "active": data.get("active")}
+
+
 def use_cloud() -> dict[str, Any]:
     data = load()
     data["backend"] = "cloud"
@@ -252,6 +266,24 @@ def use_cloud() -> dict[str, Any]:
     data["offline"] = False
     save(data)
     return {"ok": True, "backend": "cloud"}
+
+
+def apply_provider_hint(provider: str) -> dict[str, Any]:
+    """Keep wardrobe mode in lockstep with DAEDALUS_PROVIDER from Свързаност."""
+    from .local_llm import is_local_provider, normalize_provider
+
+    p = normalize_provider(provider)
+    if not p:
+        return load()
+    if is_local_provider(p):
+        return use_local(p)
+    cloudish = {
+        "openrouter", "alltoken", "novita", "nvidia", "openai",
+        "anthropic", "groq", "gemini", "custom", "poolside",
+    }
+    if p in cloudish:
+        return use_cloud()
+    return load()
 
 
 def status() -> dict[str, Any]:

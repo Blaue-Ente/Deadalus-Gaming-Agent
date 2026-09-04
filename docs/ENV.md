@@ -54,7 +54,7 @@ Optional: `OPENROUTER_HTTP_REFERER`, `OPENROUTER_APP_TITLE` (sent on OpenRouter 
 | `DAEDALUS_LAB_DOCKER` | `0` — never start a Docker lab; local HTTP only |
 | `DAEDALUS_LAB_INSTALL_ROOT` | extra allowed root for `play_lab` install paths |
 
-Studio → LLM (wardrobe) can switch models without editing `.env` (`wardrobe.json` under the data dir).
+Studio → **Свързаност** (or Studio → Мозък) can switch models without editing `.env` (`wardrobe.json` under the data dir). That choice is the brain for the whole process — chat, workers, autopilot, CLI — not only Studio.
 
 ## Agent behaviour
 

@@ -23,6 +23,8 @@ def conn_tmp(tmp_path, monkeypatch):
     monkeypatch.setenv("DAEDALUS_DATA", str(tmp_path / "data"))
     monkeypatch.setenv("DAEDALUS_PLAYGROUND", str(tmp_path / "projects"))
     monkeypatch.delenv("DAEDALUS_USE_ADN_DB", raising=False)
+    monkeypatch.delenv("DAEDALUS_LOCAL_LLM", raising=False)
+    monkeypatch.delenv("DAEDALUS_OFFLINE", raising=False)
     for key in (*_LLM_KEYS, *_GIT_KEYS, *_PUBLISH):
         monkeypatch.delenv(key, raising=False)
     from daedalus.paths import data_root, playground_projects_dir, product_root, repo_root
@@ -106,6 +108,12 @@ def test_overview_never_returns_raw_secret(conn_tmp):
     assert field["source"] == "ui"
     assert "sk-or" not in field["mask"] or "••••" in field["mask"]
     assert field["mask"] != "sk-or-raw-secret-SHOULD-NOT-LEAK"
+    brain = data.get("brain") or {}
+    assert "effective" in brain
+    assert brain["effective"].get("has_key") is True
+    assert "api_key" not in brain["effective"]
+    blob_brain = str(brain)
+    assert "sk-or-raw-secret-SHOULD-NOT-LEAK" not in blob_brain
 
 
 def test_connectors_http_save_and_page(conn_tmp):
@@ -116,11 +124,17 @@ def test_connectors_http_save_and_page(conn_tmp):
     assert page.status_code == 200
     assert "Свързаност" in page.text
     assert "secrets.env" in page.text
+    assert 'id="brain"' in page.text
+    assert "един за цял Дедал" in page.text
+    assert 'id="brain"' in page.text
+    assert "един за цял Дедал" in page.text
 
     overview = client.get("/admin/daedalus/connectors/overview")
     assert overview.status_code == 200
     body = overview.json()
     assert body.get("ok") is True
+    assert "brain" in body
+    assert "effective" in (body.get("brain") or {})
     groups = {g["id"] for g in body["groups"]}
     assert {"llm", "git", "publish", "mcp", "lab"} <= groups
     rec_ids = {r["id"] for r in body["recommendations"]}
@@ -183,3 +197,50 @@ def test_mcp_toggle_copies_github_token(conn_tmp, monkeypatch):
     off = client.post("/admin/daedalus/connectors/mcp", json={"id": "github-mcp", "enabled": False})
     assert off.json().get("ok") is True
     assert "github-mcp" not in load_servers()
+
+
+def test_secrets_provider_syncs_wardrobe(conn_tmp):
+    from daedalus.connectivity import set_secrets
+    from daedalus.llm_config import get_config
+    from daedalus.llm_wardrobe import load
+    from daedalus.local_llm import local_requested
+    from daedalus.workers import get_worker_config
+
+    set_secrets({"DAEDALUS_PROVIDER": "ollama", "DAEDALUS_MODEL": "qwen2.5:3b"})
+    assert load()["backend"] == "ollama"
+    assert local_requested() is True
+    cfg = get_config()
+    assert cfg["provider"] == "ollama"
+    assert cfg.get("local") is True
+    wc = get_worker_config()
+    assert all(sc["provider"] == "ollama" for sc in wc.values())
+    assert all(sc.get("source") == "master_local" for sc in wc.values())
+
+    set_secrets({"DAEDALUS_PROVIDER": "openrouter", "OPENROUTER_API_KEY": "sk-or-after-cloud"})
+    assert load()["backend"] == "cloud"
+    assert local_requested() is False
+    cloud = get_config()
+    assert cloud["provider"] == "openrouter"
+
+
+def test_connectors_brain_http_activate(conn_tmp, monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-http-must-not-leak")
+    from app.main import app
+    client = TestClient(app)
+    act = client.post("/api/v1/llm/wardrobe/activate", json={"id": "talk-3b"})
+    assert act.status_code == 200
+    assert act.json()["active"] == "qwen2.5:3b"
+    ov = client.get("/admin/daedalus/connectors/overview")
+    assert ov.status_code == 200
+    brain = ov.json()["brain"]
+    assert brain["mode"] == "local"
+    assert brain["effective"]["provider"] == "ollama"
+    assert "sk-or-http-must-not-leak" not in ov.text
+    workers = brain.get("workers") or {}
+    assert workers
+    assert all(s["provider"] == "ollama" for s in workers.values())
+    loc = client.post("/api/v1/llm/wardrobe/local", json={"backend": "ollama"})
+    assert loc.status_code == 200
+    assert loc.json().get("ok") is True
+    cloud = client.post("/api/v1/llm/wardrobe/cloud")
+    assert cloud.json().get("backend") == "cloud"

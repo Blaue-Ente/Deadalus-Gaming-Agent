@@ -463,7 +463,41 @@ def get_worker_config() -> dict:
                 "enabled":  True,
                 "source":   "default",
             }
-    return result
+    return _inherit_master_local(result, master)
+
+
+def _inherit_master_local(workers: dict, master: dict) -> dict:
+    """When the owner picked a local brain, every slot uses it.
+
+    Saved OpenRouter/NVIDIA worker defaults must not keep calling the cloud
+    while Studio chat, CLI, and autopilot are on Ollama.
+    """
+    from .llm_config import PROVIDER_DEFAULTS
+    from .local_llm import is_local_provider, local_requested
+
+    if not (
+        local_requested()
+        or master.get("local")
+        or is_local_provider(str(master.get("provider") or ""))
+    ):
+        return workers
+    provider = master.get("provider") or "ollama"
+    pd = PROVIDER_DEFAULTS.get(provider) or PROVIDER_DEFAULTS.get("ollama") or {}
+    out: dict[str, dict] = {}
+    for slot, w in workers.items():
+        if is_local_provider(str(w.get("provider") or "")):
+            out[slot] = w
+            continue
+        out[slot] = {
+            **w,
+            "model": master.get("model") or w.get("model"),
+            "provider": provider,
+            "api_key": master.get("api_key") or w.get("api_key") or "",
+            "base_url": master.get("base_url") or pd.get("base_url") or "",
+            "sdk": master.get("sdk") or pd.get("sdk") or "openai",
+            "source": "master_local",
+        }
+    return out
 
 
 def set_worker_slot(slot: str, *, model: str, provider: str,

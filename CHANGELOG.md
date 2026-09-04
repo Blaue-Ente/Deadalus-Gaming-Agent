@@ -7,7 +7,7 @@ The version in `pyproject.toml` is the source of truth for the package.
 
 ### Agent
 
-- **Свързаност** — Studio / Command Center one screen for LLM keys, GitHub/GitLab, Netlify, MCP servers, mesh, Play Lab, 3D keys. Values go to `$DAEDALUS_DATA/secrets.env` (masked in the UI, never git). Recommendations say which key to set first (OpenRouter/AllToken vs GitLab vs GitHub PAT).
+- **Свързаност** — one screen for the app-wide brain (Ollama wardrobe or cloud keys), GitHub/GitLab, Netlify, MCP, mesh, Play Lab, 3D keys. Values go to `$DAEDALUS_DATA/secrets.env` (masked in the UI, never git). Recommendations say which key to set first (Ollama vs OpenRouter/AllToken vs GitLab vs GitHub PAT).
 - **Git forges** — clone GitHub **or** GitLab; playground push honours `provider`; GitHub Pull Request and GitLab Merge Request (`create-upstream-pr`, native tool `git_forge`). Playground menu 🔀 PR / MR.
 - **Skill memory** — catalog (name + description) plus at most one SKILL.md body per turn. `draft_from_failure` / `draft_from_success` write pending JSON; they stay out of the next prompt until owner Approve in Studio **Уроци**. Native `skill` is catalog/load/pending only — the agent cannot approve itself.
 - **Hard-job slices** — playground work that is already multi-file keeps a job ledger (`original ask`, acceptance, named artifacts) under `$DAEDALUS_DATA/jobs/`. `spawn_subagent` takes `role=explorer|coder|verify` (explorer/verify cannot write), injects only the asked artifacts, and refuses `TASK_COMPLETE` that contradicts a failure. Definition of Done blocks "готово" while slices remain or the reply admits it did not finish. Whisper chat and greenfield playable slices are unchanged.
@@ -23,6 +23,7 @@ The version in `pyproject.toml` is the source of truth for the package.
 
 ### LLM
 
+- **One brain** — Ollama / cloud keys live in **Свързаност**. Activating a wardrobe model (or `DAEDALUS_PROVIDER=ollama`) routes Studio chat, Command Center, worker slots, and autopilot to that backend. Workers no longer stay on OpenRouter defaults while the master is local.
 - **OpenRouter Free** preset (`or_free`) — all slots on `$0` OpenRouter ids (`poolside/laguna-s-2.1:free` + `openrouter/free`). Applying any preset now also pins planner/coder/reviewer/analysis/claude to that preset’s core models, so an eco/free mix cannot silently call paid Claude defaults.
 - Autopilot coder/reviewer no longer stall on ungated `deep_worker` permission: they fall back to `coder` / `reviewer`. Static HTML scaffolds escape the project description so a brief that mentions `<canvas>` cannot fake a game element. Coder output in ```html fences is ingested (weaker `:free` models rarely emit `===FILE===` blocks).
 

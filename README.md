@@ -96,8 +96,8 @@ Data lives under `$DAEDALUS_DATA` (default `data/daedalus/` on the machine, `%LO
 | Native tools | `read_file`, `write_file`, `run_command`, `web_search`, `web_fetch`, `web_read`, `generate_image`, `remember`, `code_search`, `browser`, `mcp_call`, `spawn_subagent`, `playtest`, `play_lab`, `dissect_game`, `engine`, `world`, `assets`, `skill`, `production`, `git_forge` |
 | MCP | Studio → **Свързаност** (`$DAEDALUS_DATA/mcp.json` + `secrets.env`) |
 | Honesty suite | `python -m daedalus.game_agent_bench` · `GET /api/v1/daedalus/bench` — this harness, not a vendor bake-off |
-| Local LLM | Studio **wardrobe** — hardware profile + Ollama pull; or `DAEDALUS_PROVIDER=ollama` |
-| Offline kit | `DAEDALUS_OFFLINE=1` / Studio toggle — no search/images; local model + capsules still work |
+| Local LLM | **Свързаност** wardrobe — hardware profile + Ollama pull; applies to Studio, workers, autopilot, CLI |
+| Offline kit | `DAEDALUS_OFFLINE=1` / Studio or Свързаност toggle — no search/images; local model + capsules still work |
 | Sub-agents | worker slots **and** `spawn_subagent` (files + shell, jailed) |
 | Autopilot | kernel `full_autopilot` + Definition of Done + playtest |
 | Browser | Playwright smoke **and** an interactive session (goto / click / type) |
@@ -220,7 +220,7 @@ Cloud (fly.io, Render, GitLab Registry): see [DEPLOY.md](DEPLOY.md).
 
 ## First run
 
-Open http://127.0.0.1:8787 — that is **Studio** (chat, shell, wardrobe, mark).
+Open http://127.0.0.1:8787 — that is **Studio** (chat, shell, local brain, mark).
 
 Command Center (same process):
 
@@ -231,6 +231,7 @@ Command Center (same process):
 | Game Studio | http://127.0.0.1:8787/admin/daedalus/game-studio |
 | Proposals (Approve) | http://127.0.0.1:8787/admin/daedalus/proposals |
 | Skills | http://127.0.0.1:8787/admin/daedalus/skills |
+| Свързаност | http://127.0.0.1:8787/admin/daedalus/connectors |
 | OpenAPI | http://127.0.0.1:8787/docs |
 | Health | http://127.0.0.1:8787/health |
 
@@ -254,7 +255,7 @@ Local, no key:
 ```bash
 export DAEDALUS_PROVIDER=ollama
 export DAEDALUS_MODEL=qwen2.5-coder:7b
-# or click a recommended row in Studio → LLM (pull + activate)
+# or click a recommended row in Studio → Мозък / Свързаност (pull + activate)
 ```
 
 `python -m app.cli models` prints the machine class and what to pull.

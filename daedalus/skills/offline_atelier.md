@@ -8,7 +8,7 @@ description: Work without internet using a hardware-aware local model wardrobe a
 **When**: no API keys, airplane, or the owner says "офлайн", "локален модел", "Ollama".
 
 **How**:
-1. Studio → LLM **Гардероб**. Дедал чете RAM/GPU и маркира какво събира.
+1. Studio → **Мозък** или Command Center → **Свързаност**. Дедал чете RAM/GPU и маркира какво събира.
 2. Кликни препоръчания ред. Ако Ollama я няма — https://ollama.com/download после пак.
 3. Първото дърпане иска потвърждение (няколко GB). Не дърпай 32B на 8 GB RAM.
 4. **Офлайн кит** — спира Jina, търсене, картинки. Файлове, shell, localhost browser, playtest heuristic, капсули остават.

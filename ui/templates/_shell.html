@@ -80,9 +80,9 @@
 
       <div class="px-3 pt-1 pb-1.5 text-[9px] uppercase tracking-[0.22em] text-emerald-700/80 font-mono select-none">LLM</div>
       <div class="space-y-0.5 mb-3">
-        <a href="/admin/llm-router" onclick="closeSidebar()" class="flex items-center gap-2 px-3 py-2 rounded {% if page == 'llm_router' %}bg-emerald-500/10 text-emerald-300 border border-emerald-500/30{% else %}text-slate-300 hover:bg-argos-panel2 border border-transparent{% endif %}">
-          <span class="w-1.5 h-1.5 rounded-full shrink-0 {% if page == 'llm_router' %}bg-emerald-400{% else %}bg-argos-dim{% endif %}"></span>
-          LLM status
+        <a href="/admin/daedalus/connectors#brain" onclick="closeSidebar()" class="flex items-center gap-2 px-3 py-2 rounded {% if page == 'llm_router' or page == 'daedalus_connectors' %}bg-emerald-500/10 text-emerald-300 border border-emerald-500/30{% else %}text-slate-300 hover:bg-argos-panel2 border border-transparent{% endif %}">
+          <span class="w-1.5 h-1.5 rounded-full shrink-0 {% if page == 'llm_router' or page == 'daedalus_connectors' %}bg-emerald-400{% else %}bg-argos-dim{% endif %}"></span>
+          Мозък
         </a>
       </div>
     </nav>

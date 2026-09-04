@@ -380,12 +380,24 @@ def _resolve_llm_config() -> dict:
     from .local_llm import (
         is_local_provider,
         local_requested,
+        normalize_provider,
         resolve_local_config,
     )
 
-    # 0. Explicit local LLM (DAEDALUS_PROVIDER=ollama | DAEDALUS_LOCAL_LLM=1)
+    # 0. Explicit local LLM — wardrobe / DAEDALUS_PROVIDER=ollama / DAEDALUS_LOCAL_LLM=1.
+    # Always pin to the local backend even if the probe fails, so a running
+    # OpenRouter key cannot silently steal workers, autopilot, or Command Center.
     if local_requested():
-        local = resolve_local_config()
+        backend = ""
+        try:
+            from .llm_wardrobe import load as _wardrobe_load
+            data = _wardrobe_load()
+            backend = normalize_provider(str(data.get("backend") or ""))
+        except Exception:
+            backend = ""
+        if not backend or backend in {"auto", "cloud"}:
+            backend = (os.environ.get("DAEDALUS_PROVIDER") or "ollama").strip() or "ollama"
+        local = resolve_local_config(backend)
         if local:
             return local
 
@@ -553,7 +565,7 @@ def set_config(
     """Persist LLM config to Replit DB. Returns the saved config.
 
     api_key may be empty — runtime resolves from env via get_config().
-    Live writes are allowed only from LLM Router (see llm_router_config).
+    Live writes go through Свързаност / wardrobe (see llm_router_config).
     """
     from .llm_router_config import require_llm_write_permission
 

@@ -14,6 +14,7 @@ def harness_tmp(tmp_path, monkeypatch):
     monkeypatch.setenv("DAEDALUS_DATA", str(tmp_path / "data"))
     monkeypatch.setenv("DAEDALUS_PLAYGROUND", str(tmp_path / "projects"))
     monkeypatch.delenv("DAEDALUS_PROVIDER", raising=False)
+    monkeypatch.delenv("DAEDALUS_MODEL", raising=False)
     monkeypatch.delenv("DAEDALUS_LOCAL_LLM", raising=False)
     monkeypatch.delenv("DAEDALUS_OFFLINE", raising=False)
     monkeypatch.delenv("DAEDALUS_USE_ADN_DB", raising=False)
@@ -49,12 +50,33 @@ def test_recommend_tiny_skips_32b():
 def test_wardrobe_activate_and_local_requested(harness_tmp, monkeypatch):
     monkeypatch.delenv("DAEDALUS_PROVIDER", raising=False)
     monkeypatch.delenv("DAEDALUS_LOCAL_LLM", raising=False)
-    from daedalus.llm_wardrobe import activate, load
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-should-not-win")
+    monkeypatch.setenv("DAEDALUS_MODEL", "poolside/laguna-s-2.1:free")
+    from daedalus.llm_wardrobe import activate, load, use_cloud
     from daedalus.local_llm import local_requested
+    from daedalus.llm_config import get_config
+    from daedalus.workers import get_worker_config
     r = activate("code-7b")
     assert r["active"] == "qwen2.5-coder:7b"
     assert load()["backend"] == "ollama"
     assert local_requested() is True
+    cfg = get_config()
+    assert cfg["provider"] == "ollama"
+    assert cfg["model"] == "qwen2.5-coder:7b"
+    assert cfg.get("local") is True
+    wc = get_worker_config()
+    assert wc, "worker slots should exist"
+    for slot, sc in wc.items():
+        assert sc["provider"] == "ollama", slot
+        assert sc["model"] == "qwen2.5-coder:7b"
+        assert sc.get("source") == "master_local"
+    use_cloud()
+    assert local_requested() is False
+    cloud = get_config()
+    assert cloud["provider"] == "openrouter"
+    wc2 = get_worker_config()
+    assert all(sc.get("source") != "master_local" for sc in wc2.values())
+    assert wc2["fast"]["provider"] == "openrouter"
 
 
 def test_offline_denies_web(harness_tmp):
@@ -134,8 +156,13 @@ def test_atelier_http(harness_tmp):
     assert off.json()["offline"] is True
 
     home = client.get("/")
-    assert "Гардероб" in home.text
+    assert "Мозък" in home.text
+    assert "Свързаност" in home.text
     assert "Капсула" in home.text
+
+    loc = client.post("/api/v1/llm/wardrobe/local", json={"backend": "ollama"})
+    assert loc.json().get("ok") is True
+    assert loc.json().get("backend") == "ollama"
 
     addons = client.get("/api/v1/daedalus/addons")
     assert addons.status_code == 200

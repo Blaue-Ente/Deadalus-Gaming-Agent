@@ -1,15 +1,16 @@
 {% extends "_shell.html" %}
 {% set page = 'llm_router' %}
-{% block title %}LLM — Дедал{% endblock %}
+{% block title %}Мозък — Дедал{% endblock %}
 {% block eyebrow %}Standalone · Direct LLM{% endblock %}
-{% block heading %}LLM status{% endblock %}
-{% block mob_title %}LLM{% endblock %}
+{% block heading %}Мозък — статус{% endblock %}
+{% block mob_title %}Мозък{% endblock %}
 
 {% block content %}
 <div class="bg-argos-panel border border-argos-border rounded-lg p-5 space-y-3 max-w-xl">
   <p class="text-sm text-argos-dim">
-    Standalone Daedalus talks to the provider directly (AllToken / OpenRouter / Novita / NVIDIA).
-    ADN MeshRouter is off unless <code class="text-argos-accent">DAEDALUS_USE_MESH_ROUTER=1</code>.
+    Това е само преглед. Ключове, Ollama гардероб и MCP се пишат в
+    <a href="/admin/daedalus/connectors#brain" class="text-cyan-400 underline">Свързаност</a>.
+    Същият мозък върти Studio, workers и autopilot.
   </p>
   <dl class="text-sm font-mono space-y-2">
     <div class="flex justify-between gap-4"><dt class="text-argos-dim">provider</dt><dd class="text-white">{{ provider or "—" }}</dd></div>
@@ -17,6 +18,7 @@
     <div class="flex justify-between gap-4"><dt class="text-argos-dim">source</dt><dd class="text-white">{{ source or "—" }}</dd></div>
     <div class="flex justify-between gap-4"><dt class="text-argos-dim">key</dt><dd class="text-white">{% if has_key %}set{% else %}missing{% endif %}</dd></div>
   </dl>
-  <p class="text-xs text-argos-dim">Ключовете се пишат в <a href="/admin/daedalus/connectors" class="text-cyan-400 underline">Свързаност</a> или в <code>.env</code>.</p>
+  <a href="/admin/daedalus/connectors#brain"
+    class="inline-block px-3 py-1.5 rounded-lg text-xs bg-cyan-800 hover:bg-cyan-700 text-white">Отвори Свързаност</a>
 </div>
 {% endblock %}

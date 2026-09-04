@@ -31,7 +31,7 @@ Daedalus is **one product**: coding agent + Studio + Playground. One FastAPI pro
 | Local LLM | `local_llm.py` + `llm_wardrobe.py` + `machine_profile.py` | Probe + hardware catalog |
 | Offline | `offline.py` | Blocks network native tools |
 | Addons | `addons.py` | MCP shelf → `mcp.json` |
-| Connectivity | `connectivity.py` | Studio → Свързаност; `$DAEDALUS_DATA/secrets.env` |
+| Connectivity | `connectivity.py` | Свързаност — secrets, MCP, Ollama wardrobe as the app-wide brain |
 | Capsule | `capsule.py` | Zip a playground project |
 | Live | `live_publish.py` | `/apps/` + Netlify / GitLab Pages / 1h preview |
 | Preferences | `preferences.py` | Owner speech → durable memory |

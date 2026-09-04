@@ -171,11 +171,43 @@ def first_healthy_local() -> dict[str, Any] | None:
     return None
 
 
+def _looks_cloud_model_id(name: str) -> bool:
+    """Gateway ids (OpenRouter etc.) must not be sent to Ollama."""
+    n = (name or "").strip().lower()
+    if not n:
+        return False
+    if n.endswith(":free") or n.endswith("/free"):
+        return True
+    return n.startswith((
+        "poolside/", "openai/", "anthropic/", "google/", "openrouter/",
+        "meta-llama/", "deepseek/", "mistralai/", "x-ai/", "nvidia/",
+    ))
+
+
+def _pick_local_model(probed_models: list[str] | None, provider: str) -> str:
+    try:
+        from .llm_wardrobe import active_model
+        active = active_model()
+        if active:
+            return str(active)
+    except Exception:
+        pass
+    for env_name in ("OLLAMA_MODEL", "DAEDALUS_MODEL"):
+        raw = (os.environ.get(env_name) or "").strip()
+        if raw and not _looks_cloud_model_id(raw):
+            return raw
+    if probed_models:
+        return str(probed_models[0])
+    return (_DEFAULTS.get(provider) or _DEFAULTS["ollama"])["default_model"]
+
+
 def resolve_local_config(provider: str | None = None) -> dict[str, Any] | None:
     """Build a get_config()-shaped dict for a local backend, or None if unreachable.
 
     If ``provider`` is set, use that backend even if probe failed (so CLI/UI can
     still show the intended target). If unset, pick the first healthy probe.
+    Wardrobe's active model beats a leftover cloud ``DAEDALUS_MODEL`` so Ollama
+    is not sent an OpenRouter id.
     """
     p = normalize_provider(provider or os.environ.get("DAEDALUS_PROVIDER") or "")
     if p and p not in LOCAL_PROVIDERS and p != "custom":
@@ -184,18 +216,7 @@ def resolve_local_config(provider: str | None = None) -> dict[str, Any] | None:
     if p in LOCAL_PROVIDERS:
         base = default_base_url(p)
         probed = probe_endpoint(base)
-        model = (
-            os.environ.get("DAEDALUS_MODEL")
-            or os.environ.get("OLLAMA_MODEL")
-            or (probed.get("models") or [None])[0]
-            or _DEFAULTS.get(p, _DEFAULTS["ollama"])["default_model"]
-        )
-        try:
-            from .llm_wardrobe import active_model
-            if not os.environ.get("DAEDALUS_MODEL") and active_model():
-                model = active_model()
-        except Exception:
-            pass
+        model = _pick_local_model(probed.get("models") or [], p)
         return {
             "provider": p if p != "local" else "ollama",
             "model": model,
@@ -216,18 +237,7 @@ def resolve_local_config(provider: str | None = None) -> dict[str, Any] | None:
     if not healthy:
         return None
     p = str(healthy.get("provider") or "ollama")
-    model = (
-        os.environ.get("DAEDALUS_MODEL")
-        or os.environ.get("OLLAMA_MODEL")
-        or (healthy.get("models") or [None])[0]
-        or _DEFAULTS[p]["default_model"]
-    )
-    try:
-        from .llm_wardrobe import active_model
-        if not os.environ.get("DAEDALUS_MODEL") and active_model():
-            model = active_model()
-    except Exception:
-        pass
+    model = _pick_local_model(healthy.get("models") or [], p)
     return {
         "provider": p,
         "model": model,
@@ -243,6 +253,17 @@ def resolve_local_config(provider: str | None = None) -> dict[str, Any] | None:
 
 
 def local_requested() -> bool:
+    """True when the owner asked for a local brain for the whole process.
+
+    Order: explicit env flags, then wardrobe mode, then DAEDALUS_PROVIDER.
+    Wardrobe ``cloud`` is an explicit Studio/Свързаност click — it wins over a
+    leftover ``DAEDALUS_PROVIDER=ollama`` in secrets unless LOCAL_LLM/OFFLINE is on.
+    """
+    flag = (os.environ.get("DAEDALUS_LOCAL_LLM") or "").strip().lower()
+    if flag in ("1", "true", "yes", "on"):
+        return True
+    if (os.environ.get("DAEDALUS_OFFLINE") or "").strip().lower() in ("1", "true", "yes", "on"):
+        return True
     try:
         from .llm_wardrobe import load
         data = load()
@@ -253,10 +274,5 @@ def local_requested() -> bool:
             return True
     except Exception:
         pass
-    flag = (os.environ.get("DAEDALUS_LOCAL_LLM") or "").strip().lower()
-    if flag in ("1", "true", "yes", "on"):
-        return True
-    if (os.environ.get("DAEDALUS_OFFLINE") or "").strip().lower() in ("1", "true", "yes", "on"):
-        return True
     provider = normalize_provider(os.environ.get("DAEDALUS_PROVIDER") or "")
     return provider in LOCAL_PROVIDERS

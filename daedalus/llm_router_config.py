@@ -1,8 +1,9 @@
 """Single control point for live LLM profile (master + worker slots).
 
-All writes to adn:daedalus_llm_config / adn:daedalus_worker_config / active_mix
-must go through apply_profile() while router_write_context() is active.
-Daedalus Admin › LLM tab is read-only; LLM Router is the only UI that may apply.
+Writes to adn:daedalus_llm_config / worker config / active_mix go through
+apply_profile() while router_write_context() is active. Keys, Ollama wardrobe,
+and mode live in Свързаност (`/admin/daedalus/connectors`). The old LLM Router
+page is a status view of the same brain.
 """
 from __future__ import annotations
 
@@ -14,7 +15,11 @@ from typing import Iterator
 _LLM_WRITE_ALLOWED: ContextVar[bool] = ContextVar("llm_write_allowed", default=False)
 
 # HTTP paths that may mutate the live LLM profile (middleware enables write context).
-ROUTER_WRITE_PATH_PREFIXES = ("/admin/llm-router",)
+ROUTER_WRITE_PATH_PREFIXES = (
+    "/admin/llm-router",
+    "/admin/daedalus/connectors",
+    "/api/v1/llm",
+)
 ROUTER_WRITE_PATH_EXACT = frozenset({
     "/admin/daedalus/mix/apply",
     "/admin/daedalus/mix/test",
@@ -57,8 +62,8 @@ def llm_writes_allowed() -> bool:
 def require_llm_write_permission() -> None:
     if not llm_writes_allowed():
         raise LlmConfigWriteForbidden(
-            "Live LLM конфигурацията се променя само от LLM Router "
-            "(/admin/llm-router). Отвори Registry / MIX и натисни „Приложи“."
+            "Live LLM конфигурацията се променя от Свързаност "
+            "(/admin/daedalus/connectors#brain) — Ollama, ключове и облачен provider."
         )
 
 

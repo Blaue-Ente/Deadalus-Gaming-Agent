@@ -12,7 +12,7 @@ description: Match LLM cost and depth to the task. Whisper stays cheap; epic may
 2. Whisper — 2–6 sentences. No playground writes. `remember` is allowed.
 3. Craft — ship one playable loop. Keep the owner's configured model. Do not open a campaign bible.
 4. Epic — you may use a stronger model *this turn only*. Write `world/` and `characters/` and `levels/`. One slice, then journal. Never `ollama pull` without confirm.
-5. Do not persist wardrobe changes unless the owner clicked a model in Гардероб.
+5. Do not persist wardrobe changes unless the owner clicked a model in Мозък / Свързаност.
 
 **Anti-patterns**:
 - A 32B local pull because the prompt said "сложен свят".

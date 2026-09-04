@@ -347,6 +347,10 @@ class WardrobePull(BaseModel):
     confirm: bool = False
 
 
+class WardrobeLocal(BaseModel):
+    backend: str = Field(default="ollama", max_length=40)
+
+
 class OfflineBody(BaseModel):
     offline: bool = True
 
@@ -396,6 +400,13 @@ async def llm_wardrobe_pull(body: WardrobePull) -> dict[str, Any]:
 async def llm_wardrobe_cloud() -> dict[str, Any]:
     from daedalus.llm_wardrobe import use_cloud
     return use_cloud()
+
+
+@router.post("/api/v1/llm/wardrobe/local")
+async def llm_wardrobe_local(body: WardrobeLocal | None = None) -> dict[str, Any]:
+    from daedalus.llm_wardrobe import use_local
+    backend = (body.backend if body else None) or "ollama"
+    return use_local(backend)
 
 
 @router.get("/api/v1/daedalus/offline")

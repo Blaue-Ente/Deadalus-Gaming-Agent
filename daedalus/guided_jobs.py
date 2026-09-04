@@ -277,7 +277,7 @@ async def _finish_guided(job: GuidedJob, *, log_line: str) -> None:
         if not _milestone_code_files(job):
             await job.fail(
                 f"Milestone {job.milestone_scope}: няма записани файлове. "
-                "Провери LLM Router ключовете и пусни Guided отново."
+                "Провери ключовете в Свързаност и пусни Guided отново."
             )
             return
         await job.append_event("milestone_done", {"milestone_id": job.milestone_scope})
@@ -843,7 +843,7 @@ async def continue_job(
             if not _milestone_code_files(job):
                 await job.fail(
                     f"Milestone {job.milestone_scope}: няма записани файлове след одобрение. "
-                    "Провери LLM Router и пусни отново."
+                    "Провери Свързаност и пусни отново."
                 )
                 return {"ok": False, "error": job.error or "no files written"}
             async with job.cond:

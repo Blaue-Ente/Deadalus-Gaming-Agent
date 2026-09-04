@@ -11,6 +11,7 @@ def harness_tmp(tmp_path, monkeypatch):
     monkeypatch.setenv("DAEDALUS_DATA", str(tmp_path / "data"))
     monkeypatch.setenv("DAEDALUS_PLAYGROUND", str(tmp_path / "projects"))
     monkeypatch.delenv("DAEDALUS_PROVIDER", raising=False)
+    monkeypatch.delenv("DAEDALUS_MODEL", raising=False)
     monkeypatch.delenv("DAEDALUS_LOCAL_LLM", raising=False)
     monkeypatch.delenv("DAEDALUS_USE_ADN_DB", raising=False)
     from daedalus.paths import data_root, playground_projects_dir, product_root, repo_root
