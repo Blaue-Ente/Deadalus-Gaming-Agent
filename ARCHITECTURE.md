@@ -28,10 +28,10 @@ Daedalus is **one product**: coding agent + Studio + Playground. One FastAPI pro
 | Job ledger | `job_ledger.py` | Original ask, acceptance, slices, named artifacts on disk |
 | Shell | `shell_center.py` | Argv-first runner; cwd jail; strip secrets. Not a container. |
 | Owner auth | `owner_auth.py` | Bearer token on mutations; loopback bootstrap |
-| Local LLM | `local_llm.py` + `llm_wardrobe.py` + `machine_profile.py` | Probe + hardware catalog |
+| Local LLM | `local_llm.py` + `llm_wardrobe.py` + `machine_profile.py` | Probe + hardware catalog; Ollama is process-wide |
 | Offline | `offline.py` | Blocks network native tools |
 | Addons | `addons.py` | MCP shelf → `mcp.json` |
-| Connectivity | `connectivity.py` | Studio → Свързаност; `$DAEDALUS_DATA/secrets.env` |
+| Connectivity | `connectivity.py` | Studio → Connectors; `$DAEDALUS_DATA/secrets.env`; Brain panel |
 | Capsule | `capsule.py` | Zip a playground project |
 | Live | `live_publish.py` | `/apps/` + Netlify / GitLab Pages / 1h preview |
 | Preferences | `preferences.py` | Owner speech → durable memory |

@@ -36,14 +36,14 @@ GROUPS: list[dict[str, Any]] = [
         "id": "llm",
         "title": "Brain (LLM)",
         "blurb": (
-            "Which model writes the code. One cloud key is enough — or local Ollama. "
-            "Daedalus calls an OpenAI-compatible API."
+            "One brain for all of Daedalus — Studio, Command Center, workers, autopilot. "
+            "Ollama or a cloud key. Daedalus calls an OpenAI-compatible API."
         ),
         "pick": (
+            "Ollama — no internet, no key; the wardrobe above applies to every mode. "
             "OpenRouter — many models (incl. Grok via x-ai/…). "
             "AllToken — one key for several families. "
-            "NVIDIA — free preview. "
-            "Ollama — no internet, no key (Studio → Wardrobe)."
+            "NVIDIA — free preview."
         ),
     },
     {
@@ -161,25 +161,36 @@ FIELDS: list[dict[str, Any]] = [
     {
         "key": "DAEDALUS_PROVIDER", "group": "llm", "secret": False,
         "label": "Provider",
-        "why": "openrouter / alltoken / novita / nvidia / ollama / custom. Empty = auto.",
+        "why": "openrouter / alltoken / novita / nvidia / ollama / custom. Empty = auto. Ollama is switched from the wardrobe above.",
         "placeholder": "openrouter",
+        "advanced": True,
     },
     {
         "key": "DAEDALUS_MODEL", "group": "llm", "secret": False,
         "label": "Model",
         "why": "Concrete id. For $0 on OpenRouter: poolside/laguna-s-2.1:free (preset or_free).",
         "placeholder": "poolside/laguna-s-2.1:free",
+        "advanced": True,
     },
     {
         "key": "DAEDALUS_BASE_URL", "group": "llm", "secret": False,
         "label": "Custom base URL",
         "why": "For xAI Grok: https://api.x.ai/v1 plus a key as OPENAI_API_KEY or DAEDALUS_API_KEY. For Ollama you usually leave this.",
         "placeholder": "https://api.x.ai/v1",
+        "advanced": True,
     },
     {
         "key": "DAEDALUS_API_KEY", "group": "llm", "secret": True,
         "label": "DAEDALUS_API_KEY",
         "why": "Fallback key when the provider is custom (e.g. xAI) and there is no separate env.",
+        "advanced": True,
+    },
+    {
+        "key": "OLLAMA_HOST", "group": "llm", "secret": False,
+        "label": "Ollama host",
+        "why": "Default 127.0.0.1:11434. Set if Ollama runs on another machine or port. Same brain for the whole app.",
+        "placeholder": "127.0.0.1:11434",
+        "advanced": True,
     },
     # Git
     {
@@ -428,6 +439,12 @@ def set_secrets(
         os.environ.pop(key, None)
     write_secrets_file(stored)
     apply_secrets(stored)
+    if updates and str(updates.get("DAEDALUS_PROVIDER") or "").strip():
+        try:
+            from .llm_wardrobe import apply_provider_hint
+            apply_provider_hint(str(updates["DAEDALUS_PROVIDER"]))
+        except Exception as extra:
+            log.debug("wardrobe sync from provider: %s", extra)
     return stored
 
 
@@ -443,6 +460,7 @@ def field_status(field: dict[str, Any]) -> dict[str, Any]:
         "recommend": bool(field.get("recommend")),
         "docs": field.get("docs") or "",
         "placeholder": field.get("placeholder") or "",
+        "advanced": bool(field.get("advanced")),
         "secret": secret,
         "set": bool(raw),
         "source": value_source(key),
@@ -471,7 +489,15 @@ def _has_llm() -> bool:
         if current_value(key):
             return True
     provider = (current_value("DAEDALUS_PROVIDER") or os.environ.get("DAEDALUS_PROVIDER") or "").strip().lower()
-    return provider in {"ollama", "lmstudio", "llamacpp", "vllm"}
+    if provider in {"ollama", "lmstudio", "llamacpp", "vllm"}:
+        return True
+    try:
+        from .llm_wardrobe import wants_local
+        if wants_local():
+            return True
+    except Exception:
+        pass
+    return False
 
 
 def recommendations() -> list[dict[str, Any]]:
@@ -483,22 +509,45 @@ def recommendations() -> list[dict[str, Any]]:
             "level": "high",
             "title": "Set an LLM key or a local provider",
             "body": (
-                "Without a brain Daedalus does not write code. Most flexible: OpenRouter "
-                "(many models, incl. Grok). Alternative: AllToken, NVIDIA, or Ollama in the Wardrobe."
+                "Without a brain Daedalus does not write code. Most flexible: Ollama "
+                "(wardrobe above) or OpenRouter (many models, incl. Grok). Alternative: AllToken / NVIDIA."
             ),
             "group": "llm",
         })
     or_key = current_value("OPENROUTER_API_KEY")
     model = current_value("DAEDALUS_MODEL")
     provider = (current_value("DAEDALUS_PROVIDER") or "").strip().lower()
+    try:
+        from .local_llm import default_base_url, local_requested, probe_endpoint
+        if local_requested():
+            probed = probe_endpoint(default_base_url("ollama"))
+            if not probed.get("ok"):
+                out.insert(0, {
+                    "id": "ollama-down",
+                    "level": "high",
+                    "title": "Ollama is not responding",
+                    "body": (
+                        "The brain is local for all of Daedalus (chat, workers, autopilot), "
+                        "but nothing answers on port 11434. Start Ollama, then pull a model from the wardrobe."
+                    ),
+                    "group": "llm",
+                })
+    except Exception:
+        pass
     if or_key and not model and provider in ("", "openrouter"):
-        out.append({
-            "id": "or-model",
-            "level": "medium",
-            "title": "OpenRouter without a chosen model uses paid Claude",
-            "body": "For $0 set DAEDALUS_MODEL=poolside/laguna-s-2.1:free or Studio preset or_free.",
-            "group": "llm",
-        })
+        try:
+            from .local_llm import local_requested as _loc
+            cloudish = not _loc()
+        except Exception:
+            cloudish = True
+        if cloudish:
+            out.append({
+                "id": "or-model",
+                "level": "medium",
+                "title": "OpenRouter without a chosen model uses paid Claude",
+                "body": "For $0 set DAEDALUS_MODEL=poolside/laguna-s-2.1:free or preset or_free in Connectors.",
+                "group": "llm",
+            })
     gh = bool(current_value("GITHUB_TOKEN"))
     gl = bool(current_value("GITLAB_TOKEN"))
     if not gh and not gl:
@@ -531,6 +580,90 @@ def recommendations() -> list[dict[str, Any]]:
     return out
 
 
+def _public_llm(cfg: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "provider": cfg.get("provider") or "",
+        "model": cfg.get("model") or "",
+        "source": cfg.get("source") or "",
+        "local": bool(cfg.get("local")),
+        "reachable": cfg.get("reachable"),
+        "warning": str(cfg.get("warning") or ""),
+        "base_url": cfg.get("base_url") or "",
+        "has_key": bool(cfg.get("api_key")),
+    }
+
+
+def brain_overview() -> dict[str, Any]:
+    """Sanitized LLM + wardrobe + worker routing for Connectors. Never includes keys."""
+    from .llm_config import get_config
+    from .llm_wardrobe import status as wardrobe_status
+    from .local_llm import default_base_url, local_requested, probe_endpoint
+    from .workers import get_worker_config
+
+    try:
+        cfg = get_config()
+    except Exception as extra:
+        cfg = {"warning": str(extra)[:240]}
+    try:
+        w = wardrobe_status()
+    except Exception as extra:
+        w = {"ok": False, "error": str(extra)[:240], "wardrobe": {}, "catalog": [], "profile": {}}
+    try:
+        workers = get_worker_config()
+    except Exception:
+        workers = {}
+    ollama = probe_endpoint(default_base_url("ollama"))
+    wardrobe = w.get("wardrobe") if isinstance(w.get("wardrobe"), dict) else {}
+    profile = w.get("profile") if isinstance(w.get("profile"), dict) else {}
+    local = bool(cfg.get("local") or local_requested())
+    slots = {}
+    for slot, sc in (workers or {}).items():
+        if not isinstance(sc, dict):
+            continue
+        slots[slot] = {
+            "provider": sc.get("provider") or "",
+            "model": sc.get("model") or "",
+            "source": sc.get("source") or "",
+            "enabled": sc.get("enabled", True),
+        }
+    catalog = []
+    for row in w.get("catalog") or []:
+        catalog.append({
+            "id": row.get("id"),
+            "label": row.get("label"),
+            "role": row.get("role"),
+            "ollama": row.get("ollama"),
+            "blurb": row.get("blurb") or "",
+            "ram_gb": row.get("ram_gb"),
+            "fits": row.get("fits"),
+            "installed": row.get("installed"),
+            "recommended": row.get("recommended"),
+        })
+    return {
+        "mode": "local" if local else "cloud",
+        "effective": _public_llm(cfg if isinstance(cfg, dict) else {}),
+        "wardrobe": {
+            "backend": wardrobe.get("backend") or "auto",
+            "active": wardrobe.get("active"),
+            "offline": bool(wardrobe.get("offline")),
+        },
+        "ollama": {
+            "bin": bool(w.get("ollama")),
+            "ok": bool(ollama.get("ok")),
+            "base_url": ollama.get("base_url") or "",
+            "models": (ollama.get("models") or [])[:24],
+            "error": ollama.get("error") or "",
+        },
+        "profile": {
+            "class": profile.get("class") or "",
+            "ram_gb": profile.get("ram_gb"),
+            "note": profile.get("note") or "",
+        },
+        "catalog": catalog,
+        "workers": slots,
+    }
+
+
 def overview() -> dict[str, Any]:
     from .addons import catalog as addon_catalog
     from .mcp_client import status as mcp_status
@@ -541,6 +674,7 @@ def overview() -> dict[str, Any]:
         "ok": True,
         "groups": catalog_status(),
         "recommendations": recommendations(),
+        "brain": brain_overview(),
         "mcp": mcp,
         "addons": [
             {

@@ -737,6 +737,17 @@
       add("bot", t("studio.offlineErr") + ": " + errText(e));
     }
   };
+  $("uselocal").onclick = async () => {
+    try {
+      await api("/api/v1/llm/wardrobe/local", {
+        method: "POST",
+        body: JSON.stringify({ backend: "ollama" }),
+      });
+      refreshHealth();
+    } catch (e) {
+      add("bot", t("studio.localErr") + ": " + errText(e));
+    }
+  };
   $("usecloud").onclick = async () => {
     try {
       await api("/api/v1/llm/wardrobe/cloud", { method: "POST" });
