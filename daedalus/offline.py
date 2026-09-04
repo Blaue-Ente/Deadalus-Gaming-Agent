@@ -56,5 +56,6 @@ def snapshot() -> dict[str, Any]:
             "browser (localhost)", "playtest heuristic", "smoke/verify",
             "play_lab (local install)", "dissect_game (path/lab)",
             "capsule zip", "MCP stdio", "live publish (local /apps/ only)",
+            "math3d", "game_lint", "profiler parse", "game_canon study",
         ],
     }

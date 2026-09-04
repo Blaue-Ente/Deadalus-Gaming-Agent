@@ -93,7 +93,7 @@ Data lives under `$DAEDALUS_DATA` (default `data/daedalus/` on the machine, `%LO
 | Chat (Bulgarian / English) | Studio `/` · `POST /api/v1/daedalus/chat` |
 | Files and projects | Playground `playground/projects/{slug}` |
 | Shell | Studio Shell · `POST /api/v1/daedalus/shell` (jail, secrets stripped from env) |
-| Native tools | `read_file`, `write_file`, `run_command`, `web_search`, `web_fetch`, `web_read`, `generate_image`, `remember`, `code_search`, `browser`, `mcp_call`, `spawn_subagent`, `playtest`, `play_lab`, `dissect_game`, `engine`, `world`, `assets`, `skill`, `production`, `git_forge` |
+| Native tools | `read_file`, `write_file`, `run_command`, `web_search`, `web_fetch`, `web_read`, `generate_image`, `remember`, `code_search`, `browser`, `mcp_call`, `spawn_subagent`, `playtest`, `play_lab`, `dissect_game`, `engine`, `world`, `assets`, `skill`, `production`, `git_forge`, `math3d`, `game_lint`, `profiler`, `game_canon` |
 | MCP | Studio → **Connectors** (`$DAEDALUS_DATA/mcp.json` + `secrets.env`) |
 | Honesty suite | `python -m daedalus.game_agent_bench` · `GET /api/v1/daedalus/bench` — this harness, not a vendor bake-off |
 | Local LLM | Connectors **Brain** (`/admin/daedalus/connectors#brain`) — Ollama wardrobe for the **whole process** (chat, workers, autopilot, CLI), not Studio-only. Or `DAEDALUS_PROVIDER=ollama` |
@@ -106,6 +106,7 @@ Data lives under `$DAEDALUS_DATA` (default `data/daedalus/` on the machine, `%LO
 | Cloud LLM | AllToken / OpenRouter / Novita / NVIDIA |
 | Games — browser | Phaser, canvas, Vite; 3D arcade / racing → Vite + Three.js WebGPU (`src/racer/`) |
 | Games — Godot 4 | kind `godot`: `.tscn` + GDScript; 2D scaffold or 3D greybox room |
+| Games — senior tools | `math3d` (SLERP / rays / look-at), `game_lint` (ruff / clang-tidy / Roslyn heuristics), `profiler` (NUnit / Chrome / FPS logs), `game_canon` (study OSS trees, never copy) |
 | Dissection | name / URL / git / Play Lab install → specimen used as a **мостра** (loop, feel, stack — not a clone) |
 | Play Lab | virtual computer for specimens: `$DAEDALUS_DATA/labs/{id}/` + local HTTP; optional Docker |
 | Meshes | `python -m daedalus.blender_mcp` or `blender_jobs.emit_job` (no `bpy` in the cloud) |

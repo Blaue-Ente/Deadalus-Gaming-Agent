@@ -27,8 +27,8 @@ _SUB_RE = re.compile(
 
 MAX_PARALLEL = 3
 DEFAULT_ROUNDS = 6
-CODER_TOOLS = ("read_file", "list_dir", "write_file", "run_command", "engine", "world", "assets", "skill", "production")
-EXPLORER_TOOLS = ("read_file", "list_dir", "run_command", "engine", "world", "skill", "production")
+CODER_TOOLS = ("read_file", "list_dir", "write_file", "run_command", "engine", "world", "assets", "skill", "production", "math3d", "game_lint", "profiler", "game_canon")
+EXPLORER_TOOLS = ("read_file", "list_dir", "run_command", "engine", "world", "skill", "production", "math3d", "game_lint", "profiler", "game_canon")
 VERIFY_TOOLS = EXPLORER_TOOLS
 
 _BASE_SYSTEM = """You are a Daedalus sub-agent. You have tools. The master agent
