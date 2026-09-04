@@ -14,7 +14,7 @@
   <!-- GitHub / connectors status -->
   <div id="gh-status" class="mb-4 text-xs font-mono px-3 py-2 rounded border border-gray-700 bg-gray-900 text-gray-400 flex flex-wrap items-center justify-between gap-2">
     <span id="gh-status-text">GitHub: проверка…</span>
-    <a href="/admin/daedalus/connectors" class="text-indigo-400 hover:text-indigo-300 shrink-0">🔗 Connectors & Durability</a>
+    <a href="/admin/daedalus/connectors" class="text-indigo-400 hover:text-indigo-300 shrink-0">🔗 Свързаност</a>
   </div>
 
   <!-- Actions: primary + overflow -->
@@ -769,23 +769,39 @@ async function api(url, opts) {
 
 async function loadGh() {
   try {
-    const g = await api('/admin/daedalus/playground/api/github/status');
+    const st = await api('/admin/daedalus/playground/api/git/status');
     const el = $('gh-status-text');
     if (!el) return;
-    if (g.configured && g.ok) {
-      const pushNote = g.can_push === false
-        ? ' · <span class="text-amber-400 font-medium">⚠ няма push права — виж Connectors</span>'
-        : ' · <span class="text-emerald-400/80">push OK (1 клик)</span>';
-      el.innerHTML = `GitHub: ✅ <b class="text-emerald-400">${g.login || '?'}</b> (${g.source || 'token'})${pushNote}`;
-      $('gh-status').classList.toggle('border-amber-700', g.can_push === false);
-    } else if (g.configured && !g.ok) {
-      el.innerHTML = `GitHub: ⚠️ токен има, но връзката не работи — <span class="text-red-400">${g.error || '?'}</span>`;
-      $('gh-status').classList.add('border-red-800');
+    const gh = st.github || {};
+    const gl = st.gitlab || {};
+    const bits = [];
+    if (gh.ok) {
+      const pushNote = gh.can_push === false
+        ? ' <span class="text-amber-400">⚠ няма push/PR права</span>'
+        : '';
+      bits.push(`GitHub ✅ <b class="text-emerald-400">${escHtml(gh.login || '?')}</b>${pushNote}`);
+    } else if (gh.configured) {
+      bits.push(`GitHub ⚠️ <span class="text-red-400">${escHtml(gh.error || 'токен не работи')}</span>`);
     } else {
-      el.innerHTML = `GitHub: ❌ няма токен — <a href="/admin/daedalus/connectors" class="text-indigo-400 underline">настрой Connectors</a>`;
-      $('gh-status').classList.add('border-amber-800');
+      bits.push('GitHub ❌');
     }
-  } catch (e) { const el = $('gh-status-text'); if (el) el.textContent = 'GitHub: грешка'; }
+    if (gl.ok) {
+      bits.push(`GitLab ✅ <b class="text-emerald-400">${escHtml(gl.username || gl.host || '?')}</b>`);
+    } else if (gl.configured) {
+      bits.push(`GitLab ⚠️ <span class="text-red-400">${escHtml(gl.error || 'токен не работи')}</span>`);
+    } else {
+      bits.push('GitLab ❌');
+    }
+    const missing = !gh.configured && !gl.configured;
+    el.innerHTML = bits.join(' · ') + (missing
+      ? ` — <a href="/admin/daedalus/connectors" class="text-indigo-400 underline">настрой Свързаност</a>`
+      : '');
+    $('gh-status').classList.toggle('border-amber-800', missing || gh.can_push === false);
+    $('gh-status').classList.toggle('border-red-800', (gh.configured && !gh.ok) || (gl.configured && !gl.ok));
+  } catch (e) {
+    const el = $('gh-status-text');
+    if (el) el.textContent = 'Git: грешка';
+  }
 }
 
 function kindBadge(k) {
@@ -810,7 +826,7 @@ async function loadProjects() {
   const d = await api('/admin/daedalus/playground/api/projects');
   const list = $('project-list');
   if (!d.projects || !d.projects.length) {
-    list.innerHTML = '<p class="text-gray-500 text-sm">Няма проекти. Създай нов или clone от GitHub.</p>';
+    list.innerHTML = '<p class="text-gray-500 text-sm">Няма проекти. Създай нов или clone от GitHub/GitLab.</p>';
     return;
   }
   list.innerHTML = d.projects.map(p => {
