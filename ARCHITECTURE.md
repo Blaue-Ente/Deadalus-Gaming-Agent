@@ -31,6 +31,7 @@ Daedalus is **one product**: coding agent + Studio + Playground. One FastAPI pro
 | Local LLM | `local_llm.py` + `llm_wardrobe.py` + `machine_profile.py` | Probe + hardware catalog |
 | Offline | `offline.py` | Blocks network native tools |
 | Addons | `addons.py` | MCP shelf → `mcp.json` |
+| Connectivity | `connectivity.py` | Studio → Свързаност; `$DAEDALUS_DATA/secrets.env` |
 | Capsule | `capsule.py` | Zip a playground project |
 | Live | `live_publish.py` | `/apps/` + Netlify / GitLab Pages / 1h preview |
 | Preferences | `preferences.py` | Owner speech → durable memory |
@@ -41,6 +42,7 @@ Daedalus is **one product**: coding agent + Studio + Playground. One FastAPI pro
 | Dissection | `dissection.py` + `play_lab.py` | Specimen from name/URL/git/install; Play Lab is the VM |
 | MiroFish | `mirofish_client.py` | HTTP-only to a sidecar — never vendor |
 | MCP | `mcp_client.py` | JSON-RPC stdio/HTTP from `mcp.json` |
+| Git forges | `playground_github.py`, `playground_gitlab.py`, `playground_git_push.py` | Clone, push, GitHub PR, GitLab MR |
 | Engine session | `engine_session.py`, `godot_bridge.py` | Headless Godot TCP bridge; optional Godot MCP adapter |
 | Browser | `playground_browser.py`, `browser_session.py` | Smoke + interactive session |
 | Playground | `playground*.py`, `game_*.py` | static, vite, phaser-via-vite, expo, unity, godot |

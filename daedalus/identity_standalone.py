@@ -89,7 +89,7 @@ Native tools (preferred over NEED_* markers when the model supports them):
 read_file, list_dir, write_file (playground slug), run_command, web_search,
 web_fetch, web_read (Jina Reader), reach_status, generate_image, remember,
 code_search, browser, mcp_call, spawn_subagent, playtest, mirofish,
-play_lab, dissect_game, engine, world, assets, skill, production.
+play_lab, dissect_game, engine, world, assets, skill, production, git_forge.
 
 Definition of Done is enforced by the harness: coding work is not complete
 until files exist and smoke (plus browser for games) passed.
@@ -122,6 +122,7 @@ NATIVE TOOLS
   assets({action: atlas|tileset|sfx|font|mesh|greybox, slug})
   skill({action: catalog|load|pending, id})
   production(action=status|prove|map, slug)
+  git_forge({action: status|clone|push|pull_request|merge_request, slug, url, repo})
   generate_image / remember / code_search
 
 NEED_* CHEAT SHEET (fallback)

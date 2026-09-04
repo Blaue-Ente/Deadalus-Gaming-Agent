@@ -1,7 +1,7 @@
 """Git / object-storage connector status and non-secret preferences.
 
-Secrets (GITHUB_TOKEN, GITLAB_TOKEN) stay in Replit Secrets or Integrations —
-this module only reads env, tests connections, and stores UI prefs in Replit DB.
+Secrets are set in Studio → Свързаност ($DAEDALUS_DATA/secrets.env) or process
+env. This module reads env, tests connections, and stores UI prefs.
 """
 from __future__ import annotations
 
@@ -64,11 +64,11 @@ def probe_github_can_create_repo(tok: str) -> tuple[bool, str]:
 
 
 _GITHUB_PUSH_SETUP_HINT = (
-    "Replit Integration често дава само READ — push изисква PAT с права за запис.\n"
+    "Push изисква PAT с права за запис (read-only integration не стига).\n"
     "1) github.com → Settings → Developer settings → Personal access tokens\n"
-    "2) Classic token → отметни scope: repo (или fine-grained: Contents + Administration Read/Write)\n"
-    "3) Replit → Secrets → GITHUB_TOKEN = новият токен (заменя integration token)\n"
-    "4) Redeploy на ADN → Playground → ⬆ GitHub (1 клик)"
+    "2) Classic token → отметни scope: repo (или fine-grained: Contents + Pull requests + Administration Read/Write)\n"
+    "3) Studio → Свързаност → GitHub PAT\n"
+    "4) Playground → ⬆ GitHub (1 клик)"
 )
 
 
@@ -142,8 +142,8 @@ async def test_github_connection() -> dict[str, Any]:
             "source": "none",
             "error": "GITHUB_TOKEN не е зададен",
             "hint": (
-                "Свържи GitHub през Replit → Tools → Integrations → GitHub, "
-                "или добави GITHUB_TOKEN в Secrets (fine-grained PAT с scope repo)."
+                "Отвори Studio → Свързаност и сложи GITHUB_TOKEN "
+                "(classic PAT с scope repo, или fine-grained Contents + Pull requests)."
             ),
         }
     try:
@@ -162,7 +162,7 @@ async def test_github_connection() -> dict[str, Any]:
                 "configured": True,
                 "source": github_token_source(),
                 "error": "Токенът е невалиден или изтекъл (401)",
-                "hint": "Обнови GITHUB_TOKEN в Replit Secrets или пресвържи GitHub Integration.",
+                "hint": "Обнови GITHUB_TOKEN в Studio → Свързаност.",
             }
         if r.status_code == 403:
             return {
@@ -216,7 +216,7 @@ async def test_gitlab_connection() -> dict[str, Any]:
             "ok": False,
             "configured": False,
             "error": "GITLAB_TOKEN не е зададен",
-            "hint": "Добави GITLAB_TOKEN в Replit Secrets (scope api, write_repository).",
+            "hint": "Добави GITLAB_TOKEN в Studio → Свързаност (scope api, write_repository).",
         }
     try:
         import httpx
@@ -286,10 +286,10 @@ async def full_status() -> dict[str, Any]:
         "prefs": prefs,
         "setup": {
             "github": [
-                "Replit → Tools → Integrations → Connect GitHub (препоръчително)",
-                "Или Secrets → GITHUB_TOKEN = fine-grained PAT (scope: repo)",
+                "Studio → Свързаност → GitHub PAT (classic, scope repo)",
+                "Fine-grained: Contents + Pull requests + Administration Read/Write",
                 "За private repos: задължително repo scope",
-                "След промяна: Redeploy на приложението",
+                "Ключът се пише в $DAEDALUS_DATA/secrets.env, не в git",
             ],
             "durability": [
                 "Публикувай в /apps/ — най-надеждно (zip в object storage)",

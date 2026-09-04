@@ -9,7 +9,7 @@
 <div class="max-w-6xl mx-auto">
 {% include "_daedalus_nav.html" %}
 
-  <p class="text-gray-400 text-sm mb-4">Строй · тествай в sandbox · публикувай като ADN раздел · push към GitHub</p>
+  <p class="text-gray-400 text-sm mb-4">Строй · тествай в sandbox · публикувай · push към GitHub/GitLab · PR / MR</p>
 
   <!-- GitHub / connectors status -->
   <div id="gh-status" class="mb-4 text-xs font-mono px-3 py-2 rounded border border-gray-700 bg-gray-900 text-gray-400 flex flex-wrap items-center justify-between gap-2">
@@ -20,7 +20,7 @@
   <!-- Actions: primary + overflow -->
   <div class="flex flex-wrap items-center gap-2 mb-6">
     <button onclick="openCreateWizard()" class="px-4 py-2 rounded-lg text-sm font-medium bg-emerald-600 hover:bg-emerald-500 text-white">+ Нов проект</button>
-    <button onclick="openReviveModal()" class="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white">⬇ Съживи от GitHub</button>
+    <button onclick="openReviveModal()" class="px-4 py-2 rounded-lg text-sm font-medium bg-indigo-600 hover:bg-indigo-500 text-white">⬇ Съживи от Git</button>
     <a href="/admin/daedalus/game-studio" class="px-4 py-2 rounded-lg text-sm font-medium bg-purple-600 hover:bg-purple-500 text-white">🎮 Game Studio</a>
     <button onclick="openSkillCreator()" class="px-4 py-2 rounded-lg text-sm font-medium bg-amber-600 hover:bg-amber-500 text-white">📝 Skill Creator</button>
     <button onclick="loadProjects()" class="px-3 py-2 rounded-lg text-sm font-medium bg-gray-700 hover:bg-gray-600 text-gray-200" title="Обнови списъка">↻</button>
@@ -28,7 +28,7 @@
       <button onclick="togglePgMenu()" id="pg-menu-btn"
         class="px-3 py-2 rounded-lg text-sm font-medium bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700">⋮ Още</button>
       <div id="pg-overflow-menu" class="hidden absolute right-0 top-full mt-1 z-30 min-w-[11rem] py-1 rounded-lg border border-gray-700 bg-gray-900 shadow-xl">
-        <button onclick="hidePgMenu(); showClone();" class="block w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-800">⬇ Clone GitHub</button>
+        <button onclick="hidePgMenu(); showClone();" class="block w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-800">⬇ Clone GitHub/GitLab</button>
         <button onclick="hidePgMenu(); showLearning();" class="block w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-800">📖 Учене</button>
         <button onclick="hidePgMenu(); openSkillCreator();" class="block w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-800">📝 Skill Creator</button>
         <button onclick="hidePgMenu(); showPublishedPanel();" class="block w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-gray-800">📋 Публикувани /apps</button>
@@ -363,8 +363,8 @@
 
   <!-- Inline clone form -->
   <div id="clone-form" class="hidden mb-6 p-4 bg-gray-900 border border-indigo-600/40 rounded-xl">
-    <h3 class="text-white font-semibold mb-3">Clone от GitHub</h3>
-    <input id="cl-url" placeholder="https://github.com/owner/repo или owner/repo" class="w-full px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700">
+    <h3 class="text-white font-semibold mb-3">Clone от GitHub или GitLab</h3>
+    <input id="cl-url" placeholder="https://github.com/owner/repo · https://gitlab.com/group/project · owner/repo" class="w-full px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700">
     <input id="cl-name" placeholder="Локално име (опционално)" class="mt-3 w-full px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700">
     <div class="mt-3 flex gap-2">
       <button onclick="cloneRepo()" class="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 text-white text-sm">Clone</button>
@@ -377,8 +377,8 @@
     <div class="bg-gray-900 border border-indigo-600/40 rounded-t-2xl sm:rounded-xl w-full max-w-3xl max-h-[92vh] flex flex-col shadow-2xl">
       <div class="flex items-center justify-between p-4 border-b border-gray-800 shrink-0">
         <div>
-          <h3 class="text-white font-semibold">⬇ Съживи от GitHub</h3>
-          <p class="text-xs text-gray-500 mt-1">Import & Evolve — clone, оценка, onboarding, публикувай</p>
+          <h3 class="text-white font-semibold">⬇ Съживи от Git</h3>
+          <p class="text-xs text-gray-500 mt-1">GitHub списък или URL към GitHub/GitLab — clone, оценка, onboarding</p>
         </div>
         <button onclick="closeReviveModal()" class="text-gray-400 hover:text-white text-xl leading-none p-1">✕</button>
       </div>
@@ -396,7 +396,7 @@
         </div>
 
         <div id="rev-pane-url" class="hidden space-y-3">
-          <input id="rev-url" placeholder="https://github.com/owner/repo или owner/repo"
+          <input id="rev-url" placeholder="https://github.com/owner/repo · https://gitlab.com/group/project"
             class="w-full px-3 py-2 rounded bg-gray-800 text-white text-sm border border-gray-700"
             oninput="debounceCompatCheck()">
         </div>
@@ -1134,7 +1134,7 @@ function projectOverflowMenu(p, isStatic, isPublishable, running) {
   if (p.source === 'revived' || p.upstream_url) {
     items.push(`<button onclick="revivePipeline('${p.slug}')" class="pg-menu-item">📦 Verify & Publish</button>`);
     items.push(`<button onclick="showUpstreamDiff('${p.slug}')" class="pg-menu-item">↔ Upstream diff</button>`);
-    items.push(`<button onclick="createUpstreamPr('${p.slug}')" class="pg-menu-item">🔀 PR към upstream</button>`);
+    items.push(`<button onclick="createUpstreamPr('${p.slug}')" class="pg-menu-item">🔀 PR / MR към upstream</button>`);
   }
   if (isPublishable) {
     const pubLabel = p.kind === 'expo' ? '📦 Export' : (p.kind === 'vite' || p.kind === 'vite-react' ? '🔨 Build & Pub' : '🚀 Публикувай');
@@ -3003,19 +3003,47 @@ function setReviveTab(tab) {
 async function loadReviveRepos() {
   const el = $('rev-repo-list');
   el.innerHTML = '<p class="text-gray-500 text-sm animate-pulse">Зареждам repos…</p>';
-  const r = await api('/admin/daedalus/playground/api/github/repos');
-  if (!r.ok || !r.repos || !r.repos.length) {
-    el.innerHTML = `<p class="text-amber-400 text-sm">${r.error || 'Няма repos или липсва GITHUB_TOKEN'}</p>`;
+  const [gh, gl] = await Promise.all([
+    api('/admin/daedalus/playground/api/github/repos').catch(() => ({})),
+    api('/admin/daedalus/playground/api/gitlab/projects').catch(() => ({})),
+  ]);
+  const rows = [];
+  for (const repo of (gh.repos || [])) {
+    rows.push({
+      full_name: repo.full_name,
+      description: repo.description || '',
+      url: repo.url || repo.clone_url || '',
+      forge: 'github',
+      compat: repo.compat || {},
+    });
+  }
+  for (const p of (gl.projects || [])) {
+    rows.push({
+      full_name: p.full_name,
+      description: p.description || '',
+      url: p.url || p.clone_url || '',
+      forge: 'gitlab',
+      compat: {},
+    });
+  }
+  if (!rows.length) {
+    const err = gh.error || gl.error || 'Няма repos. Paste URL или отвори Свързаност за токен.';
+    el.innerHTML = `<p class="text-amber-400 text-sm">${escHtml(err)}</p>
+      <p class="text-gray-500 text-xs mt-2">GitHub PAT / GITLAB_TOKEN → Studio → Свързаност. URL paste работи и без списък.</p>`;
     return;
   }
-  el.innerHTML = r.repos.map(repo => {
+  el.innerHTML = rows.map(repo => {
     const c = repo.compat || {};
     const levelColor = {good:'text-emerald-400', warning:'text-amber-400', hard:'text-red-400'}[c.level] || 'text-gray-400';
-    return `<button onclick="selectReviveRepo('${repo.url}','${repo.full_name.replace(/'/g,"")}')"
+    const forge = repo.forge === 'gitlab' ? '🦊' : '🐙';
+    const safeUrl = String(repo.url || '').replace(/'/g, '');
+    const safeName = String(repo.full_name || '').replace(/'/g, '');
+    const score = repo.forge === 'gitlab' ? 'GL' : (c.score || '?') + '%';
+    return `<button onclick="selectReviveRepo('${safeUrl}','${safeName}','${repo.forge}')"
       class="w-full text-left p-3 rounded-lg bg-gray-800 hover:bg-gray-750 border border-gray-700 hover:border-indigo-600/50 transition">
       <div class="flex items-center justify-between gap-2">
-        <span class="text-white text-sm font-medium truncate">${escHtml(repo.full_name)}</span>
-        <span class="text-xs font-mono ${levelColor} shrink-0">${c.score || '?'}%</span>
+        <span class="text-white text-sm font-medium truncate">${forge} ${escHtml(repo.full_name)}</span>
+        <span class="text-xs font-mono ${levelColor} shrink-0">${score}</span>
       </div>
       <div class="text-[10px] text-gray-500 mt-1 truncate">${escHtml(repo.description || '')}</div>
       <div class="flex flex-wrap gap-1 mt-1">${(c.badges||[]).slice(0,4).map(b=>`<span class="text-[9px] px-1 py-0.5 rounded bg-gray-900 text-gray-400">${b}</span>`).join('')}</div>
@@ -3023,11 +3051,11 @@ async function loadReviveRepos() {
   }).join('');
 }
 
-async function selectReviveRepo(url, fullName) {
+async function selectReviveRepo(url, fullName, forge) {
   _revSelectedUrl = url;
   $('rev-url').value = url;
   $('rev-name').value = fullName.split('/').pop();
-  await loadReviveBranches(fullName);
+  if (forge !== 'gitlab') await loadReviveBranches(fullName);
   await showCompatForUrl(url);
 }
 
@@ -3168,7 +3196,7 @@ async function createUpstreamPr(slug) {
   const r = await api(`/admin/daedalus/playground/api/projects/${slug}/create-upstream-pr`, {
     method: 'POST', body: JSON.stringify({}),
   });
-  if (r.ok && r.pr) alert('✅ PR създаден: ' + r.pr.url);
+  if (r.ok && (r.pr || r.mr)) alert('✅ PR/MR: ' + ((r.pr && r.pr.url) || (r.mr && r.mr.url) || ''));
   else alert('Грешка: ' + (r.error || 'неуспешно'));
 }
 
@@ -3371,12 +3399,11 @@ async function pushGithubOneClick(slug) {
 function githubPushSetupMessage(gh) {
   return (
     'GitHub е свързан, но токенът НЯМА права за push/нов repo (403).\n\n' +
-    'Replit Integration дава само read — за 1-клик push трябва PAT с repo scope:\n\n' +
+    'Нужен е PAT с repo scope:\n\n' +
     '1. github.com/settings/tokens → Generate new token (classic)\n' +
     '2. Отметни: repo (пълен достъп)\n' +
-    '3. Replit → Secrets → GITHUB_TOKEN = новият токен\n' +
-    '4. Redeploy на ADN\n' +
-    '5. Playground → ⬆ GitHub (без да пишеш нищо)\n\n' +
+    '3. Studio → Свързаност → GitHub PAT\n' +
+    '4. Playground → ⬆ GitHub\n\n' +
     (gh?.hint || 'Отвори /admin/daedalus/connectors за детайли.')
   );
 }
@@ -3400,7 +3427,7 @@ async function pushProj(slug, provider, opts) {
     return;
   }
   if (prov === 'github' && !ghOk) {
-    alert('GitHub не е свързан.\n\nОтвори /admin/daedalus/connectors — Replit Integrations или GITHUB_TOKEN в Secrets.');
+    alert('GitHub не е свързан.\n\nОтвори /admin/daedalus/connectors (Свързаност) и сложи GitHub PAT.');
     window.open('/admin/daedalus/connectors', '_blank');
     return;
   }

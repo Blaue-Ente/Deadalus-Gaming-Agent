@@ -29,6 +29,14 @@ def env_file_candidates(path: Path | None = None) -> list[Path]:
     return unique
 
 
+def _apply_secrets() -> None:
+    try:
+        from daedalus.connectivity import apply_secrets
+        apply_secrets()
+    except Exception:
+        pass
+
+
 def _apply_file(path: Path) -> None:
     for raw in path.read_text(encoding="utf-8").splitlines():
         line = raw.strip()
@@ -47,3 +55,4 @@ def load_env_file(path: Path | None = None) -> None:
             _apply_file(candidate)
             if path is not None:
                 return
+    _apply_secrets()

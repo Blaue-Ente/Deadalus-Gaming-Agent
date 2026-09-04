@@ -293,6 +293,36 @@ async def github_create_issue_tool(
         return {"ok": False, "error": str(exc)}
 
 
+async def github_create_pr_tool(
+    owner: str,
+    repo: str,
+    title: str,
+    *,
+    head: str,
+    base: str = "main",
+    body: str = "",
+) -> dict[str, Any]:
+    """Open a GitHub pull request on behalf of the owner."""
+    try:
+        from .host import github
+        ghc = github()
+        if not ghc.is_configured():
+            return {"ok": False, "error": "GitHub connector not configured"}
+        result = await _run_sync(
+            ghc.create_pull_request,
+            owner, repo, title=title, head=head, base=base, body=body,
+        )
+        return {
+            "ok": True,
+            "number": result.get("number"),
+            "url": result.get("html_url") or result.get("url") or "",
+            "title": result.get("title", ""),
+            "existed": result.get("existed"),
+        }
+    except Exception as extra:
+        return {"ok": False, "error": str(extra)}
+
+
 async def github_list_issues_tool(owner: str, repo: str, state: str = "open") -> dict[str, Any]:
     """List issues for a GitHub repository."""
     try:
