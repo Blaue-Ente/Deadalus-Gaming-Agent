@@ -17,13 +17,13 @@ Do not commit `.env`, tokens, or Chroma dumps with private chats.
 - `write_file` writes a Playground project, not the harness. Patches to `daedalus/` go through proposals + Approve.
 - The Windows app binds `127.0.0.1:8787` only.
 - Offline kit refuses search, Jina, and image-gen.
-- Published games under `/apps/` stay public (including their small KV store).
+- Published games under `/apps/` stay public (GET). A **published** app may write a single KV key (`POST`/`DELETE /apps/{slug}/db/{key}`) from the game itself. Unpublished slugs get 404 on those writes. Clearing the whole store (`DELETE /apps/{slug}/db/`) needs the owner token.
 
 ## What you should do
 
 - On a laptop: `daedalus serve` (loopback). Do not bind `0.0.0.0` on a home PC.
-- On a VPS: HTTPS reverse proxy, `DAEDALUS_TOKEN` set to a long random value, a changed peer secret from `.env.example`, a volume only you persist.
-- Do not expose port 8787 to the internet without TLS and a token that is not the default peer secret.
+- On a VPS: HTTPS reverse proxy, `DAEDALUS_TOKEN` set to a long random value, a peer secret set before enabling ask/chat, a volume only you persist.
+- Do not expose port 8787 to the internet without TLS and an owner token. Leave the peer secret empty until you actually need peer HTTP.
 - Keep `GITLAB_TOKEN` / `NETLIFY_AUTH_TOKEN` / LLM keys out of git.
 
 ## Supported versions

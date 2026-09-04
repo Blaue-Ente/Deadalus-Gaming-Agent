@@ -4,6 +4,7 @@ Auth: X-Iyveris-Mesh-Key (preferred) or X-Argos-Key.
 """
 from __future__ import annotations
 
+import hmac
 import json
 import os
 
@@ -21,8 +22,9 @@ async def require_builder_auth(
     x_iyveris_mesh_key: str | None = Header(default=None, alias="X-Iyveris-Mesh-Key"),
     x_argos_key: str | None = Header(default=None, alias="X-Argos-Key"),
 ) -> str:
-    mesh_expected = os.getenv("IYVERIS_MESH_KEY", "")
-    if mesh_expected and x_iyveris_mesh_key == mesh_expected:
+    mesh_expected = (os.getenv("IYVERIS_MESH_KEY") or "").strip()
+    got = (x_iyveris_mesh_key or "").strip()
+    if mesh_expected and got and len(got) == len(mesh_expected) and hmac.compare_digest(got, mesh_expected):
         return "mesh"
     if x_argos_key and _adn_keys().verify(x_argos_key) is not None:
         return "api"

@@ -1,7 +1,7 @@
 {% extends "_shell.html" %}
 {% set page = 'daedalus' %}
 {% set daedalus_tab = 'chat' %}
-{% block title %}ArgosDataNexus · Дедал{% endblock %}
+{% block title %}Дедал · стар чат{% endblock %}
 {% block mob_title %}Дедал{% endblock %}
 {% block eyebrow %}Персистентен агент-инженер{% endblock %}
 {% block heading %}Дедал — Команден център{% endblock %}
@@ -11,7 +11,10 @@
 {% block content %}
 {% include "_daedalus_nav.html" %}
 
-<!-- ── Layout wrapper ─────────────────────────────────────── -->
+<div class="mb-3 rounded-lg border border-argos-accent/30 bg-argos-accent/5 px-4 py-3 text-sm text-slate-300">
+  Разговорът и строежът са в <a href="/" class="text-argos-accent hover:underline">Studio</a>.
+  Тук остават предложенията, GDD и playground.
+</div>
 <div class="flex gap-3 relative daedalus-layout" style="min-height:calc(100vh - 200px)">
 
   <!-- ════════════════════════════════════════════════════════
@@ -545,7 +548,7 @@
         </div>
         <a href="/admin/daedalus/playground" target="_blank" class="text-[10px] text-emerald-400 hover:text-emerald-300 font-mono uppercase tracking-wider border border-emerald-500/30 px-2 py-0.5 rounded hover:bg-emerald-500/10 transition">↗ Отвори</a>
       </div>
-      <p class="text-[11px] text-argos-dim leading-relaxed">Строй · тествай · публикувай като ADN раздел · GitHub clone/push.</p>
+      <p class="text-[11px] text-argos-dim leading-relaxed">Строй · тествай · публикувай като /apps раздел · GitHub clone/push.</p>
       <a href="/apps/" target="_blank" class="inline-block mt-2 text-[10px] text-argos-dim hover:text-argos-accent font-mono uppercase tracking-wider">↗ /apps (публикувани)</a>
 
       <!-- Kernel GitHub Sync -->
@@ -2526,7 +2529,12 @@
     h = h.replace(/^## (.+)$/gm, '<h2 class="text-argos-accent font-semibold text-base mt-5 mb-2 uppercase tracking-wider border-b border-argos-border pb-1">$1</h2>');
     h = h.replace(/`([^`]+)`/g, '<code class="bg-argos-bg/80 px-1.5 py-0.5 rounded text-argos-accent text-[12px] font-mono">$1</code>');
     h = h.replace(/\*\*([^*]+)\*\*/g, '<strong class="text-white">$1</strong>');
-    h = h.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" class="text-argos-accent hover:underline">$1</a>');
+    h = h.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, href) => {
+      const url = String(href || '').trim();
+      if (!/^https?:\/\//i.test(url)) return label;
+      const safe = url.replace(/"/g, '&quot;');
+      return `<a href="${safe}" target="_blank" rel="noopener noreferrer" class="text-argos-accent hover:underline">${label}</a>`;
+    });
     h = h.replace(/^(\s*)-\s+(.+)$/gm, '$1<li class="ml-4 list-disc">$2</li>');
     h = h.replace(/^(\s*)(\d+)\.\s+(.+)$/gm, '$1<li class="ml-4 list-decimal">$3</li>');
     h = h.split(/\n{2,}/).map(p =>
@@ -3283,7 +3291,7 @@
               });
               const j2 = await res.json();
               if (j2.ok) {
-                msg.textContent = '✓ Приложено! ADN се рестартира…';
+                msg.textContent = '✓ Приложено. Презареди Studio ако файлът е отворен.';
                 msg.className = msg.className.replace('text-argos-dim', 'text-green-400');
                 setTimeout(() => loadProposalsPanel(), 3000);
               } else {

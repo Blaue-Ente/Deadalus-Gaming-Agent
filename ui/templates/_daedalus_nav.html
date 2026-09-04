@@ -6,17 +6,13 @@
 {% set _dx_tab = daedalus_tab|default('hub') %}
 <nav class="adn-section-nav daedalus-section-nav" aria-label="Дедал навигация">
   <div class="adn-nav-row">
+    <a href="/"
+      class="adn-nav-link dx-nav-tab text-argos-dim hover:text-white">
+      💬 Разговор
+    </a>
     <a href="/admin/daedalus/hub"
       class="adn-nav-link dx-nav-tab {% if _dx_tab == 'hub' %}adn-nav-active border-b-2{% else %}text-argos-dim hover:text-white{% endif %}">
       🏠 Начало
-    </a>
-    <a href="/admin/daedalus"
-      class="adn-nav-link dx-nav-tab {% if _dx_tab == 'chat' %}adn-nav-active border-b-2{% else %}text-argos-dim hover:text-white{% endif %}">
-      💬 Chat
-    </a>
-    <a href="/"
-      class="adn-nav-link dx-nav-tab text-argos-dim hover:text-white">
-      🏛 Studio
     </a>
     <a href="/admin/daedalus/playground"
       class="adn-nav-link dx-nav-tab {% if _dx_tab == 'playground' %}adn-nav-active border-b-2{% else %}text-argos-dim hover:text-white{% endif %}">
@@ -33,7 +29,7 @@
     <a href="/admin/daedalus/skills"
       class="adn-nav-link dx-nav-tab {% if _dx_tab == 'skills' %}adn-nav-active border-b-2{% else %}text-argos-dim hover:text-white{% endif %}"
       title="Постоянни gates за кодови промени">
-      🔐 Access
+      🔐 Умения
     </a>
     <div class="adn-nav-dropdown {% if _dx_tab in ('config', 'bundles', 'connectors') %}adn-nav-dropdown--open{% endif %}" id="dx-config-dropdown">
       <button type="button"
@@ -43,6 +39,7 @@
       </button>
       <div id="dx-config-menu" class="adn-nav-dropdown-menu" role="menu">
         <a href="/admin/daedalus/connectors" role="menuitem" class="adn-nav-dropdown-item">🔗 Свързаност</a>
+        <a href="/admin/daedalus" role="menuitem" class="adn-nav-dropdown-item">💬 Стар чат</a>
         <a href="/admin/llm-router" role="menuitem" class="adn-nav-dropdown-item">⚡ LLM Router</a>
         <a href="/admin/llm-router?tab=registry" role="menuitem" class="adn-nav-dropdown-item">🤖 Model Registry</a>
         <a href="/admin/llm-router?tab=registry#named-configs" role="menuitem" class="adn-nav-dropdown-item">📦 Worker Named Configs</a>

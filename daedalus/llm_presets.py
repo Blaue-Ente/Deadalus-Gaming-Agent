@@ -412,7 +412,7 @@ def list_presets() -> list[dict]:
 
 
 def _resolve_provider_key(provider: str, fallback: str = "") -> str:
-    """Resolve a provider's API key from env (Replit Secrets)."""
+    """Resolve a provider's API key from the process environment."""
     from .llm_config import provider_env_hint, resolve_provider_api_key
 
     return resolve_provider_api_key(provider, fallback=fallback)
@@ -563,7 +563,7 @@ def apply_mix_config(
         if not master_key:
             raise ValueError(
                 f"Няма API ключ за master provider '{master_provider}' — "
-                f"задай {provider_env_hint(master_provider)} в Replit Secrets или Admin › LLM."
+                f"задай {provider_env_hint(master_provider)} в Studio → Свързаност или `.env`."
             )
         set_config(
             model=master_model,

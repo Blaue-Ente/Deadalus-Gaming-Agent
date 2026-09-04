@@ -1,9 +1,12 @@
 """Studio / harness HTTP API — shell, local LLM, preferences, learned skills."""
 from __future__ import annotations
 
+import asyncio
+import json
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 router = APIRouter(tags=["harness"])
@@ -494,3 +497,93 @@ async def evolution_cycle(body: EvolutionCycleBody = EvolutionCycleBody()) -> di
     except Exception:
         pass
     return await run_cycle(force=force, daedalus=daedalus)
+
+
+# ── Studio chat jobs (SSE; blocking POST /api/v1/daedalus/chat stays) ────────
+
+class ChatJobBody(BaseModel):
+    message: str = Field(..., min_length=1, max_length=20000)
+    session_id: str = Field(default="default", max_length=128)
+    effort: str = Field(default="auto", max_length=16)
+
+
+def _chat_sse(event: str, data: Any) -> str:
+    payload = json.dumps(data, default=str, ensure_ascii=False)
+    return f"event: {event}\ndata: {payload}\n\n"
+
+
+@router.post("/api/v1/daedalus/chat/jobs")
+async def chat_job_start(body: ChatJobBody) -> dict[str, Any]:
+    from daedalus.chat_jobs import start_chat
+    return await start_chat(
+        message=body.message,
+        session_id=body.session_id,
+        effort=body.effort,
+    )
+
+
+@router.get("/api/v1/daedalus/chat/jobs/{job_id}")
+async def chat_job_get(job_id: str) -> dict[str, Any]:
+    from daedalus.chat_jobs import get_job
+    row = get_job(job_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="unknown job")
+    return {"ok": True, **row}
+
+
+@router.post("/api/v1/daedalus/chat/jobs/{job_id}/cancel")
+async def chat_job_cancel(job_id: str) -> dict[str, Any]:
+    from daedalus.chat_jobs import cancel, get_job
+    if not cancel(job_id):
+        raise HTTPException(status_code=404, detail="unknown job")
+    row = get_job(job_id) or {"id": job_id, "status": "cancelled"}
+    return {"ok": True, **row}
+
+
+@router.get("/api/v1/daedalus/chat/live")
+async def chat_live(session_id: str = "") -> dict[str, Any]:
+    """Live tool label for a Studio session (owner token). Not the /apps live catalog."""
+    from daedalus.stream import get_live
+    sid = (session_id or "").strip()
+    if sid:
+        entry = get_live(sid)
+        return {"ok": True, "live": {sid: entry} if entry else {}}
+    return {"ok": True, "live": get_live()}
+
+
+@router.get("/api/v1/daedalus/chat/jobs/{job_id}/stream")
+async def chat_job_stream(job_id: str, request: Request) -> StreamingResponse:
+    from daedalus.chat_jobs import get_job
+    from daedalus.stream import get_live
+
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="unknown job")
+
+    async def _gen():
+        yield _chat_sse("job", job)
+        last: tuple[Any, ...] | None = None
+        while True:
+            if await request.is_disconnected():
+                break
+            row = get_job(job_id)
+            if not row:
+                yield _chat_sse("error", {"error": "gone"})
+                break
+            live = get_live(row.get("session_id") or "") or {}
+            stamp = (live.get("ts"), live.get("label"), live.get("tool"), row.get("status"))
+            if stamp != last:
+                last = stamp
+                if live:
+                    yield _chat_sse("live", live)
+                yield _chat_sse("status", {"status": row.get("status")})
+            if row.get("status") in ("done", "error", "cancelled"):
+                yield _chat_sse("done", row)
+                break
+            await asyncio.sleep(0.35)
+
+    return StreamingResponse(
+        _gen(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

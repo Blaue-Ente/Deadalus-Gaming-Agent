@@ -1066,7 +1066,13 @@ async def durability_status():
 
 @router.get("/daedalus/playground/api/published")
 async def playground_published():
-    return JSONResponse({"ok": True, "apps": []})
+    from daedalus.playground_publish import list_published
+    try:
+        apps = [_jsonable(a) for a in await list_published(enabled_only=False)]
+    except Exception:
+        log.exception("list published apps failed")
+        apps = []
+    return JSONResponse({"ok": True, "apps": apps})
 
 
 # ── Game Studio + wizard helpers ────────────────────────────────────────────
