@@ -127,13 +127,27 @@ def evaluate(
         )
     if coding and claims_done:
         try:
+            from .tool_router import route, score_plan
+            scored = score_plan(
+                route(user_message, kind=kind, intent=intent),
+                tool_calls,
+            )
+        except Exception:
+            scored = None
+        if scored is not None:
+            checks["task_plan"] = scored.complete
+            if scored.blocker:
+                blockers.append(scored.blocker)
+        try:
             from .game_engineer import missing_eng_tools
             miss = missing_eng_tools(user_message, tool_calls)
         except Exception:
             miss = ""
         if miss:
             checks["eng_tools"] = False
-            blockers.append(miss)
+            if not (scored and scored.blocker and "math3d" in scored.blocker and "math3d" in miss):
+                if miss not in blockers:
+                    blockers.append(miss)
         else:
             checks["eng_tools"] = True
 

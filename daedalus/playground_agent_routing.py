@@ -51,20 +51,10 @@ def treat_as_conversational(
     return any(kw in low for kw in _CHAT_SMALLTALK)
 
 
-def native_build_system(user_message: str) -> str:
+def native_build_system(user_message: str, *, kind: str = "", intent: str = "") -> str:
     """System prompt for Playground/game native-tool rounds — build, do not recon."""
-    from .game_engineer import attach_to_sys
+    from .tool_router import format_system, route, run_consult
 
-    sys = (
-        "You are Daedalus BUILDING a Playground project now.\n"
-        "Do not read daedalus/agent.py, kernel, native_tools, or map the harness.\n"
-        "Do not code_search the product. Do not find / across the filesystem.\n"
-        "Order:\n"
-        "1. Heavy 3D math (SLERP, look-at, rays, projection) → math3d with claimed.\n"
-        "2. Many colliders (~N>20) → spatial(action=advise, n=N, dim=2|3) BEFORE nested loops.\n"
-        "3. Need GLM / engine sample → game_canon study. Steal structure; never copy books.\n"
-        "4. playground_new (kind=static unless asked otherwise), then write_file(slug, path, content).\n"
-        "5. Static HTML/canvas: do not start a dev server. Preview is enough.\n"
-        "Stay in THIS game. When the slice's files exist, stop and summarize.\n"
-    )
-    return attach_to_sys(sys, text=user_message or "", kind="static")
+    rt = route(user_message or "", kind=kind, intent=intent)
+    _log, extra = run_consult(rt)
+    return format_system(rt, extra=extra, user_message=user_message)

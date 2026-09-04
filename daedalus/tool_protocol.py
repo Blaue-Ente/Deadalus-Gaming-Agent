@@ -20,6 +20,10 @@ MARKER_TO_NATIVE: dict[str, str] = {
     "NEED_PG": "postgres_query",
     "NEED_PLAYGROUND_WRITE": "write_file",
     "NEED_PLAYGROUND_RUN": "run_command",
+    "NEED_PLAYGROUND_NEW": "playground_new",
+    "NEED_PLAYGROUND_READ": "read_file",
+    "NEED_SUBAGENT": "spawn_subagent",
+    "NEED_VERIFY": "playtest",
 }
 
 
@@ -70,6 +74,24 @@ def request_from_marker(name: str, payload: str, *, extra: dict[str, Any] | None
     elif native == "run_command":
         args.setdefault("slug", blob)
         args.setdefault("command", "true")
+    elif native == "playground_new":
+        parts = [p.strip() for p in blob.split("|")]
+        if parts:
+            args.setdefault("name", parts[0])
+        if len(parts) > 1 and parts[1]:
+            args.setdefault("kind", parts[1])
+        if len(parts) > 2 and parts[2]:
+            args.setdefault("description", parts[2])
+    elif native == "spawn_subagent":
+        parts = [p.strip() for p in blob.split("|")]
+        if parts:
+            args.setdefault("slug", parts[0])
+        if len(parts) > 1:
+            args.setdefault("task", parts[1])
+        if len(parts) > 2:
+            args.setdefault("role", parts[2])
+    elif native == "playtest":
+        args.setdefault("slug", blob)
     return ToolRequest(name=native, args=args, source="marker", marker=name)
 
 
