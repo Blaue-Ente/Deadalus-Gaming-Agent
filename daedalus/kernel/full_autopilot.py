@@ -205,8 +205,8 @@ async def run_full_autopilot(
     kind_rules = _KIND_RULES.get(kind, _KIND_RULES["static"])
     lessons = ""
     try:
-        from daedalus.learned_skills import format_block
-        lessons = format_block(f"{kind} {state.description}", limit=2)
+        from daedalus.learned_skills import disclose
+        lessons = disclose(f"{kind} {state.description}", limit=2)
     except Exception:
         lessons = ""
     specimen = ""
@@ -447,6 +447,12 @@ async def run_full_autopilot(
 
     if deliverable:
         state.set_agent_status(AgentRole.PUBLISHER, "done")
+        try:
+            from daedalus.learned_skills import draft_from_success
+            if state.test_ok:
+                draft_from_success(kind=kind, summary=(state.description or "")[:400])
+        except Exception:
+            pass
         await backend.emit(
             "done",
             {

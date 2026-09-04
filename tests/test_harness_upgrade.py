@@ -85,13 +85,26 @@ def test_job_contract_coding_vs_chat():
 
 
 def test_learned_skill_from_failure(harness_tmp):
-    from daedalus.learned_skills import draft_from_failure, list_skills, format_block
+    from daedalus.learned_skills import (
+        approve,
+        draft_from_failure,
+        format_block,
+        list_pending,
+        list_skills,
+    )
     path = draft_from_failure(kind="static", errors=["SyntaxError: unexpected EOF"], context="snake")
     assert path and path.is_file()
-    skills = list_skills()
-    assert any(s["origin"] in {"failure", "learned"} or "repair" in s["id"] for s in skills)
+    assert path.suffix == ".json"
+    assert "pending" in str(path)
+    assert not any("repair" in s["id"] for s in list_skills())
     block = format_block("static snake syntax")
-    assert "SKILLS" in block or "SyntaxError" in path.read_text(encoding="utf-8")
+    assert "SyntaxError" not in block
+    rec = list_pending()[0]
+    assert rec["id"] in path.read_text(encoding="utf-8")
+    ok = approve(rec["id"])
+    assert ok.get("ok") is True
+    live = format_block("static snake syntax")
+    assert "SyntaxError" in live or "repair" in live.lower()
 
 
 def test_openai_tool_message_roundtrip():

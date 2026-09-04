@@ -27,8 +27,8 @@ _SUB_RE = re.compile(
 
 MAX_PARALLEL = 3
 DEFAULT_ROUNDS = 6
-CODER_TOOLS = ("read_file", "list_dir", "write_file", "run_command", "engine", "world", "assets")
-EXPLORER_TOOLS = ("read_file", "list_dir", "run_command", "engine", "world")
+CODER_TOOLS = ("read_file", "list_dir", "write_file", "run_command", "engine", "world", "assets", "skill")
+EXPLORER_TOOLS = ("read_file", "list_dir", "run_command", "engine", "world", "skill")
 VERIFY_TOOLS = EXPLORER_TOOLS
 
 _BASE_SYSTEM = """You are a Daedalus sub-agent. You have tools. The master agent
@@ -50,6 +50,7 @@ _EXPLORER_SYSTEM = """
 Role: explorer (read-only). You MUST NOT write or edit project files.
 Investigate, map, and verify. Return named artifacts the coder will need.
 If asked to verify, check the original ask / acceptance, not a weaker proxy.
+skill(action=catalog|load) is read-only. Pending drafts wait for owner Approve.
 """
 
 _CODER_SYSTEM = """

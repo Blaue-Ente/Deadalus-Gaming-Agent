@@ -697,6 +697,8 @@ def select_skills(user_message: str, intent: str, hint: str = "") -> list[str]:
                          "play-check", "balance.json"],
         "asset_pipeline": ["sprite atlas", "tileset", "sfx kit", "bitmap font", "tripo",
                            "meshy", "hunyuan", "glb job", "asset-check", "greybox"],
+        "skill_memory": ["learned skill", "одобри урока", "skill catalog",
+                         "progressive disclosure", "skill memory", "уроци"],
         "dissection": ["дисекция", "dissect", "мостра", "play lab",
                        "лаборатория", "разглоби играта", "specimen game"],
     }
@@ -710,17 +712,11 @@ def select_skills(user_message: str, intent: str, hint: str = "") -> list[str]:
 
 
 def render_skills_block(skill_names: list[str]) -> str:
+    """Catalog + at most one body. Leftover callers stay progressive."""
     if not skill_names:
         return ""
-    _load_skills()
-    parts = []
-    for n in skill_names:
-        body = _SKILLS_CACHE.get(n)
-        if body:
-            parts.append(f"━━━ SKILL: {n} ━━━\n{body}")
-    if not parts:
-        return ""
-    return "\n\n## RELEVANT SKILLS\n\n" + "\n\n".join(parts) + "\n"
+    from .learned_skills import disclose
+    return disclose("", extra_ids=skill_names)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

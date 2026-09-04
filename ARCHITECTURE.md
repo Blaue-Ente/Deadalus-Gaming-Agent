@@ -34,7 +34,7 @@ Daedalus is **one product**: coding agent + Studio + Playground. One FastAPI pro
 | Capsule | `capsule.py` | Zip a playground project |
 | Live | `live_publish.py` | `/apps/` + Netlify / GitLab Pages / 1h preview |
 | Preferences | `preferences.py` | Owner speech → durable memory |
-| Learned skills | `learned_skills.py` | Failure/success → SKILL.md |
+| Learned skills | `learned_skills.py` | Catalog first; pending drafts wait for Approve |
 | DoD | `job_contract.py` | Code without evidence is not done |
 | Reach | `reach.py` | Jina Reader + optional CLIs |
 | Playtest | `playtest.py` | Judge personas; no 1M dataset |

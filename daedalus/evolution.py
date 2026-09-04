@@ -304,7 +304,7 @@ def _license_blocked(license_name: str) -> bool:
 
 def _write_learned_note(analysis: dict[str, Any]) -> str | None:
     try:
-        from .learned_skills import write_skill
+        from .learned_skills import pending_dir, queue_draft
     except Exception as extra:
         log.debug("evolution: learned skill import failed: %s", extra)
         return None
@@ -325,13 +325,14 @@ def _write_learned_note(analysis: dict[str, Any]) -> str | None:
     readme = analysis.get("readme") or ""
     if readme:
         body += "\n## README excerpt\n" + readme[:800] + "\n"
-    path = write_skill(
+    rec = queue_draft(
         name=f"radar-{slug}",
         description=desc or f"Radar note for {slug}",
         body=body,
         origin="evolution",
+        kind="radar",
     )
-    return str(path)
+    return str(pending_dir() / f"{rec['id']}.json")
 
 
 def _maybe_clone(url: str, owner: str, repo: str, license_name: str) -> dict[str, Any]:
