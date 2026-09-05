@@ -10,6 +10,7 @@ Standalone apps, които Дедал строи / клонира от GitHub, 
   fastapi   — Python ASGI app (uvicorn). Subprocess test (само dev).
   streamlit — Streamlit app. Subprocess test (само dev).
   vite      — Frontend build tool. Test чрез dev server (dev) / build→static (publish).
+              iOS+Android: Capacitor wrap of dist/ (not a new kind; see playground_capacitor).
   vite-react — Vite + React 18. Test чрез dev server (dev) / build→static (publish).
   node      — Generic Node app. Subprocess test (само dev).
   expo      — React Native / Expo app. Dev test чрез Expo Web (браузър preview).

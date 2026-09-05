@@ -67,9 +67,9 @@ STUDIO_PRESETS: dict[str, dict[str, Any]] = {
         "description": "Netcode-ready architecture, match, sync (MVP offline-first).",
     },
         "hybrid_mobile": {
-        "label": "Hybrid Mobile (Web shell → iOS)",
-        "recommended_kind": "expo",
-        "description": "Expo/Vite prototype + Framework7/PakePlus iOS path.",
+        "label": "Hybrid Web → iOS + Android",
+        "recommended_kind": "vite",
+        "description": "Vite/canvas prototype + Capacitor wrap (iOS+Android). Framework7/PakePlus remains iOS-only fallback. Ionic UI optional for app chrome.",
     },
     "godot_2d": {
         "label": "Godot 2D (Metroidvania / RPG / platformer)",
@@ -307,7 +307,10 @@ def infer_studio_preset(description: str) -> str:
     blob = (description or "").lower()
     if any(w in blob for w in ("fastapi", "backend api", "cloud save api", "playfab server")):
         return "backend_api"
-    if any(w in blob for w in ("framework7", "pakeplus", "hybrid ios", "web shell")):
+    if any(w in blob for w in (
+        "framework7", "pakeplus", "hybrid ios", "web shell",
+        "capacitor", "ionic", "hybrid android", "hybrid mobile",
+    )):
         return "hybrid_mobile"
     if any(
         w in blob
