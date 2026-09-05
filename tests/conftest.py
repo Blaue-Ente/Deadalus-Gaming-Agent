@@ -41,6 +41,12 @@ def _owner_token_env(monkeypatch):
     monkeypatch.setenv("DAEDALUS_BIND_HOST", "127.0.0.1")
 
 
+@pytest.fixture(autouse=True)
+def _catalog_offline(monkeypatch):
+    """Never hit OpenRouter /api/v1/models from unit tests."""
+    monkeypatch.setattr("daedalus.model_catalog.fetch_openrouter", lambda **kwargs: [])
+
+
 @pytest.fixture
 def raw_http():
     """Disable TestClient auto-injection of the owner token."""

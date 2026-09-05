@@ -132,9 +132,12 @@ def test_wrap_up_falls_back_to_the_ledger_when_the_model_is_useless_or_down():
 
 
 def test_model_roles_override_only_the_model(monkeypatch):
+    monkeypatch.setenv("DAEDALUS_ROLE_AUTO", "0")
     monkeypatch.setattr(llm_config, "get_config", lambda: {"provider": "openrouter", "model": "primary/x", "api_key": "k", "sdk": "openai"})
     monkeypatch.delenv("DAEDALUS_MODEL_BUILD", raising=False)
     monkeypatch.delenv("DAEDALUS_MODEL_WRAP_UP", raising=False)
+    monkeypatch.delenv("DAEDALUS_PROVIDER_BUILD", raising=False)
+    monkeypatch.delenv("DAEDALUS_PROVIDER_WRAP_UP", raising=False)
     assert llm_config.role_model("build") == "" and llm_config.config_for_role("build")["model"] == "primary/x"
     assert llm_config.role_model("persona") == ""  # unknown role → primary
     monkeypatch.setenv("DAEDALUS_MODEL_BUILD", "strong/tool-caller")

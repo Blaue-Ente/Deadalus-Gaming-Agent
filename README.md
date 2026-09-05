@@ -263,6 +263,8 @@ export DAEDALUS_MODEL=qwen2.5-coder:7b
 
 OpenRouter **without** a chosen model still defaults to paid Claude Sonnet. For a $0 run, apply Studio preset **OpenRouter Free** (`or_free`) — models whose ids end in `:free` — or set `DAEDALUS_PROVIDER=openrouter` and `DAEDALUS_MODEL=poolside/laguna-s-2.1:free`. The `:free` pool is rate-limited; some ids return 429 or empty completions.
 
+Studio's header chip picks **Chat / Build / Mentor / Wrap** independently (any keyed provider). After a key is set, auto-assign fills Build with a cheap tool-caller and Mentor with Claude Haiku — Sonnet when a typical build is under 10 ¢. See [docs/MODEL_ROLES.md](docs/MODEL_ROLES.md).
+
 ---
 
 ## Playground and Game Studio

@@ -63,8 +63,8 @@ class Playbook:
 
 
 _CORE = (
-    "playground_new", "write_file", "read_file", "list_dir",
-    "run_command", "skill",
+    "playground_new", "write_file", "edit_file", "read_file", "list_dir",
+    "run_command", "skill", "ask_mentor",
 )
 
 PLAYBOOKS: tuple[Playbook, ...] = (

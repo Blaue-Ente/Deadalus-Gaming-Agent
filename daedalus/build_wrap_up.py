@@ -74,6 +74,13 @@ def _ledger(loop: BuildLoop, native_log: list[dict[str, Any]]) -> str:
         from .native_tools import project_nav
 
         lines.append(project_nav(loop.slug))
+    try:
+        from .llm_cost import current as _cost_now
+        led = _cost_now()
+        if led is not None and led.rows:
+            lines.append(led.summary())
+    except Exception:
+        pass
     return "\n".join(lines)
 
 

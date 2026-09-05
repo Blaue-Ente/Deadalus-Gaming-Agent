@@ -344,7 +344,9 @@ def format_system(rt: Route, *, extra: str = "", user_message: str = "") -> str:
             lines.append(f"      docs: {', '.join(s.docs)}")
     lines.append(
         "write_file parses what you write (node --check / compile / json). "
-        "'FAILED syntax' means the step is still open: fix the line and write the full file again."
+        "'FAILED syntax' means the step is still open: fix the line and write the full file again. "
+        "A one-line fix: edit_file with search/replace instead of rewriting the whole file. "
+        "Stuck on a tool: ask_mentor with a short question."
     )
     lines.append("When the slice files exist, stop and summarize. No NEED_* dumps, no SQL.")
     sys = "\n".join(lines)

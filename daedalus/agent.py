@@ -112,15 +112,28 @@ _MAX_TOKENS = 8192
 _BUILD_MAX_TOKENS_DEFAULT = 16384
 
 
-def _build_max_tokens() -> int:
-    """Output budget for a native build round. A whole game.js in one
-    ``write_file`` is ~6–8k tokens; at 8192 the provider cuts the JSON mid-file
-    and the round is lost. ``DAEDALUS_BUILD_MAX_TOKENS`` overrides."""
+def _build_max_tokens(model: str = "", provider: str = "") -> int:
+    """Output budget for a native build round.
+
+    Env ``DAEDALUS_BUILD_MAX_TOKENS`` wins. Otherwise the catalog's
+    ``max_completion_tokens``, at least 16384 and at most 32768 — a whole
+    ``game.js`` is ~6–8k tokens; 8192 cut GLM mid-file.
+    """
     raw = (os.environ.get("DAEDALUS_BUILD_MAX_TOKENS") or "").strip()
+    if raw:
+        try:
+            return max(1024, int(raw))
+        except ValueError:
+            pass
+    default = _BUILD_MAX_TOKENS_DEFAULT
+    if not model:
+        return default
     try:
-        return max(1024, int(raw)) if raw else _BUILD_MAX_TOKENS_DEFAULT
-    except ValueError:
-        return _BUILD_MAX_TOKENS_DEFAULT
+        from .model_catalog import max_output_tokens
+        got = max_output_tokens(model, provider, default=default)
+    except Exception:
+        return default
+    return max(default, min(got, 32_768))
 
 
 def _max_tokens_rejected(exc: Exception) -> bool:
@@ -200,6 +213,11 @@ async def _call_claude_primary(system: str, messages: list[dict[str, str]],
                 system=system_param,
                 messages=messages,
             )
+            try:
+                from .llm_cost import record_from_response
+                record_from_response(resp, role=role or "chat", provider=provider, model=model)
+            except Exception:
+                pass
             block = resp.content[0]
             return block.text if block.type == "text" else ""
 
@@ -229,11 +247,15 @@ async def _call_claude_primary(system: str, messages: list[dict[str, str]],
             default_headers=extra or None,
         )
         oa_messages = [{"role": "system", "content": system}] + list(messages)
-        resp = await oa_client.chat.completions.create(
-            model=model,
-            max_tokens=_MAX_TOKENS,
-            messages=oa_messages,
-        )
+        oa_kw: dict[str, Any] = dict(model=model, max_tokens=_MAX_TOKENS, messages=oa_messages)
+        if (provider or "").strip().lower() == "openrouter":
+            oa_kw["extra_body"] = {"usage": {"include": True}}
+        resp = await oa_client.chat.completions.create(**oa_kw)
+        try:
+            from .llm_cost import record_from_response
+            record_from_response(resp, role=role or "chat", provider=provider, model=model)
+        except Exception:
+            pass
         return resp.choices[0].message.content or ""
     except Exception as exc:
         err = str(exc)[:300]
@@ -279,7 +301,7 @@ async def _call_claude_with_tools(
     model = cfg.get("model", _MODEL)
     sdk = cfg.get("sdk") or "openai"
     provider = cfg.get("provider") or ""
-    max_tokens = _build_max_tokens() if role == "build" else _MAX_TOKENS
+    max_tokens = _build_max_tokens(model, provider) if role == "build" else _MAX_TOKENS
     if not api_key:
         if is_local_provider(provider) or cfg.get("local"):
             api_key = dummy_api_key(provider)
@@ -313,6 +335,11 @@ async def _call_claude_with_tools(
             resp = await client.messages.create(
                 model=model, max_tokens=_MAX_TOKENS, system=system, messages=messages, tools=anthropic_tools,
             )
+        try:
+            from .llm_cost import record_from_response
+            record_from_response(resp, role=role or "build", provider=provider, model=model)
+        except Exception:
+            pass
         content = []
         for block in resp.content:
             if block.type == "text":
@@ -341,6 +368,8 @@ async def _call_claude_with_tools(
     oa_kwargs: dict[str, Any] = dict(
         model=model, messages=oa_messages, tools=openai_tool_specs(tools), tool_choice="auto",
     )
+    if (provider or "").strip().lower() == "openrouter":
+        oa_kwargs["extra_body"] = {"usage": {"include": True}}
     try:
         resp = await client.chat.completions.create(max_tokens=max_tokens, **oa_kwargs)
     except Exception as exc:
@@ -350,6 +379,11 @@ async def _call_claude_with_tools(
         resp = await client.chat.completions.create(max_tokens=_MAX_TOKENS, **oa_kwargs)
     choice = resp.choices[0] if resp.choices else None
     msg = choice.message if choice else None
+    try:
+        from .llm_cost import record_from_response
+        record_from_response(resp, role=role or "build", provider=provider, model=model)
+    except Exception:
+        pass
     cut_off = bool(choice) and str(getattr(choice, "finish_reason", "") or "") == "length"
     content = []
     if msg and msg.content:
@@ -4782,13 +4816,24 @@ class Daedalus:
         if brief:
             msg = brief + "\n\n" + msg
 
-        with bind_effort(effort_dec):
-            raw, summary = await self._build_context_and_call(
-                user_message=msg,
-                session_id=session_id,
-                expect_json=False,
-                for_self=for_self,
-            )
+        from .llm_config import freeze_roles, unfreeze_roles
+        from . import llm_cost
+        _cost = llm_cost.begin_turn()
+        _role_tok = None
+        try:
+            with bind_effort(effort_dec):
+                _role_tok = freeze_roles()
+                raw, summary = await self._build_context_and_call(
+                    user_message=msg,
+                    session_id=session_id,
+                    expect_json=False,
+                    for_self=for_self,
+                )
+        finally:
+            unfreeze_roles(_role_tok)
+            llm_cost.end_turn()
+        if isinstance(summary, dict) and _cost.rows:
+            summary["cost"] = _cost.as_dict()
         # Process task markers — execute side-effects, strip from reply
         raw, task_events = process_task_markers(raw, session_id)
 
