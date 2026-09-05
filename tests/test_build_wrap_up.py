@@ -136,6 +136,8 @@ def test_agent_has_one_build_layer():
     assert "raw = await wrap_up(_loop, _native_log, user_message, _call_claude, _call_persona)" in src
     assert "if not _planning_succeeded and not _build_wrapped:" in src
     assert "range(0 if _build_wrapped else MAX_TOOL_ITERATIONS)" in src
+    assert "_tool_iter = -1" in src
+    assert "NATIVE BUILD ALREADY ACTED" not in src
     assert "propose_block = None if _build_wrapped else _extract_propose_block(raw)" in src
     assert "NATIVE BUILD ALREADY ACTED" not in src
     # no second DoD sticker on a wrapped build

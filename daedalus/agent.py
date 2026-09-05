@@ -203,7 +203,14 @@ async def _call_claude_primary(system: str, messages: list[dict[str, str]],
                     "(set DAEDALUS_API_KEY env var or configure in Admin › LLM, "
                     "or DAEDALUS_PROVIDER=ollama for a local model)"
                 )
-        oa_client = AsyncOpenAI(api_key=api_key, base_url=base_url or None)
+        from .llm_config import openai_compat_headers
+
+        extra = openai_compat_headers(provider)
+        oa_client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=base_url or None,
+            default_headers=extra or None,
+        )
         oa_messages = [{"role": "system", "content": system}] + list(messages)
         resp = await oa_client.chat.completions.create(
             model=model,
@@ -245,7 +252,7 @@ async def _call_claude_with_tools(
     ``role="build"`` uses ``DAEDALUS_MODEL_BUILD`` when set — the model that
     must make correct tool calls can differ from the persona model.
     """
-    from .llm_config import config_for_role
+    from .llm_config import config_for_role, openai_compat_headers
     from .local_llm import dummy_api_key, is_local_provider
     from .native_tools import openai_tool_specs, to_openai_messages
 
@@ -302,7 +309,13 @@ async def _call_claude_with_tools(
         from openai import AsyncOpenAI
     except ImportError:
         return {"stop_reason": "end_turn", "content": []}
-    client = AsyncOpenAI(api_key=api_key, base_url=base_url or None, max_retries=0)
+    extra = openai_compat_headers(provider)
+    client = AsyncOpenAI(
+        api_key=api_key,
+        base_url=base_url or None,
+        max_retries=0,
+        default_headers=extra or None,
+    )
     oa_messages = to_openai_messages(system, messages)
     resp = await client.chat.completions.create(
         model=model,
@@ -1837,6 +1850,7 @@ class Daedalus:
         MAX_TOOL_ITERATIONS = 30
         _tool_loop_broke_with_fallback = False
         _promise_guard_count = 0  # no-silent-stall guard: max 3 re-rolls per session
+        _tool_iter = -1  # defined even when the re-roll loop is skipped
         # A wrapped build turn has no second layer: the kernel already ran the
         # plan and sanitized the closing message — no NEED_* re-rolls.
         for _tool_iter in range(0 if _build_wrapped else MAX_TOOL_ITERATIONS):
