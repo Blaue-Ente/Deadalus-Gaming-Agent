@@ -419,6 +419,42 @@ itself and hand the result to the builder.
 **Not in S7:** a Mentor that edits files itself (it advises and consults; the
 builder writes), persisting role models in Admin › LLM, Studio UI for roles.
 
+### Live run C (2026-09-05, GLM 5.2 builder + Kimi K2.5 mentor, RAG loaded)
+
+| Case | Files on disk | Kernel verify | Verdict | What still went wrong |
+|------|---------------|---------------|---------|------------------------|
+| snake | index.html, game.js, assets/ | passed | **complete**, 406 s, 2 mentor calls | — (generate_image data-URL fixed mid-run) |
+| slerp | index.html, style.css, game.js, game2.js (WebGL, math3d-verified look_at/perspective/slerp) | passed, lint clean | incomplete: "time budget exhausted", 426 s | `node --check` with no file sat on stdin 30 s, twice; that one unrecovered `run_command` kept the contract red although nothing was missing |
+| crowd | index.html, style.css, game.js, gen_assets.py, assets/ (octree, 80 bodies) | passed | incomplete: "time budget exhausted", 500 s | verify said `style.css … never written`; the model wrote it; nothing ever lints `.css`, so the failure stayed unrecovered forever. Two 22 KB `write_file` payloads were cut at the 8192-token output limit. `batch_verify read` crashed on `ADN_ROOT.parent` (None in standalone). The wrap-up said "4 tool calls failed, probably playtest/browser did not pass" — all four had been recovered |
+
+All three products exist and pass verify; the two "incomplete" verdicts were
+the harness judging itself wrong. Fixes, each with a test:
+
+- `shell_center`: children get `stdin=DEVNULL`; a timeout says "did not
+  finish; do not repeat as-is". `BuildLoop.reroute`: bare `node --check` /
+  `node -c` → `game_lint check` of the newest script this turn wrote.
+- `job_contract`: a failed shell *inspection* (`node --check`, `cat`, `ls`,
+  `grep`, `py_compile`) is repaired by a later good `game_lint` / `read_file`
+  / `list_dir` / `playtest`; a kernel "referenced but never written" failure
+  (`input.missing`) is repaired by a later good `write_file` of that path.
+- `run_verify` remembers what it reported missing and, when the file exists on
+  the next verify, records `game_lint check … OK — referenced file now present`.
+- `_call_claude_with_tools(role="build")` uses `DAEDALUS_BUILD_MAX_TOKENS`
+  (16384; one retry at 8192 if the provider rejects it); when
+  `finish_reason=length` cuts a tool call, the error says so and tells the
+  model to split the file into modules.
+- `math3d batch` accepts `action` / `name` as the op key and `ops` as a JSON
+  string.
+- `_read_file_tool` anchors relative paths on `PROJECT_ROOT` and the audit log
+  on `AUDIT_LOG` (data root) — no `ADN_ROOT` in standalone.
+- `log_row()` carries `blockers` and `failed`; the outer DoD reports them
+  ("stopped: time budget exhausted" is the last line, not the whole story).
+- Wrap-up ledger: "N failed and all recovered (not open issues)" vs "still
+  unrecovered: …"; rules forbid guessing ("probably", "вероятно").
+
+Re-scored offline with the fixed contract, all three run-C ledgers are
+`complete: true`.
+
 ## How to approve S7 (and close the plan)
 
 1. Review `build_mentor.py`, `tool_args.py`, `build_context.py`, the
