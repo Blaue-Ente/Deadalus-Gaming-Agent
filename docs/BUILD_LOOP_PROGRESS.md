@@ -17,8 +17,12 @@ approves.
 | S3 | Tool results as navigation (paths, slug, NEXT) | **Done** — MR !49 (`cursor/build-loop-s3-nav-948f`) |
 | S4 | Write-time quality gate (syntax) + arcade lint | **Done** — MR !50 (`cursor/build-loop-s4-gate-948f`) |
 | S2 | Kernel-run scaffold/verify, phase-gated tools | **Done** — MR !51 (`cursor/build-loop-s2-kernel-948f`) |
-| S6 | Router: negations, explicit merge only | **This MR** — awaiting owner approval |
-| S5 | One build layer, model roles, wrap-up sanitizing | Pending |
+| S6 | Router: negations, explicit merge only | **Done** — MR !52 (`cursor/build-loop-s6-router-948f`) |
+| S5 | One build layer, model roles, wrap-up sanitizing | **This MR** — awaiting owner approval |
+
+All six stages are implemented. Merge order is the branch stack: !48 → !49 →
+!50 → !51 → !52 → this MR. After the merge, one live run of the three eval
+prompts below is the acceptance test for the whole plan.
 
 ## Evidence the plan is built on (live eval, 2026-09-05, Nemotron 3.5 Lightning)
 
@@ -175,7 +179,7 @@ reported next to the write so the model fixes them while the file is in hand.
 verify own that), CSS, TypeScript, kernel-run `playtest`/`browser` after the
 last write (S2).
 
-## S2 — Kernel-run scaffold and verify, phase-gated tools (this MR)
+## S2 — Kernel-run scaffold and verify, phase-gated tools (done)
 
 **Intent:** take the two decisions the cheap model kept getting wrong out of
 its hands. It no longer creates or searches for the project — the kernel does,
@@ -237,9 +241,99 @@ build is redirected to the model's own project.
 the plan step stays model-driven), LLM persona playtest (only the heuristic
 runs — deterministic and free), browser verify on by default.
 
-## How to approve S2
+## S6 — Router: negations, explicit merge only (done)
 
-1. Review `scaffold`, `run_verify`, `prepare("list_dir")` in `build_loop.py`,
-   the `drop=` gate in `tool_router.native_specs`, and the agent wiring.
-2. `DAEDALUS_STANDALONE=1 python3 -m pytest tests/test_kernel_build_phases.py tests/test_build_loop.py -q`.
-3. Reply that S2 is approved. S6 (router negations) is next.
+**Intent:** the live eval's first slerp attempt became
+`playground.math3d+playground.crowd+playground.arcade` because the ask said
+"Не прави 3D, quaternion или octree" and the router matched the words it was
+told to avoid. The router now reads the negation, and two playbooks merge only
+when the owner joins them.
+
+**Shipped**
+
+- `tool_router.strip_negations(text) -> (cleaned, dropped)` — a negated
+  clause (`не прави / без / никакъв / избягвай / no / not / don't / never /
+  avoid / without / skip / exclude`) is cut to the end of its sentence or to
+  `, само / , only / , but / , а`. `match_playbook`, `infer_n`, `infer_dim`
+  and `looks_like_game` see the cleaned text.
+- Explicit merge only — `_hit_span` records where each playbook matched;
+  `_explicitly_joined` merges only when the word right before the next match
+  is a conjunction (`and / и / плюс / with / с / + / &`). "3D camera demo on a
+  canvas" is `playground.math3d`; "quaternion slerp and octree" is
+  `math3d+crowd`. An explicit `kind` (Godot / Unity) leads the merge.
+- `Route.negated` — surfaced in `as_dict()` (`/tools/route`) and in the plan
+  prompt as `Owner excluded (honour these, they were not routed on): …`.
+- Self-improvement trigger — a build turn reflects only when the `build_loop`
+  row says the kernel gave up (`stop_reason` contains `exhausted` and not
+  complete). A slow-but-complete build or a recovered failure no longer
+  spawns a harness patch proposal.
+
+**Done when (acceptance)**
+
+| Criterion | How we know |
+|-----------|-------------|
+| Negated clause cut to sentence / `, само`; word boundaries | `test_strip_negations_cuts_the_clause_to_the_sentence_or_the_but` |
+| Snake + "Не прави 3D…" → arcade only, dim 2, no `math3d` | `test_negated_kinds_do_not_route` |
+| Rendering-target mention does not merge; `and`/`плюс` does; kind leads | `test_merge_only_on_explicit_conjunction` |
+| Plan prompt carries the exclusions | `test_plan_prompt_tells_the_model_what_the_owner_excluded` |
+| `/tools/route` exposes `negated` | `test_route_api_exposes_negated` |
+| Reflection gated on the loop's verdict | `test_self_improvement_only_when_the_build_loop_gave_up` |
+
+## S5 — One build layer, model roles, wrap-up sanitizing (this MR)
+
+**Intent:** after the native build the persona received the whole enriched
+context plus a prose plea ("you already acted, do not emit NEED_*"). It
+planned again anyway — NEED_* markers, JSON tool dumps, `<think>` transcripts,
+SQL, and a DoD sticker appended after the fact. The native rounds *are* the
+build. The second call only writes the closing message, over the kernel's
+ledger, in a role that may use a cheaper model, and everything the owner must
+not see is removed before the reply leaves the agent.
+
+**Shipped**
+
+- `daedalus/build_wrap_up.py` — `wrap_up(loop, native_log, ask, call_fn,
+  persona)`: one short call with `WRAP_UP_RULES` appended to the persona and
+  the `BUILD LEDGER` (loop summary, ok/failed counts, files written,
+  `project_nav`) as the only user content. `sanitize_reply` strips
+  `<think>…</think>` (also unclosed), JSON tool dumps and XML tool tags
+  (`tool_dumps` + `<need_x …/>`), `NEED_*` lines, SQL statements, rule lines
+  (`━━━ …`), empty fences. Under 24 useful characters or a provider error →
+  `fallback_summary(loop)`: project, files, `Open:` preview, kernel verify,
+  `Plan complete.` or missing / unrecovered / stop reason.
+- `agent.py` — when the loop scaffolded or observed anything: `raw =
+  wrap_up(…)`, `_build_wrapped = True`; the persona initial call, the
+  `NEED_PROPOSE` extractor and the 30-iteration NEED_* re-roll loop are
+  skipped. The `NATIVE BUILD ALREADY ACTED` plea is gone. The post-hoc
+  `job_contract` sticker is not appended when a `build_loop` row exists — the
+  loop's verdict drives `draft_from_failure` / `draft_from_success` instead.
+- Model roles — `llm_config.role_model(role)` / `config_for_role(role)`:
+  `DAEDALUS_MODEL_BUILD` for the native tool rounds (the model that must make
+  correct tool calls), `DAEDALUS_MODEL_WRAP_UP` for the closing message. Same
+  provider, key and base URL; only the model changes. `_call_claude(…,
+  role=)` and `_call_claude_with_tools(…, role=)` honour it; the build pass
+  is called with `role="build"`, the wrap-up with `role="wrap_up"`.
+  `describe_effective_config()` reports `roles`.
+
+**Done when (acceptance)**
+
+| Criterion | How we know |
+|-----------|-------------|
+| Think / NEED_* / JSON / XML / SQL / stickers stripped, prose kept in order | `test_sanitize_strips_everything_the_owner_must_not_see` |
+| Prompt is the ledger, ask truncated, files + preview present | `test_wrap_up_prompt_is_the_ledger_not_the_whole_context` |
+| Call goes out in the `wrap_up` role with the rules; output sanitized | `test_wrap_up_calls_the_wrap_up_role_and_sanitizes` |
+| Useless or failed model → kernel ledger summary with Open:, unrecovered, stop reason | `test_wrap_up_falls_back_to_the_ledger_when_the_model_is_useless_or_down` |
+| Roles override only the model | `test_model_roles_override_only_the_model` |
+| Agent: build role, wrap-up replaces persona call, no re-roll / propose / plea / second sticker | `test_agent_has_one_build_layer` |
+
+**Not in S5:** persisting role models in the Admin › LLM DB row (env only for
+now), Studio UI for roles.
+
+## How to approve S5 (and close the plan)
+
+1. Review `build_wrap_up.py`, the `_build_wrapped` branch and the
+   `job_contract` guard in `agent.py`, `config_for_role` in `llm_config.py`.
+2. `DAEDALUS_STANDALONE=1 python3 -m pytest tests/test_build_wrap_up.py tests/test_kernel_build_phases.py tests/test_build_loop.py -q`.
+3. Merge the stack !48 → !52 → this MR, then run the three eval prompts live
+   (snake, slerp mixed, slerp clean). Expected: project created by the
+   kernel, files written, kernel verify in the reply, no NEED_* / XML, and a
+   preview path that opens.

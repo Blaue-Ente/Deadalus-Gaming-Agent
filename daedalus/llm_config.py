@@ -375,6 +375,32 @@ def get_config() -> dict:
     return cfg
 
 
+MODEL_ROLES = ("build", "wrap_up")
+
+
+def role_model(role: str) -> str:
+    """Model override for one role, or "" to use the primary model.
+
+    ``DAEDALUS_MODEL_BUILD`` drives the native tool rounds (the model that has
+    to make correct tool calls); ``DAEDALUS_MODEL_WRAP_UP`` writes the closing
+    summary (cheap is fine). Same provider, key and base URL as the primary.
+    """
+    key = (role or "").strip().lower().replace("-", "_")
+    if key not in MODEL_ROLES:
+        return ""
+    return (os.environ.get(f"DAEDALUS_MODEL_{key.upper()}") or "").strip()
+
+
+def config_for_role(role: str) -> dict:
+    cfg = get_config()
+    model = role_model(role)
+    if model and isinstance(cfg, dict) and model != cfg.get("model"):
+        cfg = dict(cfg)
+        cfg["model"] = model
+        cfg["role"] = role
+    return cfg
+
+
 def _resolve_llm_config() -> dict:
     """Return resolved LLM config: {provider, model, api_key, base_url, sdk, use_cache}."""
     from .local_llm import (
@@ -640,6 +666,7 @@ def describe_effective_config() -> dict:
     return {
         "db_raw": safe_db,
         "effective": safe_eff,
+        "roles": {r: (role_model(r) or "(primary)") for r in MODEL_ROLES},
         "warnings": warnings,
         "aligned": len(warnings) == 0 and not safe_eff.get("error"),
     }
