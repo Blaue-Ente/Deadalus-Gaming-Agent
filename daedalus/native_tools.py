@@ -624,8 +624,9 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
         "description": (
             "Architectural lint for game code. Python ruff; C++ clang-format/tidy "
             "when installed plus leak heuristics; C# Unity heuristics and dotnet format; "
-            "GDScript Godot 3 API smells. action=format returns text and does not write. "
-            "Missing clang-tidy is not a leak pass."
+            "GDScript Godot 3 API smells; JS/HTML canvas games: node --check syntax, "
+            "double game loop, canvas without input, off-grid start. "
+            "action=format returns text and does not write. Missing clang-tidy is not a leak pass."
         ),
         "input_schema": {
             "type": "object",
@@ -973,9 +974,21 @@ async def execute_native_tool(
                     slug, kind="static", source="built", description="auto-created on write", slug=slug,
                 )
             pg.write_file(slug, path, content)
+            from .write_gate import check_source
+            gate = check_source(path, content, project_root=pg.project_dir(slug))
+            if not gate.ok:
+                return (
+                    f"── write_file FAILED syntax {slug}/{path} ({len(content)} chars) ──\n"
+                    f"{gate.summary()}\n"
+                    "The file is saved but does not parse. Fix it and write_file again "
+                    "with the full corrected content.\n"
+                    f"{project_nav(slug, path)}"
+                )
+            extra = gate.summary()
             return (
                 f"── write_file OK {slug}/{path} ({len(content)} chars) ──\n"
-                f"{project_nav(slug, path)}"
+                + (f"{extra}\n" if extra else "")
+                + project_nav(slug, path)
             )
 
         if name == "run_command":
