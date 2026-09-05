@@ -47,11 +47,28 @@ def _repair_key(call: dict[str, Any]) -> tuple[str, str, str]:
     return (_call_name(call), slug if path else "", path)
 
 
+_INSPECTION_CMD = re.compile(
+    r"^\s*(?:node\s+(?:--check|-c)\b|cat\b|head\b|tail\b|less\b|more\b|ls\b|find\b|grep\b|wc\b|"
+    r"python3?\s+-m\s+py_compile\b)"
+)
+_INSPECTION_TOOLS = frozenset({"game_lint", "read_file", "list_dir", "playtest"})
+
+
+def _is_inspection_shell(call: dict[str, Any]) -> bool:
+    if _call_name(call) != "run_command":
+        return False
+    args = call.get("input") if isinstance(call.get("input"), dict) else {}
+    return bool(_INSPECTION_CMD.match(str((args or {}).get("command") or "")))
+
+
 def unrecovered_failure_indexes(tool_calls: list[dict[str, Any]] | None) -> list[int]:
     """Indexes of failed calls that no later successful call repaired.
 
     A failed ``run_command`` followed by a passing ``run_command`` is a fix, not a
-    blocker — otherwise the model could never recover inside one turn.
+    blocker — otherwise the model could never recover inside one turn. A failed
+    shell *inspection* (``node --check``, ``cat``, ``ls`` …) is also repaired by
+    the tool that does that job (``game_lint``, ``read_file``, ``list_dir``):
+    the point was to look at the files, and the files were looked at.
     """
     calls = tool_calls or []
     out: list[int] = []
@@ -62,9 +79,19 @@ def unrecovered_failure_indexes(tool_calls: list[dict[str, Any]] | None) -> list
         # A failure that never named a file (unparseable arguments, missing
         # path) is repaired by any later good call of the same tool.
         loose = not key[2]
+        inspection = _is_inspection_shell(call)
+        # Kernel verify: "index.html references game.js but it was never
+        # written" — writing that file is the repair, not another lint.
+        args = call.get("input") if isinstance(call.get("input"), dict) else {}
+        never_written = bool((args or {}).get("missing")) and bool(key[2])
         recovered = any(
             later.get("ok") is True
-            and (_repair_key(later) == key or (loose and _call_name(later) == key[0]))
+            and (
+                _repair_key(later) == key
+                or (loose and _call_name(later) == key[0])
+                or (inspection and _call_name(later) in _INSPECTION_TOOLS)
+                or (never_written and _repair_key(later) == ("write_file", key[1], key[2]))
+            )
             for later in calls[i + 1:]
         )
         if not recovered:

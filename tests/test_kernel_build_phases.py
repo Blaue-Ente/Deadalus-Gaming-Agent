@@ -236,6 +236,46 @@ def test_index_that_loads_an_unwritten_script_is_not_complete(playground, monkey
     assert loop.log_row()["verified"] is True
 
 
+def test_missing_stylesheet_written_later_is_recovered(playground, monkeypatch):
+    """Live eval, GLM 5.2 crowd: verify said `style.css ... never written`; the model
+    wrote it; nothing ever lints .css, so the failure stood and the build stayed
+    'incomplete' until the clock ran out."""
+    root, _ = playground
+    executed: list[str] = []
+
+    async def _exec(name, args, **_kw):
+        executed.append(name)
+        if name == "write_file":
+            (root / args["slug"] / args["path"]).write_text(args["content"], encoding="utf-8")
+            return f"── write_file OK {args['slug']}/{args['path']} ──"
+        return f"── {name} OK ──"
+
+    monkeypatch.setattr(native_tools, "execute_native_tool", _exec)
+    html = "<canvas id='c'></canvas><link rel='stylesheet' href='./style.css'><script src='game.js'></script>"
+    rounds = [
+        [{"type": "tool_use", "id": "1", "name": "write_file", "input": {"path": "index.html", "content": html}},
+         {"type": "tool_use", "id": "2", "name": "write_file", "input": {"path": "game.js", "content": OK_JS}}],
+        [{"type": "text", "text": "Готово."}],                                   # quiet → verify: style.css missing
+        [{"type": "tool_use", "id": "3", "name": "write_file", "input": {"path": "style.css", "content": "canvas{}"}}],
+        [{"type": "text", "text": "Готово."}],
+    ]
+
+    async def _model(system, messages, tools):
+        return {"stop_reason": "x", "content": rounds.pop(0)}
+
+    loop = BuildLoop(route(SNAKE), SNAKE, fix_rounds=2)
+    asyncio.run(loop.scaffold(""))
+    asyncio.run(native_tools.run_native_discovery_pass(
+        "sys", SNAKE, _model, memory=None, session_id="", read_file_fn=lambda *a: {}, max_rounds=6, loop=loop,
+    ))
+    assert executed == ["write_file", "write_file", "write_file"]
+    row = loop.log_row()
+    assert row["complete"] is True and loop.stop_reason == "complete", row
+    assert row["failed"] == [] and row["blockers"] == []
+    heads = [o.head for o in loop.observations if o.args.get("missing")]
+    assert any("style.css FAILED" in h for h in heads) and any("style.css OK" in h for h in heads)
+
+
 def test_agent_scaffolds_before_building():
     src = Path("daedalus/agent.py").read_text(encoding="utf-8")
     assert "await _loop.scaffold(session_id" in src

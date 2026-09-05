@@ -38,6 +38,7 @@ _SHELL_READ = re.compile(
     rf"^(?:cat|less|more|head(?:\s+-n?\s*\d+)?|tail(?:\s+-n?\s*\d+)?)\s+{_PATH}(?:\s*\|.*)?$"
 )
 _SHELL_CHECK = re.compile(rf"^node\s+(?:--check|-c)\s+{_PATH}$")
+_SHELL_CHECK_BARE = re.compile(r"^node\s+(?:--check|-c)\s*$")
 _HTML_LINK = re.compile(
     r"<(?:script[^>]*\ssrc|link[^>]*\shref)\s*=\s*[\"'](?P<ref>[^\"']+)[\"']", re.I,
 )
@@ -205,6 +206,7 @@ class BuildLoop:
         self.scaffolded = False
         self.verify_report: list[str] = []
         self._verified_at = -1
+        self._missing_reported: set[tuple[str, str]] = set()
         for row in self.seed_log:
             self._capture_slug(row.get("input") or {}, "")
 
@@ -301,6 +303,7 @@ class BuildLoop:
             self._verified_at = len(self.observations) - 1
             return True
         from .game_lint import check as lint_check
+        from .playground import project_dir
 
         for slug, path in files:
             if not path.lower().endswith(_WEB_SUFFIXES) and not path.lower().endswith(".py"):
@@ -318,13 +321,29 @@ class BuildLoop:
             self.verify_report.append(head)
             self.verify_report.extend(f"  lint: {w}" for w in warnings[:4])
             ok_all = ok_all and bool(r.get("ok"))
-            for missing in self._missing_links(slug, path):
+            missing_now = self._missing_links(slug, path)
+            for missing in missing_now:
                 # index.html that loads a game.js nobody wrote is not a slice —
                 # the write gate only warned because the script could still come.
                 head = f"── game_lint check {slug}/{missing} FAILED ── referenced by {path} but never written"
-                self.observe("game_lint", {"action": "check", "slug": slug, "path": missing, "kernel": True}, head, ok=False)
+                self.observe(
+                    "game_lint",
+                    {"action": "check", "slug": slug, "path": missing, "kernel": True, "missing": True},
+                    head, ok=False,
+                )
                 self.verify_report.append(head)
+                self._missing_reported.add((slug, missing))
                 ok_all = False
+            # A file reported missing on an earlier verify that exists now: say so,
+            # or the old failure would stand unrecovered (css is never linted).
+            for key in sorted(self._missing_reported):
+                if key[0] == slug and key[1] not in missing_now and (project_dir(slug) / key[1]).is_file():
+                    self._missing_reported.discard(key)
+                    self.observe(
+                        "game_lint",
+                        {"action": "check", "slug": slug, "path": key[1], "kernel": True, "missing": True},
+                        f"── game_lint check {slug}/{key[1]} OK ── referenced file now present", ok=True,
+                    )
         slug = files[0][0]
         try:
             from .playtest import _heuristic, _signal_source
@@ -446,6 +465,18 @@ class BuildLoop:
             path = m.group("path")
             out = {"action": "check", "path": path, "slug": str(args.get("slug") or self.slug or "")}
             return "game_lint", out, f"(kernel: `{cmd[:60]}` → game_lint check path={path})"
+        if _SHELL_CHECK_BARE.match(cmd):
+            # `node --check` with no file reads stdin — it checks nothing. Lint
+            # the newest script this turn wrote instead; kernel verify covers the rest.
+            scripts = [p for _, p in self.written_files() if p.lower().endswith((".js", ".mjs", ".cjs"))]
+            if scripts:
+                path = scripts[-1]
+                out = {"action": "check", "path": path, "slug": str(args.get("slug") or self.slug or "")}
+                others = ", ".join(scripts[:-1][-3:])
+                note = f"(kernel: `{cmd}` had no file → game_lint check path={path}"
+                if others:
+                    note += f"; kernel verify lints the rest: {others}"
+                return "game_lint", out, note + ")"
         return tool, args, ""
 
     def prepare(self, tool: str, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
@@ -713,6 +744,8 @@ class BuildLoop:
             "nudges": self.nudges,
             "stop_reason": self.stop_reason,
             "missing": list(v.missing_steps),
+            "blockers": list(v.blockers),
+            "failed": [f"{o.tool} {o.args or ''}".strip()[:120] for o in v.failed_calls[-3:]],
             "slug": self.slug,
             "scaffolded": self.scaffolded,
             "verified": self._verified_at >= 0,
