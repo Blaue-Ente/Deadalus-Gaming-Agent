@@ -43,7 +43,9 @@ WRAP_UP_RULES = (
     "closing message to the owner, nothing else. 4–10 short lines: what exists (files), how "
     "to open it (the preview path), what the kernel verified, what is still missing if "
     "anything. No tool calls, no NEED_* markers, no JSON, no XML, no SQL, no new plan. "
-    "Do not repeat the ledger verbatim."
+    "Do not repeat the ledger verbatim. State only what the ledger says: no guessing why "
+    "something failed ('probably', 'вероятно'); a failure the ledger marks recovered is not "
+    "an open issue and does not belong in the message."
 )
 
 
@@ -51,10 +53,23 @@ def _ledger(loop: BuildLoop, native_log: list[dict[str, Any]]) -> str:
     calls = [r for r in native_log if r.get("tool") not in ("build_loop", None)]
     ok = sum(1 for r in calls if r.get("ok") is not False)
     failed = len(calls) - ok
-    lines = [loop.summary_block().strip(), f"Tool calls: {ok} ok, {failed} failed."]
+    open_failures = loop.unrecovered_failures()
+    if failed and not open_failures:
+        tally = f"Tool calls: {ok} ok, {failed} failed and all recovered (not open issues)."
+    elif open_failures:
+        names = "; ".join(f"{o.tool} {o.args or ''}".strip()[:80] for o in open_failures[-3:])
+        tally = f"Tool calls: {ok} ok, {failed} failed; still unrecovered: {names}."
+    else:
+        tally = f"Tool calls: {ok} ok, none failed."
+    lines = [loop.summary_block().strip(), tally]
     files = loop.written_files()
     if files:
         lines.append("Files written: " + ", ".join(f"{s}/{p}" if s else p for s, p in files[:12]))
+    mentor = getattr(loop, "mentor", None)
+    if mentor is not None and getattr(mentor, "advice", None):
+        lines.append(f"Mentor stepped in {len(mentor.advice)}×: " + "; ".join(
+            (a.diagnosis or a.instruction)[:120] for a in mentor.advice[:3]
+        ))
     if loop.slug:
         from .native_tools import project_nav
 

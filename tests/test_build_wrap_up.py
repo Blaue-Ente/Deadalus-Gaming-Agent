@@ -70,10 +70,26 @@ def test_wrap_up_prompt_is_the_ledger_not_the_whole_context():
     prompt = wrap_up_prompt(loop, log, SNAKE * 20)
     assert prompt.startswith("━━━ BUILD LEDGER (kernel) ━━━")
     assert "Owner asked:" in prompt and prompt.count("Направи нова Playground") < 20  # truncated ask
-    assert "Tool calls: 2 ok, 1 failed." in prompt
+    assert "Tool calls: 2 ok, 1 failed and all recovered (not open issues)." in prompt
     assert "Files written: snake-game/index.html, snake-game/game.js" in prompt
     assert "preview: /api/v1/playground/projects/snake-game/preview/index.html" in prompt
     assert "Write the closing message now." in prompt
+
+
+def test_ledger_separates_recovered_from_open_failures():
+    """GLM crowd run: 4 failed calls, all repaired — the wrap-up still told the
+    owner "4 tool calls failed, probably playtest/browser did not pass"."""
+    loop = _built_loop()
+    loop.observe("write_file", {"raw": "{trunc"}, "── write_file FAILED: cut off ──", ok=False)
+    loop.observe("write_file", {"slug": "snake-game", "path": "style.css"}, "── write_file OK ──", ok=True)
+    prompt = wrap_up_prompt(loop, [{"tool": "write_file", "ok": False}, {"tool": "write_file", "ok": True}], SNAKE)
+    assert "1 failed and all recovered (not open issues)" in prompt
+    assert "still unrecovered" not in prompt
+
+    loop = _built_loop(complete=False)
+    prompt = wrap_up_prompt(loop, [{"tool": "write_file", "ok": True}, {"tool": "write_file", "ok": False}], SNAKE)
+    assert "still unrecovered: write_file" in prompt and "game.js" in prompt
+    assert "no guessing" in WRAP_UP_RULES
 
 
 def test_wrap_up_calls_the_wrap_up_role_and_sanitizes():

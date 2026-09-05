@@ -18,11 +18,10 @@ approves.
 | S4 | Write-time quality gate (syntax) + arcade lint | **Done** — MR !50 (`cursor/build-loop-s4-gate-948f`) |
 | S2 | Kernel-run scaffold/verify, phase-gated tools | **Done** — MR !51 (`cursor/build-loop-s2-kernel-948f`) |
 | S6 | Router: negations, explicit merge only | **Done** — MR !52 (`cursor/build-loop-s6-router-948f`) |
-| S5 | One build layer, model roles, wrap-up sanitizing | **This MR** — awaiting owner approval |
+| S5 | One build layer, model roles, wrap-up sanitizing | **Done** — `cursor/build-loop-s5-wrapup-948f` |
+| S7 | Mentor + harness that meets a weak model half-way | **This MR** — `cursor/build-loop-s7-mentor-948f` |
 
-All six stages are implemented. Merge order is the branch stack: !48 → !49 →
-!50 → !51 → !52 → this MR. After the merge, one live run of the three eval
-prompts below is the acceptance test for the whole plan.
+Merge order is the branch stack: !48 → !49 → !50 → !51 → !52 → S5 → this MR.
 
 ## Evidence the plan is built on (live eval, 2026-09-05, Nemotron 3.5 Lightning)
 
@@ -328,12 +327,141 @@ not see is removed before the reply leaves the agent.
 **Not in S5:** persisting role models in the Admin › LLM DB row (env only for
 now), Studio UI for roles.
 
-## How to approve S5 (and close the plan)
+## Live eval after S1–S6 (2026-09-05, OpenRouter)
 
-1. Review `build_wrap_up.py`, the `_build_wrapped` branch and the
-   `job_contract` guard in `agent.py`, `config_for_role` in `llm_config.py`.
-2. `DAEDALUS_STANDALONE=1 python3 -m pytest tests/test_build_wrap_up.py tests/test_kernel_build_phases.py tests/test_build_loop.py -q`.
-3. Merge the stack !48 → !52 → this MR, then run the three eval prompts live
-   (snake, slerp mixed, slerp clean). Expected: project created by the
-   kernel, files written, kernel verify in the reply, no NEED_* / XML, and a
-   preview path that opens.
+| Builder | Snake | SLERP | Crowd | What broke |
+|---------|-------|-------|-------|------------|
+| GLM 5.2 | delivered | **no files** — `math3d perspective` failed 9× with `eye=[fov, aspect, near, far]` | partial — one `write_file {"raw": …}`, then 3 fix rounds on a "failure" that was already repaired | tool schema lacked `fovy/aspect/near/far`; broken-args failure never counted as repaired; playtest fun gate applied to a physics demo |
+| Kimi K2.5 | delivered | delivered (3× perspective misses first) | delivered | `cat … \| head`, `grep \|` refused by the shell jail but reported as FAILED with an empty body |
+
+Two findings were not model-specific: the DoD called snake "a heavy 3D slice
+without math3d" because it read "3D" out of "не прави 3D"; and the builder's
+user turn was `user_content[:8000]` — a prefix of the persona context in which
+the owner's request comes *last*, so with knowledge loaded the request itself
+would have been cut off. RAG reached the persona, not the builder.
+
+## S7 — Mentor + harness that meets a weak model half-way (this MR)
+
+**Intent:** a weak builder is compensated by the harness, not by prose. Two
+layers. First, deterministic: the tools accept what models actually send and
+say exactly what they need when they cannot. Second, a Mentor — a second model
+the kernel consults only at decision points, that can run a read-only tool
+itself and hand the result to the builder.
+
+**Shipped — deterministic**
+
+- `math3d`: schema lists every argument (`fovy`, `aspect`, `near`, `far`,
+  `axis`, `angle`, `min`, `max`, `q`, `v`); `catalog` returns
+  `perspective(fovy, aspect, near, far) e.g. {...}` per op; a flat list under
+  `a`/`eye` is spread over the signature; `fovy` > π is read as degrees (with
+  a note); errors carry `expected` and `got`.
+- `daedalus/tool_args.py`: tool-call JSON with a code fence, raw newlines in
+  strings or a trailing comma is repaired (visibly); a truncated payload fails
+  with "cut off after N chars — split style.css / game.js" and is logged
+  against the file it named. Used by `_call_claude_with_tools` and the native
+  round loop.
+- `job_contract`: a failure that never named a file is repaired by any later
+  good call of the same tool. `looks_like_heavy_eng` strips negations. The
+  outer DoD adopts the build loop's verdict when one exists.
+- `run_command`: policy refusals are `BLOCKED` with the reason and a pointer to
+  `read_file` / `game_lint`; spec says "one plain command, no pipes".
+  `BuildLoop.reroute`: `cat|head|tail <file>` → `read_file`, `node --check
+  x.html` → `game_lint`, noted in the result.
+- `playtest._heuristic(demo=True)`: math3d / crowd playbooks need a canvas and
+  a frame loop, not win/lose or a readable race track.
+- `daedalus/build_context.py`: the builder's turn is OWNER REQUEST → KNOWLEDGE
+  (top-4 RAG chunks, 900 chars each) → LESSONS → DoD, later blocks dropped
+  whole under a 14k budget; the request is never truncated.
+- No post-hoc "Self-review бележка" on wrapped builds.
+- `DAEDALUS_BUILD_TIME_BUDGET_S` (420): no new model round once the wall-clock
+  budget is spent; `on_quiet` stops instead of granting fix rounds; the
+  summary carries the elapsed time. Found in the S7 live run — GLM 5.2 needs
+  40–60 s per round and the crowd case outlived a 540 s client timeout with
+  three good files on disk and no wrap-up.
+- Playtest heuristic reads whole source files (`_signal_source`), racer rules
+  come from the ask (`:hover` is CSS, not a hovercraft), a missing browser is
+  `BLOCKED` with "do not retry".
+
+**Shipped — Mentor (`daedalus/build_mentor.py`)**
+
+- Triggers: `after_round` when the same tool failed twice in a row
+  (`failure_streak`, kernel/mentor rows excluded); `on_quiet` when the plan is
+  incomplete — the Mentor's block is appended to PLAN PROGRESS.
+- Input: the ask, plan rows with status, files written, last 10 ledger rows
+  (no file content), the failing tool's schema, kernel verdict/verify, RAG
+  chunks retrieved for the *error* (`mem0.fused_context`, global + lessons).
+- Output: `{diagnosis, instruction, consult, stop}`. `consult` is one of
+  `math3d spatial game_canon game_lint read_file list_dir`; the kernel runs
+  it, observes it (counts toward the plan step) and shows the result under
+  "Mentor ran … for you →".
+- Budget `DAEDALUS_MENTOR_MAX_CALLS` (3), dedupe per (trigger, tool, error),
+  `DAEDALUS_BUILD_MENTOR=0` disables, `DAEDALUS_MODEL_MENTOR` picks the
+  model. Any failure leaves the deterministic nudge in place.
+- `log_row()["mentor"]` and the wrap-up ledger record the interventions.
+
+**Done when (acceptance)**
+
+| Criterion | How we know |
+|-----------|-------------|
+| `perspective eye=[…]`, degrees, wrong shape → value / value+note / expected+example | `test_math3d_perspective_accepts_the_shapes_models_actually_send` |
+| Fenced / newline / trailing-comma args repaired; truncation named | `test_tool_args_repairs_common_breakage_and_detects_truncation` |
+| Broken write logged against its file, never executed, repaired by the good write | `test_broken_write_is_logged_against_its_file_and_repaired_by_the_good_one` |
+| Refusal is BLOCKED; `cat`/`node --check` rerouted | `test_shell_policy_refusal_is_blocked_not_failed`, `test_loop_reroutes_inspection_commands_to_read_file_and_game_lint` |
+| Demos skip the fun gate; negated 3D is not heavy | `test_demo_playbooks_skip_the_arcade_fun_gate`, `test_heavy_eng_check_honours_negations` |
+| Ask first, RAG bounded, never truncated; agent uses it | `test_build_user_content_puts_the_ask_first_and_bounds_knowledge`, `test_agent_builder_receives_build_user_content_not_a_prefix` |
+| Streak → Mentor once, schema + RAG in its prompt, consult run by the kernel, plan completes | `test_mentor_steps_in_on_a_failure_streak_and_runs_the_consult` |
+| Budget, dedupe, fail-open; quiet nudge carries the Mentor | `test_mentor_respects_budget_dedupes_and_fails_open` |
+| `stop: true` ends the loop visibly | `test_mentor_stop_verdict_ends_the_loop_and_is_visible` |
+| Time budget: no round started, honest stop, no free fix rounds | `test_time_budget_ends_the_build_with_an_honest_stop` |
+| Heuristic sees the whole file; `:hover` ≠ racer; browser missing = BLOCKED | `test_heuristic_scans_whole_files_not_the_judge_snapshot`, `test_css_hover_does_not_make_a_snake_game_a_racer`, `test_missing_browser_is_blocked_not_failed` |
+| Prompt compact, no file content | `test_mentor_prompt_is_compact_and_never_leaks_file_content` |
+
+**Not in S7:** a Mentor that edits files itself (it advises and consults; the
+builder writes), persisting role models in Admin › LLM, Studio UI for roles.
+
+### Live run C (2026-09-05, GLM 5.2 builder + Kimi K2.5 mentor, RAG loaded)
+
+| Case | Files on disk | Kernel verify | Verdict | What still went wrong |
+|------|---------------|---------------|---------|------------------------|
+| snake | index.html, game.js, assets/ | passed | **complete**, 406 s, 2 mentor calls | — (generate_image data-URL fixed mid-run) |
+| slerp | index.html, style.css, game.js, game2.js (WebGL, math3d-verified look_at/perspective/slerp) | passed, lint clean | incomplete: "time budget exhausted", 426 s | `node --check` with no file sat on stdin 30 s, twice; that one unrecovered `run_command` kept the contract red although nothing was missing |
+| crowd | index.html, style.css, game.js, gen_assets.py, assets/ (octree, 80 bodies) | passed | incomplete: "time budget exhausted", 500 s | verify said `style.css … never written`; the model wrote it; nothing ever lints `.css`, so the failure stayed unrecovered forever. Two 22 KB `write_file` payloads were cut at the 8192-token output limit. `batch_verify read` crashed on `ADN_ROOT.parent` (None in standalone). The wrap-up said "4 tool calls failed, probably playtest/browser did not pass" — all four had been recovered |
+
+All three products exist and pass verify; the two "incomplete" verdicts were
+the harness judging itself wrong. Fixes, each with a test:
+
+- `shell_center`: children get `stdin=DEVNULL`; a timeout says "did not
+  finish; do not repeat as-is". `BuildLoop.reroute`: bare `node --check` /
+  `node -c` → `game_lint check` of the newest script this turn wrote.
+- `job_contract`: a failed shell *inspection* (`node --check`, `cat`, `ls`,
+  `grep`, `py_compile`) is repaired by a later good `game_lint` / `read_file`
+  / `list_dir` / `playtest`; a kernel "referenced but never written" failure
+  (`input.missing`) is repaired by a later good `write_file` of that path.
+- `run_verify` remembers what it reported missing and, when the file exists on
+  the next verify, records `game_lint check … OK — referenced file now present`.
+- `_call_claude_with_tools(role="build")` uses `DAEDALUS_BUILD_MAX_TOKENS`
+  (16384; one retry at 8192 if the provider rejects it); when
+  `finish_reason=length` cuts a tool call, the error says so and tells the
+  model to split the file into modules.
+- `math3d batch` accepts `action` / `name` as the op key and `ops` as a JSON
+  string.
+- `_read_file_tool` anchors relative paths on `PROJECT_ROOT` and the audit log
+  on `AUDIT_LOG` (data root) — no `ADN_ROOT` in standalone.
+- `log_row()` carries `blockers` and `failed`; the outer DoD reports them
+  ("stopped: time budget exhausted" is the last line, not the whole story).
+- Wrap-up ledger: "N failed and all recovered (not open issues)" vs "still
+  unrecovered: …"; rules forbid guessing ("probably", "вероятно").
+
+Re-scored offline with the fixed contract, all three run-C ledgers are
+`complete: true`.
+
+## How to approve S7 (and close the plan)
+
+1. Review `build_mentor.py`, `tool_args.py`, `build_context.py`, the
+   `reroute` / `after_round` / `_mentor` methods in `build_loop.py`, the
+   Mentor wiring and `_build_user` in `agent.py`.
+2. `DAEDALUS_STANDALONE=1 python3 -m pytest tests/test_build_mentor.py tests/test_build_wrap_up.py tests/test_kernel_build_phases.py tests/test_build_loop.py -q`.
+3. Set `DAEDALUS_MODEL_MENTOR` to a model stronger than the builder (it is
+   called at most three times per build) and run the three eval prompts.
+   Expected: no repeated identical failures, a `Mentor ran …` line when the
+   builder was stuck, files present, kernel verify in the reply.

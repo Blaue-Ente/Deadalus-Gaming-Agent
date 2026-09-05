@@ -275,6 +275,9 @@ def run_command(
             shell=use_shell,
             cwd=str(workdir),
             env=_child_env(),
+            # Closed stdin: `node --check`, `python3`, `cat` with no file would
+            # otherwise sit on a tty read until the timeout.
+            stdin=subprocess.DEVNULL,
             capture_output=True,
             text=True,
             timeout=timeout_s,
@@ -298,7 +301,10 @@ def run_command(
             "ok": False,
             "blocked": False,
             "disabled": False,
-            "error": f"timeout after {timeout_s}s",
+            "error": (
+                f"timeout after {timeout_s}s — the command did not finish; do not repeat it as-is "
+                "(long-running servers/watchers are not for run_command; use game_lint or read_file to inspect files)"
+            ),
             "command": command,
             "stdout": "",
             "stderr": "",

@@ -114,7 +114,35 @@ def _project_snapshot(slug: str, *, max_chars: int = 5000) -> str:
     return text[:max_chars]
 
 
-def _heuristic(snapshot: str) -> dict[str, Any]:
+def _signal_source(slug: str, *, max_chars: int = 400_000) -> str:
+    """Every web source file in the project, whole. The judge reads the
+    1800-char snapshot; the heuristic must see the ``requestAnimationFrame``
+    at line 400 of game.js, or it reports a missing game loop that is there."""
+    from .paths import playground_projects_dir
+    from .playground import slugify
+    root = playground_projects_dir() / slugify(slug)
+    if not root.is_dir():
+        return f"(missing project {slug})"
+    bits: list[str] = []
+    total = 0
+    for path in sorted(root.rglob("*")):
+        if not path.is_file() or path.suffix.lower() not in (".html", ".htm", ".js", ".mjs", ".ts", ".jsx", ".tsx", ".css"):
+            continue
+        if "node_modules" in path.parts or "dist" in path.parts:
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        bits.append(f"=== {path.relative_to(root)} ===\n{text}")
+        total += len(text)
+        if total >= max_chars:
+            break
+    return "\n\n".join(bits)[:max_chars] if bits else _project_snapshot(slug)
+
+
+def _heuristic(snapshot: str, *, demo: bool = False, ask: str = "") -> dict[str, Any]:
+    """Static play-readiness signals. ``demo=True`` is a tech demo (camera,
+    crowd physics): it needs a canvas and a frame loop, not win/lose or a
+    readable race track — the arcade fun gate would only mislead the fix rounds.
+    ``ask`` (the owner's request) decides whether racer rules apply at all."""
     low = snapshot.lower()
     has_canvas = (
         "canvas" in low or "<canvas" in low or "phaser" in low
@@ -129,20 +157,21 @@ def _heuristic(snapshot: str) -> dict[str, Any]:
     blockers = []
     if not has_canvas:
         blockers.append("Няма canvas/Phaser — първата рисунка може да липсва.")
-    if not has_input:
-        blockers.append("Не се вижда input handler — контролите може да са неясни.")
     if not has_loop:
         blockers.append("Не се вижда game loop.")
-    if not has_win:
-        blockers.append("Няма явен win/lose или score.")
     extra_signals: dict[str, Any] = {}
-    try:
-        from .arcade_craft import fun_signals
-        extra = fun_signals(snapshot)
-        extra_signals = dict(extra.get("signals") or {})
-        blockers.extend(extra.get("blockers") or [])
-    except Exception:
-        extra_signals = {}
+    if not demo:
+        if not has_input:
+            blockers.append("Не се вижда input handler — контролите може да са неясни.")
+        if not has_win:
+            blockers.append("Няма явен win/lose или score.")
+        try:
+            from .arcade_craft import fun_signals, looks_like_racer
+            extra = fun_signals(snapshot, racer=looks_like_racer(ask) if ask else None)
+            extra_signals = dict(extra.get("signals") or {})
+            blockers.extend(extra.get("blockers") or [])
+        except Exception:
+            extra_signals = {}
     return {
         "signals": {
             "canvas": has_canvas,
@@ -234,7 +263,7 @@ async def run_playtest(
     chosen = chosen[: max(1, min(n, len(PERSONAS)))]
 
     snapshot = _project_snapshot(slug)
-    heuristic = _heuristic(snapshot)
+    heuristic = _heuristic(_signal_source(slug))
     extra = ""
     if use_browser:
         try:

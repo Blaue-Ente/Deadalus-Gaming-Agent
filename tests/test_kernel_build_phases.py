@@ -194,6 +194,88 @@ def test_native_pass_verifies_before_accepting(playground, monkeypatch):
     assert row["scaffolded"] is True and row["verified"] is True and row["complete"] is True
 
 
+def test_index_that_loads_an_unwritten_script_is_not_complete(playground, monkeypatch):
+    """Live eval, GLM 5.2 SLERP: index.html + style.css written, `<script src=game.js>`
+    never followed, rounds ran out while the model kept calling tools → 'complete'."""
+    root, _ = playground
+    executed: list[str] = []
+
+    async def _exec(name, args, **_kw):
+        executed.append(name)
+        if name == "write_file":
+            (root / args["slug"] / args["path"]).write_text(args["content"], encoding="utf-8")
+            return f"── write_file OK {args['slug']}/{args['path']} ──"
+        return f"── {name} OK ──"
+
+    monkeypatch.setattr(native_tools, "execute_native_tool", _exec)
+    html = "<canvas id='c'></canvas><link rel='stylesheet' href='style.css'><script src='game.js'></script>"
+    rounds = [
+        [{"type": "tool_use", "id": "1", "name": "write_file", "input": {"path": "index.html", "content": html}},
+         {"type": "tool_use", "id": "2", "name": "write_file", "input": {"path": "style.css", "content": "canvas{}"}}],
+        [{"type": "tool_use", "id": "3", "name": "assets", "input": {"action": "sfx"}}],   # rounds run out here
+        [{"type": "tool_use", "id": "4", "name": "write_file", "input": {"path": "game.js", "content": OK_JS}}],
+        [{"type": "text", "text": "Готово."}],
+    ]
+    sent: list[list[dict]] = []
+
+    async def _model(system, messages, tools):
+        sent.append([dict(m) for m in messages])
+        return {"stop_reason": "x", "content": rounds.pop(0)}
+
+    loop = BuildLoop(route(SNAKE), SNAKE, fix_rounds=2)
+    asyncio.run(loop.scaffold(""))
+    asyncio.run(native_tools.run_native_discovery_pass(
+        "sys", SNAKE, _model, memory=None, session_id="", read_file_fn=lambda *a: {}, max_rounds=2, loop=loop,
+    ))
+    checkpoint = sent[2][-1]["content"][-1]["text"]
+    assert "PLAN PROGRESS" in checkpoint
+    assert "game_lint check snake-game/game.js FAILED ── referenced by index.html but never written" in checkpoint
+    assert "NEXT: fix game.js — write_file slug=snake-game path=game.js" in checkpoint
+    assert executed == ["write_file", "write_file", "assets", "write_file"]
+    assert loop.stop_reason == "complete" and loop.nudges == 1
+    assert loop.log_row()["verified"] is True
+
+
+def test_missing_stylesheet_written_later_is_recovered(playground, monkeypatch):
+    """Live eval, GLM 5.2 crowd: verify said `style.css ... never written`; the model
+    wrote it; nothing ever lints .css, so the failure stood and the build stayed
+    'incomplete' until the clock ran out."""
+    root, _ = playground
+    executed: list[str] = []
+
+    async def _exec(name, args, **_kw):
+        executed.append(name)
+        if name == "write_file":
+            (root / args["slug"] / args["path"]).write_text(args["content"], encoding="utf-8")
+            return f"── write_file OK {args['slug']}/{args['path']} ──"
+        return f"── {name} OK ──"
+
+    monkeypatch.setattr(native_tools, "execute_native_tool", _exec)
+    html = "<canvas id='c'></canvas><link rel='stylesheet' href='./style.css'><script src='game.js'></script>"
+    rounds = [
+        [{"type": "tool_use", "id": "1", "name": "write_file", "input": {"path": "index.html", "content": html}},
+         {"type": "tool_use", "id": "2", "name": "write_file", "input": {"path": "game.js", "content": OK_JS}}],
+        [{"type": "text", "text": "Готово."}],                                   # quiet → verify: style.css missing
+        [{"type": "tool_use", "id": "3", "name": "write_file", "input": {"path": "style.css", "content": "canvas{}"}}],
+        [{"type": "text", "text": "Готово."}],
+    ]
+
+    async def _model(system, messages, tools):
+        return {"stop_reason": "x", "content": rounds.pop(0)}
+
+    loop = BuildLoop(route(SNAKE), SNAKE, fix_rounds=2)
+    asyncio.run(loop.scaffold(""))
+    asyncio.run(native_tools.run_native_discovery_pass(
+        "sys", SNAKE, _model, memory=None, session_id="", read_file_fn=lambda *a: {}, max_rounds=6, loop=loop,
+    ))
+    assert executed == ["write_file", "write_file", "write_file"]
+    row = loop.log_row()
+    assert row["complete"] is True and loop.stop_reason == "complete", row
+    assert row["failed"] == [] and row["blockers"] == []
+    heads = [o.head for o in loop.observations if o.args.get("missing")]
+    assert any("style.css FAILED" in h for h in heads) and any("style.css OK" in h for h in heads)
+
+
 def test_agent_scaffolds_before_building():
     src = Path("daedalus/agent.py").read_text(encoding="utf-8")
     assert "await _loop.scaffold(session_id" in src
