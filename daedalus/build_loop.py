@@ -296,10 +296,10 @@ class BuildLoop:
             ok_all = ok_all and bool(r.get("ok"))
         slug = files[0][0]
         try:
-            from .playtest import _heuristic, _project_snapshot
+            from .playtest import _heuristic, _signal_source
 
             hints = _heuristic(
-                _project_snapshot(slug), demo=self.is_demo, ask=self.user_message,
+                _signal_source(slug), demo=self.is_demo, ask=self.user_message,
             ).get("blockers") or []
         except Exception as exc:
             hints = [f"playtest heuristic unavailable: {exc}"[:120]]

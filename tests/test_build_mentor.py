@@ -230,6 +230,23 @@ def test_css_hover_does_not_make_a_snake_game_a_racer():
     assert any("wayfinding" in b for b in racer["blockers"])
 
 
+def test_heuristic_scans_whole_files_not_the_judge_snapshot(tmp_path, monkeypatch):
+    from daedalus.paths import playground_projects_dir
+    from daedalus.playtest import _heuristic, _project_snapshot, _signal_source
+
+    monkeypatch.setenv("DAEDALUS_PLAYGROUND", str(tmp_path))
+    playground_projects_dir.cache_clear()
+    proj = tmp_path / "slerp-demo"
+    proj.mkdir()
+    (proj / "index.html").write_text("<canvas></canvas><script src=game.js></script>", encoding="utf-8")
+    (proj / "game.js").write_text("// header\n" * 400 + "function frame(){requestAnimationFrame(frame)}\n", encoding="utf-8")
+    try:
+        assert _heuristic(_project_snapshot("slerp-demo"), demo=True)["blockers"] == ["Не се вижда game loop."]
+        assert _heuristic(_signal_source("slerp-demo"), demo=True)["blockers"] == []
+    finally:
+        playground_projects_dir.cache_clear()
+
+
 def test_missing_browser_is_blocked_not_failed(monkeypatch):
     from daedalus import browser_session
 
