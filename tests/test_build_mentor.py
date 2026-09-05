@@ -417,6 +417,21 @@ def test_time_budget_ends_the_build_with_an_honest_stop(fake_tools):
     assert "time budget exhausted" in loop.summary_block()
     assert loop.log_row()["elapsed_s"] >= 10
 
+    # clock runs out right after the write → the kernel still verifies the file
+    loop3 = BuildLoop(rt, SNAKE, fix_rounds=3, time_budget_s=1000)
+    loop3.observe("playground_new", {"name": "snake-game"}, "── playground_new OK slug=snake-game ──", ok=True)
+    loop3.observe("write_file", {"slug": "snake-game", "path": "index.html"}, "── write_file OK ──", ok=True)
+    loop3.started_at -= 2000
+    seen_verify: list[str] = []
+
+    async def _verify():
+        seen_verify.append("ran")
+        return True
+
+    loop3.run_verify = _verify  # type: ignore[method-assign]
+    asyncio.run(loop3.finalize("time budget exhausted"))
+    assert seen_verify == ["ran"]
+
     # quiet with time left → nudge; quiet with time spent → stop, no free rounds
     loop2 = BuildLoop(rt, SNAKE, fix_rounds=3, time_budget_s=1000)
     assert asyncio.run(loop2.on_quiet("…")) is not None

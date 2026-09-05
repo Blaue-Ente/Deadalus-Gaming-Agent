@@ -1597,8 +1597,8 @@ async def run_native_discovery_pass(
         if loop is not None and loop.out_of_time():
             # A slow builder must end with an honest wrap-up, not a client
             # timeout: no new model round once the wall-clock budget is spent.
-            loop.stop_reason = "time budget exhausted"
-            loop.verdict("")
+            # The kernel still verifies the files it has.
+            await loop.finalize("time budget exhausted")
             break
         if _round + 1 >= budget:
             if loop is None:

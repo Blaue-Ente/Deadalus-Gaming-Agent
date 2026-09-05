@@ -583,6 +583,16 @@ class BuildLoop:
                 self.stop_reason = "mentor: not achievable"
         return block
 
+    async def finalize(self, reason: str) -> BuildVerdict:
+        """End the turn without another model round (clock ran out): the
+        kernel still verifies what was written so the verdict is about the
+        files, not about the last tool result."""
+        if kernel_verify_enabled() and self.written_files() and self._writes_since_verify():
+            await self.run_verify()
+        v = self.verdict("")
+        self.stop_reason = "complete" if v.complete else reason
+        return v
+
     # ── mentor checkpoints ────────────────────────────────────────────────
 
     async def after_round(self) -> str | None:
