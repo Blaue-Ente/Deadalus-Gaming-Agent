@@ -32,6 +32,16 @@ _SLUG_TOOLS = frozenset({
     "assets", "engine", "world", "production", "playground_run",
 })
 _WEB_SUFFIXES = (".js", ".mjs", ".cjs", ".html", ".htm")
+_DEMO_FAMILIES = ("math3d", "crowd")
+_PATH = r"(?P<path>[A-Za-z0-9_./-]+\.(?:html?|js|mjs|css|json|py|gd|cs|txt|md))"
+_SHELL_READ = re.compile(
+    rf"^(?:cat|less|more|head(?:\s+-n?\s*\d+)?|tail(?:\s+-n?\s*\d+)?)\s+{_PATH}(?:\s*\|.*)?$"
+)
+_SHELL_CHECK = re.compile(rf"^node\s+(?:--check|-c)\s+{_PATH}$")
+_SHELL_CHECK_BARE = re.compile(r"^node\s+(?:--check|-c)\s*$")
+_HTML_LINK = re.compile(
+    r"<(?:script[^>]*\ssrc|link[^>]*\shref)\s*=\s*[\"'](?P<ref>[^\"']+)[\"']", re.I,
+)
 _SESSION_SLUG_PREFIXES = ("playground:", "pg-auto-research:", "pg-auto-rev:", "pg-auto-plan:", "autopilot-plan:")
 _NAME_HINTS = (
     "snake", "tetris", "pong", "arkanoid", "breakout", "asteroids", "flappy", "platformer",
@@ -39,6 +49,22 @@ _NAME_HINTS = (
     "metroidvania", "slerp", "camera", "crowd", "octree", "quadtree", "raycast", "particles",
     "змия", "тетрис", "понг", "платформър", "състезание", "камера", "пъзел",
 )
+
+
+DEFAULT_TIME_BUDGET_S = 420.0
+
+
+def time_budget_from_env() -> float:
+    """Wall-clock budget for one build turn. A slow builder (40–60 s per round
+    with 20 KB writes) otherwise outlives the owner's client timeout and the
+    turn ends with no wrap-up at all. ``0`` disables."""
+    raw = (os.environ.get("DAEDALUS_BUILD_TIME_BUDGET_S") or "").strip()
+    if not raw:
+        return DEFAULT_TIME_BUDGET_S
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return DEFAULT_TIME_BUDGET_S
 
 
 def fix_rounds_from_env() -> int:
@@ -158,13 +184,20 @@ class BuildLoop:
         seed_log: list[dict[str, Any]] | None = None,
         fix_rounds: int | None = None,
         rounds_per_fix: int = ROUNDS_PER_FIX,
+        mentor: Any | None = None,
+        time_budget_s: float | None = None,
     ) -> None:
+        import time
+
         self.route = route
         self.user_message = user_message or ""
         self.kind = str(getattr(route, "kind", "") or "static")
         self.seed_log = [dict(r) for r in (seed_log or [])]
         self.fix_rounds = fix_rounds_from_env() if fix_rounds is None else max(0, fix_rounds)
         self.rounds_per_fix = max(1, rounds_per_fix)
+        self.mentor = mentor
+        self.time_budget_s = time_budget_from_env() if time_budget_s is None else max(0.0, time_budget_s)
+        self.started_at = time.monotonic()
         self.observations: list[ToolObservation] = []
         self.nudges = 0
         self.slug = ""
@@ -173,8 +206,15 @@ class BuildLoop:
         self.scaffolded = False
         self.verify_report: list[str] = []
         self._verified_at = -1
+        self._missing_reported: set[tuple[str, str]] = set()
         for row in self.seed_log:
             self._capture_slug(row.get("input") or {}, "")
+
+    @property
+    def is_demo(self) -> bool:
+        """math3d / crowd playbooks build a tech demo, not a game."""
+        families = {p.split(".")[-1] for p in str(self.route.playbook.id).split("+")}
+        return bool(families) and families <= set(_DEMO_FAMILIES)
 
     # ── kernel-run scaffold ───────────────────────────────────────────────
 
@@ -263,6 +303,7 @@ class BuildLoop:
             self._verified_at = len(self.observations) - 1
             return True
         from .game_lint import check as lint_check
+        from .playground import project_dir
 
         for slug, path in files:
             if not path.lower().endswith(_WEB_SUFFIXES) and not path.lower().endswith(".py"):
@@ -280,11 +321,36 @@ class BuildLoop:
             self.verify_report.append(head)
             self.verify_report.extend(f"  lint: {w}" for w in warnings[:4])
             ok_all = ok_all and bool(r.get("ok"))
+            missing_now = self._missing_links(slug, path)
+            for missing in missing_now:
+                # index.html that loads a game.js nobody wrote is not a slice —
+                # the write gate only warned because the script could still come.
+                head = f"── game_lint check {slug}/{missing} FAILED ── referenced by {path} but never written"
+                self.observe(
+                    "game_lint",
+                    {"action": "check", "slug": slug, "path": missing, "kernel": True, "missing": True},
+                    head, ok=False,
+                )
+                self.verify_report.append(head)
+                self._missing_reported.add((slug, missing))
+                ok_all = False
+            # A file reported missing on an earlier verify that exists now: say so,
+            # or the old failure would stand unrecovered (css is never linted).
+            for key in sorted(self._missing_reported):
+                if key[0] == slug and key[1] not in missing_now and (project_dir(slug) / key[1]).is_file():
+                    self._missing_reported.discard(key)
+                    self.observe(
+                        "game_lint",
+                        {"action": "check", "slug": slug, "path": key[1], "kernel": True, "missing": True},
+                        f"── game_lint check {slug}/{key[1]} OK ── referenced file now present", ok=True,
+                    )
         slug = files[0][0]
         try:
-            from .playtest import _heuristic, _project_snapshot
+            from .playtest import _heuristic, _signal_source
 
-            hints = _heuristic(_project_snapshot(slug)).get("blockers") or []
+            hints = _heuristic(
+                _signal_source(slug), demo=self.is_demo, ask=self.user_message,
+            ).get("blockers") or []
         except Exception as exc:
             hints = [f"playtest heuristic unavailable: {exc}"[:120]]
         self.observe("playtest", {"slug": slug, "kind": self.kind, "kernel": True, "heuristic": True},
@@ -306,6 +372,29 @@ class BuildLoop:
         self._verified_at = len(self.observations) - 1
         return ok_all
 
+    @staticmethod
+    def _missing_links(slug: str, path: str) -> list[str]:
+        """Local ``<script src>`` / ``<link href>`` targets of an HTML file that
+        do not exist in the project."""
+        if not path.lower().endswith((".html", ".htm")):
+            return []
+        from .playground import project_dir
+
+        root = project_dir(slug)
+        try:
+            text = (root / path).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return []
+        out: list[str] = []
+        for m in _HTML_LINK.finditer(text):
+            ref = m.group("ref").split("?")[0].split("#")[0].strip()
+            if not ref or ref.lower().startswith(("http://", "https://", "//", "data:")):
+                continue
+            rel = ref.lstrip("./")
+            if not (root / rel).is_file() and rel not in out:
+                out.append(rel)
+        return out
+
     def _plan_writes_done(self) -> bool:
         rows = self.progress()
         return all(r.status == "done" for r in rows if r.step.required) and bool(self.written_files())
@@ -315,6 +404,14 @@ class BuildLoop:
     @property
     def active(self) -> bool:
         return self.fix_rounds > 0
+
+    def elapsed_s(self) -> float:
+        import time
+
+        return time.monotonic() - self.started_at
+
+    def out_of_time(self) -> bool:
+        return self.time_budget_s > 0 and self.elapsed_s() >= self.time_budget_s
 
     def observe(
         self,
@@ -346,6 +443,41 @@ class BuildLoop:
         return [*self.seed_log, *(o.as_call() for o in self.observations)]
 
     # ── navigation: fix arguments before the call, point NEXT after it ────
+
+    def reroute(self, tool: str, args: dict[str, Any]) -> tuple[str, dict[str, Any], str]:
+        """Send an inspection shell command to the tool that does the job.
+
+        ``run_command cat index.html`` / ``head -20 game.js`` → ``read_file``;
+        ``node --check index.html`` → ``game_lint``. The shell jail refuses
+        pipes anyway, and these tools return the same information with the
+        plan's NEXT step attached. Returns (tool, args, note).
+        """
+        if tool != "run_command":
+            return tool, args, ""
+        cmd = str(args.get("command") or "").strip()
+        m = _SHELL_READ.match(cmd)
+        if m:
+            path = m.group("path")
+            out = {"path": path, "slug": str(args.get("slug") or self.slug or "")}
+            return "read_file", out, f"(kernel: `{cmd[:60]}` → read_file path={path})"
+        m = _SHELL_CHECK.match(cmd)
+        if m:
+            path = m.group("path")
+            out = {"action": "check", "path": path, "slug": str(args.get("slug") or self.slug or "")}
+            return "game_lint", out, f"(kernel: `{cmd[:60]}` → game_lint check path={path})"
+        if _SHELL_CHECK_BARE.match(cmd):
+            # `node --check` with no file reads stdin — it checks nothing. Lint
+            # the newest script this turn wrote instead; kernel verify covers the rest.
+            scripts = [p for _, p in self.written_files() if p.lower().endswith((".js", ".mjs", ".cjs"))]
+            if scripts:
+                path = scripts[-1]
+                out = {"action": "check", "path": path, "slug": str(args.get("slug") or self.slug or "")}
+                others = ", ".join(scripts[:-1][-3:])
+                note = f"(kernel: `{cmd}` had no file → game_lint check path={path}"
+                if others:
+                    note += f"; kernel verify lints the rest: {others}"
+                return "game_lint", out, note + ")"
+        return tool, args, ""
 
     def prepare(self, tool: str, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
         """Fill the project slug the model forgot. Returns (args, note).
@@ -465,13 +597,56 @@ class BuildLoop:
         if self.nudges >= self.fix_rounds:
             self.stop_reason = "fix budget exhausted"
             return None
+        if self.out_of_time():
+            self.stop_reason = "time budget exhausted"
+            return None
         self.nudges += 1
         log.info(
             "build loop nudge %d/%d playbook=%s missing=%s failed=%s",
             self.nudges, self.fix_rounds, self.route.playbook.id, v.missing_steps,
             [o.tool for o in v.failed_calls],
         )
-        return self.progress_block(v)
+        block = self.progress_block(v)
+        advice = await self._mentor(f"quiet#{self.nudges}", v.failed_calls[-1] if v.failed_calls else None)
+        if advice:
+            block = f"{block}\n\n{advice.block()}"
+            if advice.stop:
+                self.stop_reason = "mentor: not achievable"
+        return block
+
+    async def finalize(self, reason: str) -> BuildVerdict:
+        """End the turn without another model round (clock ran out): the
+        kernel still verifies what was written so the verdict is about the
+        files, not about the last tool result."""
+        if kernel_verify_enabled() and self.written_files() and self._writes_since_verify():
+            await self.run_verify()
+        v = self.verdict("")
+        self.stop_reason = "complete" if v.complete else reason
+        return v
+
+    # ── mentor checkpoints ────────────────────────────────────────────────
+
+    async def after_round(self) -> str | None:
+        """Called after every tool round. A streak of identical failures gets
+        the Mentor in *now*, before the builder burns more rounds on it."""
+        if self.mentor is None:
+            return None
+        from .build_mentor import BuildMentor
+
+        focus = BuildMentor.failure_streak(self.observations)
+        if focus is None:
+            return None
+        advice = await self._mentor("streak", focus)
+        return advice.block() if advice else None
+
+    async def _mentor(self, trigger: str, focus: ToolObservation | None) -> Any | None:
+        if self.mentor is None:
+            return None
+        try:
+            return await self.mentor.advise(self, trigger, focus)
+        except Exception as exc:  # fail-open: the deterministic nudge stands
+            log.warning("mentor skipped (%s): %s", trigger, exc)
+            return None
 
     def _step_args_hint(self, step: Step) -> str:
         args = dict(step.args or {})
@@ -548,7 +723,7 @@ class BuildLoop:
             f"{self.nudges} fix round(s) used"
             + (f", stopped: {self.stop_reason}" if self.stop_reason else "")
             + (f", slug {self.slug}" if self.slug else "")
-            + ".",
+            + f", {self.elapsed_s():.0f}s.",
         ]
         if self.verify_report:
             lines.append("Kernel verify: " + "; ".join(x.strip() for x in self.verify_report[:4]))
@@ -569,7 +744,11 @@ class BuildLoop:
             "nudges": self.nudges,
             "stop_reason": self.stop_reason,
             "missing": list(v.missing_steps),
+            "blockers": list(v.blockers),
+            "failed": [f"{o.tool} {o.args or ''}".strip()[:120] for o in v.failed_calls[-3:]],
             "slug": self.slug,
             "scaffolded": self.scaffolded,
             "verified": self._verified_at >= 0,
+            "mentor": self.mentor.log_rows() if self.mentor is not None else [],
+            "elapsed_s": round(self.elapsed_s(), 1),
         }

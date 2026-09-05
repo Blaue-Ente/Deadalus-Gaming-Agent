@@ -109,6 +109,23 @@ class DaedalusBadRequest(DaedalusError):
 
 _MODEL = "claude-sonnet-4-6"   # fallback if llm_config not available
 _MAX_TOKENS = 8192
+_BUILD_MAX_TOKENS_DEFAULT = 16384
+
+
+def _build_max_tokens() -> int:
+    """Output budget for a native build round. A whole game.js in one
+    ``write_file`` is ~6–8k tokens; at 8192 the provider cuts the JSON mid-file
+    and the round is lost. ``DAEDALUS_BUILD_MAX_TOKENS`` overrides."""
+    raw = (os.environ.get("DAEDALUS_BUILD_MAX_TOKENS") or "").strip()
+    try:
+        return max(1024, int(raw)) if raw else _BUILD_MAX_TOKENS_DEFAULT
+    except ValueError:
+        return _BUILD_MAX_TOKENS_DEFAULT
+
+
+def _max_tokens_rejected(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return "max_tokens" in text or "max_completion_tokens" in text or "maximum context" in text
 
 from .llm_config import get_config
 
@@ -262,6 +279,7 @@ async def _call_claude_with_tools(
     model = cfg.get("model", _MODEL)
     sdk = cfg.get("sdk") or "openai"
     provider = cfg.get("provider") or ""
+    max_tokens = _build_max_tokens() if role == "build" else _MAX_TOKENS
     if not api_key:
         if is_local_provider(provider) or cfg.get("local"):
             api_key = dummy_api_key(provider)
@@ -285,13 +303,16 @@ async def _call_claude_with_tools(
             }
             for t in tools
         ]
-        resp = await client.messages.create(
-            model=model,
-            max_tokens=_MAX_TOKENS,
-            system=system,
-            messages=messages,
-            tools=anthropic_tools,
-        )
+        try:
+            resp = await client.messages.create(
+                model=model, max_tokens=max_tokens, system=system, messages=messages, tools=anthropic_tools,
+            )
+        except Exception as exc:
+            if max_tokens == _MAX_TOKENS or not _max_tokens_rejected(exc):
+                raise
+            resp = await client.messages.create(
+                model=model, max_tokens=_MAX_TOKENS, system=system, messages=messages, tools=anthropic_tools,
+            )
         content = []
         for block in resp.content:
             if block.type == "text":
@@ -317,25 +338,38 @@ async def _call_claude_with_tools(
         default_headers=extra or None,
     )
     oa_messages = to_openai_messages(system, messages)
-    resp = await client.chat.completions.create(
-        model=model,
-        max_tokens=_MAX_TOKENS,
-        messages=oa_messages,
-        tools=openai_tool_specs(tools),
-        tool_choice="auto",
+    oa_kwargs: dict[str, Any] = dict(
+        model=model, messages=oa_messages, tools=openai_tool_specs(tools), tool_choice="auto",
     )
+    try:
+        resp = await client.chat.completions.create(max_tokens=max_tokens, **oa_kwargs)
+    except Exception as exc:
+        if max_tokens == _MAX_TOKENS or not _max_tokens_rejected(exc):
+            raise
+        log.info("provider rejected max_tokens=%d for %s; retrying with %d", max_tokens, model, _MAX_TOKENS)
+        resp = await client.chat.completions.create(max_tokens=_MAX_TOKENS, **oa_kwargs)
     choice = resp.choices[0] if resp.choices else None
     msg = choice.message if choice else None
+    cut_off = bool(choice) and str(getattr(choice, "finish_reason", "") or "") == "length"
     content = []
     if msg and msg.content:
         content.append({"type": "text", "text": msg.content})
+    from .tool_args import parse as _parse_args
     for tc in (getattr(msg, "tool_calls", None) or []):
-        args: Any = {}
         raw_args = getattr(getattr(tc, "function", None), "arguments", "") or "{}"
-        try:
-            args = json.loads(raw_args)
-        except json.JSONDecodeError:
-            args = {"raw": raw_args}
+        parsed = _parse_args(raw_args)
+        args: Any = parsed.args
+        if not parsed.ok:
+            note = parsed.note()
+            if cut_off:
+                note = (
+                    f"output cut at the {max_tokens}-token limit (finish_reason=length) — the file did "
+                    "not fit in one call. Split it into modules (e.g. physics.js + render.js + main.js, "
+                    "each its own write_file and <script> tag). " + note
+                )
+            args["_args_error"] = note
+        elif parsed.repaired:
+            args["_args_note"] = parsed.note()
         content.append({
             "type": "tool_use",
             "id": tc.id,
@@ -567,18 +601,15 @@ _AUDIT_LOG = None  # lazy-initialised below
 
 
 def _self_improve_audit_log() -> "Path":
-    from pathlib import Path
-    from .self_improve import ADN_ROOT  # type: ignore[attr-defined]
-    p = ADN_ROOT / "data" / "daedalus" / "self_improve_audit.log"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    return p
+    from .self_improve import AUDIT_LOG  # type: ignore[attr-defined]
+    AUDIT_LOG.parent.mkdir(parents=True, exist_ok=True)
+    return AUDIT_LOG
 
 
 def _read_file_tool(raw_path: str, line_start: int | None = None, line_end: int | None = None) -> dict:
     """Execute NEED_READ_FILE: read a file safely and return its contents."""
     import time as _time
-    from pathlib import Path
-    from .self_improve import _resolve_safe, _is_hard_blocked, ADN_ROOT  # type: ignore
+    from .self_improve import _resolve_safe, _is_hard_blocked, PROJECT_ROOT  # type: ignore
 
     path_str = raw_path.strip()
     target = _resolve_safe(path_str)
@@ -618,7 +649,7 @@ def _read_file_tool(raw_path: str, line_start: int | None = None, line_end: int 
     except Exception:
         pass
 
-    rel = str(target.relative_to(ADN_ROOT.parent)) if ADN_ROOT.parent in target.parents else path_str
+    rel = str(target.relative_to(PROJECT_ROOT)) if PROJECT_ROOT in target.parents else path_str
     return {
         "ok": True,
         "path": rel,
@@ -1590,10 +1621,12 @@ class Daedalus:
             user_content = user_message
 
         # [Phase 17A] DoD injection — за coding задачи инжектираме checklist
+        _dod_block_text = ""
         try:
             _dod_intent = (briefing_dict or {}).get("intent", "") if briefing_dict else ""
             if _dod.is_coding_task(user_message, _dod_intent):
-                user_content = user_content + "\n\n" + _dod.generate_dod_block(user_message, _dod_intent)
+                _dod_block_text = _dod.generate_dod_block(user_message, _dod_intent)
+                user_content = user_content + "\n\n" + _dod_block_text
         except Exception as _dod_exc:
             log.debug("DoD injection skipped: %s", _dod_exc)
 
@@ -1749,8 +1782,27 @@ class Daedalus:
                 _loop = None
                 if _pg_build or _route.use_build_subset:
                     from .build_loop import BuildLoop
+                    from .build_mentor import BuildMentor, mentor_enabled
+                    from .native_tools import execute_native_tool as _exec_native
                     _consult_log, _consult_extra = run_consult(_route)
-                    _loop = BuildLoop(_route, user_message, seed_log=_consult_log)
+                    _mentor = None
+                    if mentor_enabled():
+                        _sid = session_id or ""
+
+                        def _recall(query: str, k: int) -> list[str]:
+                            return [
+                                e.content for e in self.mem0.fused_context(_sid, query, top_k=k)
+                                if e.source in ("global", "lesson")
+                            ]
+
+                        async def _consult(tool: str, args: dict[str, Any]) -> str:
+                            return await _exec_native(
+                                tool, args, memory=self.memory, session_id=_sid,
+                                read_file_fn=_read_file_tool,
+                            )
+
+                        _mentor = BuildMentor(_call_claude, recall_fn=_recall, consult_fn=_consult)
+                    _loop = BuildLoop(_route, user_message, seed_log=_consult_log, mentor=_mentor)
                     _project_block = await _loop.scaffold(session_id or "")
                     if _project_block:
                         _consult_extra = f"{_consult_extra}\n\n{_project_block}".strip()
@@ -1772,9 +1824,19 @@ class Daedalus:
                     functools.partial(_call_claude_with_tools, role="build")
                     if _loop is not None else _call_claude_with_tools
                 )
+                if _loop is not None:
+                    # The builder reads the ask first and RAG second — never a
+                    # prefix of the persona context with the ask cut off.
+                    from .build_context import build_user_content
+                    _build_user = build_user_content(
+                        user_message, knowledge=knowledge, lessons=lessons,
+                        dod_block=_dod_block_text,
+                    )
+                else:
+                    _build_user = user_content[:8000]
                 _native_text, _native_log = await run_native_discovery_pass(
                     _nt_sys,
-                    user_content[:8000],
+                    _build_user,
                     _tool_call_fn,
                     memory=self.memory,
                     session_id=session_id or "",
@@ -4404,9 +4466,12 @@ class Daedalus:
         _had_failures = any(c.get("ok") is False for c in (tool_calls_used or []))
         _rate_limited = "[fallback:" in (raw or "")
         try:
+            # A wrapped build was already reviewed in-loop (kernel verify +
+            # Mentor); a post-hoc note on top of the sanitized reply is noise.
             _should_review = (
                 not for_self
                 and not expect_json
+                and not _build_wrapped
                 and not _rate_limited
                 and len((raw or "").strip()) > 80
                 and (len(tool_calls_used) >= 3 or _had_failures)
@@ -4770,13 +4835,25 @@ class Daedalus:
             dod = evaluate(message, raw or "", tool_calls=_tc, open_slices=_open_slices)
             if _loop_row is not None:
                 # The build loop already judged and the wrap-up already says what
-                # is missing — no second sticker on top of the reply.
+                # is missing — no second sticker on top of the reply. Its verdict
+                # is the one reported: it saw the kernel verify, not just the text.
+                dod.complete = bool(_loop_row.get("complete"))
+                dod.checks["build_loop"] = dod.complete
+                if dod.complete:
+                    dod.blockers = []
+                    dod.summary = "build loop complete"
+                else:
+                    dod.blockers = (
+                        [f"missing: {m}" for m in (_loop_row.get("missing") or [])]
+                        + [str(b) for b in (_loop_row.get("blockers") or [])]
+                        + ([f"stopped: {_loop_row['stop_reason']}"] if _loop_row.get("stop_reason") else [])
+                    ) or ["incomplete"]
+                    dod.summary = "; ".join(dod.blockers)[:300]
                 if not _loop_row.get("complete"):
                     try:
                         draft_from_failure(
                             kind="chat",
-                            errors=[f"missing: {m}" for m in (_loop_row.get("missing") or [])]
-                            or [str(_loop_row.get("stop_reason") or "incomplete")],
+                            errors=list(dod.blockers),
                             context=message[:400],
                         )
                     except Exception:

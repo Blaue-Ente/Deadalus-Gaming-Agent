@@ -58,7 +58,11 @@ def looks_like_game(text: str, *, kind: str = "", intent: str = "") -> bool:
 
 
 def looks_like_heavy_eng(text: str) -> bool:
-    return bool(_HEAVY_RE.search(text or ""))
+    """"Heavy" only when the owner asked for it — "не прави 3D" is not a 3D ask."""
+    from .tool_router import strip_negations
+
+    kept, _dropped = strip_negations(text or "")
+    return bool(_HEAVY_RE.search(kept))
 
 
 def extra_skill_ids(text: str, intent: str = "", hint: str = "", kind: str = "") -> list[str]:
