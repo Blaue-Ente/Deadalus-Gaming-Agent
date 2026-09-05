@@ -34,6 +34,31 @@ class JobContract:
         return asdict(self)
 
 
+def _call_name(call: dict[str, Any]) -> str:
+    return str(call.get("tool") or call.get("name") or "")
+
+
+def unrecovered_failure_indexes(tool_calls: list[dict[str, Any]] | None) -> list[int]:
+    """Indexes of failed calls that no later successful call of the same tool repaired.
+
+    A failed ``run_command`` followed by a passing ``run_command`` is a fix, not a
+    blocker — otherwise the model could never recover inside one turn.
+    """
+    calls = tool_calls or []
+    out: list[int] = []
+    for i, call in enumerate(calls):
+        if call.get("ok") is not False or call.get("blocked"):
+            continue
+        name = _call_name(call)
+        recovered = any(
+            later.get("ok") is True and _call_name(later) == name
+            for later in calls[i + 1:]
+        )
+        if not recovered:
+            out.append(i)
+    return out
+
+
 def _tools_ok(tool_calls: list[dict[str, Any]] | None) -> tuple[bool, bool, bool]:
     calls = tool_calls or []
     wrote = any(
@@ -60,7 +85,7 @@ def _tools_ok(tool_calls: list[dict[str, Any]] | None) -> tuple[bool, bool, bool
         or "verify" in str(c.get("tool") or "").lower()
         for c in calls
     )
-    failed = any(c.get("ok") is False and not c.get("blocked") for c in calls)
+    failed = bool(unrecovered_failure_indexes(calls))
     return wrote, ran, failed
 
 
@@ -90,8 +115,12 @@ def evaluate(
     kind: str = "",
     intent: str = "",
     open_slices: int = 0,
+    strict: bool = False,
 ) -> JobContract:
-    coding = is_coding_task(user_message, intent)
+    """Score a turn. ``strict`` is the kernel build loop: the ask is a coding
+    task by construction and the plan is scored even when the reply does not
+    claim "готово" — the loop asks *before* the model gets to declare victory."""
+    coding = strict or is_coding_task(user_message, intent)
     wrote, ran, failed = _tools_ok(tool_calls)
     if wrote and not ran and _static_preview_counts(user_message, kind):
         ran = True
@@ -125,7 +154,7 @@ def evaluate(
         blockers.append(
             f"Има {open_slices} незавършени среза в job ledger — не казвай готово."
         )
-    if coding and claims_done:
+    if coding and (claims_done or strict):
         try:
             from .tool_router import route, score_plan
             scored = score_plan(

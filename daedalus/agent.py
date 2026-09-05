@@ -1719,7 +1719,9 @@ class Daedalus:
                     _pg_build = True
                 _consult_log: list[dict[str, Any]] = []
                 _nt_specs = None
+                _loop = None
                 if _pg_build or _route.use_build_subset:
+                    from .build_loop import BuildLoop
                     _consult_log, _consult_extra = run_consult(_route)
                     _nt_specs = native_specs(_route) or playground_build_specs(
                         user_message, session_id=session_id or "",
@@ -1727,6 +1729,7 @@ class Daedalus:
                     _nt_sys = format_system(
                         _route, extra=_consult_extra, user_message=user_message,
                     )
+                    _loop = BuildLoop(_route, user_message, seed_log=_consult_log)
                     max_native = 10
                 else:
                     _nt_sys = (
@@ -1744,11 +1747,22 @@ class Daedalus:
                     read_file_fn=_read_file_tool,
                     max_rounds=max_native,
                     tools=_nt_specs,
+                    loop=_loop,
                 )
                 if _consult_log:
                     _native_log = list(_consult_log) + list(_native_log or [])
+                if _loop is not None:
+                    _loop_row = _loop.log_row()
+                    _native_log = list(_native_log or []) + [_loop_row]
+                    _set_live(
+                        session_id, "native_tools", 0,
+                        "Build loop: complete" if _loop_row["complete"]
+                        else f"Build loop: {_loop.stop_reason or 'partial'}",
+                    )
                 if _native_text:
                     user_content = user_content + "\n\n" + _native_text
+                if _loop is not None:
+                    user_content = user_content + "\n\n" + _loop.summary_block()
                     if _pg_build and any(
                         (t.get("tool") in {"write_file", "playground_new"} and t.get("ok"))
                         for t in _native_log
