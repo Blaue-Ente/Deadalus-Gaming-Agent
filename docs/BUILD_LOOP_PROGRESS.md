@@ -455,6 +455,17 @@ the harness judging itself wrong. Fixes, each with a test:
 Re-scored offline with the fixed contract, all three run-C ledgers are
 `complete: true`.
 
+### Live run D (same models, after the fixes; slerp + crowd only)
+
+| Case | Result | Time | Fix rounds / mentor | Notes |
+|------|--------|------|---------------------|-------|
+| slerp | **complete, verified** | 289 s | 0 / 0 | 20 KB WebGL `index.html` in one write (16k budget); 5 math3d ops, all OK; inline JS passes `node --check` |
+| crowd | **complete, verified** | 218 s | 0 / 0 | index.html + style.css + game.js (octree, 80 bodies, `requestAnimationFrame`); one malformed `write_file` payload, repaired by the next call |
+
+Run C → run D: 2/3 → 3/3 complete, 426–500 s → 218–289 s, 3 mentor
+calls per case → 0. The harness no longer needs the Mentor for these three
+prompts; it remains the safety net for the failure streaks it was built for.
+
 ## How to approve S7 (and close the plan)
 
 1. Review `build_mentor.py`, `tool_args.py`, `build_context.py`, the
