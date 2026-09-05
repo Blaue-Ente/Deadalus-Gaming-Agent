@@ -200,18 +200,18 @@ class BuildMentor:
 
     # ── the call ──────────────────────────────────────────────────────────
 
-    async def advise(self, loop: Any, trigger: str, focus: Any | None = None) -> MentorAdvice | None:
+    async def advise(self, loop: Any, trigger: str, focus: Any | None = None, *, question: str = "") -> MentorAdvice | None:
         """One Mentor consultation. Returns None when out of budget, when this
         exact situation was already handled, or when the call fails."""
         if self.exhausted:
             return None
-        key = self._key(trigger, focus)
+        key = self._key(trigger, focus) if not question else f"{trigger}:{question[:80]}"
         if key in self._seen:
             return None
         self._seen.add(key)
         self.calls += 1
         try:
-            prompt = self.prompt(loop, trigger, focus)
+            prompt = self.prompt(loop, trigger, focus, question=question)
             raw = await self.call_fn(MENTOR_SYSTEM, [{"role": "user", "content": prompt}], role="mentor")
         except Exception as exc:
             log.warning("mentor call failed (deterministic nudge stays): %s", exc)
@@ -258,7 +258,7 @@ class BuildMentor:
 
     # ── prompt ────────────────────────────────────────────────────────────
 
-    def prompt(self, loop: Any, trigger: str, focus: Any | None) -> str:
+    def prompt(self, loop: Any, trigger: str, focus: Any | None, *, question: str = "") -> str:
         parts: list[str] = []
         parts.append("TASK (owner):\n" + (loop.user_message or "")[:600])
         pb = loop.route.playbook
@@ -288,6 +288,8 @@ class BuildMentor:
                          + (f"\n  missing steps: {', '.join(v.missing_steps)}" if v.missing_steps else ""))
             if loop.verify_report:
                 parts.append("KERNEL VERIFY:\n" + "\n".join(loop.verify_report[:6]))
+        if question:
+            parts.append("BUILDER QUESTION:\n" + question[:500])
         knowledge = self._recall(loop, focus)
         if knowledge:
             parts.append("KNOWLEDGE (RAG, retrieved for this error):\n" + "\n".join(f"  • {k}" for k in knowledge))

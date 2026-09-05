@@ -29,6 +29,24 @@
         <button type="button" data-effort="craft" aria-pressed="false" data-i18n="studio.effort.craft">Craft</button>
         <button type="button" data-effort="epic" aria-pressed="false" data-i18n="studio.effort.epic">Epic</button>
       </div>
+      <div class="model-switch" id="modelswitch">
+        <button type="button" class="chip" id="modelbtn" aria-haspopup="dialog" aria-expanded="false" data-i18n-aria="studio.modelAria" aria-label="Active model">model</button>
+        <div class="model-pop" id="modelpop" hidden>
+          <div class="model-roles" role="tablist">
+            <button type="button" data-role="chat" class="on" data-i18n="studio.role.chat">Chat</button>
+            <button type="button" data-role="build" data-i18n="studio.role.build">Build</button>
+            <button type="button" data-role="mentor" data-i18n="studio.role.mentor">Mentor</button>
+            <button type="button" data-role="wrap_up" data-i18n="studio.role.wrap">Wrap</button>
+          </div>
+          <p class="hint" id="modelwhy"></p>
+          <div class="row tight">
+            <button type="button" id="modelauto" data-i18n="studio.modelAuto">Auto</button>
+          </div>
+          <label class="sr-only" for="modelq" data-i18n="studio.modelSearch">Search models</label>
+          <input id="modelq" type="search" autocomplete="off" data-i18n-placeholder="studio.modelSearchPh" placeholder="Search models…" />
+          <div class="list" id="modellist"></div>
+        </div>
+      </div>
       <div class="dx-lang" role="group" data-i18n-aria="lang.aria" aria-label="Language">
         <button type="button" data-lang="en" aria-pressed="true">EN</button>
         <button type="button" data-lang="bg" aria-pressed="false">BG</button>
@@ -121,6 +139,7 @@
       <div class="pane" id="pane-llm">
         <p class="kicker" data-i18n="studio.wardrobe">Wardrobe</p>
         <p class="hint" data-i18n="studio.wardrobeHint" data-i18n-html>Same brain for chat, flight, workers, and Command Center. Full keys: <a href="/admin/daedalus/connectors#brain">Connectors</a>.</p>
+        <div id="rolebox" class="rolebox"></div>
         <div class="row tight">
           <button id="uselocal" type="button">Ollama</button>
           <button id="usecloud" type="button" data-i18n="studio.cloud">Cloud</button>

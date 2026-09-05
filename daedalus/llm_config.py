@@ -17,6 +17,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import contextvars
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -222,6 +224,9 @@ PRESET_MODELS = [
     {"id": "poolside/laguna-xs-2.1:free",            "label": "Poolside Laguna XS 2.1 (OR free) 🆓","provider": "openrouter", "tier": "cheap"},
     {"id": "google/gemma-4-31b-it:free",             "label": "Gemma 4 31B (OpenRouter free) 🆓",  "provider": "openrouter", "tier": "fast"},
     {"id": "z-ai/glm-5.2:free",                      "label": "GLM 5.2 (OpenRouter free) 🆓",      "provider": "openrouter", "tier": "fast"},
+    {"id": "z-ai/glm-5.2",                           "label": "GLM 5.2 (OpenRouter) 💰 build",      "provider": "openrouter", "tier": "fast"},
+    {"id": "anthropic/claude-haiku-4.5",             "label": "Claude Haiku 4.5 (OpenRouter) mentor", "provider": "openrouter", "tier": "fast"},
+    {"id": "anthropic/claude-sonnet-4.6",            "label": "Claude Sonnet 4.6 (OpenRouter)",    "provider": "openrouter", "tier": "power"},
     {"id": "moonshotai/kimi-k2",                     "label": "Kimi K2 (OpenRouter) 🤖",            "provider": "openrouter", "tier": "fast"},
     {"id": "qwen/qwq-32b",                           "label": "QwQ 32B reasoning (OpenRouter) 🧠",  "provider": "openrouter", "tier": "fast"},
     # ── AllToken — 52 модела, единен ALLTOKEN_API_KEY ──────────────────────────
@@ -378,30 +383,265 @@ def get_config() -> dict:
 MODEL_ROLES = ("build", "wrap_up", "mentor")
 
 
-def role_model(role: str) -> str:
-    """Model override for one role, or "" to use the primary model.
+def role_auto_enabled() -> bool:
+    """When on (default), unset roles are filled from the catalog."""
+    return (os.environ.get("DAEDALUS_ROLE_AUTO") or "1").strip().lower() not in (
+        "0", "false", "no", "off",
+    )
 
-    ``DAEDALUS_MODEL_BUILD`` drives the native tool rounds (the model that has
-    to make correct tool calls); ``DAEDALUS_MODEL_WRAP_UP`` writes the closing
-    summary (cheap is fine); ``DAEDALUS_MODEL_MENTOR`` is the senior engineer
-    the kernel consults when the builder is stuck (a stronger model than the
-    builder pays off here — it is called at most a few times per build).
-    Same provider, key and base URL as the primary.
+_FROZEN_ROLES: contextvars.ContextVar[dict[str, dict] | None] = contextvars.ContextVar(
+    "llm_frozen_roles", default=None,
+)
+
+
+def _norm_role(role: str) -> str:
+    return (role or "").strip().lower().replace("-", "_")
+
+
+def role_model(role: str) -> str:
+    """Model id for one role, or "" to use the primary model.
+
+    Env ``DAEDALUS_MODEL_BUILD`` / ``_WRAP_UP`` / ``_MENTOR`` still wins.
+    Otherwise the stored assignment (manual or auto-picked).
     """
-    key = (role or "").strip().lower().replace("-", "_")
+    pick = role_assignment(role)
+    if pick.get("source") in ("env", "db", "auto") and pick.get("model"):
+        primary = ""
+        try:
+            primary = str((_resolve_llm_config() or {}).get("model") or "")
+        except Exception:
+            primary = ""
+        if pick["model"] != primary:
+            return str(pick["model"])
+    return ""
+
+
+def _env_role(role: str) -> dict[str, str]:
+    key = _norm_role(role)
     if key not in MODEL_ROLES:
-        return ""
-    return (os.environ.get(f"DAEDALUS_MODEL_{key.upper()}") or "").strip()
+        return {}
+    model = (os.environ.get(f"DAEDALUS_MODEL_{key.upper()}") or "").strip()
+    provider = (os.environ.get(f"DAEDALUS_PROVIDER_{key.upper()}") or "").strip().lower()
+    if not model and not provider:
+        return {}
+    return {"model": model, "provider": provider, "mode": "manual", "source": "env"}
+
+
+def _db_roles() -> dict[str, Any]:
+    raw = _read_db().get("roles") or {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def role_assignment(role: str) -> dict[str, Any]:
+    """Resolved {provider, model, mode, source, why} for a role. Never a secret."""
+    key = _norm_role(role)
+    if key not in MODEL_ROLES:
+        return {}
+    env = _env_role(key)
+    stored = dict(_db_roles().get(key) or {})
+    mode = str(stored.get("mode") or ("manual" if env.get("model") else "auto")).lower()
+    if env.get("model"):
+        provider = env.get("provider") or ""
+        model = env["model"]
+        source = "env"
+        why = "DAEDALUS_MODEL_" + key.upper()
+    elif mode == "manual" and stored.get("model"):
+        provider = str(stored.get("provider") or "")
+        model = str(stored.get("model") or "")
+        source = "db"
+        why = "owner pick"
+    elif role_auto_enabled():
+        try:
+            from .model_catalog import auto_assign
+            pick = auto_assign(primary=_resolve_llm_config())[key]
+            provider, model, source, why = pick.provider, pick.model, "auto", pick.why
+        except Exception as exc:
+            log.debug("auto-assign %s skipped: %s", key, exc)
+            provider = model = ""
+            source, why = "primary", "auto-assign unavailable"
+    else:
+        provider = model = ""
+        source, why = "primary", "auto roles off"
+    if not model:
+        return {"provider": "", "model": "", "mode": mode, "source": "primary", "why": why}
+    if provider:
+        try:
+            from .model_catalog import remap_to_keyed
+            provider, model = remap_to_keyed(provider, model)
+        except Exception:
+            pass
+    return {
+        "provider": provider,
+        "model": model,
+        "mode": "manual" if source in ("env", "db") else "auto",
+        "source": source,
+        "why": why,
+    }
+
+
+def _cfg_for_provider_model(provider: str, model: str, *, role: str, source: str) -> dict:
+    from .local_llm import is_local_provider, resolve_local_config
+
+    p = (provider or "").strip().lower()
+    if is_local_provider(p):
+        local = resolve_local_config(p)
+        if local:
+            out = dict(local)
+            if model:
+                out["model"] = model
+            out["role"] = role
+            out["source"] = source
+            return out
+    pd = PROVIDER_DEFAULTS.get(p) or PROVIDER_DEFAULTS["openai"]
+    api_key = resolve_provider_api_key(p)
+    if not api_key:
+        try:
+            primary = _resolve_llm_config()
+        except Exception:
+            primary = {}
+        if primary.get("provider") == p:
+            api_key = str(primary.get("api_key") or "")
+    return {
+        "provider": p or "openai",
+        "model": model,
+        "api_key": api_key,
+        "base_url": pd.get("base_url") or "",
+        "sdk": pd.get("sdk") or "openai",
+        "use_cache": p == "anthropic",
+        "role": role,
+        "source": source,
+    }
 
 
 def config_for_role(role: str) -> dict:
-    cfg = get_config()
-    model = role_model(role)
-    if model and isinstance(cfg, dict) and model != cfg.get("model"):
-        cfg = dict(cfg)
-        cfg["model"] = model
-        cfg["role"] = role
+    """Full LLM config for a role. Provider may differ from the chat model.
+
+    Frozen for the duration of a chat/build turn so a Studio switch mid-turn
+    cannot swap the builder under the kernel's feet.
+    """
+    key = _norm_role(role)
+    frozen = _FROZEN_ROLES.get()
+    if frozen and key in frozen:
+        return dict(frozen[key])
+    if key not in MODEL_ROLES:
+        return get_config()
+    pick = role_assignment(key)
+    primary = get_config()
+    if not pick.get("model"):
+        out = dict(primary)
+        out["role"] = key
+        return out
+    provider = str(pick.get("provider") or primary.get("provider") or "")
+    model = str(pick["model"])
+    if provider == primary.get("provider") and model == primary.get("model"):
+        out = dict(primary)
+        out["role"] = key
+        return out
+    if not provider:
+        out = dict(primary)
+        out["model"] = model
+        out["role"] = key
+        out["source"] = f"role:{key}"
+        return out
+    cfg = _cfg_for_provider_model(provider, model, role=key, source=f"role:{key}:{pick.get('source')}")
+    if not cfg.get("api_key") and cfg.get("provider") == primary.get("provider"):
+        cfg["api_key"] = primary.get("api_key") or ""
+    if key == "mentor" and pick.get("source") == "auto":
+        try:
+            from .llm_cost import current as _cost_now
+            led = _cost_now()
+            if led is not None and not led.below_mentor_upgrade() and "sonnet" in model.lower():
+                haiku = "claude-haiku-4-5" if cfg.get("provider") == "anthropic" else "anthropic/claude-haiku-4.5"
+                cfg = _cfg_for_provider_model(cfg.get("provider") or provider, haiku, role=key, source="role:mentor:spend-cap")
+                cfg["why"] = "build already ≥ 10¢ — Haiku for remaining mentor calls"
+        except Exception:
+            pass
     return cfg
+
+
+def freeze_roles() -> contextvars.Token:
+    """Snapshot chat + build + wrap-up for this turn. Mentor stays live so
+    a spend-cap can drop Sonnet to Haiku once the build crosses 10 ¢."""
+    snap: dict[str, dict] = {"": get_config()}
+    for r in ("build", "wrap_up"):
+        snap[r] = config_for_role(r)
+    return _FROZEN_ROLES.set(snap)
+
+
+def unfreeze_roles(token: contextvars.Token | None) -> None:
+    if token is None:
+        return
+    try:
+        _FROZEN_ROLES.reset(token)
+    except Exception:
+        _FROZEN_ROLES.set(None)
+
+
+def set_roles(roles: dict[str, Any]) -> dict[str, Any]:
+    """Persist per-role assignments. Keys are never stored here.
+
+    Each value is ``{mode: auto|manual, provider?, model?}``. ``mode=auto``
+    clears a manual pick so the next call re-runs auto-assign.
+    """
+    from .llm_router_config import require_llm_write_permission
+
+    require_llm_write_permission()
+    try:
+        from .model_catalog import clear_assign_cache
+        clear_assign_cache()
+    except Exception:
+        pass
+    cfg = _read_db()
+    stored = dict(cfg.get("roles") or {})
+    for raw_name, raw_body in (roles or {}).items():
+        name = _norm_role(str(raw_name))
+        if name not in MODEL_ROLES:
+            continue
+        body = dict(raw_body or {}) if isinstance(raw_body, dict) else {}
+        mode = str(body.get("mode") or "manual").strip().lower()
+        if mode == "auto":
+            stored[name] = {"mode": "auto"}
+            continue
+        model = str(body.get("model") or "").strip()
+        provider = str(body.get("provider") or "").strip().lower()
+        if not model:
+            stored.pop(name, None)
+            continue
+        stored[name] = {"mode": "manual", "provider": provider, "model": model}
+    cfg["roles"] = stored
+    _write_db(cfg)
+    return describe_roles()
+
+
+def describe_roles() -> dict[str, Any]:
+    """Safe (no api_key) view of primary + roles for Studio / status."""
+    try:
+        primary = get_config()
+    except Exception as exc:
+        primary = {"error": str(exc)[:200]}
+    roles = {}
+    for r in MODEL_ROLES:
+        pick = role_assignment(r)
+        cfg = {}
+        try:
+            cfg = config_for_role(r)
+        except Exception:
+            cfg = {}
+        roles[r] = {
+            **pick,
+            "has_key": bool(cfg.get("api_key")),
+            "sdk": cfg.get("sdk"),
+        }
+    return {
+        "ok": True,
+        "chat": {
+            "provider": primary.get("provider"),
+            "model": primary.get("model"),
+            "source": primary.get("source"),
+            "has_key": bool(primary.get("api_key")),
+        },
+        "roles": roles,
+    }
 
 
 def _resolve_llm_config() -> dict:
@@ -609,10 +849,14 @@ def set_config(
     }
     if (api_key or "").strip():
         cfg["api_key"] = api_key.strip()
+    elif prev.get("api_key"):
+        cfg["api_key"] = prev["api_key"]
     if persona_via_master is not None:
         cfg["persona_via_master"] = bool(persona_via_master)
     elif "persona_via_master" in prev:
         cfg["persona_via_master"] = prev["persona_via_master"]
+    if prev.get("roles"):
+        cfg["roles"] = prev["roles"]
     _write_db(cfg)
     return cfg
 
@@ -669,7 +913,7 @@ def describe_effective_config() -> dict:
     return {
         "db_raw": safe_db,
         "effective": safe_eff,
-        "roles": {r: (role_model(r) or "(primary)") for r in MODEL_ROLES},
+        "roles": describe_roles().get("roles"),
         "warnings": warnings,
         "aligned": len(warnings) == 0 and not safe_eff.get("error"),
     }

@@ -4,6 +4,8 @@
     slug: localStorage.getItem("dx.slug") || null,
     session: localStorage.getItem("dx.session") || ("studio-" + Math.random().toString(16).slice(2, 10)),
     effort: localStorage.getItem("dx.effort") || "auto",
+    modelRole: "chat",
+    roles: null,
     projects: [],
     lastCwd: "",
     chatJob: null,
@@ -183,6 +185,175 @@
     btn.onclick = () => setEffort(btn.dataset.effort);
   });
 
+  function shortModel(id) {
+    const s = String(id || "");
+    const tail = s.split("/").pop() || s;
+    return tail.length > 28 ? tail.slice(0, 26) + "…" : tail;
+  }
+
+  function roleRow(role) {
+    if (role === "chat") return (state.roles && state.roles.chat) || {};
+    return ((state.roles && state.roles.roles) || {})[role] || {};
+  }
+
+  function paintModelBtn() {
+    const btn = $("modelbtn");
+    if (!btn) return;
+    const chat = roleRow("chat");
+    const build = roleRow("build");
+    const label = shortModel(chat.model || "?");
+    const extra = build.model && build.model !== chat.model ? " · " + shortModel(build.model) : "";
+    text(btn, label + extra);
+  }
+
+  function paintRoleBox() {
+    const box = $("rolebox");
+    if (!box || !state.roles) return;
+    const lines = ["chat", "build", "mentor", "wrap_up"].map((role) => {
+      const r = roleRow(role);
+      const mode = r.mode === "auto" || r.source === "auto" ? "auto" : (r.source || "");
+      return role + ": " + (r.provider || "?") + " / " + (r.model || "?") + (mode ? " (" + mode + ")" : "");
+    });
+    box.replaceChildren();
+    lines.forEach((line) => {
+      const p = document.createElement("div");
+      text(p, line);
+      box.appendChild(p);
+    });
+    const why = roleRow("mentor").why;
+    if (why) {
+      const p = document.createElement("div");
+      p.className = "hint";
+      text(p, why);
+      box.appendChild(p);
+    }
+  }
+
+  async function loadRoles() {
+    try {
+      state.roles = await api("/api/v1/llm/roles", { timeoutMs: 12000 });
+    } catch {
+      state.roles = null;
+    }
+    paintModelBtn();
+    paintRoleBox();
+    const why = $("modelwhy");
+    if (why) {
+      const r = roleRow(state.modelRole);
+      text(why, r.why || t("studio.modelHint"));
+    }
+  }
+
+  async function loadCatalog(q) {
+    const list = $("modellist");
+    if (!list) return;
+    list.replaceChildren();
+    try {
+      const tools = state.modelRole === "build" ? 1 : 0;
+      const data = await api(
+        "/api/v1/llm/catalog?limit=60&tools=" + tools + "&q=" + encodeURIComponent(q || ""),
+        { timeoutMs: 15000 },
+      );
+      const current = roleRow(state.modelRole);
+      (data.models || []).forEach((m) => {
+        const active = m.id === current.model && m.provider === current.provider;
+        const el = itemEl(m.name || m.id, m.provider + " · " + (m.label || m.id).replace(m.name + "  ", ""), active);
+        el.onclick = () => pickModel(m);
+        list.appendChild(el);
+      });
+      if (!(data.models || []).length) {
+        const p = document.createElement("p");
+        p.className = "hint";
+        text(p, t("studio.modelEmpty"));
+        list.appendChild(p);
+      }
+    } catch (e) {
+      const p = document.createElement("p");
+      p.className = "hint";
+      text(p, errText(e));
+      list.appendChild(p);
+    }
+  }
+
+  async function pickModel(m) {
+    const body = {};
+    body[state.modelRole] = { mode: "manual", provider: m.provider, model: m.id };
+    try {
+      state.roles = await api("/api/v1/llm/roles", {
+        method: "POST",
+        body: JSON.stringify(body),
+        timeoutMs: 12000,
+      });
+      paintModelBtn();
+      paintRoleBox();
+      loadCatalog($("modelq") && $("modelq").value);
+      refreshHealth();
+    } catch (e) {
+      add("bot", t("studio.modelErr") + ": " + errText(e));
+    }
+  }
+
+  async function pickAuto() {
+    if (state.modelRole === "chat") return;
+    const body = {};
+    body[state.modelRole] = { mode: "auto" };
+    try {
+      state.roles = await api("/api/v1/llm/roles", {
+        method: "POST",
+        body: JSON.stringify(body),
+        timeoutMs: 12000,
+      });
+      paintModelBtn();
+      paintRoleBox();
+      loadCatalog($("modelq") && $("modelq").value);
+    } catch (e) {
+      add("bot", t("studio.modelErr") + ": " + errText(e));
+    }
+  }
+
+  function setModelRole(role) {
+    state.modelRole = role;
+    document.querySelectorAll(".model-roles button").forEach((btn) => {
+      btn.classList.toggle("on", btn.dataset.role === role);
+    });
+    const autoBtn = $("modelauto");
+    if (autoBtn) autoBtn.hidden = role === "chat";
+    const r = roleRow(role);
+    text($("modelwhy"), r.why || t("studio.modelHint"));
+    loadCatalog($("modelq") && $("modelq").value);
+  }
+
+  function closeModelPop() {
+    const pop = $("modelpop");
+    if (!pop) return;
+    pop.hidden = true;
+    $("modelbtn").setAttribute("aria-expanded", "false");
+  }
+
+  $("modelbtn").onclick = () => {
+    const pop = $("modelpop");
+    const open = pop.hidden;
+    pop.hidden = !open;
+    $("modelbtn").setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) {
+      loadRoles();
+      loadCatalog($("modelq").value);
+    }
+  };
+  document.querySelectorAll(".model-roles button").forEach((btn) => {
+    btn.onclick = () => setModelRole(btn.dataset.role);
+  });
+  $("modelauto").onclick = pickAuto;
+  let modelTimer = 0;
+  $("modelq").oninput = () => {
+    clearTimeout(modelTimer);
+    modelTimer = setTimeout(() => loadCatalog($("modelq").value), 220);
+  };
+  document.addEventListener("click", (ev) => {
+    const wrap = $("modelswitch");
+    if (wrap && !wrap.contains(ev.target)) closeModelPop();
+  });
+
   async function refreshHealth() {
     try {
       const [h, llm, local, w] = await Promise.all([
@@ -203,6 +374,7 @@
       if (w.wardrobe && w.wardrobe.offline) addPill("offline", "warn");
       if (llm.ok) addPill((llm.provider || "?") + " · " + (llm.model || "?"));
       else addPill(t("studio.noLlm"), "err");
+      loadRoles();
       const backends = (local.backends || []).filter((b) => b.ok).map((b) => b.provider);
       if (backends.length) addPill("local " + backends.join("+"));
 

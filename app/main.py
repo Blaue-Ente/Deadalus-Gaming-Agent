@@ -182,14 +182,17 @@ async def capabilities() -> dict:
 @app.get("/api/v1/llm/status")
 async def llm_status() -> dict:
     try:
-        from daedalus.llm_config import get_config
+        from daedalus.llm_config import describe_roles, get_config
         cfg = get_config()
+        roles = describe_roles()
         return {
             "ok": True,
             "provider": cfg.get("provider"),
             "model": cfg.get("model"),
             "source": cfg.get("source"),
             "has_key": bool(cfg.get("api_key")),
+            "roles": roles.get("roles"),
+            "chat": roles.get("chat"),
         }
     except Exception as exc:
         return {"ok": False, "error": str(exc)[:200]}

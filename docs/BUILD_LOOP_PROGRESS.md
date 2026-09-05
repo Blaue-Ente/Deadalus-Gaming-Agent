@@ -19,9 +19,10 @@ approves.
 | S2 | Kernel-run scaffold/verify, phase-gated tools | **Done** — MR !51 (`cursor/build-loop-s2-kernel-948f`) |
 | S6 | Router: negations, explicit merge only | **Done** — MR !52 (`cursor/build-loop-s6-router-948f`) |
 | S5 | One build layer, model roles, wrap-up sanitizing | **Done** — `cursor/build-loop-s5-wrapup-948f` |
-| S7 | Mentor + harness that meets a weak model half-way | **This MR** — `cursor/build-loop-s7-mentor-948f` |
+| S7 | Mentor + harness that meets a weak model half-way | **Done** — `cursor/build-loop-s7-mentor-948f` |
+| Roles | Cursor-style Chat/Build/Mentor/Wrap + 10 ¢ Sonnet upgrade | **This MR** — `cursor/model-roles-switcher-948f` |
 
-Merge order is the branch stack: !48 → !49 → !50 → !51 → !52 → S5 → this MR.
+Merge order is the branch stack: !48 → !49 → !50 → !51 → !52 → S5 → S7 → this MR.
 
 ## Evidence the plan is built on (live eval, 2026-09-05, Nemotron 3.5 Lightning)
 
@@ -465,6 +466,24 @@ Re-scored offline with the fixed contract, all three run-C ledgers are
 Run C → run D: 2/3 → 3/3 complete, 426–500 s → 218–289 s, 3 mentor
 calls per case → 0. The harness no longer needs the Mentor for these three
 prompts; it remains the safety net for the failure streaks it was built for.
+
+## After S7 — Cursor-style model roles (this MR)
+
+Owner-approved plan: R1 catalog → R2 Studio switcher → R3 auto-assign with
+the 10 ¢ Mentor upgrade → R4 `edit_file` + `ask_mentor`. R5 (OpenRouter web
+search / Fusion for epic design) is opt-in later and is not the build path.
+
+- Typical build = 80k prompt + 40k completion on the **builder**. Under
+  `DAEDALUS_MENTOR_UPGRADE_BELOW_USD` (10 ¢) → Claude Sonnet as Mentor;
+  otherwise Haiku. GLM 5.2 is ~8 ¢ so it gets Sonnet; Kimi K2.5 is ~12 ¢
+  so it stays on Haiku. OpenRouter `anthropic/claude-haiku-4.5` does not
+  need a native Anthropic key.
+- Studio header chip: Chat / Build / Mentor / Wrap, Auto, catalog search.
+  `GET`/`POST /api/v1/llm/roles`, `GET /api/v1/llm/catalog`.
+- Native `edit_file` (unique search/replace + write gate) and `ask_mentor`
+  (kernel-run Mentor). OpenRouter hosted Shell / Apply Patch / Fusion are
+  not used — Playground files live on this disk.
+- Docs: `docs/MODEL_ROLES.md`.
 
 ## How to approve S7 (and close the plan)
 

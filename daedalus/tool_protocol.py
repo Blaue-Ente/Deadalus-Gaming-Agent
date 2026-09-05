@@ -19,6 +19,7 @@ MARKER_TO_NATIVE: dict[str, str] = {
     "NEED_MODULES": "list_modules",
     "NEED_PG": "postgres_query",
     "NEED_PLAYGROUND_WRITE": "write_file",
+    "NEED_PLAYGROUND_EDIT": "edit_file",
     "NEED_PLAYGROUND_RUN": "run_command",
     "NEED_PLAYGROUND_NEW": "playground_new",
     "NEED_PLAYGROUND_READ": "read_file",

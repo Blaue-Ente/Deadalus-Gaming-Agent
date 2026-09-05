@@ -26,6 +26,18 @@ DAEDALUS_MODEL=poolside/laguna-s-2.1:free
 
 Optional: `OPENROUTER_HTTP_REFERER`, `OPENROUTER_APP_TITLE` (sent on OpenRouter requests).
 
+## Model roles
+
+Studio header chip, or env. Auto-assign is on by default once a cloud key exists. Details: [MODEL_ROLES.md](MODEL_ROLES.md).
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `DAEDALUS_MODEL_BUILD` / `DAEDALUS_PROVIDER_BUILD` | auto | Native build rounds |
+| `DAEDALUS_MODEL_MENTOR` / `DAEDALUS_PROVIDER_MENTOR` | auto | Kernel Mentor |
+| `DAEDALUS_MODEL_WRAP_UP` / `DAEDALUS_PROVIDER_WRAP_UP` | auto | Closing message |
+| `DAEDALUS_ROLE_AUTO` | `1` | `0` keeps every role on the primary model |
+| `DAEDALUS_MENTOR_UPGRADE_BELOW_USD` | `0.10` | Typical-build estimate under this → Sonnet Mentor instead of Haiku |
+
 ## Process
 
 | Variable | Default | Meaning |
