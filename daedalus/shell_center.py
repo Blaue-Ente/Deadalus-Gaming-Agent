@@ -75,6 +75,26 @@ def jail_roots() -> list[Path]:
     return out
 
 
+def project_cwd(cwd: str) -> Path | None:
+    """``cwd`` written as ``<slug>`` or ``<slug>/sub`` (or ``/anything/<slug>``)
+    resolves into that Playground project when it exists. Models name the
+    project, not ``$DAEDALUS_PLAYGROUND``; without this the command silently
+    ran in the product root and ``open('snake-game/index.html')`` failed."""
+    parts = [p for p in Path(cwd).expanduser().parts if p not in ("/", "\\", ".")]
+    if not parts:
+        return None
+    projects = playground_projects_dir().resolve()
+    for i, part in enumerate(parts):
+        if (projects / part).is_dir():
+            cand = (projects / part).joinpath(*parts[i + 1:]).resolve()
+            try:
+                cand.relative_to(projects)
+            except ValueError:
+                return None
+            return cand if cand.is_dir() else (projects / part)
+    return None
+
+
 def resolve_cwd(cwd: str | None = None, *, slug: str = "") -> Path:
     if slug:
         root = (playground_projects_dir() / slug).resolve()
@@ -86,12 +106,19 @@ def resolve_cwd(cwd: str | None = None, *, slug: str = "") -> Path:
             cand = (product_root() / cand).resolve()
         else:
             cand = cand.resolve()
+        if not cand.is_dir():
+            in_project = project_cwd(cwd)
+            if in_project is not None:
+                return in_project
         for root in jail_roots():
             try:
                 cand.relative_to(root)
                 return cand if cand.is_dir() else root
             except ValueError:
                 continue
+        in_project = project_cwd(cwd)
+        if in_project is not None:
+            return in_project
         raise ValueError(f"cwd outside jail: {cwd}")
     return product_root()
 

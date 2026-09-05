@@ -155,6 +155,43 @@ class BuildLoop:
     def tool_calls(self) -> list[dict[str, Any]]:
         return [*self.seed_log, *(o.as_call() for o in self.observations)]
 
+    # ── navigation: fix arguments before the call, point NEXT after it ────
+
+    def prepare(self, tool: str, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
+        """Fill the project slug the model forgot. Returns (args, note).
+
+        ``run_command cwd=snake-game`` → ``slug=snake-game``; ``write_file``
+        without slug → the slug this turn created. The note is appended to the
+        tool result so the correction is visible, not silent.
+        """
+        if not self.slug or tool not in _SLUG_TOOLS:
+            return args, ""
+        out = dict(args)
+        if str(out.get("slug") or "").strip():
+            return out, ""
+        cwd = str(out.get("cwd") or "")
+        if tool == "run_command" and cwd and self.slug not in cwd.replace("\\", "/").split("/"):
+            return out, ""  # a deliberate cwd elsewhere in the jail — leave it
+        out["slug"] = self.slug
+        out.pop("cwd", None)
+        return out, f"(kernel: slug={self.slug} filled in)"
+
+    def annotate(self, tool: str, result_text: str) -> str:
+        """Append the plan's NEXT step to a tool result so every reply steers."""
+        rows = self.progress()
+        pending = [r for r in rows if r.step.required and r.status != "done" and r.step.tool]
+        if pending:
+            nxt = pending[0].step
+            hint = self._step_args_hint(nxt)
+            line = f"NEXT (plan): {nxt.tool}" + (f" {hint}" if hint else "")
+            if nxt.why:
+                line += f" — {nxt.why}"
+        else:
+            line = "PLAN: all required steps done — stop and summarize the slice; do not explore."
+        if line in result_text:
+            return result_text
+        return f"{result_text.rstrip()}\n{line}"
+
     # ── plan bookkeeping ──────────────────────────────────────────────────
 
     def progress(self) -> list[StepProgress]:
