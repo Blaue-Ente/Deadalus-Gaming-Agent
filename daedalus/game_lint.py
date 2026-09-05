@@ -23,6 +23,17 @@ _CPP = {".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".inl"}
 _CS = {".cs"}
 _PY = {".py", ".pyw"}
 _GD = {".gd"}
+_WEB = {".js", ".mjs", ".cjs", ".html", ".htm"}
+
+_INPUT_EVENTS = re.compile(
+    r"addEventListener\(\s*['\"](keydown|keyup|keypress|pointerdown|pointerup|mousedown|"
+    r"mouseup|touchstart|touchend|click)['\"]|\bon(keydown|keyup|click|pointerdown|touchstart)\s*=",
+    re.I,
+)
+_GRID_CONST = re.compile(
+    r"\b(?:const|let|var)\s+(tileCount|tiles|gridSize|grid_size|GRID_SIZE|GRID|cols|COLS|rows|ROWS|cells|CELLS|size|SIZE)\s*=\s*(\d+)\b"
+)
+_LOOP_CALL = re.compile(r"\b(setInterval|requestAnimationFrame)\(\s*([A-Za-z_$][\w$]*)")
 
 _CLANG_TIDY_CHECKS = (
     "clang-analyzer-cplusplus.NewDeleteLeaks,"
@@ -48,6 +59,8 @@ def _lang_for(path: str) -> str:
         return "python"
     if suffix in _GD:
         return "gdscript"
+    if suffix in _WEB:
+        return "web"
     return "unknown"
 
 
@@ -167,6 +180,32 @@ def heuristic_gdscript(text: str) -> list[dict[str, Any]]:
     if re.search(r"\bKinematicBody(2D|3D)?\b", text):
         issues.append(_issue("warning", "godot3-kinematic", "KinematicBody* is Godot 3; use CharacterBody2D/3D"))
     return issues
+
+
+def heuristic_web(text: str) -> list[dict[str, Any]]:
+    """Canvas-game smells a parser does not catch: two loops driving one tick,
+    a canvas nobody can steer, a start cell at N on a 0..N-1 grid."""
+    out: list[dict[str, Any]] = []
+    drivers: dict[str, set[str]] = {}
+    for m in _LOOP_CALL.finditer(text):
+        drivers.setdefault(m.group(2), set()).add(m.group(1))
+    interval_calls = [m for m in _LOOP_CALL.finditer(text) if m.group(1) == "setInterval"]
+    by_fn: dict[str, int] = {}
+    for m in interval_calls:
+        by_fn[m.group(2)] = by_fn.get(m.group(2), 0) + 1
+    for fn, n in by_fn.items():
+        if n > 1:
+            out.append(_issue("warning", "web-double-loop", f"setInterval({fn}) is started {n} times — one game loop, cleared before restart"))
+    for fn, kinds in drivers.items():
+        if len(kinds) > 1:
+            out.append(_issue("warning", "web-mixed-loop", f"{fn} is driven by both setInterval and requestAnimationFrame — pick one"))
+    if "getContext(" in text and not _INPUT_EVENTS.search(text):
+        out.append(_issue("warning", "web-no-input", "canvas is drawn but no key/pointer/touch listener — the player cannot steer"))
+    for m in _GRID_CONST.finditer(text):
+        name, n = m.group(1), m.group(2)
+        if re.search(rf"\bx\s*[:=]\s*{n}\b[^;\n]*\by\s*[:=]\s*{n}\b", text) or re.search(rf"\{{\s*x\s*:\s*{n}\s*,\s*y\s*:\s*{n}\s*\}}", text):
+            out.append(_issue("warning", "web-off-grid-start", f"start cell ({n},{n}) is outside a 0..{int(n) - 1} grid ({name}={n}) — game over on frame one"))
+    return out
 
 
 def _ruff(path: str, content: str | None) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str]:
@@ -313,6 +352,13 @@ def check(
     elif lang == "gdscript":
         warnings.extend(heuristic_gdscript(text))
         backends["gdscript"] = {"ran": True, "backend": "heuristic"}
+    elif lang == "web":
+        from .write_gate import check_source
+
+        gate = check_source(disk_path or rel, text, project_root=Path(disk_path).parent if disk_path else None)
+        blockers.extend(_issue("error", "web-syntax", e) for e in gate.errors)
+        warnings.extend(_issue("warning", "web", w) for w in gate.warnings)
+        backends["web"] = {"ran": True, "backend": gate.backend or "heuristic", "skipped": gate.skipped}
     else:
         backends["unknown"] = {"ran": False, "note": f"no linter for {lang}"}
 

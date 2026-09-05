@@ -272,6 +272,10 @@ def format_system(rt: Route, *, extra: str = "", user_message: str = "") -> str:
         lines.append(f"  {i}. [{flag}] {s.id}: {tool} — {s.why or ''}".rstrip())
         if s.docs:
             lines.append(f"      docs: {', '.join(s.docs)}")
+    lines.append(
+        "write_file parses what you write (node --check / compile / json). "
+        "'FAILED syntax' means the step is still open: fix the line and write the full file again."
+    )
     lines.append("When the slice files exist, stop and summarize. No NEED_* dumps, no SQL.")
     sys = "\n".join(lines)
     docs = _docs_block(rt.ordered_steps)

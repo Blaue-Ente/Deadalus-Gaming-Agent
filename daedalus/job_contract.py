@@ -38,8 +38,17 @@ def _call_name(call: dict[str, Any]) -> str:
     return str(call.get("tool") or call.get("name") or "")
 
 
+def _repair_key(call: dict[str, Any]) -> tuple[str, str, str]:
+    """A failed write of ``game.js`` is repaired only by a later good write of
+    ``game.js`` — not by writing ``index.html``. Other tools repair by name."""
+    args = call.get("input") if isinstance(call.get("input"), dict) else {}
+    path = str(args.get("path") or "") if args else ""
+    slug = str(args.get("slug") or "") if args else ""
+    return (_call_name(call), slug if path else "", path)
+
+
 def unrecovered_failure_indexes(tool_calls: list[dict[str, Any]] | None) -> list[int]:
-    """Indexes of failed calls that no later successful call of the same tool repaired.
+    """Indexes of failed calls that no later successful call repaired.
 
     A failed ``run_command`` followed by a passing ``run_command`` is a fix, not a
     blocker — otherwise the model could never recover inside one turn.
@@ -49,9 +58,9 @@ def unrecovered_failure_indexes(tool_calls: list[dict[str, Any]] | None) -> list
     for i, call in enumerate(calls):
         if call.get("ok") is not False or call.get("blocked"):
             continue
-        name = _call_name(call)
+        key = _repair_key(call)
         recovered = any(
-            later.get("ok") is True and _call_name(later) == name
+            later.get("ok") is True and _repair_key(later) == key
             for later in calls[i + 1:]
         )
         if not recovered:
