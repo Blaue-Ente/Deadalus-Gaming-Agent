@@ -91,6 +91,11 @@ def unrecovered_failure_indexes(tool_calls: list[dict[str, Any]] | None) -> list
                 or (loose and _call_name(later) == key[0])
                 or (inspection and _call_name(later) in _INSPECTION_TOOLS)
                 or (never_written and _repair_key(later) == ("write_file", key[1], key[2]))
+                or (
+                    key[2]
+                    and {key[0], _call_name(later)} <= {"write_file", "edit_file"}
+                    and _repair_key(later)[1:] == key[1:]
+                )
             )
             for later in calls[i + 1:]
         )

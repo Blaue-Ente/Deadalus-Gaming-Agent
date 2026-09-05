@@ -31,6 +31,8 @@ PERM_MAP: dict[str, str | None] = {
     "list_modules": None,
     "run_command": None,
     "write_file": None,
+    "edit_file": None,
+    "ask_mentor": None,
     "playground_new": None,
     "generate_image": None,
     "remember": None,
@@ -104,6 +106,39 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
                 "content": {"type": "string"},
             },
             "required": ["slug", "path", "content"],
+        },
+    },
+    {
+        "name": "edit_file",
+        "description": (
+            "Surgical search/replace in an existing Playground file. "
+            "search must match exactly once. Prefer this over rewriting the whole "
+            "file for a one-line or one-block fix. slug + path required."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "slug": {"type": "string"},
+                "path": {"type": "string"},
+                "search": {"type": "string"},
+                "replace": {"type": "string"},
+            },
+            "required": ["slug", "path", "search", "replace"],
+        },
+    },
+    {
+        "name": "ask_mentor",
+        "description": (
+            "Ask the senior-engineer Mentor a short question when you are stuck "
+            "(wrong tool args, unclear next step). Do not use this to write code. "
+            "The kernel runs the Mentor and returns the instruction."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "question": {"type": "string"},
+            },
+            "required": ["question"],
         },
     },
     {
@@ -718,7 +753,7 @@ def native_tools_enabled() -> bool:
 
 
 _PLAYGROUND_BUILD_NAMES = frozenset({
-    "playground_new", "write_file", "read_file", "list_dir",
+    "playground_new", "write_file", "edit_file", "ask_mentor", "read_file", "list_dir",
     "math3d", "spatial", "game_canon", "game_lint", "profiler",
     "assets", "generate_image", "playtest", "browser",
     "run_command", "skill", "engine", "world",
@@ -866,6 +901,24 @@ def before_tool_call(tool_name: str, *, marker_name: str | None = None) -> tuple
         return True, ""
 
 
+async def _ask_mentor(loop: Any, args: dict[str, Any]) -> str:
+    mentor = getattr(loop, "mentor", None)
+    if mentor is None:
+        return "── ask_mentor BLOCKED ── Mentor is off this turn. Follow PLAN PROGRESS."
+    q = str(args.get("question") or "").strip()
+    if not q:
+        return "── ask_mentor FAILED: question required ──"
+    try:
+        advice = await mentor.advise(loop, "ask", None, question=q)
+    except TypeError:
+        advice = await mentor.advise(loop, "ask", None)
+    except Exception as exc:
+        return f"── ask_mentor FAILED: {str(exc)[:200]} ──"
+    if advice is None:
+        return "── ask_mentor ── Mentor already answered this, or is out of budget. Continue the plan."
+    return advice.block()
+
+
 async def execute_native_tool(
     name: str,
     args: dict[str, Any],
@@ -1007,6 +1060,43 @@ async def execute_native_tool(
                 f"── write_file OK {slug}/{path} ({len(content)} chars) ──\n"
                 + (f"{extra}\n" if extra else "")
                 + project_nav(slug, path)
+            )
+
+        if name == "edit_file":
+            from . import playground as pg
+            slug = str(args.get("slug") or "")
+            path = str(args.get("path") or "")
+            search = str(args.get("search") or "")
+            replace = str(args.get("replace") or "")
+            if not slug or not path:
+                return "── edit_file FAILED: slug and path required ──"
+            res = pg.edit_file(slug, path, search, replace)
+            if not res.get("ok"):
+                return f"── edit_file FAILED {slug}/{path} ── {res.get('error')}\n{project_nav(slug, path)}"
+            try:
+                content = pg.read_file(slug, path)
+            except Exception as exc:
+                return f"── edit_file FAILED after write: {exc} ──"
+            from .write_gate import check_source
+            gate = check_source(path, content, project_root=pg.project_dir(slug))
+            if not gate.ok:
+                return (
+                    f"── edit_file FAILED syntax {slug}/{path} ──\n"
+                    f"{gate.summary()}\n"
+                    "The replacement landed but the file does not parse. edit_file again or write_file the full file.\n"
+                    f"{project_nav(slug, path)}"
+                )
+            extra = gate.summary()
+            return (
+                f"── edit_file OK {slug}/{path} ({res.get('old_size')}→{res.get('new_size')} chars) ──\n"
+                + (f"{extra}\n" if extra else "")
+                + project_nav(slug, path)
+            )
+
+        if name == "ask_mentor":
+            return (
+                "── ask_mentor BLOCKED ── The Mentor only runs inside a build turn. "
+                "Call write_file / edit_file / the plan's next tool."
             )
 
         if name == "run_command":
@@ -1696,6 +1786,8 @@ async def run_native_discovery_pass(
 
             if args_error:
                 result_text = f"── {tname} FAILED: {args_error} ──"
+            elif tname == "ask_mentor" and loop is not None:
+                result_text = await _ask_mentor(loop, tinput if isinstance(tinput, dict) else {})
             else:
                 result_text = await execute_native_tool(
                     tname, tinput,

@@ -153,6 +153,46 @@ button.chip {
   color: var(--gold-2);
 }
 
+.model-switch { position: relative; flex-shrink: 0; }
+#modelbtn { max-width: 260px; }
+.model-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  width: min(360px, 92vw);
+  padding: 0.7rem;
+  background: var(--bg-raise);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+.model-roles {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+.model-roles button {
+  flex: 1;
+  border: 0;
+  border-radius: 0;
+  padding: 0.28rem 0.4rem;
+  font-size: 0.72rem;
+  background: transparent;
+  color: var(--muted);
+}
+.model-roles button.on {
+  background: rgba(201, 162, 39, 0.16);
+  color: var(--gold-2);
+}
+#modelq { width: 100%; margin: 0.35rem 0; }
+#modellist { max-height: 240px; overflow: auto; }
+.rolebox { font-size: 0.78rem; color: var(--muted); margin: 0.4rem 0; }
+.rolebox b { color: var(--ink); font-weight: 600; }
+
 .dx-lang {
   display: inline-flex;
   flex-shrink: 0;

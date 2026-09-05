@@ -29,7 +29,7 @@ _HEAD_CHARS = 240
 _SLUG_RE = re.compile(r"\bslug=([A-Za-z0-9_.-]+)")
 _SLUG_TOOLS = frozenset({
     "write_file", "read_file", "list_dir", "playtest", "browser", "run_command", "game_lint",
-    "assets", "engine", "world", "production", "playground_run",
+    "assets", "engine", "world", "production", "playground_run", "edit_file",
 })
 _WEB_SUFFIXES = (".js", ".mjs", ".cjs", ".html", ".htm")
 _DEMO_FAMILIES = ("math3d", "crowd")

@@ -424,6 +424,19 @@ class EffortBody(BaseModel):
     effort: str = Field(default="auto", max_length=16)
 
 
+class RolePickBody(BaseModel):
+    mode: str = Field(default="manual", max_length=16)
+    provider: str = Field(default="", max_length=40)
+    model: str = Field(default="", max_length=120)
+
+
+class RolesBody(BaseModel):
+    chat: RolePickBody | None = None
+    build: RolePickBody | None = None
+    mentor: RolePickBody | None = None
+    wrap_up: RolePickBody | None = None
+
+
 @router.get("/api/v1/daedalus/effort")
 async def effort_preview(q: str = "", effort: str = "auto") -> dict[str, Any]:
     from daedalus.task_effort import classify
@@ -467,6 +480,60 @@ async def llm_wardrobe_local(body: WardrobeLocal | None = None) -> dict[str, Any
     from daedalus.llm_wardrobe import use_local
     backend = (body.backend if body else None) or "ollama"
     return use_local(backend)
+
+
+@router.get("/api/v1/llm/catalog")
+async def llm_catalog(
+    q: str = "",
+    provider: str = "",
+    tools: int = 0,
+    refresh: int = 0,
+    limit: int = 80,
+) -> dict[str, Any]:
+    from daedalus.model_catalog import list_catalog
+    return list_catalog(
+        q=q, provider=provider, tools_only=bool(tools),
+        refresh=bool(refresh), limit=min(max(limit, 1), 200),
+    )
+
+
+@router.get("/api/v1/llm/roles")
+async def llm_roles() -> dict[str, Any]:
+    from daedalus.llm_config import describe_roles
+    from daedalus.model_catalog import auto_assign, keyed_providers, upgrade_below_usd
+    row = describe_roles()
+    try:
+        picks = auto_assign()
+        row["auto"] = {k: v.as_dict() for k, v in picks.items()}
+    except Exception as exc:
+        row["auto"] = {"error": str(exc)[:200]}
+    row["providers"] = keyed_providers()
+    row["upgrade_below_usd"] = upgrade_below_usd()
+    return row
+
+
+@router.post("/api/v1/llm/roles")
+async def llm_roles_set(body: RolesBody) -> dict[str, Any]:
+    from daedalus.llm_config import set_config, set_roles, get_config
+    from daedalus.llm_router_config import router_write_context
+    payload = body.model_dump(exclude_none=True)
+    chat = payload.pop("chat", None)
+    with router_write_context():
+        if chat and (chat.get("model") or chat.get("provider")):
+            try:
+                cur = get_config()
+            except Exception:
+                cur = {}
+            set_config(
+                model=str(chat.get("model") or cur.get("model") or ""),
+                api_key="",
+                provider=str(chat.get("provider") or cur.get("provider") or "openrouter"),
+                base_url=str(cur.get("base_url") or ""),
+                use_cache=bool(cur.get("use_cache", True)),
+            )
+        if payload:
+            set_roles(payload)
+    return await llm_roles()
 
 
 @router.get("/api/v1/daedalus/offline")
