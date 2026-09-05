@@ -41,12 +41,21 @@ GAME PLATFORM PICKER — official Playground recommendations
    • Cloud does not run the Editor. Open the folder in Godot 4.3 locally.
    • Meshes: blender_jobs → GLB in assets/. Optional MCP: python -m daedalus.blender_mcp.
 
+6) CAPACITOR SHIP (not a kind — wrap an existing web build)
+   • Best for: the SAME vite/static canvas game on iOS + Android.
+   • Tech: Capacitor WebView + official plugins (haptics, status bar, filesystem).
+   • Game loop stays Phaser / Pixi / Three. Do NOT rewrite to Expo/Skia.
+   • Ionic UI is optional for app chrome (lists/forms/settings) — NEVER the rAF loop.
+   • Cloud writes config; owner runs Android Studio / Xcode locally.
+   • Expo stays the RN path. Godot/Unity export from their Editors.
+
 QUICK PICK:
 • Browser arcade / 2D web → vite + Phaser or PixiJS
 • Browser 3D / F-Zero-class → vite + Three.js WebGPU
 • 2D desktop Metroidvania / Godot → godot
 • Browser with rich menus → vite-react + canvas gameplay module
-• Mobile touch game → expo
+• Same web game on iOS+Android → vite + Capacitor wrap (not Expo)
+• Native RN / Skia mobile → expo
 • Simple puzzle in one file → static
 """
 
@@ -97,7 +106,7 @@ _UI_SHORT: dict[str, str] = {
     "expo": "📱 Мобилна игра — React Native. View/Text, expo-av. Без Web Audio/HTML.",
     "unity": "🎮 Unity C# / URP — локален Unity Hub, scaffold + Git.",
     "godot": "🎮 Godot 4 — .tscn/.gd, локален Editor. blender_jobs за GLB.",
-    "auto": "🧠 Дедал избира: web → vite/vite-react, Godot 2D → godot, mobile → expo.",
+    "auto": "🧠 Дедал избира: web → vite/vite-react, Godot 2D → godot, mobile RN → expo, web→store → Capacitor.",
 }
 
 _GAME_WORDS = re.compile(
@@ -112,6 +121,13 @@ _MOBILE_WORDS = re.compile(
     r"\b(expo|react\s*native|ios|android|app\s*store|play\s*store|мобил|телефон|tablet)\b",
     re.I,
 )
+
+_HYBRID_WEB_WORDS = re.compile(
+    r"\b(capacitor|ionic|hybrid\s+web|webview|pakeplus)\b",
+    re.I,
+)
+
+_EXPO_EXPLICIT = re.compile(r"\b(expo|react\s*native|skia)\b", re.I)
 
 _WEB_ENGINE_WORDS = re.compile(r"\b(phaser|pixi|webgl|canvas|three\.?js|браузър|browser)\b", re.I)
 
@@ -157,9 +173,14 @@ def suggest_kind_heuristic(name: str = "", description: str = "") -> tuple[str, 
     if _want3(name, description):
         return "godot", "Godot 4 3D puzzle room — не Vite/Three"
 
+    if _HYBRID_WEB_WORDS.search(blob) and not _EXPO_EXPLICIT.search(blob) and not _UNITY_WORDS.search(blob):
+        return "vite", "Същата web игра → Capacitor wrap за iOS/Android (не Expo rewrite)"
+
     if _MOBILE_WORDS.search(blob):
         if re.search(r"\b(3d|urp|scriptable|collection rpg|open world)\b", blob, re.I):
             return "unity", "Сериозна mobile/3D игра → Unity"
+        if _HYBRID_WEB_WORDS.search(blob) and not _EXPO_EXPLICIT.search(blob):
+            return "vite", "Същата web игра → Capacitor wrap за iOS/Android (не Expo rewrite)"
         return "expo", "Мобилна игра → Expo (React Native)"
 
     if _SIMPLE_WORDS.search(blob) and not _WEB_ENGINE_WORDS.search(blob):
@@ -251,7 +272,8 @@ def brief_enrichment(kind: str, name: str = "", criteria: str = "") -> str:
         f"Препоръчани библиотеки: {libs}\n"
         f"Архитектура: {arch}\n"
         f"Предложена файлова структура:\n{staging}\n"
-        f"Спазвай PLATFORM_PICKER правилата — не смесвай web APIs в Expo.\n"
+        f"Спазвай PLATFORM_PICKER правилата — не смесвай web APIs в Expo. "
+        f"Web→iOS/Android без rewrite: Capacitor wrap на dist/ (Ionic UI само за app chrome).\n"
     )
 
 
@@ -269,7 +291,9 @@ def autopilot_research_addendum(kind: str, *, slug: str = "") -> str:
         return base + (
             "• WEB ИГРА: 2D → Phaser/PixiJS/canvas; 3D/racing/F-Zero → Three.js WebGPU "
             "(src/racer/) — НЕ Phaser. "
-            "NEED_SKILL_CATALOG: arcade craft OR three-webgpu-tsl OR game platform picker.\n"
+            "NEED_SKILL_CATALOG: arcade craft OR three-webgpu-tsl OR game platform picker. "
+            "Ship iOS+Android without rewrite: Capacitor wrap of dist/ "
+            "(Ionic UI only for menus/settings). НЕ Expo rewrite на работеща web игра.\n"
         )
     return base
 

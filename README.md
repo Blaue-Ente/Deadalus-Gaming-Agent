@@ -300,6 +300,7 @@ Each project is `playground/projects/{slug}/` with a kind:
    - **Capsule** — zip (USB / send a file). Static: unzip, open `index.html`.
    - **Local /apps/** — Studio “To /apps/”.
    - **Live** — public `https`: Netlify token → GitLab Pages → 1-hour Netlify preview. Static / vite / expo-web only.
+   - **Capacitor** — same vite/static web build → iOS + Android (`studio/capacitor/`). Local Android SDK / Xcode. Not a rewrite to Expo. Ionic UI is optional for app chrome, not the game loop.
    - **Git** — push to GitLab if `GITLAB_TOKEN` is set, else GitHub. Clone from either host. Open a GitHub Pull Request or GitLab Merge Request from Playground (🔀 PR / MR) or the `git_forge` tool. Tokens live in Studio → **Connectors**.
    - Unity and Godot: open the folder in the matching Editor.
 

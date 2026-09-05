@@ -47,7 +47,7 @@ Daedalus is **one product**: coding agent + Studio + Playground. One FastAPI pro
 | Git forges | `playground_github.py`, `playground_gitlab.py`, `playground_git_push.py` | Clone, push, GitHub PR, GitLab MR |
 | Engine session | `engine_session.py`, `godot_bridge.py` | Headless Godot TCP bridge; optional Godot MCP adapter |
 | Browser | `playground_browser.py`, `browser_session.py` | Smoke + interactive session |
-| Playground | `playground*.py`, `game_*.py` | static, vite, phaser-via-vite, expo, unity, godot |
+| Playground | `playground*.py`, `game_*.py` | static, vite, phaser-via-vite, expo, unity, godot; Capacitor wraps vite/static `dist/` |
 | Autopilot | `builder_runtime.py` + `kernel/full_autopilot.py` | Kernel loop |
 | Self-improve | `self_improve.py` | Gated skills; patches wait for Approve |
 | Evolution | `evolution.py` | Opt-in idle gardener |
@@ -76,7 +76,7 @@ Defaults:
 - Asset gate: generated `assets/*.png` must be referenced (`load.image` / `<img>`).
 - Verify: smoke + browser + scenario bot (`playtest/scenario.json`, pixel-diff, FPS/memory) + playtest personas + quality critic.
 - Unity is scaffold + Git, not an in-cloud Editor. Native `engine` on a Unity slug uses `DAEDALUS_UNITY_MCP` (local Editor plugin) or `UNITY_PATH` batchmode (import ≠ Play). Without either it refuses honestly. We do not vendor Unity. Gate `unity-check` does not block guided racing.
-- Arcade craft (`arcade_craft.py` + `studio_shelf.py` + `playground_racer_scaffold.py`): 3D arcade uses Vite + Three.js WebGPU/TSL. A racing brief boots a playable M0 in `src/racer/` (not Phaser).
+- Capacitor ship (`playground_capacitor.py`): wrap an existing vite/static/vite-react `dist/` as iOS+Android. Same canvas. Not a new kind. Ionic UI is optional for app chrome. Cloud does not run Xcode or Android Studio. PakePlus-iOS remains an iOS-only fallback under `hybrid_mobile`.
 - Dissection: analyze a reference (link, name, git, or files in Play Lab) and inject a specimen into GDD/planner/builder. Do not copy proprietary assets or code.
 - Play Lab (`$DAEDALUS_DATA/labs/{id}/`): jailed install tree + local HTTP. Optional SmolVM guest browser (not vendored). Optional Docker. Not a Windows guest and not Steam.
 - Godot 4 (`playground_godot_scaffold.py`, `playground_godot3d_scaffold.py`, `godot_tools.py`, `godot_bridge.py`): text `.tscn`/GDScript. When `GODOT_BIN` exists, a TCP autoload (`DaedalusBridge`) is the playtest — scene tree, input, errors — not only file DoD. Optional `DAEDALUS_GODOT_MCP` adapter; we do not vendor an Editor.
