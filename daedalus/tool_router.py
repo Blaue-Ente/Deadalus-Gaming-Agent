@@ -24,6 +24,21 @@ _N_BODIES = re.compile(
 )
 _N_EQ = re.compile(r"\bn\s*[=:]?\s*(\d{2,5})\b", re.I)
 
+# "Не прави 3D, quaternion или octree." must not route to the 3D playbook.
+# A negated clause runs from the negation word to the end of its sentence.
+_NEGATION = re.compile(
+    r"(?<![\w-])"
+    r"(?:не\s+(?:прави|правѝ|използвай|ползвай|пиши|слагай|добавяй|искам|ми\s+трябва)|"
+    r"без|никак(?:ъв|ва|во|ви)?|избягвай|"
+    r"no|not|don'?t|do\s+not|never|avoid|without|skip|exclude)\b"
+    # the clause ends at the sentence, or at ", само / , only / , but / , а"
+    r"(?:(?!,\s*(?:само|only|just|but|а)\b)[^.;!?\n])*",
+    re.I,
+)
+# Two playbooks merge only when the ask joins them explicitly: the word right
+# before the second match is a conjunction ("slerp and octree", "змия и тетрис").
+_JOINED = re.compile(r"(?:^|\s)(?:and|и|плюс|with|със?|together\s+with|[+&])\s*$", re.I)
+
 
 @dataclass
 class Route:
@@ -34,6 +49,7 @@ class Route:
     n: int = 0
     dim: int = 3
     use_build_subset: bool = True
+    negated: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -43,6 +59,7 @@ class Route:
             "tools": list(self.tool_names),
             "n": self.n,
             "dim": self.dim,
+            "negated": list(self.negated),
             "steps": [
                 {"id": s.id, "tool": s.tool, "required": s.required, "auto": s.auto, "why": s.why}
                 for s in self.ordered_steps
@@ -67,8 +84,22 @@ def infer_n(text: str, default: int = 64) -> int:
     return default
 
 
+def strip_negations(text: str) -> tuple[str, list[str]]:
+    """Drop negated clauses before keyword matching. Returns (text, dropped)."""
+    dropped: list[str] = []
+
+    def _cut(m: re.Match[str]) -> str:
+        clause = m.group(0).strip()
+        if clause:
+            dropped.append(clause)
+        return " "
+
+    cleaned = _NEGATION.sub(_cut, text or "")
+    return cleaned, dropped
+
+
 def infer_dim(text: str) -> int:
-    low = (text or "").lower()
+    low, _ = strip_negations((text or "").lower())
     if any(k in low for k in ("2d", "canvas", "змия", "snake", "tetris")) and "3d" not in low:
         return 2
     return 3
@@ -99,12 +130,36 @@ def _topo(steps: tuple[Step, ...]) -> list[Step]:
 
 
 def _kw_hit(pb: Playbook, blob: str, kind: str) -> bool:
+    return _hit_span(pb, blob, kind) is not None
+
+
+def _hit_span(pb: Playbook, blob: str, kind: str) -> tuple[int, int] | None:
+    """(start, end) of the earliest match in the ask; (-1, -1) for a kind match."""
     if kind and pb.kinds and kind.lower() in {k.lower() for k in pb.kinds}:
-        return True
+        return (-1, -1)
     low = blob.lower()
-    if pb.regex and re.search(pb.regex, blob, re.I):
-        return True
-    return any(k.lower() in low for k in pb.keywords)
+    best: tuple[int, int] | None = None
+    if pb.regex:
+        m = re.search(pb.regex, blob, re.I)
+        if m:
+            best = (m.start(), m.end())
+    for k in pb.keywords:
+        i = low.find(k.lower())
+        if i >= 0 and (best is None or i < best[0]):
+            best = (i, i + len(k))
+    return best
+
+
+def _explicitly_joined(blob: str, spans: list[tuple[int, int]]) -> bool:
+    """"quaternion slerp and octree" is one ask for two graphs; "3D camera demo
+    on a canvas" is one graph — the top-priority one."""
+    ordered = sorted(s for s in spans if s[0] >= 0)
+    if len(ordered) < 2:
+        return len(spans) >= 2 and any(s[0] < 0 for s in spans)
+    return all(
+        _JOINED.search(blob[a_end:b_start]) is not None
+        for (_, a_end), (b_start, _) in zip(ordered, ordered[1:])
+    )
 
 
 def _copy_step(step: Step, new_id: str) -> Step:
@@ -169,19 +224,26 @@ def match_playbook(
     from .game_engineer import looks_like_game
     from .playground_agent_routing import is_playground_work_session, treat_as_conversational
 
-    blob = f"{message or ''} {kind or ''} {intent or ''}"
+    cleaned, _ = strip_negations(message or "")
+    blob = f"{cleaned} {kind or ''} {intent or ''}"
     pg = is_playground_work_session(session_id, message or "")
-    game = looks_like_game(message or "", kind=kind, intent=intent)
+    game = looks_like_game(cleaned, kind=kind, intent=intent)
     k = (kind or "").strip().lower()
 
     ranked = sorted(PLAYBOOKS, key=lambda p: p.priority, reverse=True)
-    hits = [
-        pb for pb in ranked
-        if pb.id not in {"talk", "app.build", "playground.generic"}
-        and _kw_hit(pb, blob, k)
-    ]
+    hits: list[tuple[Playbook, tuple[int, int]]] = []
+    for pb in ranked:
+        if pb.id in {"talk", "app.build", "playground.generic"}:
+            continue
+        span = _hit_span(pb, blob, k)
+        if span is not None:
+            hits.append((pb, span))
     if hits:
-        return _merge_playbooks(hits) if len(hits) > 1 else hits[0]
+        # an explicit kind (Godot / Unity) leads: the engine decides the file layout
+        hits.sort(key=lambda h: 0 if h[1][0] < 0 else 1)
+        if len(hits) > 1 and _explicitly_joined(blob, [s for _, s in hits]):
+            return _merge_playbooks([pb for pb, _ in hits])
+        return hits[0][0]
 
     if (
         not pg
@@ -209,7 +271,8 @@ def route(
     intent: str = "",
 ) -> Route:
     pb = match_playbook(message, session_id=session_id, kind=kind, intent=intent)
-    n = infer_n(message)
+    cleaned, negated = strip_negations(message or "")
+    n = infer_n(cleaned)
     dim = infer_dim(message)
     kind_out = (kind or pb.kind or "static").strip() or "static"
     names = pb.tools
@@ -221,6 +284,7 @@ def route(
         n=n,
         dim=dim,
         use_build_subset=pb.use_build_subset and bool(names),
+        negated=negated,
     )
 
 
@@ -269,6 +333,8 @@ def format_system(rt: Route, *, extra: str = "", user_message: str = "") -> str:
     ]
     if pb.notes:
         lines.append(pb.notes)
+    if rt.negated:
+        lines.append("Owner excluded (honour these, they were not routed on): " + " | ".join(rt.negated[:4]))
     lines.append("TASK PLAN (kernel — call these tools in order):")
     for i, s in enumerate(rt.ordered_steps, 1):
         tool = s.tool or "(docs)"
