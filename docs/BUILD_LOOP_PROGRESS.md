@@ -15,8 +15,8 @@ approves.
 |-------|-------|--------|
 | S1 | Closed build loop instead of post-mortem DoD | **Done** — MR !48 (`cursor/build-loop-s1-948f`) |
 | S3 | Tool results as navigation (paths, slug, NEXT) | **Done** — MR !49 (`cursor/build-loop-s3-nav-948f`) |
-| S4 | Write-time quality gate (syntax) + arcade lint | **This MR** — awaiting owner approval |
-| S2 | Kernel-run scaffold/verify, phase-gated tools | Pending |
+| S4 | Write-time quality gate (syntax) + arcade lint | **Done** — MR !50 (`cursor/build-loop-s4-gate-948f`) |
+| S2 | Kernel-run scaffold/verify, phase-gated tools | **This MR** — awaiting owner approval |
 | S6 | Router: negations, explicit merge only | Pending |
 | S5 | One build layer, model roles, wrap-up sanitizing | Pending |
 
@@ -124,7 +124,7 @@ the kernel fills a forgotten slug itself and appends the plan's NEXT step.
 **Not in S3:** syntax gate on write (S4), kernel-run verify (S2), router
 negations (S6), single build layer (S5).
 
-## S4 — Write-time quality gate + arcade lint (this MR)
+## S4 — Write-time quality gate + arcade lint (done)
 
 **Intent:** `write_file` reported OK for `game.js` with a duplicate
 `let gameLoopId`, and the snake started at (20,20) on a 0..19 grid. A file that
@@ -175,11 +175,71 @@ reported next to the write so the model fixes them while the file is in hand.
 verify own that), CSS, TypeScript, kernel-run `playtest`/`browser` after the
 last write (S2).
 
-## How to approve S4
+## S2 — Kernel-run scaffold and verify, phase-gated tools (this MR)
 
-1. Review `daedalus/write_gate.py`, `heuristic_web` in `game_lint.py`, the
-   `write_file` branch in `native_tools.py`, and `_repair_key` in
-   `job_contract.py`.
-2. `DAEDALUS_STANDALONE=1 python3 -m pytest tests/test_write_gate.py tests/test_build_loop.py -q`.
-3. Reply that S4 is approved. S2 (kernel-run scaffold/verify, phase-gated
-   tools) starts next.
+**Intent:** take the two decisions the cheap model kept getting wrong out of
+its hands. It no longer creates or searches for the project — the kernel does,
+deterministically, before the first model round. It no longer chooses whether
+to verify — the kernel lints every written file and runs the playtest
+heuristic when the plan's writes are in, and feeds blockers back as
+unrecovered failures the model must fix. Exploration of the harness during a
+build is redirected to the model's own project.
+
+**Shipped**
+
+- `BuildLoop.scaffold(session_id)` — for routes with a `playground_new` step:
+  adopt the session's project (`playground:<slug>`) when it exists, else
+  `create_project` with a deterministic name (`project_name_from_ask`: the
+  game the owner named + `-game`/`-demo`/`-godot`, or `<playbook>-<hash4>`;
+  an existing folder gets a hashed sibling, never a silent overwrite). The
+  create step is ✓ before the model talks; the system prompt gets a
+  `PROJECT (kernel created)` block with dir / preview / first `write_file`.
+  On failure the model keeps `playground_new`. `DAEDALUS_BUILD_SCAFFOLD=0`
+  disables.
+- `BuildLoop.drop_tools()` + `tool_router.native_specs(rt, drop=…)` —
+  `playground_new` is removed from the model's tool list once the kernel
+  scaffolded (phase gate).
+- `BuildLoop.run_verify()` — when all required steps are done and there are
+  new writes since the last verify: `game_lint check` per written web/py
+  file (blockers → failed `game_lint` observation, warnings → `lint:`),
+  `playtest` heuristic (canvas / input / loop / win-lose hints), optional
+  Chromium `verify_app` behind `DAEDALUS_BUILD_BROWSER_VERIFY=1`. Results
+  appear under `VERIFY (kernel ran it — not the model)` in the nudge; a
+  failed file gets `NEXT: fix game.js — write_file … the kernel re-verifies
+  after your write`. A good re-write of the same file repairs it (`_repair_key`).
+  `DAEDALUS_BUILD_VERIFY=0` disables.
+- `BuildLoop.on_quiet()` is async and verifies before accepting; the native
+  pass awaits it.
+- `prepare("list_dir")` — during a build, `/workspace`, `daedalus/…`, `app/…`
+  become `list_dir slug=<project> path=.` with a visible note; project paths
+  just get the slug.
+- `job_contract`: `playtest` / `game_lint` / `engine` / `browser` / `world`
+  count as verification.
+- `agent.py`: scaffold runs between consult and the tool subset; the PROJECT
+  block joins the plan prompt.
+
+**Done when (acceptance)**
+
+| Criterion | How we know |
+|-----------|-------------|
+| Deterministic names; session slug parsing | `test_project_name_is_deterministic_and_named_after_the_game` |
+| Kernel creates the project, step ✓, `playground_new` gated, collision → hashed | `test_kernel_scaffold_creates_the_project_and_gates_playground_new` |
+| Existing session project is adopted | `test_kernel_scaffold_adopts_the_session_project` |
+| No create step / disabled → no scaffold | `test_scaffold_skips_routes_without_a_create_step_and_when_disabled` |
+| Scaffold failure leaves `playground_new` to the model | `test_scaffold_failure_leaves_playground_new_to_the_model` |
+| Verify blocks a bad file, does not re-run without new writes, passes after the fix | `test_kernel_verify_blocks_bad_file_then_passes_after_fix` |
+| Verify can be disabled | `test_verify_can_be_disabled` |
+| Harness `list_dir` redirected to the project | `test_list_dir_during_build_is_redirected_to_the_project` |
+| End-to-end: write → quiet → kernel verify → nudge → fix → complete | `test_native_pass_verifies_before_accepting` |
+| Agent wiring | `test_agent_scaffolds_before_building` |
+
+**Not in S2:** Godot `engine` verify for `kind=godot` (needs `GODOT_BIN`;
+the plan step stays model-driven), LLM persona playtest (only the heuristic
+runs — deterministic and free), browser verify on by default.
+
+## How to approve S2
+
+1. Review `scaffold`, `run_verify`, `prepare("list_dir")` in `build_loop.py`,
+   the `drop=` gate in `tool_router.native_specs`, and the agent wiring.
+2. `DAEDALUS_STANDALONE=1 python3 -m pytest tests/test_kernel_build_phases.py tests/test_build_loop.py -q`.
+3. Reply that S2 is approved. S6 (router negations) is next.

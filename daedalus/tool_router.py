@@ -224,13 +224,17 @@ def route(
     )
 
 
-def native_specs(rt: Route) -> list[dict[str, Any]] | None:
-    """OpenAI tool subset for this route, or None to keep the full catalog."""
+def native_specs(rt: Route, *, drop: set[str] | None = None) -> list[dict[str, Any]] | None:
+    """OpenAI tool subset for this route, or None to keep the full catalog.
+
+    ``drop`` removes tools the kernel already ran this turn (phase gate), e.g.
+    ``playground_new`` after the kernel scaffolded the project.
+    """
     if not rt.use_build_subset:
         return None
     from .native_tools import NATIVE_TOOL_SPECS
 
-    want = set(rt.tool_names)
+    want = set(rt.tool_names) - set(drop or ())
     specs = [t for t in NATIVE_TOOL_SPECS if t["name"] in want]
     if not specs:
         return None

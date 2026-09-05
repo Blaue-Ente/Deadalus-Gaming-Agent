@@ -38,7 +38,7 @@ Daedalus is **one product**: coding agent + Studio + Playground. One FastAPI pro
 | Learned skills | `learned_skills.py` | Catalog first; pending drafts wait for Approve |
 | DoD | `job_contract.py` | Code without evidence is not done |
 | Tool router | `tool_catalog.py`, `task_playbooks.py`, `tool_router.py` | Kernel matches the ask to a playbook graph, exposes the right native tools, injects docs, scores the run. The LLM is not the router. |
-| Build loop | `build_loop.py` | Walks the playbook during the native rounds: marks steps, scores DoD when the model goes quiet, injects PLAN PROGRESS, bounded fix rounds. Ends complete or honest. |
+| Build loop | `build_loop.py` | Scaffolds the project before the model talks, walks the playbook during the native rounds, marks steps, runs `game_lint` + playtest heuristic when the writes are in, injects PLAN PROGRESS, bounded fix rounds. Ends complete or honest. |
 | Write gate | `write_gate.py` | Every Playground write is parsed (`node --check`, `compile`, `json`, inline `<script>`); a file that does not parse is FAILED with the line. Canvas smells from `game_lint.heuristic_web` ride along as warnings. |
 | Senior game tools | `math3d.py`, `spatial.py`, `game_lint.py`, `profiler.py`, `game_canon.py`, `game_engineer.py` | 3D referee, spatial advisor, C++/C# lint, log/Tracy parsers, OSS study jail, prompt/gate wiring |
 | Reach | `reach.py` | Jina Reader + optional CLIs |

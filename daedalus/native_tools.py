@@ -1576,7 +1576,7 @@ async def run_native_discovery_pass(
 
         if not tool_uses:
             final = "\n".join(text_parts).strip()
-            nudge = loop.on_quiet(final) if loop is not None else None
+            nudge = (await loop.on_quiet(final)) if loop is not None else None
             if nudge:
                 messages.append({
                     "role": "assistant",
