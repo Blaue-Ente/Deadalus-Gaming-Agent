@@ -258,10 +258,15 @@ def scope_warnings(brainstorm: dict[str, Any] | None) -> list[str]:
     return out
 
 
-def fun_signals(snapshot: str) -> dict[str, Any]:
-    """Playtest extras — wayfinding, fail, pickups, challenge. Conservative: blockers only for racers."""
+def fun_signals(snapshot: str, *, racer: bool | None = None) -> dict[str, Any]:
+    """Playtest extras — wayfinding, fail, pickups, challenge. Conservative: blockers only for racers.
+
+    ``racer`` should come from the owner's ask when the caller knows it; the
+    source-based guess ignores CSS ``:hover`` (a snake game is not a hovercraft).
+    """
     low = (snapshot or "").lower()
-    racer = looks_like_racer(low) or "turbo" in low or "lap" in low
+    if racer is None:
+        racer = looks_like_racer(low.replace(":hover", "")) or "turbo" in low or "lap" in low
     has_fail = any(tok in low for tok in ("gameover", "game over", "crash", "damage", "integrity", "offtrack", "off-track", "destroyed"))
     has_way = any(tok in low for tok in ("checkpoint", "chevron", "arrow", "spline", "racingline", "racing_line", "waypoint"))
     has_pickup = any(tok in low for tok in ("boost", "turbo", "pad", "pickup", "item"))

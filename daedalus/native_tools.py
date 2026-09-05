@@ -1104,6 +1104,14 @@ async def execute_native_tool(
             if r.get("ok"):
                 text = r.get("text") or r.get("path") or r.get("title") or ""
                 return f"── browser {r.get('action')} OK {r.get('url') or ''} ──\n{text}"
+            if r.get("skipped"):
+                # No browser on this machine is not a build failure — say so
+                # once and steer to the checks that do run here.
+                return (
+                    f"── browser BLOCKED: {r.get('error')} on this machine ──\n"
+                    "Do not retry browser. game_lint + playtest (use_browser=false) are the "
+                    "verification here; the owner opens the preview URL."
+                )
             return f"── browser FAILED: {r.get('error')} ──"
 
         if name == "mcp_call":

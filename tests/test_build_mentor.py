@@ -216,6 +216,34 @@ def test_demo_playbooks_skip_the_arcade_fun_gate():
     assert BuildLoop(route(SNAKE), SNAKE, fix_rounds=0).is_demo is False
 
 
+def test_css_hover_does_not_make_a_snake_game_a_racer():
+    from daedalus.playtest import _heuristic
+
+    snake_html = (
+        "<style>button:hover{color:red}</style><canvas></canvas><script>"
+        "document.addEventListener('keydown',()=>{});setInterval(tick,100);"
+        "let score=0;function gameOver(){}</script>"
+    )
+    assert _heuristic(snake_html)["blockers"] == []
+    assert _heuristic(snake_html, ask=SNAKE)["blockers"] == []
+    racer = _heuristic(snake_html, ask="Направи hover racer с писта и boost pads")
+    assert any("wayfinding" in b for b in racer["blockers"])
+
+
+def test_missing_browser_is_blocked_not_failed(monkeypatch):
+    from daedalus import browser_session
+
+    async def _no_browser(action, **_kw):
+        return {"ok": False, "error": "playwright_unavailable", "skipped": True}
+
+    monkeypatch.setattr(browser_session, "run_action", _no_browser)
+    out = asyncio.run(native_tools.execute_native_tool(
+        "browser", {"action": "goto", "url": "/x", "slug": "s"},
+        memory=None, session_id="", read_file_fn=lambda *a, **k: {},
+    ))
+    assert "browser BLOCKED" in out and "FAILED" not in out and "Do not retry browser" in out
+
+
 def test_heavy_eng_check_honours_negations():
     from daedalus.game_engineer import looks_like_heavy_eng
 

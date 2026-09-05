@@ -114,10 +114,11 @@ def _project_snapshot(slug: str, *, max_chars: int = 5000) -> str:
     return text[:max_chars]
 
 
-def _heuristic(snapshot: str, *, demo: bool = False) -> dict[str, Any]:
+def _heuristic(snapshot: str, *, demo: bool = False, ask: str = "") -> dict[str, Any]:
     """Static play-readiness signals. ``demo=True`` is a tech demo (camera,
     crowd physics): it needs a canvas and a frame loop, not win/lose or a
-    readable race track — the arcade fun gate would only mislead the fix rounds."""
+    readable race track — the arcade fun gate would only mislead the fix rounds.
+    ``ask`` (the owner's request) decides whether racer rules apply at all."""
     low = snapshot.lower()
     has_canvas = (
         "canvas" in low or "<canvas" in low or "phaser" in low
@@ -141,8 +142,8 @@ def _heuristic(snapshot: str, *, demo: bool = False) -> dict[str, Any]:
         if not has_win:
             blockers.append("Няма явен win/lose или score.")
         try:
-            from .arcade_craft import fun_signals
-            extra = fun_signals(snapshot)
+            from .arcade_craft import fun_signals, looks_like_racer
+            extra = fun_signals(snapshot, racer=looks_like_racer(ask) if ask else None)
             extra_signals = dict(extra.get("signals") or {})
             blockers.extend(extra.get("blockers") or [])
         except Exception:
