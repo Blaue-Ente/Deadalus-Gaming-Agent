@@ -341,7 +341,7 @@ def list_catalog(
         if needle and needle not in hay:
             continue
         rows.append(m)
-    rows.sort(key=lambda m: (m.prompt_per_m + m.completion_per_m, m.id))
+    rows.sort(key=_wrap_sort_key)
     return {
         "ok": True,
         "providers": sorted(keys),
@@ -350,6 +350,24 @@ def list_catalog(
         "models": [m.as_dict() for m in rows[: max(1, min(limit, 200))]],
         "upgrade_below_usd": upgrade_below_usd(),
     }
+
+
+def _wrap_sort_key(m: CatalogModel) -> tuple[float, str]:
+    """Cheapest real model first. OpenRouter sentinels are -$1; presets with
+    no rates are unknown, not free."""
+    if m.prompt_per_m < 0 or m.completion_per_m < 0:
+        return (1e9, m.id)
+    if m.source == "preset" and m.prompt_per_m == 0 and m.completion_per_m == 0:
+        return (1e8, m.id)
+    return (m.prompt_per_m + m.completion_per_m, m.id)
+
+
+def _usable_wrap(m: CatalogModel) -> bool:
+    if m.prompt_per_m < 0 or m.completion_per_m < 0:
+        return False
+    if m.source == "preset" and m.prompt_per_m == 0 and m.completion_per_m == 0:
+        return False
+    return True
 
 
 def _pick(models: list[CatalogModel], ids: tuple[str, ...], providers: set[str]) -> CatalogModel | None:
@@ -427,8 +445,8 @@ def auto_assign(
         mentor = build
 
     wrap = min(
-        (m for m in pool if m.completion_per_m >= 0),
-        key=lambda m: (m.prompt_per_m + m.completion_per_m, m.id),
+        (m for m in pool if _usable_wrap(m)),
+        key=_wrap_sort_key,
         default=None,
     )
     if wrap is None:

@@ -16,10 +16,14 @@ The owner can pin any role from the Studio header chip, or from env.
 ## The 10 ¢ Mentor rule
 
 A “typical build” is priced as 80k prompt + 40k completion tokens on the
-**builder**. If that estimate is under `DAEDALUS_MENTOR_UPGRADE_BELOW_USD`
-(default `0.10`), auto-assign may spend more on Mentor — Claude Sonnet instead
-of Haiku. GLM 5.2 at published OpenRouter rates is ~8 ¢, so it gets Sonnet.
-A dearer builder (Kimi K2.5 is ~12 ¢) stays on Haiku.
+**builder**, using the **live** OpenRouter catalog when a key is present
+(fallback table only when offline). If that estimate is under
+`DAEDALUS_MENTOR_UPGRADE_BELOW_USD` (default `0.10`), auto-assign may spend
+more on Mentor — Claude Sonnet instead of Haiku.
+
+Published fallback rates put GLM 5.2 around 8 ¢ (Sonnet). Live OpenRouter
+rates move; if GLM is ~20 ¢, Mentor stays on Haiku. Pin Mentor in Studio
+when you want Sonnet regardless of the estimate.
 
 There is no free ongoing Claude API. Haiku via OpenRouter
 (`anthropic/claude-haiku-4.5`) does not need a native Anthropic key.

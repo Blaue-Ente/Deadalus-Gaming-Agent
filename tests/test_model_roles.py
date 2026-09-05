@@ -101,6 +101,13 @@ def test_auto_assign_without_keys_falls_back_to_primary():
     assert picks["mentor"].model == "primary/x"
 
 
+def test_wrap_up_skips_sentinel_and_unknown_zero_prices():
+    auto = CatalogModel("openrouter/auto", "openrouter", "Auto", -1.0, -1.0, 0, 0, False, "openrouter")
+    stub = CatalogModel("anthropic/claude-sonnet-4-5", "openrouter", "Sonnet stub", 0.0, 0.0, 0, 0, True, "preset")
+    picks = auto_assign(models=CHEAP_BUILD_POOL + [auto, stub], providers=["openrouter"])
+    assert picks["wrap_up"].model == "meta-llama/llama-3.1-8b-instruct"
+
+
 def test_remap_native_claude_through_openrouter_when_anthropic_has_no_key():
     p, m = remap_to_keyed("anthropic", "claude-haiku-4-5", providers=["openrouter"])
     assert p == "openrouter" and m == "anthropic/claude-haiku-4.5"

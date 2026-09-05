@@ -473,11 +473,12 @@ Owner-approved plan: R1 catalog → R2 Studio switcher → R3 auto-assign with
 the 10 ¢ Mentor upgrade → R4 `edit_file` + `ask_mentor`. R5 (OpenRouter web
 search / Fusion for epic design) is opt-in later and is not the build path.
 
-- Typical build = 80k prompt + 40k completion on the **builder**. Under
-  `DAEDALUS_MENTOR_UPGRADE_BELOW_USD` (10 ¢) → Claude Sonnet as Mentor;
-  otherwise Haiku. GLM 5.2 is ~8 ¢ so it gets Sonnet; Kimi K2.5 is ~12 ¢
-  so it stays on Haiku. OpenRouter `anthropic/claude-haiku-4.5` does not
-  need a native Anthropic key.
+- Typical build = 80k prompt + 40k completion on the **builder**, priced
+  from the live catalog. Under `DAEDALUS_MENTOR_UPGRADE_BELOW_USD` (10 ¢)
+  → Claude Sonnet as Mentor; otherwise Haiku. Fallback table puts GLM 5.2
+  at ~8 ¢; live OpenRouter rates are currently ~20 ¢, so Mentor stays Haiku
+  unless pinned. OpenRouter `anthropic/claude-haiku-4.5` does not need a
+  native Anthropic key.
 - Studio header chip: Chat / Build / Mentor / Wrap, Auto, catalog search.
   `GET`/`POST /api/v1/llm/roles`, `GET /api/v1/llm/catalog`.
 - Native `edit_file` (unique search/replace + write gate) and `ask_mentor`
