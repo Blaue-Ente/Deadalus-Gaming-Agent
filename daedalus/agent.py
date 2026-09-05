@@ -4765,7 +4765,14 @@ class Daedalus:
             tool_calls = (summary.get("tool_calls") or [])
             fails = sum(1 for c in tool_calls if c.get("ok") is False)
             fail_rate = (fails / len(tool_calls)) if tool_calls else 0.0
-            should_reflect = (elapsed > 90 and len(tool_calls) >= 3) or fail_rate > 0.5
+            _loop_rows = [c for c in tool_calls if c.get("tool") == "build_loop"]
+            if _loop_rows:
+                # A build turn reflects only when the kernel loop gave up — a
+                # slow-but-complete build or a recovered failure is not a lesson.
+                _lr = _loop_rows[-1]
+                should_reflect = (not _lr.get("complete")) and "exhausted" in str(_lr.get("stop_reason") or "")
+            else:
+                should_reflect = (elapsed > 90 and len(tool_calls) >= 3) or fail_rate > 0.5
             if should_reflect and not for_self:
                 async def _self_improve_bg():
                     try:

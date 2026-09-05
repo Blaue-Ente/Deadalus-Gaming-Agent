@@ -16,8 +16,8 @@ approves.
 | S1 | Closed build loop instead of post-mortem DoD | **Done** — MR !48 (`cursor/build-loop-s1-948f`) |
 | S3 | Tool results as navigation (paths, slug, NEXT) | **Done** — MR !49 (`cursor/build-loop-s3-nav-948f`) |
 | S4 | Write-time quality gate (syntax) + arcade lint | **Done** — MR !50 (`cursor/build-loop-s4-gate-948f`) |
-| S2 | Kernel-run scaffold/verify, phase-gated tools | **This MR** — awaiting owner approval |
-| S6 | Router: negations, explicit merge only | Pending |
+| S2 | Kernel-run scaffold/verify, phase-gated tools | **Done** — MR !51 (`cursor/build-loop-s2-kernel-948f`) |
+| S6 | Router: negations, explicit merge only | **This MR** — awaiting owner approval |
 | S5 | One build layer, model roles, wrap-up sanitizing | Pending |
 
 ## Evidence the plan is built on (live eval, 2026-09-05, Nemotron 3.5 Lightning)
