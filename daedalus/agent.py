@@ -25,6 +25,7 @@ All entry points automatically:
 from __future__ import annotations
 
 import asyncio
+import functools
 import json
 import logging
 import os
@@ -114,21 +115,24 @@ from .llm_config import get_config
 
 async def _call_claude(system: str, messages: list[dict[str, str]],
                        *,
-                       use_cache_override: bool | None = None) -> str:
+                       use_cache_override: bool | None = None,
+                       role: str = "") -> str:
     """Unified async LLM call with rate-limit fallback chain.
 
     Tries primary provider first; on 429 / overload falls back to
     replit_openai gpt-5.4 → replit_gemini gemini-2.5-flash automatically.
+    ``role`` ("build" / "wrap_up") picks a per-role model override.
     """
     return await call_with_fallback(
         _call_claude_primary, system, messages,
-        use_cache_override=use_cache_override,
+        use_cache_override=use_cache_override, role=role,
     )
 
 
 async def _call_claude_primary(system: str, messages: list[dict[str, str]],
                                 *,
-                                use_cache_override: bool | None = None) -> str:
+                                use_cache_override: bool | None = None,
+                                role: str = "") -> str:
     """Direct provider call (the original logic). Used by call_with_fallback."""
     import time as _t
     try:
@@ -137,7 +141,9 @@ async def _call_claude_primary(system: str, messages: list[dict[str, str]],
         def record_llm_call(*_a, **_k):  # type: ignore
             return None
 
-    cfg = get_config()
+    from .llm_config import config_for_role
+
+    cfg = config_for_role(role) if role else get_config()
     provider = cfg.get("provider", "anthropic")
     model    = cfg.get("model", _MODEL)
     api_key  = cfg.get("api_key", "")
@@ -231,12 +237,19 @@ async def _call_claude_with_tools(
     system: str,
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]],
+    *,
+    role: str = "",
 ) -> dict[str, Any]:
-    """Native tool round for Anthropic *and* OpenAI-compatible providers (incl. Ollama)."""
+    """Native tool round for Anthropic *and* OpenAI-compatible providers (incl. Ollama).
+
+    ``role="build"`` uses ``DAEDALUS_MODEL_BUILD`` when set — the model that
+    must make correct tool calls can differ from the persona model.
+    """
+    from .llm_config import config_for_role
     from .local_llm import dummy_api_key, is_local_provider
     from .native_tools import openai_tool_specs, to_openai_messages
 
-    cfg = get_config()
+    cfg = config_for_role(role) if role else get_config()
     api_key = cfg.get("api_key", "")
     base_url = cfg.get("base_url", "")
     model = cfg.get("model", _MODEL)
@@ -1698,6 +1711,7 @@ class Daedalus:
         # Phase 2 — native tool API. Playground/game: BUILD with a tight tool
         # subset. Everything else: recon over the full catalog.
         _native_log: list[dict[str, Any]] = []
+        _build_wrapped = False
         if (
             not _planning_succeeded
             and not _is_conversational
@@ -1741,10 +1755,14 @@ class Daedalus:
                     )
                     max_native = 8
                 _set_live(session_id, "native_tools", 0, "Native tools…")
+                _tool_call_fn = (
+                    functools.partial(_call_claude_with_tools, role="build")
+                    if _loop is not None else _call_claude_with_tools
+                )
                 _native_text, _native_log = await run_native_discovery_pass(
                     _nt_sys,
                     user_content[:8000],
-                    _call_claude_with_tools,
+                    _tool_call_fn,
                     memory=self.memory,
                     session_id=session_id or "",
                     read_file_fn=_read_file_tool,
@@ -1764,27 +1782,24 @@ class Daedalus:
                     )
                 if _native_text:
                     user_content = user_content + "\n\n" + _native_text
-                if _loop is not None:
+                if _loop is not None and (_loop.scaffolded or _loop.observations):
+                    # One build layer: the native rounds *were* the build. The
+                    # persona only writes the closing message over the ledger.
+                    from .build_wrap_up import wrap_up
+                    _set_live(session_id, "reasoning", 0, "Wrap-up…")
+                    raw = await wrap_up(_loop, _native_log, user_message, _call_claude, _call_persona)
+                    _build_wrapped = True
+                elif _loop is not None:
                     user_content = user_content + "\n\n" + _loop.summary_block()
-                    if _pg_build and any(
-                        (t.get("tool") in {"write_file", "playground_new"} and t.get("ok"))
-                        for t in _native_log
-                    ):
-                        user_content += (
-                            "\n\n━━━ NATIVE BUILD ALREADY ACTED ━━━\n"
-                            "You already created/wrote Playground files. "
-                            "Reply with a short summary of the slice. "
-                            "Do NOT emit NEED_* markers, JSON {\"tool\":...} dumps, or SQL.\n"
-                        )
-                    log.info(
-                        "daedalus native-tools: %d tool calls — enriched context",
-                        len(_native_log),
-                    )
+                log.info(
+                    "daedalus native-tools: %d tool calls — %s",
+                    len(_native_log), "build wrapped" if _build_wrapped else "enriched context",
+                )
             except Exception as _nt_exc:
                 log.warning("native tools preflight failed (non-fatal): %s", _nt_exc)
                 _native_log = []
 
-        if not _planning_succeeded:
+        if not _planning_succeeded and not _build_wrapped:
             # Normal path: full-persona initial call
             try:
                 async with _keepalive(session_id, "reasoning", 0,
@@ -1802,7 +1817,7 @@ class Daedalus:
         if _native_log:
             tool_calls_used.extend(_native_log)
         propose_result_text = ""
-        propose_block = _extract_propose_block(raw)
+        propose_block = None if _build_wrapped else _extract_propose_block(raw)
         if propose_block:
             propose_result_text, raw = await _run_propose_loop(
                 initial_raw=raw,
@@ -1822,7 +1837,9 @@ class Daedalus:
         MAX_TOOL_ITERATIONS = 30
         _tool_loop_broke_with_fallback = False
         _promise_guard_count = 0  # no-silent-stall guard: max 3 re-rolls per session
-        for _tool_iter in range(MAX_TOOL_ITERATIONS):
+        # A wrapped build turn has no second layer: the kernel already ran the
+        # plan and sanitized the closing message — no NEED_* re-rolls.
+        for _tool_iter in range(0 if _build_wrapped else MAX_TOOL_ITERATIONS):
             # Tool re-roll: if Claude emitted any NEED_* marker, execute tools and re-call.
             hit = scan_need_markers(raw)
             search_q = hit.search_q
@@ -4734,12 +4751,28 @@ class Daedalus:
                 _open_slices = open_count_for_session(session_id or "")
             except Exception:
                 _open_slices = 0
-            dod = evaluate(
-                message, raw or "",
-                tool_calls=summary.get("tool_calls") or [],
-                open_slices=_open_slices,
-            )
-            if not dod.complete and dod.coding_task:
+            _tc = summary.get("tool_calls") or []
+            _loop_row = next((c for c in reversed(_tc) if c.get("tool") == "build_loop"), None)
+            dod = evaluate(message, raw or "", tool_calls=_tc, open_slices=_open_slices)
+            if _loop_row is not None:
+                # The build loop already judged and the wrap-up already says what
+                # is missing — no second sticker on top of the reply.
+                if not _loop_row.get("complete"):
+                    try:
+                        draft_from_failure(
+                            kind="chat",
+                            errors=[f"missing: {m}" for m in (_loop_row.get("missing") or [])]
+                            or [str(_loop_row.get("stop_reason") or "incomplete")],
+                            context=message[:400],
+                        )
+                    except Exception:
+                        pass
+                else:
+                    try:
+                        draft_from_success(kind="chat", summary=(message or "")[:400])
+                    except Exception:
+                        pass
+            elif not dod.complete and dod.coding_task:
                 raw = (raw or "") + finish_nudge(dod)
                 try:
                     draft_from_failure(
