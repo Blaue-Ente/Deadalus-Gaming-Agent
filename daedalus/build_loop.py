@@ -32,6 +32,12 @@ _SLUG_TOOLS = frozenset({
     "assets", "engine", "world", "production", "playground_run",
 })
 _WEB_SUFFIXES = (".js", ".mjs", ".cjs", ".html", ".htm")
+_DEMO_FAMILIES = ("math3d", "crowd")
+_PATH = r"(?P<path>[A-Za-z0-9_./-]+\.(?:html?|js|mjs|css|json|py|gd|cs|txt|md))"
+_SHELL_READ = re.compile(
+    rf"^(?:cat|less|more|head(?:\s+-n?\s*\d+)?|tail(?:\s+-n?\s*\d+)?)\s+{_PATH}(?:\s*\|.*)?$"
+)
+_SHELL_CHECK = re.compile(rf"^node\s+(?:--check|-c)\s+{_PATH}$")
 _SESSION_SLUG_PREFIXES = ("playground:", "pg-auto-research:", "pg-auto-rev:", "pg-auto-plan:", "autopilot-plan:")
 _NAME_HINTS = (
     "snake", "tetris", "pong", "arkanoid", "breakout", "asteroids", "flappy", "platformer",
@@ -176,6 +182,12 @@ class BuildLoop:
         for row in self.seed_log:
             self._capture_slug(row.get("input") or {}, "")
 
+    @property
+    def is_demo(self) -> bool:
+        """math3d / crowd playbooks build a tech demo, not a game."""
+        families = {p.split(".")[-1] for p in str(self.route.playbook.id).split("+")}
+        return bool(families) and families <= set(_DEMO_FAMILIES)
+
     # ── kernel-run scaffold ───────────────────────────────────────────────
 
     def _create_step(self) -> Step | None:
@@ -284,7 +296,7 @@ class BuildLoop:
         try:
             from .playtest import _heuristic, _project_snapshot
 
-            hints = _heuristic(_project_snapshot(slug)).get("blockers") or []
+            hints = _heuristic(_project_snapshot(slug), demo=self.is_demo).get("blockers") or []
         except Exception as exc:
             hints = [f"playtest heuristic unavailable: {exc}"[:120]]
         self.observe("playtest", {"slug": slug, "kind": self.kind, "kernel": True, "heuristic": True},
@@ -346,6 +358,29 @@ class BuildLoop:
         return [*self.seed_log, *(o.as_call() for o in self.observations)]
 
     # ── navigation: fix arguments before the call, point NEXT after it ────
+
+    def reroute(self, tool: str, args: dict[str, Any]) -> tuple[str, dict[str, Any], str]:
+        """Send an inspection shell command to the tool that does the job.
+
+        ``run_command cat index.html`` / ``head -20 game.js`` → ``read_file``;
+        ``node --check index.html`` → ``game_lint``. The shell jail refuses
+        pipes anyway, and these tools return the same information with the
+        plan's NEXT step attached. Returns (tool, args, note).
+        """
+        if tool != "run_command":
+            return tool, args, ""
+        cmd = str(args.get("command") or "").strip()
+        m = _SHELL_READ.match(cmd)
+        if m:
+            path = m.group("path")
+            out = {"path": path, "slug": str(args.get("slug") or self.slug or "")}
+            return "read_file", out, f"(kernel: `{cmd[:60]}` → read_file path={path})"
+        m = _SHELL_CHECK.match(cmd)
+        if m:
+            path = m.group("path")
+            out = {"action": "check", "path": path, "slug": str(args.get("slug") or self.slug or "")}
+            return "game_lint", out, f"(kernel: `{cmd[:60]}` → game_lint check path={path})"
+        return tool, args, ""
 
     def prepare(self, tool: str, args: dict[str, Any]) -> tuple[dict[str, Any], str]:
         """Fill the project slug the model forgot. Returns (args, note).

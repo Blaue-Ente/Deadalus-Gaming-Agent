@@ -329,13 +329,15 @@ async def _call_claude_with_tools(
     content = []
     if msg and msg.content:
         content.append({"type": "text", "text": msg.content})
+    from .tool_args import parse as _parse_args
     for tc in (getattr(msg, "tool_calls", None) or []):
-        args: Any = {}
         raw_args = getattr(getattr(tc, "function", None), "arguments", "") or "{}"
-        try:
-            args = json.loads(raw_args)
-        except json.JSONDecodeError:
-            args = {"raw": raw_args}
+        parsed = _parse_args(raw_args)
+        args: Any = parsed.args
+        if not parsed.ok:
+            args["_args_error"] = parsed.note()
+        elif parsed.repaired:
+            args["_args_note"] = parsed.note()
         content.append({
             "type": "tool_use",
             "id": tc.id,
@@ -4770,7 +4772,18 @@ class Daedalus:
             dod = evaluate(message, raw or "", tool_calls=_tc, open_slices=_open_slices)
             if _loop_row is not None:
                 # The build loop already judged and the wrap-up already says what
-                # is missing — no second sticker on top of the reply.
+                # is missing — no second sticker on top of the reply. Its verdict
+                # is the one reported: it saw the kernel verify, not just the text.
+                dod.complete = bool(_loop_row.get("complete"))
+                dod.checks["build_loop"] = dod.complete
+                if dod.complete:
+                    dod.blockers = []
+                    dod.summary = "build loop complete"
+                else:
+                    dod.blockers = [f"missing: {m}" for m in (_loop_row.get("missing") or [])] or [
+                        str(_loop_row.get("stop_reason") or "incomplete")
+                    ]
+                    dod.summary = "; ".join(dod.blockers)[:300]
                 if not _loop_row.get("complete"):
                     try:
                         draft_from_failure(

@@ -24,6 +24,68 @@ OPS = (
     "catalog",
 )
 
+# Per-op argument names the model must send. ``catalog`` returns these, error
+# messages quote them, and ``_positional`` accepts a single list in this order
+# when the model stuffs everything into ``a`` / ``eye`` (seen with GLM/Kimi:
+# ``perspective eye=[fovy, aspect, near, far]``).
+SIGNATURES: dict[str, tuple[str, ...]] = {
+    "add": ("a", "b"), "sub": ("a", "b"), "scale": ("a", "s"),
+    "length": ("a",), "normalize": ("a",), "dot": ("a", "b"), "cross": ("a", "b"),
+    "facing": ("view", "normal"), "triangle_normal": ("v0", "v1", "v2"),
+    "quat_mul": ("q0", "q1"), "quat_normalize": ("q",), "quat_slerp": ("q0", "q1", "t"),
+    "quat_from_axis_angle": ("axis", "angle"), "quat_rotate": ("q", "v"),
+    "mat4_mul": ("a", "b"), "mat4_transform": ("m", "p"),
+    "look_at": ("eye", "center", "up"),
+    "perspective": ("fovy", "aspect", "near", "far"),
+    "ray_triangle": ("origin", "direction", "v0", "v1", "v2"),
+    "ray_aabb": ("origin", "direction", "min", "max"),
+}
+
+EXAMPLES: dict[str, dict[str, Any]] = {
+    "quat_slerp": {"q0": [0, 0, 0, 1], "q1": [0, 0.7071, 0, 0.7071], "t": 0.5},
+    "look_at": {"eye": [0, 2, 5], "center": [0, 0, 0], "up": [0, 1, 0]},
+    "perspective": {"fovy": 1.0472, "aspect": 1.777, "near": 0.1, "far": 100},
+    "quat_from_axis_angle": {"axis": [0, 1, 0], "angle": 1.5708},
+    "ray_aabb": {"origin": [0, 0, 5], "direction": [0, 0, -1], "min": [-1, -1, -1], "max": [1, 1, 1]},
+    "ray_triangle": {"origin": [0, 0, 5], "direction": [0, 0, -1],
+                     "v0": [-1, -1, 0], "v1": [1, -1, 0], "v2": [0, 1, 0]},
+}
+
+# Fallback keys a confused model uses for "the single argument I have".
+_LOOSE_KEYS = ("a", "eye", "args", "params", "values", "v", "input")
+
+
+def signature(op: str) -> str:
+    keys = SIGNATURES.get(op)
+    if not keys:
+        return op
+    ex = EXAMPLES.get(op)
+    text = f"{op}({', '.join(keys)})"
+    if ex:
+        text += " e.g. " + json.dumps({"action": op, **ex})
+    return text
+
+
+def _positional(op: str, args: dict[str, Any]) -> dict[str, Any]:
+    """Spread one flat list over the op's named parameters when the named
+    ones are absent: ``perspective a=[1.05, 1.33, 0.1, 100]`` →
+    fovy/aspect/near/far. Named arguments always win."""
+    keys = SIGNATURES.get(op)
+    if not keys or any(k in args for k in keys):
+        return args
+    for loose in _LOOSE_KEYS:
+        if loose in keys:
+            continue
+        cand = _maybe_parse(args.get(loose))
+        if isinstance(cand, (list, tuple)) and len(cand) == len(keys) and all(
+            isinstance(x, (int, float)) for x in cand
+        ):
+            out = {k: v for k, v in args.items() if k != loose}
+            out.update(dict(zip(keys, cand)))
+            out["_positional_from"] = loose
+            return out
+    return args
+
 
 def _num(v: Any, default: float = 0.0) -> float:
     try:
@@ -450,7 +512,14 @@ def run_op(op: str, args: dict[str, Any] | None = None) -> dict[str, Any]:
     name = (op or "").strip().lower().replace("-", "_")
     fields = dict(args or {})
     if name in ("catalog", "help", "ops"):
-        return {"ok": True, "ops": list(OPS), "convention": "quat xyzw, mat4 row-major, OpenGL Y-up"}
+        return {
+            "ok": True,
+            "ops": list(OPS),
+            "signatures": {o: signature(o) for o in OPS if o in SIGNATURES},
+            "convention": "quat xyzw, mat4 row-major, OpenGL Y-up, angles in radians",
+        }
+    if name not in OPS:
+        return {"ok": False, "op": name, "error": f"unknown op {name}", "ops": list(OPS)}
     claimed = fields.pop("claimed", None)
     if isinstance(claimed, str) and not claimed.strip().startswith(("[", "{")):
         claimed = None  # prose note, not a numeric claim
@@ -458,16 +527,33 @@ def run_op(op: str, args: dict[str, Any] | None = None) -> dict[str, Any]:
         claimed = _maybe_parse(claimed)
     atol = _num(fields.pop("atol", ATOL), ATOL)
     fields = {k: _maybe_parse(v) for k, v in fields.items()}
+    fields = _positional(name, fields)
+    notes: list[str] = []
+    positional_from = fields.pop("_positional_from", "")
+    if positional_from:
+        notes.append(f"read {positional_from}=[...] as {', '.join(SIGNATURES[name])}")
+    if name == "perspective" and _num(fields.get("fovy")) > 3.2:
+        deg = _num(fields.get("fovy"))
+        fields["fovy"] = math.radians(deg)
+        notes.append(f"fovy {deg:g} looked like degrees — used {fields['fovy']:.4f} rad")
     try:
         value = _compute(name, fields)
     except Exception as exc:
-        return {"ok": False, "op": name, "error": str(exc)[:300]}
+        return {
+            "ok": False,
+            "op": name,
+            "error": str(exc)[:300],
+            "expected": signature(name),
+            "got": sorted(k for k in fields if k not in ("_positional_from",)),
+        }
     out: dict[str, Any] = {
         "ok": True,
         "op": name,
         "value": _round_num(value),
         "backend": "stdlib",
     }
+    if notes:
+        out["note"] = "; ".join(notes)
     np_ck = _numpy_crosscheck(name, fields, value)
     if np_ck:
         out["numpy"] = np_ck

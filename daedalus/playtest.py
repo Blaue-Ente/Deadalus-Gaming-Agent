@@ -114,7 +114,10 @@ def _project_snapshot(slug: str, *, max_chars: int = 5000) -> str:
     return text[:max_chars]
 
 
-def _heuristic(snapshot: str) -> dict[str, Any]:
+def _heuristic(snapshot: str, *, demo: bool = False) -> dict[str, Any]:
+    """Static play-readiness signals. ``demo=True`` is a tech demo (camera,
+    crowd physics): it needs a canvas and a frame loop, not win/lose or a
+    readable race track — the arcade fun gate would only mislead the fix rounds."""
     low = snapshot.lower()
     has_canvas = (
         "canvas" in low or "<canvas" in low or "phaser" in low
@@ -129,20 +132,21 @@ def _heuristic(snapshot: str) -> dict[str, Any]:
     blockers = []
     if not has_canvas:
         blockers.append("Няма canvas/Phaser — първата рисунка може да липсва.")
-    if not has_input:
-        blockers.append("Не се вижда input handler — контролите може да са неясни.")
     if not has_loop:
         blockers.append("Не се вижда game loop.")
-    if not has_win:
-        blockers.append("Няма явен win/lose или score.")
     extra_signals: dict[str, Any] = {}
-    try:
-        from .arcade_craft import fun_signals
-        extra = fun_signals(snapshot)
-        extra_signals = dict(extra.get("signals") or {})
-        blockers.extend(extra.get("blockers") or [])
-    except Exception:
-        extra_signals = {}
+    if not demo:
+        if not has_input:
+            blockers.append("Не се вижда input handler — контролите може да са неясни.")
+        if not has_win:
+            blockers.append("Няма явен win/lose или score.")
+        try:
+            from .arcade_craft import fun_signals
+            extra = fun_signals(snapshot)
+            extra_signals = dict(extra.get("signals") or {})
+            blockers.extend(extra.get("blockers") or [])
+        except Exception:
+            extra_signals = {}
     return {
         "signals": {
             "canvas": has_canvas,

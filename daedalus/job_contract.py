@@ -59,8 +59,12 @@ def unrecovered_failure_indexes(tool_calls: list[dict[str, Any]] | None) -> list
         if call.get("ok") is not False or call.get("blocked"):
             continue
         key = _repair_key(call)
+        # A failure that never named a file (unparseable arguments, missing
+        # path) is repaired by any later good call of the same tool.
+        loose = not key[2]
         recovered = any(
-            later.get("ok") is True and _repair_key(later) == key
+            later.get("ok") is True
+            and (_repair_key(later) == key or (loose and _call_name(later) == key[0]))
             for later in calls[i + 1:]
         )
         if not recovered:

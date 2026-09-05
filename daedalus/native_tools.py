@@ -13,6 +13,9 @@ import os
 import re
 from typing import Any, Awaitable, Callable
 
+from .tool_args import head_keys
+from .tool_args import parse as parse_tool_args
+
 log = logging.getLogger(__name__)
 
 PERM_MAP: dict[str, str | None] = {
@@ -89,6 +92,8 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
             "Write a file in a Playground project (slug required). "
             "Call playground_new first if the slug does not exist — "
             "otherwise a static project is created. "
+            "Keep one file under ~12000 chars: split style.css and game.js out of index.html "
+            "for bigger games (one write_file per file). "
             "Do not use this to patch the Daedalus harness — propose instead."
         ),
         "input_schema": {
@@ -122,8 +127,9 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
     {
         "name": "run_command",
         "description": (
-            "Run a shell command in the product/playground jail. "
-            "Use for pytest, npm, python, ls, git status. Secrets are stripped from env."
+            "Run ONE plain command in the product/playground jail (argv, no shell): "
+            "pytest, npm, python, ls, git status. No pipes, redirection, $(), && or globs. "
+            "Reading a file → read_file; JS/HTML syntax → game_lint. Secrets are stripped from env."
         ),
         "input_schema": {
             "type": "object",
@@ -559,9 +565,11 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
         "name": "math3d",
         "description": (
             "Reference 3D math (stdlib; numpy cross-check if installed). "
-            "Ops: dot, cross, facing, triangle_normal, quat_slerp, quat_rotate, "
-            "look_at, perspective, ray_triangle, ray_aabb, mat4_mul, catalog. "
-            "Pass claimed to verify a formula before embedding it in C++/C#/GDScript. "
+            "Each op has named arguments — quat_slerp(q0, q1, t); "
+            "look_at(eye, center, up); perspective(fovy, aspect, near, far) with fovy in radians; "
+            "quat_from_axis_angle(axis, angle); ray_aabb(origin, direction, min, max); "
+            "ray_triangle(origin, direction, v0, v1, v2); dot/cross/mat4_mul(a, b). "
+            "action=catalog lists every signature. Pass claimed to verify your own result. "
             "Quat xyzw, mat4 row-major, OpenGL Y-up."
         ),
         "input_schema": {
@@ -572,19 +580,29 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
                     "description": "Op name or catalog | batch",
                 },
                 "op": {"type": "string", "description": "Alias of action"},
-                "a": {"description": "vec3 / quat / mat4"},
+                "a": {"description": "vec3 / quat / mat4 (dot, cross, mat4_mul, add, sub, length, normalize)"},
                 "b": {"description": "vec3 / quat / mat4"},
-                "q0": {"description": "quat xyzw"},
+                "q0": {"description": "quat xyzw (quat_slerp, quat_mul)"},
                 "q1": {"description": "quat xyzw"},
-                "t": {"type": "number"},
+                "t": {"type": "number", "description": "quat_slerp interpolation 0..1"},
+                "q": {"description": "quat xyzw (quat_rotate, quat_normalize)"},
+                "v": {"description": "vec3 to rotate (quat_rotate)"},
+                "axis": {"description": "vec3 (quat_from_axis_angle)"},
+                "angle": {"type": "number", "description": "radians (quat_from_axis_angle)"},
                 "eye": {"description": "look_at eye vec3"},
                 "center": {"description": "look_at target vec3"},
                 "up": {"description": "look_at up vec3"},
-                "origin": {"description": "ray origin"},
-                "direction": {"description": "ray direction"},
+                "fovy": {"type": "number", "description": "perspective vertical FOV in radians (1.0472 = 60°)"},
+                "aspect": {"type": "number", "description": "perspective width/height"},
+                "near": {"type": "number", "description": "perspective near plane"},
+                "far": {"type": "number", "description": "perspective far plane"},
+                "origin": {"description": "ray origin vec3"},
+                "direction": {"description": "ray direction vec3"},
                 "v0": {"description": "triangle p0"},
                 "v1": {"description": "triangle p1"},
                 "v2": {"description": "triangle p2"},
+                "min": {"description": "AABB min vec3 (ray_aabb)"},
+                "max": {"description": "AABB max vec3 (ray_aabb)"},
                 "claimed": {"description": "Agent's result to verify"},
                 "ops": {"description": "batch: list of {op,...}"},
             },
@@ -999,7 +1017,18 @@ async def execute_native_tool(
             from .shell_center import run_command
             cwd = str(args.get("cwd") or "") or None
             r = run_command(cmd, cwd=cwd, slug=slug, timeout=args.get("timeout"))
+            if r.get("blocked"):
+                # Policy refusal is not a build failure: say why and point at the
+                # tool that does the job without a shell.
+                return (
+                    f"── run_command BLOCKED ── {r.get('error') or 'refused'}\n"
+                    "One plain command per call — no pipes, redirection, $() or quotes-in-quotes. "
+                    "To read a file use read_file; to check JS/HTML syntax use game_lint "
+                    "(write_file already ran node --check)."
+                )
             body = (r.get("stdout") or "") + (("\n" + r["stderr"]) if r.get("stderr") else "")
+            if not body and r.get("error"):
+                body = str(r.get("error"))
             status = "OK" if r.get("ok") else "FAILED"
             hint = ""
             if not r.get("ok") and cwd and not slug:
@@ -1602,19 +1631,35 @@ async def run_native_discovery_pass(
             tname = tu.get("name", "")
             tinput = tu.get("input") or {}
             if isinstance(tinput, str):
-                try:
-                    tinput = json.loads(tinput)
-                except json.JSONDecodeError:
-                    tinput = {"raw": tinput}
+                parsed = parse_tool_args(tinput)
+                tinput = parsed.args
+                if not parsed.ok:
+                    tinput["_args_error"] = parsed.note()
+                elif parsed.repaired:
+                    tinput["_args_note"] = parsed.note()
             note = ""
-            if loop is not None and isinstance(tinput, dict):
+            args_error = ""
+            if isinstance(tinput, dict):
+                args_error = str(tinput.pop("_args_error", "") or "")
+                note = str(tinput.pop("_args_note", "") or "")
+                if args_error:
+                    # Log the failure against the file it was meant for so a
+                    # later good write of that file counts as the repair.
+                    tinput.update({k: v for k, v in head_keys(str(tinput.get("raw", ""))).items()
+                                   if k not in tinput})
+            if loop is not None and isinstance(tinput, dict) and not args_error:
+                tname, tinput, reroute_note = loop.reroute(tname, tinput)
                 tinput, note = loop.prepare(tname, tinput)
+                note = " ".join(x for x in (reroute_note, note) if x)
 
-            result_text = await execute_native_tool(
-                tname, tinput,
-                memory=memory, session_id=session_id,
-                read_file_fn=read_file_fn,
-            )
+            if args_error:
+                result_text = f"── {tname} FAILED: {args_error} ──"
+            else:
+                result_text = await execute_native_tool(
+                    tname, tinput,
+                    memory=memory, session_id=session_id,
+                    read_file_fn=read_file_fn,
+                )
             blocked = "BLOCKED" in result_text
             ok = blocked or ("FAILED" not in result_text and "ERROR" not in result_text)
             tool_log.append({
