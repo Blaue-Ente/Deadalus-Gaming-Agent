@@ -336,8 +336,9 @@
     pop.hidden = !open;
     $("modelbtn").setAttribute("aria-expanded", open ? "true" : "false");
     if (open) {
+      setModelRole(state.modelRole);
       loadRoles();
-      loadCatalog($("modelq").value);
+      loadCatalog($("modelq") && $("modelq").value);
     }
   };
   document.querySelectorAll(".model-roles button").forEach((btn) => {
