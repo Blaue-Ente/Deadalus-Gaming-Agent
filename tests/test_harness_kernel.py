@@ -34,6 +34,8 @@ def test_marker_maps_to_native():
     assert req.args["query"] == "tetris sprites"
     assert req.source == "marker"
     assert MARKER_TO_NATIVE["NEED_PLAYGROUND_WRITE"] == "write_file"
+    assert MARKER_TO_NATIVE["NEED_PLAYGROUND_NEW"] == "playground_new"
+    assert request_from_marker("NEED_PLAYGROUND_NEW", "Snake | static | canvas").name == "playground_new"
     assert request_from_marker("NEED_MADE_UP", "x") is None
 
 
@@ -165,9 +167,10 @@ def test_game_agent_bench_gates():
 def test_wiring_in_source():
     agent = (ROOT / "daedalus" / "agent.py").read_text(encoding="utf-8")
     assert "scan_need_markers" in agent
-    assert "max_rounds=10 if _pg_build else 8" in agent
+    assert "max_rounds=max_native" in agent
     assert "extract_tool_dumps" in agent
     assert "playground_build_specs" in agent
+    assert "tool_router" in agent
     cfg = (ROOT / "daedalus" / "llm_config.py").read_text(encoding="utf-8")
     assert "overlay_effort" in cfg
     kernel = (ROOT / "daedalus" / "kernel" / "full_autopilot.py").read_text(encoding="utf-8")
@@ -343,6 +346,7 @@ def test_studio_asset_generate_route(isolated, monkeypatch):
     names = caps.json()["capabilities"]
     assert "typed-tools" in names
     assert "atomic-router" in names
+    assert "tool-router" in names
     assert "durable-runs" in names
     assert "one-builder" in names
     assert "quality-gate" in names

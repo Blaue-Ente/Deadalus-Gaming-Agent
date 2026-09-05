@@ -1706,19 +1706,34 @@ class Daedalus:
             try:
                 from .game_engineer import looks_like_game as _looks_game
                 from .native_tools import playground_build_specs
-                from .playground_agent_routing import native_build_system
+                from .tool_router import format_system, native_specs, route, run_consult
                 _pg_build = is_playground_work_session(session_id, user_message) or _looks_game(
                     user_message
                 )
-                _nt_specs = playground_build_specs() if _pg_build else None
-                _nt_sys = (
-                    native_build_system(user_message)
-                    if _pg_build
-                    else (
+                _route = route(
+                    user_message,
+                    session_id=session_id or "",
+                    intent=(briefing_dict or {}).get("intent") or "",
+                )
+                if _route.playbook.id.startswith("playground."):
+                    _pg_build = True
+                _consult_log: list[dict[str, Any]] = []
+                _nt_specs = None
+                if _pg_build or _route.use_build_subset:
+                    _consult_log, _consult_extra = run_consult(_route)
+                    _nt_specs = native_specs(_route) or playground_build_specs(
+                        user_message, session_id=session_id or "",
+                    )
+                    _nt_sys = format_system(
+                        _route, extra=_consult_extra, user_message=user_message,
+                    )
+                    max_native = 10
+                else:
+                    _nt_sys = (
                         "You are Daedalus tool-discovery. Use tools to gather context. "
                         "When done, summarize findings briefly."
                     )
-                )
+                    max_native = 8
                 _set_live(session_id, "native_tools", 0, "Native tools…")
                 _native_text, _native_log = await run_native_discovery_pass(
                     _nt_sys,
@@ -1727,9 +1742,11 @@ class Daedalus:
                     memory=self.memory,
                     session_id=session_id or "",
                     read_file_fn=_read_file_tool,
-                    max_rounds=10 if _pg_build else 8,
+                    max_rounds=max_native,
                     tools=_nt_specs,
                 )
+                if _consult_log:
+                    _native_log = list(_consult_log) + list(_native_log or [])
                 if _native_text:
                     user_content = user_content + "\n\n" + _native_text
                     if _pg_build and any(

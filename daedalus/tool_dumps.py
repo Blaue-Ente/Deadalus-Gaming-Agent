@@ -45,7 +45,14 @@ class ToolDump:
 
 def canonical_dump_name(raw: str) -> str:
     name = (raw or "").strip()
-    return _ALIASES.get(name.lower(), name)
+    mapped = _ALIASES.get(name.lower())
+    if mapped:
+        return mapped
+    try:
+        from .tool_catalog import canonical
+        return canonical(name)
+    except Exception:
+        return name
 
 
 def _normalize_args(name: str, args: dict[str, Any]) -> dict[str, Any]:

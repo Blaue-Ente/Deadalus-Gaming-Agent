@@ -12,7 +12,7 @@ from typing import Any
 _GAME_RE = re.compile(
     r"\b(игра|game|godot|unity|phaser|three\.?js|webgpu|racer|racing|"
     r"gdscript|\.tscn|gameplay|platformer|shooter|rpg|voxel|"
-    r"playground|canvas|webgl|demo|"
+    r"playground|canvas|webgl|demo|snake|tetris|pong|змия|"
     r"състезан|писта|камера)\b",
     re.I,
 )

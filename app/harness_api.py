@@ -655,3 +655,25 @@ async def chat_job_stream(job_id: str, request: Request) -> StreamingResponse:
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+@router.get("/api/v1/daedalus/tools")
+async def tool_catalog() -> dict[str, Any]:
+    """Inspectable catalog: native tools, NEED_* leftovers, skills, knowledge."""
+    from daedalus.task_playbooks import all_playbooks
+    from daedalus.tool_catalog import full_catalog
+
+    return {
+        "ok": True,
+        "tools": [row.as_dict() for row in full_catalog()],
+        "playbooks": [pb.as_dict() for pb in all_playbooks()],
+    }
+
+
+@router.get("/api/v1/daedalus/tools/route")
+async def tool_route(q: str = "", kind: str = "", intent: str = "") -> dict[str, Any]:
+    """Compile the kernel task plan for an ask (no LLM)."""
+    from daedalus.tool_router import route
+
+    rt = route(q, kind=kind, intent=intent)
+    return {"ok": True, **rt.as_dict()}
