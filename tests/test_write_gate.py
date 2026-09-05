@@ -150,9 +150,9 @@ def test_build_loop_keeps_bad_write_open():
     loop.observe("playground_new", {"name": "snake-game"}, "── playground_new OK slug=snake-game ──", ok=True)
     loop.observe("write_file", {"slug": "snake-game", "path": "index.html"}, "── write_file OK ──", ok=True)
     loop.observe("write_file", {"slug": "snake-game", "path": "game.js"}, "── write_file FAILED syntax snake-game/game.js ──\nsyntax: line 5: 'gameLoopId' already declared", ok=False)
-    nudge = loop.on_quiet("Готово.")
+    nudge = asyncio.run(loop.on_quiet("Готово."))
     assert nudge is not None
     assert "game.js" in nudge and "gameLoopId" in nudge
     assert "NEXT: repeat write_file with corrected arguments (slug=snake-game)" in nudge
     loop.observe("write_file", {"slug": "snake-game", "path": "game.js"}, "── write_file OK ──", ok=True)
-    assert loop.on_quiet("Готово.") is None and loop.stop_reason == "complete"
+    assert asyncio.run(loop.on_quiet("Готово.")) is None and loop.stop_reason == "complete"

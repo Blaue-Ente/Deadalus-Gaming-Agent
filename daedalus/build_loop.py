@@ -28,9 +28,17 @@ ROUNDS_PER_FIX = 2
 _HEAD_CHARS = 240
 _SLUG_RE = re.compile(r"\bslug=([A-Za-z0-9_.-]+)")
 _SLUG_TOOLS = frozenset({
-    "write_file", "read_file", "playtest", "browser", "run_command", "game_lint",
+    "write_file", "read_file", "list_dir", "playtest", "browser", "run_command", "game_lint",
     "assets", "engine", "world", "production", "playground_run",
 })
+_WEB_SUFFIXES = (".js", ".mjs", ".cjs", ".html", ".htm")
+_SESSION_SLUG_PREFIXES = ("playground:", "pg-auto-research:", "pg-auto-rev:", "pg-auto-plan:", "autopilot-plan:")
+_NAME_HINTS = (
+    "snake", "tetris", "pong", "arkanoid", "breakout", "asteroids", "flappy", "platformer",
+    "racer", "racing", "shooter", "invaders", "runner", "puzzle", "tower", "rpg", "roguelike",
+    "metroidvania", "slerp", "camera", "crowd", "octree", "quadtree", "raycast", "particles",
+    "змия", "тетрис", "понг", "платформър", "състезание", "камера", "пъзел",
+)
 
 
 def fix_rounds_from_env() -> int:
@@ -41,6 +49,51 @@ def fix_rounds_from_env() -> int:
         return max(0, int(raw))
     except ValueError:
         return DEFAULT_FIX_ROUNDS
+
+
+def _flag(name: str, default: str) -> bool:
+    return (os.environ.get(name) or default).strip().lower() not in ("0", "false", "no", "off")
+
+
+def kernel_scaffold_enabled() -> bool:
+    return _flag("DAEDALUS_BUILD_SCAFFOLD", "1")
+
+
+def kernel_verify_enabled() -> bool:
+    return _flag("DAEDALUS_BUILD_VERIFY", "1")
+
+
+def browser_verify_enabled() -> bool:
+    return _flag("DAEDALUS_BUILD_BROWSER_VERIFY", "0")
+
+
+def session_slug(session_id: str) -> str:
+    sid = (session_id or "").strip()
+    for prefix in _SESSION_SLUG_PREFIXES:
+        if sid.startswith(prefix):
+            return sid[len(prefix):].split(":")[0].strip()
+    return ""
+
+
+def project_name_from_ask(message: str, playbook_id: str, kind: str) -> str:
+    """Deterministic project name: the game the owner named, or the playbook
+    plus a short hash. The model never has to invent or search for a slug."""
+    import hashlib
+
+    from .playground import slugify
+
+    low = (message or "").lower()
+    hint = next((h for h in _NAME_HINTS if h in low), "")
+    base = slugify(hint) if hint else ""
+    family = playbook_id.split("+")[0].split(".")[-1] or "game"
+    if not base:
+        digest = hashlib.sha1((message or "").encode("utf-8")).hexdigest()[:4]
+        base = f"{family}-{digest}"
+    if kind in ("godot", "unity"):
+        return f"{base}-{kind}"
+    if family in ("math3d", "crowd"):
+        return f"{base}-demo"
+    return f"{base}-game"
 
 
 @dataclass
@@ -117,8 +170,145 @@ class BuildLoop:
         self.slug = ""
         self.last_verdict: BuildVerdict | None = None
         self.stop_reason = ""
+        self.scaffolded = False
+        self.verify_report: list[str] = []
+        self._verified_at = -1
         for row in self.seed_log:
             self._capture_slug(row.get("input") or {}, "")
+
+    # ── kernel-run scaffold ───────────────────────────────────────────────
+
+    def _create_step(self) -> Step | None:
+        return next((s for s in self.route.ordered_steps if s.tool == "playground_new"), None)
+
+    async def scaffold(self, session_id: str = "") -> str:
+        """Create (or adopt) the Playground project before the model talks.
+
+        Returns a PROJECT block for the system prompt, or "" when this route
+        has no create step or the kernel scaffold is off. On failure the model
+        keeps ``playground_new`` and does it itself.
+        """
+        step = self._create_step()
+        if step is None or not kernel_scaffold_enabled():
+            return ""
+        from . import playground as pg
+        from .native_tools import project_nav
+
+        existing = session_slug(session_id)
+        if existing and pg.project_dir(existing).is_dir():
+            self.slug = existing
+            self.observe("playground_new", {"slug": existing, "reused": True},
+                         f"── playground_new OK slug={existing} (existing session project) ──", ok=True)
+            self.scaffolded = True
+            return (
+                "━━━ PROJECT (kernel — existing) ━━━\n"
+                f"slug={existing}\n{project_nav(existing)}\n"
+                "Do not call playground_new. Write into this slug."
+            )
+        name = project_name_from_ask(self.user_message, self.route.playbook.id, self.kind)
+        slug = pg.slugify(name)
+        if pg.project_dir(slug).is_dir():
+            import hashlib
+
+            slug = f"{slug}-{hashlib.sha1(self.user_message.encode('utf-8')).hexdigest()[:4]}"
+        kind = str(step.args.get("kind") or self.kind or "static")
+        try:
+            proj = await pg.create_project(
+                name, kind=kind, source="built", description=self.user_message[:200], slug=slug,
+            )
+        except Exception as exc:
+            log.warning("kernel scaffold failed (model keeps playground_new): %s", exc)
+            return ""
+        slug = str((proj or {}).get("slug") or slug)
+        self.slug = slug
+        self.scaffolded = True
+        self.observe("playground_new", {"name": name, "kind": kind, "slug": slug, "kernel": True},
+                     f"── playground_new OK slug={slug} kind={kind} ──", ok=True)
+        return (
+            "━━━ PROJECT (kernel created) ━━━\n"
+            f"slug={slug} kind={kind}\n{project_nav(slug)}\n"
+            "Do not call playground_new. Start with write_file slug="
+            f"{slug} path={(self.route.playbook.expected_files or ('index.html',))[0]}."
+        )
+
+    def drop_tools(self) -> set[str]:
+        """Tools the model does not need this turn (phase gate)."""
+        return {"playground_new"} if self.scaffolded else set()
+
+    # ── kernel-run verify ─────────────────────────────────────────────────
+
+    def written_files(self) -> list[tuple[str, str]]:
+        out: list[tuple[str, str]] = []
+        for o in self.observations:
+            if o.tool == "write_file" and o.ok:
+                pair = (str(o.args.get("slug") or self.slug), str(o.args.get("path") or ""))
+                if pair[1] and pair not in out:
+                    out.append(pair)
+        return out
+
+    def _writes_since_verify(self) -> bool:
+        for o in self.observations[self._verified_at + 1:]:
+            if o.tool == "write_file" and o.ok:
+                return True
+        return False
+
+    async def run_verify(self) -> bool:
+        """Kernel verify after the plan's writes: lint every web file, heuristic
+        playtest, optional browser. Records observations so the contract and
+        the nudge see the outcome. Returns True when nothing blocks."""
+        self.verify_report = []
+        ok_all = True
+        files = self.written_files()
+        if not files:
+            self._verified_at = len(self.observations) - 1
+            return True
+        from .game_lint import check as lint_check
+
+        for slug, path in files:
+            if not path.lower().endswith(_WEB_SUFFIXES) and not path.lower().endswith(".py"):
+                continue
+            try:
+                r = lint_check(path, slug=slug)
+            except Exception as exc:
+                r = {"ok": True, "error": str(exc)[:120], "blockers": [], "warnings": []}
+            blockers = [str(b.get("message") or b) for b in (r.get("blockers") or [])]
+            warnings = [str(w.get("message") or w) for w in (r.get("warnings") or [])]
+            head = f"── game_lint check {slug}/{path} {'OK' if r.get('ok') else 'FAILED'} ──"
+            if blockers:
+                head += " " + "; ".join(blockers[:3])
+            self.observe("game_lint", {"action": "check", "slug": slug, "path": path, "kernel": True}, head, ok=bool(r.get("ok")))
+            self.verify_report.append(head)
+            self.verify_report.extend(f"  lint: {w}" for w in warnings[:4])
+            ok_all = ok_all and bool(r.get("ok"))
+        slug = files[0][0]
+        try:
+            from .playtest import _heuristic, _project_snapshot
+
+            hints = _heuristic(_project_snapshot(slug)).get("blockers") or []
+        except Exception as exc:
+            hints = [f"playtest heuristic unavailable: {exc}"[:120]]
+        self.observe("playtest", {"slug": slug, "kind": self.kind, "kernel": True, "heuristic": True},
+                     "── playtest heuristic ──" + ("" if not hints else " " + "; ".join(hints[:3])), ok=True)
+        self.verify_report.extend(f"  playtest: {h}" for h in hints[:4])
+        if browser_verify_enabled():
+            try:
+                from .playground_browser import verify_app
+
+                bv = await verify_app(slug, self.kind)
+                b_ok = bool(bv.get("ok")) or bool(bv.get("skipped"))
+                summary = str(bv.get("summary") or bv.get("error") or "")[:200]
+                self.observe("browser", {"action": "verify", "slug": slug, "kernel": True},
+                             f"── browser verify {'OK' if b_ok else 'FAILED'} ── {summary}", ok=b_ok)
+                self.verify_report.append(f"  browser: {'ok' if b_ok else 'FAILED'} {summary}")
+                ok_all = ok_all and b_ok
+            except Exception as exc:
+                self.verify_report.append(f"  browser: skipped ({str(exc)[:80]})")
+        self._verified_at = len(self.observations) - 1
+        return ok_all
+
+    def _plan_writes_done(self) -> bool:
+        rows = self.progress()
+        return all(r.status == "done" for r in rows if r.step.required) and bool(self.written_files())
 
     # ── observation ───────────────────────────────────────────────────────
 
@@ -172,6 +362,15 @@ class BuildLoop:
         cwd = str(out.get("cwd") or "")
         if tool == "run_command" and cwd and self.slug not in cwd.replace("\\", "/").split("/"):
             return out, ""  # a deliberate cwd elsewhere in the jail — leave it
+        if tool == "list_dir":
+            # Exploring the harness during a build → show the model its own project instead.
+            path = str(out.get("path") or ".").replace("\\", "/")
+            if path.startswith("/") or path in (".", "daedalus", "app") or path.startswith(("daedalus/", "app/")):
+                out["path"] = "."
+                out["slug"] = self.slug
+                return out, f"(kernel: build phase — listing your project {self.slug}, not the harness)"
+            out["slug"] = self.slug
+            return out, f"(kernel: slug={self.slug} filled in)"
         out["slug"] = self.slug
         out.pop("cwd", None)
         return out, f"(kernel: slug={self.slug} filled in)"
@@ -248,8 +447,14 @@ class BuildLoop:
 
     # ── control ───────────────────────────────────────────────────────────
 
-    def on_quiet(self, reply_text: str) -> str | None:
-        """Model stopped calling tools. Return a nudge to continue, or None to stop."""
+    async def on_quiet(self, reply_text: str) -> str | None:
+        """Model stopped calling tools. Return a nudge to continue, or None to stop.
+
+        When the plan's writes are in, the kernel verifies before accepting:
+        lint blockers become unrecovered failures the model must fix.
+        """
+        if kernel_verify_enabled() and self._plan_writes_done() and self._writes_since_verify():
+            await self.run_verify()
         v = self.verdict(reply_text)
         if v.complete:
             self.stop_reason = "complete"
@@ -296,6 +501,9 @@ class BuildLoop:
             if r.detail:
                 line += f" — {r.detail}"
             head.append(line)
+        if self.verify_report:
+            head.append("VERIFY (kernel ran it — not the model):")
+            head.extend(f"  {line}" for line in self.verify_report[:8])
         if v.failed_calls:
             head.append("Failed calls not yet recovered:")
             for o in v.failed_calls[-3:]:
@@ -311,11 +519,18 @@ class BuildLoop:
             )
         elif v.failed_calls:
             o = v.failed_calls[-1]
-            head.append(
-                f"NEXT: repeat {o.tool} with corrected arguments"
-                + (f" (slug={self.slug})" if self.slug and o.tool in _SLUG_TOOLS else "")
-                + ", then finish the plan."
-            )
+            if o.tool in ("game_lint", "browser") and o.args.get("kernel"):
+                target = str(o.args.get("path") or "the file")
+                head.append(
+                    f"NEXT: fix {target} — write_file slug={self.slug} path={target} with the full "
+                    "corrected content; the kernel re-verifies after your write."
+                )
+            else:
+                head.append(
+                    f"NEXT: repeat {o.tool} with corrected arguments"
+                    + (f" (slug={self.slug})" if self.slug and o.tool in _SLUG_TOOLS else "")
+                    + ", then finish the plan."
+                )
         head.append(
             "Call the tool now; do not describe it. Do not explore the harness "
             "(no list_dir / find outside the slug). No NEED_* markers, no SQL."
@@ -335,6 +550,8 @@ class BuildLoop:
             + (f", slug {self.slug}" if self.slug else "")
             + ".",
         ]
+        if self.verify_report:
+            lines.append("Kernel verify: " + "; ".join(x.strip() for x in self.verify_report[:4]))
         if v.complete:
             lines.append("Plan complete — summarize what was built and how to open it.")
         else:
@@ -353,4 +570,6 @@ class BuildLoop:
             "stop_reason": self.stop_reason,
             "missing": list(v.missing_steps),
             "slug": self.slug,
+            "scaffolded": self.scaffolded,
+            "verified": self._verified_at >= 0,
         }

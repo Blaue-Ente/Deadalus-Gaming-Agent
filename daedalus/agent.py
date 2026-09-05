@@ -1723,13 +1723,16 @@ class Daedalus:
                 if _pg_build or _route.use_build_subset:
                     from .build_loop import BuildLoop
                     _consult_log, _consult_extra = run_consult(_route)
-                    _nt_specs = native_specs(_route) or playground_build_specs(
+                    _loop = BuildLoop(_route, user_message, seed_log=_consult_log)
+                    _project_block = await _loop.scaffold(session_id or "")
+                    if _project_block:
+                        _consult_extra = f"{_consult_extra}\n\n{_project_block}".strip()
+                    _nt_specs = native_specs(_route, drop=_loop.drop_tools()) or playground_build_specs(
                         user_message, session_id=session_id or "",
                     )
                     _nt_sys = format_system(
                         _route, extra=_consult_extra, user_message=user_message,
                     )
-                    _loop = BuildLoop(_route, user_message, seed_log=_consult_log)
                     max_native = 10
                 else:
                     _nt_sys = (
