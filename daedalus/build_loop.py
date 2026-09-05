@@ -38,6 +38,9 @@ _SHELL_READ = re.compile(
     rf"^(?:cat|less|more|head(?:\s+-n?\s*\d+)?|tail(?:\s+-n?\s*\d+)?)\s+{_PATH}(?:\s*\|.*)?$"
 )
 _SHELL_CHECK = re.compile(rf"^node\s+(?:--check|-c)\s+{_PATH}$")
+_HTML_LINK = re.compile(
+    r"<(?:script[^>]*\ssrc|link[^>]*\shref)\s*=\s*[\"'](?P<ref>[^\"']+)[\"']", re.I,
+)
 _SESSION_SLUG_PREFIXES = ("playground:", "pg-auto-research:", "pg-auto-rev:", "pg-auto-plan:", "autopilot-plan:")
 _NAME_HINTS = (
     "snake", "tetris", "pong", "arkanoid", "breakout", "asteroids", "flappy", "platformer",
@@ -315,6 +318,13 @@ class BuildLoop:
             self.verify_report.append(head)
             self.verify_report.extend(f"  lint: {w}" for w in warnings[:4])
             ok_all = ok_all and bool(r.get("ok"))
+            for missing in self._missing_links(slug, path):
+                # index.html that loads a game.js nobody wrote is not a slice —
+                # the write gate only warned because the script could still come.
+                head = f"── game_lint check {slug}/{missing} FAILED ── referenced by {path} but never written"
+                self.observe("game_lint", {"action": "check", "slug": slug, "path": missing, "kernel": True}, head, ok=False)
+                self.verify_report.append(head)
+                ok_all = False
         slug = files[0][0]
         try:
             from .playtest import _heuristic, _signal_source
@@ -342,6 +352,29 @@ class BuildLoop:
                 self.verify_report.append(f"  browser: skipped ({str(exc)[:80]})")
         self._verified_at = len(self.observations) - 1
         return ok_all
+
+    @staticmethod
+    def _missing_links(slug: str, path: str) -> list[str]:
+        """Local ``<script src>`` / ``<link href>`` targets of an HTML file that
+        do not exist in the project."""
+        if not path.lower().endswith((".html", ".htm")):
+            return []
+        from .playground import project_dir
+
+        root = project_dir(slug)
+        try:
+            text = (root / path).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return []
+        out: list[str] = []
+        for m in _HTML_LINK.finditer(text):
+            ref = m.group("ref").split("?")[0].split("#")[0].strip()
+            if not ref or ref.lower().startswith(("http://", "https://", "//", "data:")):
+                continue
+            rel = ref.lstrip("./")
+            if not (root / rel).is_file() and rel not in out:
+                out.append(rel)
+        return out
 
     def _plan_writes_done(self) -> bool:
         rows = self.progress()

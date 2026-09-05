@@ -1424,18 +1424,27 @@ async def execute_native_tool(
             dest_dir = (playground_projects_dir() / slug / "assets") if slug else (data_root() / "generated")
             dest_dir.mkdir(parents=True, exist_ok=True)
             dest = dest_dir / filename
+            url = str(first.get("url") or "")
+            if not raw_b64 and url.startswith("data:") and ";base64," in url:
+                # OpenRouter image models return the picture inline as a data URL.
+                raw_b64 = url.split(";base64,", 1)[1]
             if raw_b64:
                 import base64
                 dest.write_bytes(base64.b64decode(raw_b64))
-            elif first.get("url"):
+            elif url:
                 import httpx
                 async with httpx.AsyncClient(timeout=30.0) as client:
-                    resp = await client.get(first["url"])
+                    resp = await client.get(url)
                     resp.raise_for_status()
                     dest.write_bytes(resp.content)
             else:
                 return "── generate_image FAILED: no b64/url ──"
-            return f"── generate_image OK {dest} ──\nprovider={img.get('provider')} model={img.get('model')}"
+            rel = f"assets/{filename}" if slug else str(dest)
+            return (
+                f"── generate_image OK {dest} ({dest.stat().st_size} bytes) ──\n"
+                f"provider={img.get('provider')} model={img.get('model')}\n"
+                + (f"Use it as <img src=\"{rel}\"> or new Image().src = '{rel}' — relative to the project root." if slug else "")
+            )
 
         if name == "remember":
             from .preferences import add as pref_add
@@ -1584,13 +1593,32 @@ async def run_native_discovery_pass(
 
     budget = max_rounds
     _round = -1
-    while _round + 1 < budget:
+    while True:
         if loop is not None and loop.out_of_time():
             # A slow builder must end with an honest wrap-up, not a client
             # timeout: no new model round once the wall-clock budget is spent.
             loop.stop_reason = "time budget exhausted"
             loop.verdict("")
             break
+        if _round + 1 >= budget:
+            if loop is None:
+                break
+            # The round budget is a checkpoint, not the end: a builder that is
+            # still calling tools gets verified now, and a nudge with more
+            # rounds while the fix budget and the clock allow it. Without this
+            # a plan could end "complete" on files nobody looked at.
+            nudge = await loop.on_quiet("")
+            if not nudge:
+                if not loop.stop_reason:
+                    loop.stop_reason = "round budget exhausted"
+                break
+            last = messages[-1] if messages else None
+            if last is not None and last.get("role") == "user" and isinstance(last.get("content"), list):
+                last["content"].append({"type": "text", "text": nudge})   # keep user/assistant alternation
+            else:
+                messages.append({"role": "user", "content": nudge})
+            all_results.append(nudge)
+            budget += loop.rounds_per_fix
         _round += 1
         resp = await call_with_tools_fn(system, messages, specs)
         content_blocks = resp.get("content", [])

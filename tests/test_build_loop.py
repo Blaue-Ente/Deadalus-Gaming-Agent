@@ -152,14 +152,25 @@ def test_slerp_nudge_names_the_missing_math3d_step(fake_tools):
     assert loop.verdict("Готово.").complete is True
 
 
-def test_budget_exhausted_while_still_calling_tools_is_reported(fake_tools):
+def test_round_budget_is_a_checkpoint_not_the_end(fake_tools):
+    """A builder still calling tools when the rounds run out is scored and
+    nudged like a quiet one; only the fix budget (or the clock) ends the turn."""
     rt = route(SNAKE)
     loop = BuildLoop(rt, SNAKE, fix_rounds=3)
     model = ScriptedModel([[_use("playground_new", name="snake-game")] for _ in range(5)])
     _run("sys", SNAKE, model, loop=loop, max_rounds=2)
-    assert loop.stop_reason == "round budget exhausted"
+    assert loop.stop_reason == "fix budget exhausted"
     assert loop.log_row()["complete"] is False
-    assert loop.nudges == 0
+    assert loop.nudges == 3
+    # the checkpoint nudge rides in the same user turn as the tool results
+    checkpoint = model.seen[2][-1]
+    assert checkpoint["role"] == "user" and checkpoint["content"][-1]["type"] == "text"
+    assert "PLAN PROGRESS" in checkpoint["content"][-1]["text"]
+
+    passive = BuildLoop(rt, SNAKE, fix_rounds=0)
+    _run("sys", SNAKE, ScriptedModel([[_use("playground_new", name="snake-game")] for _ in range(5)]),
+         loop=passive, max_rounds=2)
+    assert passive.stop_reason == "passive" and passive.nudges == 0
 
 
 def test_failed_call_repaired_later_is_not_a_blocker():
