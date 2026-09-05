@@ -54,11 +54,15 @@ PERM_MAP: dict[str, str | None] = {
 NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
     {
         "name": "read_file",
-        "description": "Read a source file (harness or playground). Optional line range.",
+        "description": (
+            "Read a source file. Playground file: slug=<project> + project-relative path. "
+            "Optional line range."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "path": {"type": "string"},
+                "slug": {"type": "string", "description": "Playground project; path is then relative to it"},
                 "line_start": {"type": "integer"},
                 "line_end": {"type": "integer"},
             },
@@ -67,11 +71,15 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
     },
     {
         "name": "list_dir",
-        "description": "List files in a directory inside the Daedalus jail.",
+        "description": (
+            "List files in a directory. Playground project: slug=<project> "
+            "(path relative to it, default '.')."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "path": {"type": "string", "description": "Relative directory, default '.'"},
+                "slug": {"type": "string", "description": "Playground project to list"},
             },
         },
     },
@@ -704,6 +712,29 @@ _HARNESS_JAIL = (
 )
 
 
+def project_nav(slug: str, path: str = "") -> str:
+    """Where the files are and how to reach them — every Playground tool result
+    says this so the model never has to hunt for its own project."""
+    from . import playground as pg
+
+    root = pg.project_dir(slug)
+    rel = (path or "").strip("/")
+    lines = [f"dir: {root}" + (f"/{rel}" if rel else "")]
+    lines.append(
+        f"preview: /api/v1/playground/projects/{slug}/preview/{rel or 'index.html'}"
+    )
+    lines.append(
+        f"tools: read_file/list_dir/run_command with slug={slug} (not cwd, not /workspace)"
+    )
+    return "\n".join(lines)
+
+
+def _jail_text(slug: str = "") -> str:
+    if not slug:
+        return _HARNESS_JAIL
+    return f"{_HARNESS_JAIL}\nYour project: {project_nav(slug)}"
+
+
 def playground_build_specs(
     message: str = "",
     *,
@@ -844,19 +875,46 @@ async def execute_native_tool(
     try:
         if name == "read_file":
             path = str(args.get("path", ""))
+            slug = str(args.get("slug") or "").strip()
+            if slug:
+                from . import playground as pg
+                try:
+                    content = pg.read_file(slug, path)
+                except FileNotFoundError:
+                    return (
+                        f"── read_file FAILED: {slug}/{path} not found ──\n"
+                        f"{project_nav(slug)}"
+                    )
+                except ValueError as exc:
+                    return f"── read_file FAILED: {exc} ──"
+                return f"── read_file {slug}/{path} ──\n{content[:8000]}"
             if _playground_session(session_id) and _harness_target(path):
-                return f"── read_file BLOCKED ──\n{_HARNESS_JAIL}"
+                return f"── read_file BLOCKED ──\n{_jail_text(slug)}"
             ls = args.get("line_start")
             le = args.get("line_end")
             r = read_file_fn(path, int(ls) if ls else None, int(le) if le else None)
             if r.get("ok"):
                 trunc = " [TRUNCATED]" if r.get("truncated") else ""
                 return f"── read_file {r['path']}{trunc} ──\n{r['content']}"
-            return f"── read_file FAILED: {r.get('error')} ──"
+            hint = ""
+            if _playground_session(session_id):
+                hint = "\nPlayground files: pass slug=<project> with a project-relative path."
+            return f"── read_file FAILED: {r.get('error')} ──{hint}"
 
         if name == "list_dir":
             from .shell_center import resolve_cwd
             rel = str(args.get("path") or ".")
+            slug = str(args.get("slug") or "").strip()
+            if slug:
+                from . import playground as pg
+                try:
+                    root = pg._safe_join(pg.project_dir(slug), rel if rel != "." else "")
+                except ValueError as exc:
+                    return f"── list_dir FAILED: {exc} ──"
+                if not root.is_dir():
+                    return f"── list_dir FAILED: {slug}/{rel} is not a directory ──\n{project_nav(slug)}"
+                names = [p.name + ("/" if p.is_dir() else "") for p in sorted(root.iterdir())[:80]]
+                return f"── list_dir {slug}/{rel} ──\n" + ("\n".join(names) or "(empty)")
             if _playground_session(session_id) and _harness_target(rel):
                 from .paths import playground_projects_dir
                 root = playground_projects_dir()
@@ -867,7 +925,8 @@ async def execute_native_tool(
                 listing = "\n".join(names) or "(empty playground)"
                 return (
                     f"── list_dir playground (harness listing refused) ──\n"
-                    f"{listing}\n{_HARNESS_JAIL}"
+                    f"{listing}\n{_HARNESS_JAIL}\n"
+                    "Use list_dir with slug=<project> for your own files."
                 )
             try:
                 root = resolve_cwd(rel)
@@ -892,7 +951,9 @@ async def execute_native_tool(
             slug = (proj or {}).get("slug") or ""
             return (
                 f"── playground_new OK slug={slug} kind={(proj or {}).get('kind')} ──\n"
-                f"Write files with write_file slug={slug}."
+                f"{project_nav(slug)}\n"
+                f"next: write_file slug={slug} path=index.html content=… "
+                "(the slug is the only address you need — do not search for the folder)."
             )
 
         if name == "write_file":
@@ -912,24 +973,30 @@ async def execute_native_tool(
                     slug, kind="static", source="built", description="auto-created on write", slug=slug,
                 )
             pg.write_file(slug, path, content)
-            return f"── write_file OK {slug}/{path} ({len(content)} chars) ──"
+            return (
+                f"── write_file OK {slug}/{path} ({len(content)} chars) ──\n"
+                f"{project_nav(slug, path)}"
+            )
 
         if name == "run_command":
             cmd = str(args.get("command") or "")
+            slug = str(args.get("slug") or "").strip()
             if _playground_session(session_id) and re.search(r"\bfind\s+/", cmd):
-                return f"── run_command BLOCKED ──\n{_HARNESS_JAIL}"
+                return f"── run_command BLOCKED ──\n{_jail_text(slug)}"
             from .shell_center import run_command
-            r = run_command(
-                cmd,
-                cwd=str(args.get("cwd") or "") or None,
-                slug=str(args.get("slug") or ""),
-                timeout=args.get("timeout"),
-            )
+            cwd = str(args.get("cwd") or "") or None
+            r = run_command(cmd, cwd=cwd, slug=slug, timeout=args.get("timeout"))
             body = (r.get("stdout") or "") + (("\n" + r["stderr"]) if r.get("stderr") else "")
             status = "OK" if r.get("ok") else "FAILED"
+            hint = ""
+            if not r.get("ok") and cwd and not slug:
+                hint = (
+                    "\nhint: Playground commands take slug=<project> instead of cwd; "
+                    "the project dir is resolved for you."
+                )
             return (
                 f"── run_command {status} exit={r.get('exit_code')} cwd={r.get('cwd')} ──\n"
-                f"{body[:8000]}"
+                f"{body[:8000]}{hint}"
             )
 
         if name == "web_search":
@@ -1526,13 +1593,15 @@ async def run_native_discovery_pass(
                     tinput = json.loads(tinput)
                 except json.JSONDecodeError:
                     tinput = {"raw": tinput}
+            note = ""
+            if loop is not None and isinstance(tinput, dict):
+                tinput, note = loop.prepare(tname, tinput)
 
             result_text = await execute_native_tool(
                 tname, tinput,
                 memory=memory, session_id=session_id,
                 read_file_fn=read_file_fn,
             )
-            all_results.append(result_text)
             blocked = "BLOCKED" in result_text
             ok = blocked or ("FAILED" not in result_text and "ERROR" not in result_text)
             tool_log.append({
@@ -1546,6 +1615,10 @@ async def run_native_discovery_pass(
                     tname, tinput if isinstance(tinput, dict) else {}, result_text,
                     ok=ok, blocked=blocked,
                 )
+                if note:
+                    result_text = f"{result_text.rstrip()}\n{note}"
+                result_text = loop.annotate(tname, result_text)
+            all_results.append(result_text)
             tool_result_blocks.append({
                 "type": "tool_result",
                 "tool_use_id": tid,

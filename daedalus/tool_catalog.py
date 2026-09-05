@@ -75,14 +75,14 @@ _NATIVE_META: dict[str, dict[str, Any]] = {
         "when": "Read a file in the jail or a Playground slug. Not for mapping the harness on a game build.",
         "aliases": ("NEED_READ_FILE", "NEED_PLAYGROUND_READ", "cat"),
         "need_marker": "NEED_READ_FILE",
-        "args_hint": "path, optional line_start/line_end",
+        "args_hint": "path, optional slug (Playground project), line_start/line_end",
     },
     "list_dir": {
         "module": "daedalus.native_tools",
         "tags": ("fs", "playground"),
         "when": "List a directory inside the jail. Playground sessions refuse daedalus/ harness paths.",
         "aliases": ("ls",),
-        "args_hint": "path (default .)",
+        "args_hint": "path (default .), optional slug (Playground project)",
     },
     "write_file": {
         "module": "daedalus.playground",

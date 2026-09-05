@@ -13,8 +13,8 @@ approves.
 
 | Stage | Title | Status |
 |-------|-------|--------|
-| S1 | Closed build loop instead of post-mortem DoD | **This MR** — awaiting owner approval |
-| S3 | Tool results as navigation (paths, slug, NEXT) | Pending |
+| S1 | Closed build loop instead of post-mortem DoD | **Done** — MR !48 (`cursor/build-loop-s1-948f`) |
+| S3 | Tool results as navigation (paths, slug, NEXT) | **This MR** — awaiting owner approval |
 | S4 | Write-time quality gate (syntax) + arcade lint | Pending |
 | S2 | Kernel-run scaffold/verify, phase-gated tools | Pending |
 | S6 | Router: negations, explicit merge only | Pending |
@@ -28,7 +28,7 @@ approves.
 | SLERP (mixed prompt) | Router merged `math3d+crowd+arcade` on negated keywords. 5× `list_dir`, zero `write_file` with content, zero `math3d`. |
 | SLERP (clean prompt) | Router chose `playground.math3d` correctly. Model emitted `<need_list_dir>` XML, one `list_dir`, then quit. No files. |
 
-## S1 — Closed build loop (this MR)
+## S1 — Closed build loop (done)
 
 **Intent:** the plan drives the model. When the model goes quiet, the kernel
 scores the plan *inside* the native round loop and, while fix rounds remain,
@@ -76,9 +76,58 @@ model would have received `✗ run_command … No such file` + `NEXT: call
 write_file with slug=snake-game`, instead of eight free rounds of exploring.
 The syntax error in `game.js` is S4's job.
 
-## How to approve S1
+## S3 — Tool results as navigation (this MR)
 
-1. Review `daedalus/build_loop.py`, the `loop=` hook in
-   `native_tools.run_native_discovery_pass`, and the `strict` contract.
-2. `DAEDALUS_STANDALONE=1 python3 -m pytest tests/test_build_loop.py tests/test_tool_router.py -q`.
-3. Reply that S1 is approved. S3 starts next.
+**Intent:** the snake run lost eight rounds because `write_file OK
+snake-game/game.js` said nothing about *where* that is, `run_command
+cwd=snake-game` silently ran in the product root, and the jail message only
+said what was forbidden. Every Playground tool result now tells the model the
+project dir, the preview URL, and that `slug=` is the only address it needs;
+the kernel fills a forgotten slug itself and appends the plan's NEXT step.
+
+**Shipped**
+
+- `native_tools.project_nav(slug, path)` — `dir:` / `preview:` / `tools: …
+  slug=<slug> (not cwd, not /workspace)`. Appended to `playground_new` and
+  `write_file` results, to `read_file`/`list_dir` failures, and to the jail
+  text when the slug is known.
+- `read_file` and `list_dir` accept `slug` (project-relative path); schemas and
+  `tool_catalog` hints updated. The harness-listing refusal now says *use
+  `list_dir slug=<project>`*.
+- `run_command` FAILED with `cwd` and no `slug` adds a one-line hint.
+- `shell_center.project_cwd()` / `resolve_cwd()` — a `cwd` written as
+  `<slug>`, `<slug>/sub`, or `/anything/<slug>` resolves into that Playground
+  project instead of falling back to the product root.
+- `BuildLoop.prepare()` — before a call: fills `slug` for slug-taking tools when
+  the model omitted it and the turn already has a project; `run_command
+  cwd=<slug>` becomes `slug=<slug>`. A deliberate `cwd` elsewhere in the jail
+  is left alone. The correction is appended to the result, not silent.
+- `BuildLoop.annotate()` — after a call: `NEXT (plan): <tool> <args>` while a
+  required step is pending; `PLAN: all required steps done — stop and
+  summarize` once none is. Idempotent.
+- `run_native_discovery_pass` applies `prepare` → execute → `observe` →
+  `annotate`; the tool log records the corrected arguments.
+
+**Done when (acceptance)**
+
+| Criterion | How we know |
+|-----------|-------------|
+| `cwd=snake-game` runs inside the project | `test_relative_cwd_named_after_project_lands_in_the_project` |
+| Results name dir, preview, slug tools | `test_project_nav_names_dir_preview_and_slug_tools` |
+| `read_file`/`list_dir slug=` work and are in the schema | `test_read_and_list_take_slug` |
+| Jail/harness refusals point to the slug | `test_harness_listing_in_playground_session_points_to_slug` |
+| Failed `cwd` command hints `slug=` | `test_failed_run_command_with_cwd_hints_slug` |
+| Kernel fills the slug, leaves deliberate cwd alone | `test_loop_prepare_fills_slug_and_drops_cwd` |
+| NEXT then stop, idempotent | `test_loop_annotate_points_next_then_stop` |
+| End-to-end through the native pass | `test_native_pass_applies_prepare_and_annotate` |
+
+**Not in S3:** syntax gate on write (S4), kernel-run verify (S2), router
+negations (S6), single build layer (S5).
+
+## How to approve S3
+
+1. Review `project_nav` / `_jail_text` in `native_tools.py`,
+   `project_cwd` in `shell_center.py`, and `prepare` / `annotate` in
+   `build_loop.py`.
+2. `DAEDALUS_STANDALONE=1 python3 -m pytest tests/test_tool_navigation.py tests/test_build_loop.py -q`.
+3. Reply that S3 is approved. S4 (write-time quality gate) starts next.
