@@ -131,6 +131,10 @@ NATIVE TOOLS
   game_canon({action: list|study|open|clone|chunk, id}) — study OSS/wikis, never copy books
   generate_image / remember / code_search
 
+TASK PLAN
+The kernel matches the ask to a playbook and injects a TASK PLAN (tools, order, docs).
+Follow that plan. Do not search daedalus/agent.py for tools — they are listed there.
+
 NEED_* CHEAT SHEET (fallback)
   <NEED_PLAYGROUND_NEW: Name | static | description>
   <NEED_PLAYGROUND_WRITE: slug | path |

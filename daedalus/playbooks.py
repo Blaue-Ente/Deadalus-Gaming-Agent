@@ -1,8 +1,12 @@
 """Daedalus Playbooks — Phase 17C.
 
-Reusable step-by-step task templates for common coding operations.
-Дедал requests a playbook with:
+RIPER / process playbooks requested by the LLM:
+
   <NEED_PLAYBOOK: name_or_query>
+
+Kernel task graphs (arcade, SLERP, Godot, …) live in
+``daedalus.task_playbooks`` and are selected by ``daedalus.tool_router``
+*before* the model talks — do not duplicate those here.
 
 The system returns the matching playbook steps which are then injected
 into the tool results so Дедал follows the correct process.

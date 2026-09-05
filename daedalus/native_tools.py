@@ -704,8 +704,25 @@ _HARNESS_JAIL = (
 )
 
 
-def playground_build_specs() -> list[dict[str, Any]]:
-    """Tools for Playground/game builds — no harness code_search archaeology."""
+def playground_build_specs(
+    message: str = "",
+    *,
+    kind: str = "",
+    intent: str = "",
+    session_id: str = "",
+) -> list[dict[str, Any]]:
+    """Tools for Playground/game builds — no harness code_search archaeology.
+
+    When ``message`` is set, the tool router narrows the subset to the
+    matched playbook (snake does not get math3d; SLERP does).
+    """
+    if (message or "").strip():
+        from .tool_router import native_specs, route
+        specs = native_specs(route(
+            message, session_id=session_id, kind=kind, intent=intent,
+        ))
+        if specs:
+            return specs
     return [t for t in NATIVE_TOOL_SPECS if t["name"] in _PLAYGROUND_BUILD_NAMES]
 
 

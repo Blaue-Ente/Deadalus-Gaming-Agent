@@ -428,6 +428,7 @@ def test_job_contract_heavy_eng_requires_tool():
             {"tool": "write_file", "ok": True},
             {"tool": "run_command", "ok": True},
             {"tool": "spatial", "ok": True},
+            {"tool": "math3d", "ok": True},
         ],
     )
     assert ok.complete is True
