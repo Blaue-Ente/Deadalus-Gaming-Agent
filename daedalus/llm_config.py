@@ -531,28 +531,31 @@ def config_for_role(role: str) -> dict:
         out = dict(primary)
         out["role"] = key
         return out
-    provider = str(pick.get("provider") or primary.get("provider") or "")
+    pick_provider = str(pick.get("provider") or "")
     model = str(pick["model"])
-    if provider == primary.get("provider") and model == primary.get("model"):
-        out = dict(primary)
-        out["role"] = key
-        return out
-    if not provider:
-        out = dict(primary)
-        out["model"] = model
-        out["role"] = key
-        out["source"] = f"role:{key}"
-        return out
-    cfg = _cfg_for_provider_model(provider, model, role=key, source=f"role:{key}:{pick.get('source')}")
-    if not cfg.get("api_key") and cfg.get("provider") == primary.get("provider"):
-        cfg["api_key"] = primary.get("api_key") or ""
+    # Env that sets only the model keeps the primary provider and key (S5).
+    if not pick_provider or pick_provider == primary.get("provider"):
+        cfg = dict(primary)
+        cfg["model"] = model
+        if pick_provider:
+            cfg["provider"] = pick_provider
+        cfg["role"] = key
+        cfg["source"] = f"role:{key}:{pick.get('source')}"
+    else:
+        cfg = _cfg_for_provider_model(
+            pick_provider, model, role=key, source=f"role:{key}:{pick.get('source')}",
+        )
+        if not cfg.get("api_key") and cfg.get("provider") == primary.get("provider"):
+            cfg["api_key"] = primary.get("api_key") or ""
     if key == "mentor" and pick.get("source") == "auto":
         try:
             from .llm_cost import current as _cost_now
             led = _cost_now()
             if led is not None and not led.below_mentor_upgrade() and "sonnet" in model.lower():
                 haiku = "claude-haiku-4-5" if cfg.get("provider") == "anthropic" else "anthropic/claude-haiku-4.5"
-                cfg = _cfg_for_provider_model(cfg.get("provider") or provider, haiku, role=key, source="role:mentor:spend-cap")
+                cfg = dict(cfg)
+                cfg["model"] = haiku
+                cfg["source"] = "role:mentor:spend-cap"
                 cfg["why"] = "build already ≥ 10¢ — Haiku for remaining mentor calls"
         except Exception:
             pass

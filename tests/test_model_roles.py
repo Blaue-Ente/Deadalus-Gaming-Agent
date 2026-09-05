@@ -56,6 +56,10 @@ def test_glm_typical_build_is_under_ten_cents():
     assert GLM.estimate_build_usd() < 0.10
     assert KIMI.estimate_build_usd() >= 0.10
     assert upgrade_below_usd() == 0.10
+    from daedalus.model_catalog import find
+    live = find("z-ai/glm-5.2", "openrouter")
+    assert live is not None and live.prompt_per_m > 0
+    assert live.estimate_build_usd() < 0.10
 
 
 def test_auto_mentor_is_sonnet_when_typical_build_is_under_10c():

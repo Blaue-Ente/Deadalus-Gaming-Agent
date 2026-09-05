@@ -273,13 +273,21 @@ def _from_presets() -> list[CatalogModel]:
 
 def all_models(*, refresh: bool = False) -> list[CatalogModel]:
     rows = list(_FALLBACK)
-    seen = {(m.provider, m.id) for m in rows}
+    seen = {(m.provider, m.id): m for m in rows}
     for m in fetch_openrouter(force=refresh) + _from_presets():
         key = (m.provider, m.id)
-        if key in seen:
-            # Live OpenRouter row replaces the static fallback for the same id.
+        old = seen.get(key)
+        if old is not None:
+            # Live OpenRouter replaces fallback. A zero-price preset does not
+            # wipe published rates we already know.
+            if (
+                m.source == "preset"
+                and not (m.prompt_per_m or m.completion_per_m)
+                and (old.prompt_per_m or old.completion_per_m)
+            ):
+                continue
             rows = [x for x in rows if (x.provider, x.id) != key]
-        seen.add(key)
+        seen[key] = m
         rows.append(m)
     return rows
 

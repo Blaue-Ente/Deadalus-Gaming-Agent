@@ -92,7 +92,7 @@ def _estimate(model: str, provider: str, n_in: int, n_out: int) -> float | None:
         m = find(model, provider) or find(model)
     except Exception:
         return None
-    if m is None:
+    if m is None or not (m.prompt_per_m or m.completion_per_m):
         return None
     return m.estimate_build_usd(n_in, n_out)
 
