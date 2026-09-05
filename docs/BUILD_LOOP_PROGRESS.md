@@ -14,8 +14,8 @@ approves.
 | Stage | Title | Status |
 |-------|-------|--------|
 | S1 | Closed build loop instead of post-mortem DoD | **Done** — MR !48 (`cursor/build-loop-s1-948f`) |
-| S3 | Tool results as navigation (paths, slug, NEXT) | **This MR** — awaiting owner approval |
-| S4 | Write-time quality gate (syntax) + arcade lint | Pending |
+| S3 | Tool results as navigation (paths, slug, NEXT) | **Done** — MR !49 (`cursor/build-loop-s3-nav-948f`) |
+| S4 | Write-time quality gate (syntax) + arcade lint | **This MR** — awaiting owner approval |
 | S2 | Kernel-run scaffold/verify, phase-gated tools | Pending |
 | S6 | Router: negations, explicit merge only | Pending |
 | S5 | One build layer, model roles, wrap-up sanitizing | Pending |
@@ -76,7 +76,7 @@ model would have received `✗ run_command … No such file` + `NEXT: call
 write_file with slug=snake-game`, instead of eight free rounds of exploring.
 The syntax error in `game.js` is S4's job.
 
-## S3 — Tool results as navigation (this MR)
+## S3 — Tool results as navigation (done)
 
 **Intent:** the snake run lost eight rounds because `write_file OK
 snake-game/game.js` said nothing about *where* that is, `run_command
@@ -124,10 +124,62 @@ the kernel fills a forgotten slug itself and appends the plan's NEXT step.
 **Not in S3:** syntax gate on write (S4), kernel-run verify (S2), router
 negations (S6), single build layer (S5).
 
-## How to approve S3
+## S4 — Write-time quality gate + arcade lint (this MR)
 
-1. Review `project_nav` / `_jail_text` in `native_tools.py`,
-   `project_cwd` in `shell_center.py`, and `prepare` / `annotate` in
-   `build_loop.py`.
-2. `DAEDALUS_STANDALONE=1 python3 -m pytest tests/test_tool_navigation.py tests/test_build_loop.py -q`.
-3. Reply that S3 is approved. S4 (write-time quality gate) starts next.
+**Intent:** `write_file` reported OK for `game.js` with a duplicate
+`let gameLoopId`, and the snake started at (20,20) on a 0..19 grid. A file that
+does not parse is not written OK; canvas smells a parser cannot see are
+reported next to the write so the model fixes them while the file is in hand.
+
+**Shipped**
+
+- `daedalus/write_gate.py` — `check_source(path, content, project_root)`:
+  `.js/.mjs/.cjs` → `node --check` (line + message; heuristic duplicate
+  top-level declaration check when node is absent); `.html` → inline
+  `<script>` blocks through the same check with the real line offset,
+  unclosed `<script>` is an error, a relative `<script src>` that does not
+  exist yet is a *warning* (write order is legitimate); `.py` → `compile`;
+  `.json` → `json.loads`; other types pass with `skipped`.
+  `DAEDALUS_WRITE_GATE=0` disables.
+- `game_lint.heuristic_web()` — `web-double-loop` (same tick started twice by
+  `setInterval`), `web-mixed-loop` (`setInterval` + `requestAnimationFrame`
+  on one function), `web-no-input` (canvas drawn, no key/pointer/touch
+  listener), `web-off-grid-start` (start cell `(N,N)` with a grid constant
+  `N`). `game_lint check` now handles `web` (`.js/.html`): syntax blockers
+  from the gate, heuristics as warnings.
+- `write_file` — after saving: `── write_file FAILED syntax slug/path ──`
+  with `syntax: line N: …` and "fix and write_file again with the full
+  content", or `── write_file OK … ──` with `gate: node --check ok` and
+  `lint: …` warnings. The file is saved either way so `read_file` works.
+- `job_contract._repair_key()` — a failed write of `game.js` is repaired only
+  by a later good write of `game.js`, not by writing `index.html`. The build
+  loop therefore keeps the bad file open and its nudge names it.
+- TASK PLAN prompt line: "'FAILED syntax' means the step is still open".
+
+**Done when (acceptance)**
+
+| Criterion | How we know |
+|-----------|-------------|
+| Duplicate `let` fails with the line | `test_duplicate_let_is_a_syntax_failure_with_line` |
+| Works without node (heuristic) | `test_heuristic_fallback_without_node` |
+| Python / JSON / unknown types | `test_python_json_and_unknown_types` |
+| HTML inline script line offset; missing src is a warning | `test_html_inline_script_reports_offset_line_and_missing_src` |
+| Snake smells: double loop, no input, off-grid start | `test_web_heuristics_catch_snake_smells` |
+| `game_lint check` covers web | `test_game_lint_check_handles_web` |
+| `write_file` FAILED keeps the file, OK carries gate/lint | `test_write_file_fails_on_syntax_but_keeps_the_file` |
+| Gate can be disabled | `test_write_gate_can_be_disabled` |
+| Repair is per file | `test_failed_write_is_repaired_only_by_the_same_file` |
+| Build loop keeps the bad write open, then completes | `test_build_loop_keeps_bad_write_open` |
+
+**Not in S4:** GDScript parse (needs `GODOT_BIN`; the `engine` tool and S2
+verify own that), CSS, TypeScript, kernel-run `playtest`/`browser` after the
+last write (S2).
+
+## How to approve S4
+
+1. Review `daedalus/write_gate.py`, `heuristic_web` in `game_lint.py`, the
+   `write_file` branch in `native_tools.py`, and `_repair_key` in
+   `job_contract.py`.
+2. `DAEDALUS_STANDALONE=1 python3 -m pytest tests/test_write_gate.py tests/test_build_loop.py -q`.
+3. Reply that S4 is approved. S2 (kernel-run scaffold/verify, phase-gated
+   tools) starts next.
