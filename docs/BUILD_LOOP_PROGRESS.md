@@ -373,6 +373,14 @@ itself and hand the result to the builder.
   (top-4 RAG chunks, 900 chars each) → LESSONS → DoD, later blocks dropped
   whole under a 14k budget; the request is never truncated.
 - No post-hoc "Self-review бележка" on wrapped builds.
+- `DAEDALUS_BUILD_TIME_BUDGET_S` (420): no new model round once the wall-clock
+  budget is spent; `on_quiet` stops instead of granting fix rounds; the
+  summary carries the elapsed time. Found in the S7 live run — GLM 5.2 needs
+  40–60 s per round and the crowd case outlived a 540 s client timeout with
+  three good files on disk and no wrap-up.
+- Playtest heuristic reads whole source files (`_signal_source`), racer rules
+  come from the ask (`:hover` is CSS, not a hovercraft), a missing browser is
+  `BLOCKED` with "do not retry".
 
 **Shipped — Mentor (`daedalus/build_mentor.py`)**
 
@@ -404,6 +412,8 @@ itself and hand the result to the builder.
 | Streak → Mentor once, schema + RAG in its prompt, consult run by the kernel, plan completes | `test_mentor_steps_in_on_a_failure_streak_and_runs_the_consult` |
 | Budget, dedupe, fail-open; quiet nudge carries the Mentor | `test_mentor_respects_budget_dedupes_and_fails_open` |
 | `stop: true` ends the loop visibly | `test_mentor_stop_verdict_ends_the_loop_and_is_visible` |
+| Time budget: no round started, honest stop, no free fix rounds | `test_time_budget_ends_the_build_with_an_honest_stop` |
+| Heuristic sees the whole file; `:hover` ≠ racer; browser missing = BLOCKED | `test_heuristic_scans_whole_files_not_the_judge_snapshot`, `test_css_hover_does_not_make_a_snake_game_a_racer`, `test_missing_browser_is_blocked_not_failed` |
 | Prompt compact, no file content | `test_mentor_prompt_is_compact_and_never_leaks_file_content` |
 
 **Not in S7:** a Mentor that edits files itself (it advises and consults; the

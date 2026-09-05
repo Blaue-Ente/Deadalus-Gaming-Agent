@@ -406,6 +406,26 @@ def test_mentor_prompt_is_compact_and_never_leaks_file_content():
     assert len(prompt) < 6000
 
 
+def test_time_budget_ends_the_build_with_an_honest_stop(fake_tools):
+    rt = route(SNAKE)
+    loop = BuildLoop(rt, SNAKE, fix_rounds=3, time_budget_s=0.001)
+    loop.started_at -= 10  # the budget is already spent when the first round would start
+    model = ScriptedModel([[_use("write_file", slug="snake-game", path="index.html", content="<canvas>")]])
+    text, log = _run(SNAKE, model, loop=loop, max_rounds=4)
+    assert model.seen == []                     # no model round was started
+    assert loop.stop_reason == "time budget exhausted"
+    assert "time budget exhausted" in loop.summary_block()
+    assert loop.log_row()["elapsed_s"] >= 10
+
+    # quiet with time left → nudge; quiet with time spent → stop, no free rounds
+    loop2 = BuildLoop(rt, SNAKE, fix_rounds=3, time_budget_s=1000)
+    assert asyncio.run(loop2.on_quiet("…")) is not None
+    loop2.started_at -= 2000
+    assert asyncio.run(loop2.on_quiet("…")) is None
+    assert loop2.stop_reason == "time budget exhausted"
+    assert BuildLoop(rt, SNAKE, fix_rounds=0, time_budget_s=0).out_of_time() is False
+
+
 def test_mentor_env_flags():
     assert mentor_enabled() is True
     os.environ["DAEDALUS_BUILD_MENTOR"] = "0"

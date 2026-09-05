@@ -47,6 +47,22 @@ _NAME_HINTS = (
 )
 
 
+DEFAULT_TIME_BUDGET_S = 420.0
+
+
+def time_budget_from_env() -> float:
+    """Wall-clock budget for one build turn. A slow builder (40–60 s per round
+    with 20 KB writes) otherwise outlives the owner's client timeout and the
+    turn ends with no wrap-up at all. ``0`` disables."""
+    raw = (os.environ.get("DAEDALUS_BUILD_TIME_BUDGET_S") or "").strip()
+    if not raw:
+        return DEFAULT_TIME_BUDGET_S
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return DEFAULT_TIME_BUDGET_S
+
+
 def fix_rounds_from_env() -> int:
     raw = (os.environ.get("DAEDALUS_BUILD_FIX_ROUNDS") or "").strip()
     if not raw:
@@ -165,7 +181,10 @@ class BuildLoop:
         fix_rounds: int | None = None,
         rounds_per_fix: int = ROUNDS_PER_FIX,
         mentor: Any | None = None,
+        time_budget_s: float | None = None,
     ) -> None:
+        import time
+
         self.route = route
         self.user_message = user_message or ""
         self.kind = str(getattr(route, "kind", "") or "static")
@@ -173,6 +192,8 @@ class BuildLoop:
         self.fix_rounds = fix_rounds_from_env() if fix_rounds is None else max(0, fix_rounds)
         self.rounds_per_fix = max(1, rounds_per_fix)
         self.mentor = mentor
+        self.time_budget_s = time_budget_from_env() if time_budget_s is None else max(0.0, time_budget_s)
+        self.started_at = time.monotonic()
         self.observations: list[ToolObservation] = []
         self.nudges = 0
         self.slug = ""
@@ -331,6 +352,14 @@ class BuildLoop:
     @property
     def active(self) -> bool:
         return self.fix_rounds > 0
+
+    def elapsed_s(self) -> float:
+        import time
+
+        return time.monotonic() - self.started_at
+
+    def out_of_time(self) -> bool:
+        return self.time_budget_s > 0 and self.elapsed_s() >= self.time_budget_s
 
     def observe(
         self,
@@ -504,6 +533,9 @@ class BuildLoop:
         if self.nudges >= self.fix_rounds:
             self.stop_reason = "fix budget exhausted"
             return None
+        if self.out_of_time():
+            self.stop_reason = "time budget exhausted"
+            return None
         self.nudges += 1
         log.info(
             "build loop nudge %d/%d playbook=%s missing=%s failed=%s",
@@ -617,7 +649,7 @@ class BuildLoop:
             f"{self.nudges} fix round(s) used"
             + (f", stopped: {self.stop_reason}" if self.stop_reason else "")
             + (f", slug {self.slug}" if self.slug else "")
-            + ".",
+            + f", {self.elapsed_s():.0f}s.",
         ]
         if self.verify_report:
             lines.append("Kernel verify: " + "; ".join(x.strip() for x in self.verify_report[:4]))
@@ -642,4 +674,5 @@ class BuildLoop:
             "scaffolded": self.scaffolded,
             "verified": self._verified_at >= 0,
             "mentor": self.mentor.log_rows() if self.mentor is not None else [],
+            "elapsed_s": round(self.elapsed_s(), 1),
         }
