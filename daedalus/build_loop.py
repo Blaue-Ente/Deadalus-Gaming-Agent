@@ -164,6 +164,7 @@ class BuildLoop:
         seed_log: list[dict[str, Any]] | None = None,
         fix_rounds: int | None = None,
         rounds_per_fix: int = ROUNDS_PER_FIX,
+        mentor: Any | None = None,
     ) -> None:
         self.route = route
         self.user_message = user_message or ""
@@ -171,6 +172,7 @@ class BuildLoop:
         self.seed_log = [dict(r) for r in (seed_log or [])]
         self.fix_rounds = fix_rounds_from_env() if fix_rounds is None else max(0, fix_rounds)
         self.rounds_per_fix = max(1, rounds_per_fix)
+        self.mentor = mentor
         self.observations: list[ToolObservation] = []
         self.nudges = 0
         self.slug = ""
@@ -506,7 +508,37 @@ class BuildLoop:
             self.nudges, self.fix_rounds, self.route.playbook.id, v.missing_steps,
             [o.tool for o in v.failed_calls],
         )
-        return self.progress_block(v)
+        block = self.progress_block(v)
+        advice = await self._mentor(f"quiet#{self.nudges}", v.failed_calls[-1] if v.failed_calls else None)
+        if advice:
+            block = f"{block}\n\n{advice.block()}"
+            if advice.stop:
+                self.stop_reason = "mentor: not achievable"
+        return block
+
+    # ── mentor checkpoints ────────────────────────────────────────────────
+
+    async def after_round(self) -> str | None:
+        """Called after every tool round. A streak of identical failures gets
+        the Mentor in *now*, before the builder burns more rounds on it."""
+        if self.mentor is None:
+            return None
+        from .build_mentor import BuildMentor
+
+        focus = BuildMentor.failure_streak(self.observations)
+        if focus is None:
+            return None
+        advice = await self._mentor("streak", focus)
+        return advice.block() if advice else None
+
+    async def _mentor(self, trigger: str, focus: ToolObservation | None) -> Any | None:
+        if self.mentor is None:
+            return None
+        try:
+            return await self.mentor.advise(self, trigger, focus)
+        except Exception as exc:  # fail-open: the deterministic nudge stands
+            log.warning("mentor skipped (%s): %s", trigger, exc)
+            return None
 
     def _step_args_hint(self, step: Step) -> str:
         args = dict(step.args or {})
@@ -607,4 +639,5 @@ class BuildLoop:
             "slug": self.slug,
             "scaffolded": self.scaffolded,
             "verified": self._verified_at >= 0,
+            "mentor": self.mentor.log_rows() if self.mentor is not None else [],
         }

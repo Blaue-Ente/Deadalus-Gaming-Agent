@@ -375,7 +375,7 @@ def get_config() -> dict:
     return cfg
 
 
-MODEL_ROLES = ("build", "wrap_up")
+MODEL_ROLES = ("build", "wrap_up", "mentor")
 
 
 def role_model(role: str) -> str:
@@ -383,7 +383,10 @@ def role_model(role: str) -> str:
 
     ``DAEDALUS_MODEL_BUILD`` drives the native tool rounds (the model that has
     to make correct tool calls); ``DAEDALUS_MODEL_WRAP_UP`` writes the closing
-    summary (cheap is fine). Same provider, key and base URL as the primary.
+    summary (cheap is fine); ``DAEDALUS_MODEL_MENTOR`` is the senior engineer
+    the kernel consults when the builder is stuck (a stronger model than the
+    builder pays off here — it is called at most a few times per build).
+    Same provider, key and base URL as the primary.
     """
     key = (role or "").strip().lower().replace("-", "_")
     if key not in MODEL_ROLES:

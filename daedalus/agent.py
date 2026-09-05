@@ -1592,10 +1592,12 @@ class Daedalus:
             user_content = user_message
 
         # [Phase 17A] DoD injection — за coding задачи инжектираме checklist
+        _dod_block_text = ""
         try:
             _dod_intent = (briefing_dict or {}).get("intent", "") if briefing_dict else ""
             if _dod.is_coding_task(user_message, _dod_intent):
-                user_content = user_content + "\n\n" + _dod.generate_dod_block(user_message, _dod_intent)
+                _dod_block_text = _dod.generate_dod_block(user_message, _dod_intent)
+                user_content = user_content + "\n\n" + _dod_block_text
         except Exception as _dod_exc:
             log.debug("DoD injection skipped: %s", _dod_exc)
 
@@ -1751,8 +1753,27 @@ class Daedalus:
                 _loop = None
                 if _pg_build or _route.use_build_subset:
                     from .build_loop import BuildLoop
+                    from .build_mentor import BuildMentor, mentor_enabled
+                    from .native_tools import execute_native_tool as _exec_native
                     _consult_log, _consult_extra = run_consult(_route)
-                    _loop = BuildLoop(_route, user_message, seed_log=_consult_log)
+                    _mentor = None
+                    if mentor_enabled():
+                        _sid = session_id or ""
+
+                        def _recall(query: str, k: int) -> list[str]:
+                            return [
+                                e.content for e in self.mem0.fused_context(_sid, query, top_k=k)
+                                if e.source in ("global", "lesson")
+                            ]
+
+                        async def _consult(tool: str, args: dict[str, Any]) -> str:
+                            return await _exec_native(
+                                tool, args, memory=self.memory, session_id=_sid,
+                                read_file_fn=_read_file_tool,
+                            )
+
+                        _mentor = BuildMentor(_call_claude, recall_fn=_recall, consult_fn=_consult)
+                    _loop = BuildLoop(_route, user_message, seed_log=_consult_log, mentor=_mentor)
                     _project_block = await _loop.scaffold(session_id or "")
                     if _project_block:
                         _consult_extra = f"{_consult_extra}\n\n{_project_block}".strip()
@@ -1774,9 +1795,19 @@ class Daedalus:
                     functools.partial(_call_claude_with_tools, role="build")
                     if _loop is not None else _call_claude_with_tools
                 )
+                if _loop is not None:
+                    # The builder reads the ask first and RAG second — never a
+                    # prefix of the persona context with the ask cut off.
+                    from .build_context import build_user_content
+                    _build_user = build_user_content(
+                        user_message, knowledge=knowledge, lessons=lessons,
+                        dod_block=_dod_block_text,
+                    )
+                else:
+                    _build_user = user_content[:8000]
                 _native_text, _native_log = await run_native_discovery_pass(
                     _nt_sys,
-                    user_content[:8000],
+                    _build_user,
                     _tool_call_fn,
                     memory=self.memory,
                     session_id=session_id or "",
@@ -4406,9 +4437,12 @@ class Daedalus:
         _had_failures = any(c.get("ok") is False for c in (tool_calls_used or []))
         _rate_limited = "[fallback:" in (raw or "")
         try:
+            # A wrapped build was already reviewed in-loop (kernel verify +
+            # Mentor); a post-hoc note on top of the sanitized reply is noise.
             _should_review = (
                 not for_self
                 and not expect_json
+                and not _build_wrapped
                 and not _rate_limited
                 and len((raw or "").strip()) > 80
                 and (len(tool_calls_used) >= 3 or _had_failures)

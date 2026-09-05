@@ -55,6 +55,11 @@ def _ledger(loop: BuildLoop, native_log: list[dict[str, Any]]) -> str:
     files = loop.written_files()
     if files:
         lines.append("Files written: " + ", ".join(f"{s}/{p}" if s else p for s, p in files[:12]))
+    mentor = getattr(loop, "mentor", None)
+    if mentor is not None and getattr(mentor, "advice", None):
+        lines.append(f"Mentor stepped in {len(mentor.advice)}×: " + "; ".join(
+            (a.diagnosis or a.instruction)[:120] for a in mentor.advice[:3]
+        ))
     if loop.slug:
         from .native_tools import project_nav
 

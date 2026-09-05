@@ -1683,6 +1683,11 @@ async def run_native_discovery_pass(
                 "content": result_text,
             })
 
+        if loop is not None:
+            mentor_block = await loop.after_round()
+            if mentor_block:
+                tool_result_blocks.append({"type": "text", "text": mentor_block})
+                all_results.append(mentor_block)
         messages.append({"role": "user", "content": tool_result_blocks})
 
     if loop is not None and not loop.stop_reason:
