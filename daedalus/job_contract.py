@@ -89,6 +89,7 @@ def _tools_ok(tool_calls: list[dict[str, Any]] | None) -> tuple[bool, bool, bool
         str(c.get("tool") or "") in {
             "NEED_PLAYGROUND_RUN", "NEED_SANDBOX", "NEED_VERIFY", "run_command",
             "NEED_TDD", "spawn_subagent", "subagent",
+            "playtest", "game_lint", "engine", "browser", "world",
         }
         or "sandbox" in str(c.get("tool") or "").lower()
         or "verify" in str(c.get("tool") or "").lower()
