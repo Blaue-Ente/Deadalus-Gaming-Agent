@@ -109,6 +109,23 @@ class DaedalusBadRequest(DaedalusError):
 
 _MODEL = "claude-sonnet-4-6"   # fallback if llm_config not available
 _MAX_TOKENS = 8192
+_BUILD_MAX_TOKENS_DEFAULT = 16384
+
+
+def _build_max_tokens() -> int:
+    """Output budget for a native build round. A whole game.js in one
+    ``write_file`` is ~6–8k tokens; at 8192 the provider cuts the JSON mid-file
+    and the round is lost. ``DAEDALUS_BUILD_MAX_TOKENS`` overrides."""
+    raw = (os.environ.get("DAEDALUS_BUILD_MAX_TOKENS") or "").strip()
+    try:
+        return max(1024, int(raw)) if raw else _BUILD_MAX_TOKENS_DEFAULT
+    except ValueError:
+        return _BUILD_MAX_TOKENS_DEFAULT
+
+
+def _max_tokens_rejected(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return "max_tokens" in text or "max_completion_tokens" in text or "maximum context" in text
 
 from .llm_config import get_config
 
@@ -262,6 +279,7 @@ async def _call_claude_with_tools(
     model = cfg.get("model", _MODEL)
     sdk = cfg.get("sdk") or "openai"
     provider = cfg.get("provider") or ""
+    max_tokens = _build_max_tokens() if role == "build" else _MAX_TOKENS
     if not api_key:
         if is_local_provider(provider) or cfg.get("local"):
             api_key = dummy_api_key(provider)
@@ -285,13 +303,16 @@ async def _call_claude_with_tools(
             }
             for t in tools
         ]
-        resp = await client.messages.create(
-            model=model,
-            max_tokens=_MAX_TOKENS,
-            system=system,
-            messages=messages,
-            tools=anthropic_tools,
-        )
+        try:
+            resp = await client.messages.create(
+                model=model, max_tokens=max_tokens, system=system, messages=messages, tools=anthropic_tools,
+            )
+        except Exception as exc:
+            if max_tokens == _MAX_TOKENS or not _max_tokens_rejected(exc):
+                raise
+            resp = await client.messages.create(
+                model=model, max_tokens=_MAX_TOKENS, system=system, messages=messages, tools=anthropic_tools,
+            )
         content = []
         for block in resp.content:
             if block.type == "text":
@@ -317,15 +338,19 @@ async def _call_claude_with_tools(
         default_headers=extra or None,
     )
     oa_messages = to_openai_messages(system, messages)
-    resp = await client.chat.completions.create(
-        model=model,
-        max_tokens=_MAX_TOKENS,
-        messages=oa_messages,
-        tools=openai_tool_specs(tools),
-        tool_choice="auto",
+    oa_kwargs: dict[str, Any] = dict(
+        model=model, messages=oa_messages, tools=openai_tool_specs(tools), tool_choice="auto",
     )
+    try:
+        resp = await client.chat.completions.create(max_tokens=max_tokens, **oa_kwargs)
+    except Exception as exc:
+        if max_tokens == _MAX_TOKENS or not _max_tokens_rejected(exc):
+            raise
+        log.info("provider rejected max_tokens=%d for %s; retrying with %d", max_tokens, model, _MAX_TOKENS)
+        resp = await client.chat.completions.create(max_tokens=_MAX_TOKENS, **oa_kwargs)
     choice = resp.choices[0] if resp.choices else None
     msg = choice.message if choice else None
+    cut_off = bool(choice) and str(getattr(choice, "finish_reason", "") or "") == "length"
     content = []
     if msg and msg.content:
         content.append({"type": "text", "text": msg.content})
@@ -335,7 +360,14 @@ async def _call_claude_with_tools(
         parsed = _parse_args(raw_args)
         args: Any = parsed.args
         if not parsed.ok:
-            args["_args_error"] = parsed.note()
+            note = parsed.note()
+            if cut_off:
+                note = (
+                    f"output cut at the {max_tokens}-token limit (finish_reason=length) — the file did "
+                    "not fit in one call. Split it into modules (e.g. physics.js + render.js + main.js, "
+                    "each its own write_file and <script> tag). " + note
+                )
+            args["_args_error"] = note
         elif parsed.repaired:
             args["_args_note"] = parsed.note()
         content.append({
@@ -569,18 +601,15 @@ _AUDIT_LOG = None  # lazy-initialised below
 
 
 def _self_improve_audit_log() -> "Path":
-    from pathlib import Path
-    from .self_improve import ADN_ROOT  # type: ignore[attr-defined]
-    p = ADN_ROOT / "data" / "daedalus" / "self_improve_audit.log"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    return p
+    from .self_improve import AUDIT_LOG  # type: ignore[attr-defined]
+    AUDIT_LOG.parent.mkdir(parents=True, exist_ok=True)
+    return AUDIT_LOG
 
 
 def _read_file_tool(raw_path: str, line_start: int | None = None, line_end: int | None = None) -> dict:
     """Execute NEED_READ_FILE: read a file safely and return its contents."""
     import time as _time
-    from pathlib import Path
-    from .self_improve import _resolve_safe, _is_hard_blocked, ADN_ROOT  # type: ignore
+    from .self_improve import _resolve_safe, _is_hard_blocked, PROJECT_ROOT  # type: ignore
 
     path_str = raw_path.strip()
     target = _resolve_safe(path_str)
@@ -620,7 +649,7 @@ def _read_file_tool(raw_path: str, line_start: int | None = None, line_end: int 
     except Exception:
         pass
 
-    rel = str(target.relative_to(ADN_ROOT.parent)) if ADN_ROOT.parent in target.parents else path_str
+    rel = str(target.relative_to(PROJECT_ROOT)) if PROJECT_ROOT in target.parents else path_str
     return {
         "ok": True,
         "path": rel,
@@ -4814,16 +4843,17 @@ class Daedalus:
                     dod.blockers = []
                     dod.summary = "build loop complete"
                 else:
-                    dod.blockers = [f"missing: {m}" for m in (_loop_row.get("missing") or [])] or [
-                        str(_loop_row.get("stop_reason") or "incomplete")
-                    ]
+                    dod.blockers = (
+                        [f"missing: {m}" for m in (_loop_row.get("missing") or [])]
+                        + [str(b) for b in (_loop_row.get("blockers") or [])]
+                        + ([f"stopped: {_loop_row['stop_reason']}"] if _loop_row.get("stop_reason") else [])
+                    ) or ["incomplete"]
                     dod.summary = "; ".join(dod.blockers)[:300]
                 if not _loop_row.get("complete"):
                     try:
                         draft_from_failure(
                             kind="chat",
-                            errors=[f"missing: {m}" for m in (_loop_row.get("missing") or [])]
-                            or [str(_loop_row.get("stop_reason") or "incomplete")],
+                            errors=list(dod.blockers),
                             context=message[:400],
                         )
                     except Exception:

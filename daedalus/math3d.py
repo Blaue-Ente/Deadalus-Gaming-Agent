@@ -575,9 +575,14 @@ def run_action(action: str = "catalog", **fields: Any) -> dict[str, Any]:
     """Native-tool entry. ``action`` is an op name, or ``batch`` with ``ops``."""
     act = (action or "catalog").strip().lower().replace("-", "_")
     if act in ("batch", "run"):
-        rows = fields.get("ops") or fields.get("items") or []
+        rows = fields.get("ops") or fields.get("items") or fields.get("operations") or []
+        if isinstance(rows, str):
+            try:
+                rows = json.loads(rows)
+            except ValueError:
+                rows = []
         if not isinstance(rows, list) or not rows:
-            return {"ok": False, "error": "batch needs ops: [{op, ...}, ...]"}
+            return {"ok": False, "error": "batch needs ops: [{op, ...}, ...]", "ops": list(OPS)}
         results = []
         all_ok = True
         for row in rows[:24]:
@@ -585,8 +590,9 @@ def run_action(action: str = "catalog", **fields: Any) -> dict[str, Any]:
                 results.append({"ok": False, "error": "op row must be an object"})
                 all_ok = False
                 continue
-            op_name = str(row.get("op") or "")
-            one = run_op(op_name, {k: v for k, v in row.items() if k != "op"})
+            # Models name the op `action` / `name` as often as `op`.
+            op_name = str(row.get("op") or row.get("action") or row.get("name") or "")
+            one = run_op(op_name, {k: v for k, v in row.items() if k not in ("op", "action", "name")})
             results.append(one)
             if not one.get("ok") or one.get("verdict") == "mismatch":
                 all_ok = False

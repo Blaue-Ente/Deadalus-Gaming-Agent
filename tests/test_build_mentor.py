@@ -201,6 +201,139 @@ def test_loop_reroutes_inspection_commands_to_read_file_and_game_lint(fake_tools
     assert any("→ read_file path=index.html" in r for r in results)
 
 
+def test_bare_node_check_lints_the_newest_script_instead_of_reading_stdin(fake_tools):
+    """GLM 5.2 run C: `node --check` with no file sat on stdin for 30s, twice."""
+    rt = route(SLERP)
+    loop = BuildLoop(rt, SLERP, fix_rounds=1)
+    loop.slug = "slerp-demo"
+    # Nothing written yet → nothing to lint, the command stays a shell command.
+    assert loop.reroute("run_command", {"command": "node --check"})[0] == "run_command"
+    loop.observe("write_file", {"slug": "slerp-demo", "path": "index.html"}, "ok", ok=True)
+    loop.observe("write_file", {"slug": "slerp-demo", "path": "game.js"}, "ok", ok=True)
+    loop.observe("write_file", {"slug": "slerp-demo", "path": "game2.js"}, "ok", ok=True)
+    tool, args, note = loop.reroute("run_command", {"command": "node --check", "slug": "slerp-demo"})
+    assert tool == "game_lint"
+    assert args == {"action": "check", "path": "game2.js", "slug": "slerp-demo"}
+    assert "had no file" in note and "game.js" in note
+    tool, _, _ = loop.reroute("run_command", {"command": "node -c"})
+    assert tool == "game_lint"
+
+
+def test_failed_shell_inspection_is_repaired_by_the_tool_that_does_the_job():
+    calls = [
+        {"tool": "run_command", "ok": False, "input": {"command": "node --check", "slug": "slerp-demo"}},
+        {"tool": "game_lint", "ok": True, "input": {"action": "check", "path": "game.js"}},
+    ]
+    assert unrecovered_failure_indexes(calls) == []
+    calls = [
+        {"tool": "run_command", "ok": False, "input": {"command": "cat index.html | head"}},
+        {"tool": "read_file", "ok": True, "input": {"path": "index.html"}},
+    ]
+    assert unrecovered_failure_indexes(calls) == []
+    # A failed *build* command is not repaired by looking at files.
+    calls = [
+        {"tool": "run_command", "ok": False, "input": {"command": "npm run build"}},
+        {"tool": "read_file", "ok": True, "input": {"path": "index.html"}},
+    ]
+    assert unrecovered_failure_indexes(calls) == [0]
+
+
+def test_shell_children_get_a_closed_stdin(tmp_path, monkeypatch):
+    """A child that reads stdin must see EOF at once, not wait for the timeout."""
+    import sys
+    import time
+
+    from daedalus import shell_center
+
+    monkeypatch.setenv("DAEDALUS_SHELL_ISOLATION", "1")
+    monkeypatch.setenv("DAEDALUS_SHELL_ENABLED", "1")
+    monkeypatch.setattr(shell_center, "shell_enabled", lambda: True)
+    monkeypatch.setattr(shell_center, "resolve_cwd", lambda cwd, slug="": tmp_path)
+    monkeypatch.setattr(shell_center, "_append_history", lambda row: None)
+    (tmp_path / "read_stdin.py").write_text("import sys\nprint(len(sys.stdin.read()))\n", encoding="utf-8")
+    t0 = time.perf_counter()
+    row = shell_center.run_command(f"{sys.executable} read_stdin.py", timeout=10)
+    assert row["ok"] is True, row
+    assert row["stdout"].strip() == "0"
+    assert time.perf_counter() - t0 < 8
+
+
+def test_read_file_tool_works_without_a_monorepo(monkeypatch, tmp_path):
+    """Run C crowd: `batch_verify read` crashed on `ADN_ROOT.parent` — ADN_ROOT is
+    None in a standalone checkout, and every read_file died on the last line."""
+    from daedalus import agent, self_improve
+
+    target = self_improve.PROJECT_ROOT / "daedalus" / "__init__.py"
+    monkeypatch.setattr(self_improve, "ADN_ROOT", None)
+    monkeypatch.setattr(self_improve, "AUDIT_LOG", tmp_path / "audit.log")
+    out = agent._read_file_tool("daedalus/__init__.py")
+    assert out["ok"] is True, out
+    assert out["path"] == "daedalus/__init__.py" and out["total_lines"] >= 1
+    assert target.is_file()
+
+
+def test_build_rounds_get_a_bigger_output_budget(monkeypatch):
+    from daedalus import agent
+
+    monkeypatch.delenv("DAEDALUS_BUILD_MAX_TOKENS", raising=False)
+    assert agent._build_max_tokens() == 16384 > agent._MAX_TOKENS
+    monkeypatch.setenv("DAEDALUS_BUILD_MAX_TOKENS", "32000")
+    assert agent._build_max_tokens() == 32000
+    monkeypatch.setenv("DAEDALUS_BUILD_MAX_TOKENS", "junk")
+    assert agent._build_max_tokens() == 16384
+    assert agent._max_tokens_rejected(Exception("400: max_tokens must be <= 8192"))
+    assert not agent._max_tokens_rejected(Exception("429 rate limited"))
+
+
+def test_tool_round_reports_the_token_cut_as_the_cause(monkeypatch):
+    """finish_reason=length + broken JSON → the model is told the file did not fit,
+    not just that its JSON was invalid."""
+    import types
+
+    from daedalus import agent
+
+    seen: dict = {}
+
+    class _Completions:
+        async def create(self, **kw):
+            seen.update(kw)
+            fn = types.SimpleNamespace(name="write_file", arguments='{"slug":"s","path":"game.js","content":"const a = 1;\\nfunction f() {')
+            tc = types.SimpleNamespace(id="c1", function=fn)
+            msg = types.SimpleNamespace(content=None, tool_calls=[tc])
+            choice = types.SimpleNamespace(message=msg, finish_reason="length")
+            return types.SimpleNamespace(choices=[choice])
+
+    class _Client:
+        def __init__(self, **kw):
+            self.chat = types.SimpleNamespace(completions=_Completions())
+
+    import openai
+
+    monkeypatch.setattr(openai, "AsyncOpenAI", _Client)
+    monkeypatch.setattr(
+        "daedalus.llm_config.config_for_role",
+        lambda role: {"provider": "openrouter", "model": "z-ai/glm-5.2", "api_key": "k", "sdk": "openai", "base_url": "http://x"},
+    )
+    out = asyncio.run(agent._call_claude_with_tools("sys", [{"role": "user", "content": "go"}], [], role="build"))
+    assert seen["max_tokens"] == 16384
+    call = out["content"][0]
+    assert call["name"] == "write_file"
+    assert "finish_reason=length" in call["input"]["_args_error"]
+    assert "Split it into modules" in call["input"]["_args_error"]
+
+
+def test_build_loop_log_row_names_the_real_blocker(fake_tools):
+    rt = route(SLERP)
+    loop = BuildLoop(rt, SLERP, fix_rounds=1)
+    loop.slug = "slerp-demo"
+    loop.observe("write_file", {"slug": "slerp-demo", "path": "game.js"}, "ok", ok=True)
+    loop.observe("run_command", {"command": "npm run build", "slug": "slerp-demo"}, "── run_command FAILED ──", ok=False)
+    row = loop.log_row()
+    assert row["complete"] is False
+    assert any("run_command" in f for f in row["failed"])
+    assert row["blockers"]
+
+
 # ── verify: demos are not arcade games ────────────────────────────────────
 
 def test_demo_playbooks_skip_the_arcade_fun_gate():
