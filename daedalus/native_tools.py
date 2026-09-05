@@ -1447,11 +1447,16 @@ async def run_native_discovery_pass(
     read_file_fn: Callable[..., dict],
     max_rounds: int = 8,
     tools: list[dict[str, Any]] | None = None,
+    loop: Any = None,
 ) -> tuple[str | None, list[dict[str, Any]]]:
     """Run native tool rounds. Returns (result_text, tool_log).
 
     Returns (None, []) if no tools were called — caller uses the marker path.
     JSON/XML tool dumps in assistant text are executed like native tool_calls.
+
+    ``loop`` is a ``build_loop.BuildLoop``. With it, a quiet round (no tool
+    calls) does not end the turn: the loop scores the plan and, while fix
+    rounds remain, injects PLAN PROGRESS as the next user turn.
     """
     from .tool_dumps import extract_tool_dumps
 
@@ -1460,7 +1465,10 @@ async def run_native_discovery_pass(
     tool_log: list[dict[str, Any]] = []
     all_results: list[str] = []
 
-    for _round in range(max_rounds):
+    budget = max_rounds
+    _round = -1
+    while _round + 1 < budget:
+        _round += 1
         resp = await call_with_tools_fn(system, messages, specs)
         content_blocks = resp.get("content", [])
 
@@ -1488,6 +1496,15 @@ async def run_native_discovery_pass(
 
         if not tool_uses:
             final = "\n".join(text_parts).strip()
+            nudge = loop.on_quiet(final) if loop is not None else None
+            if nudge:
+                messages.append({
+                    "role": "assistant",
+                    "content": assistant_content or [{"type": "text", "text": final or "(no reply)"}],
+                })
+                messages.append({"role": "user", "content": nudge})
+                budget += loop.rounds_per_fix
+                continue
             if all_results:
                 combined = (
                     "━━━ NATIVE TOOL RESULTS ━━━\n"
@@ -1517,12 +1534,18 @@ async def run_native_discovery_pass(
             )
             all_results.append(result_text)
             blocked = "BLOCKED" in result_text
+            ok = blocked or ("FAILED" not in result_text and "ERROR" not in result_text)
             tool_log.append({
                 "tool": tname,
                 "input": {k: v for k, v in tinput.items() if k != "content"} if isinstance(tinput, dict) else {},
-                "ok": blocked or ("FAILED" not in result_text and "ERROR" not in result_text),
+                "ok": ok,
                 "blocked": blocked,
             })
+            if loop is not None:
+                loop.observe(
+                    tname, tinput if isinstance(tinput, dict) else {}, result_text,
+                    ok=ok, blocked=blocked,
+                )
             tool_result_blocks.append({
                 "type": "tool_result",
                 "tool_use_id": tid,
@@ -1531,6 +1554,9 @@ async def run_native_discovery_pass(
 
         messages.append({"role": "user", "content": tool_result_blocks})
 
+    if loop is not None and not loop.stop_reason:
+        loop.stop_reason = "round budget exhausted"
+        loop.verdict("")
     if all_results:
         return "━━━ NATIVE TOOL RESULTS ━━━\n" + "\n\n".join(all_results), tool_log
     return None, []
