@@ -17,6 +17,7 @@ from app.envload import load_env_file
 from app.playground_api import router as playground_router
 from app.harness_api import router as harness_router
 from daedalus.playground_router import router as published_apps_router
+from daedalus.skill_catalog import catalog_router
 from daedalus.paths import product_root, repo_root, chroma_dir
 from daedalus.identity_standalone import DAEDALUS_STANDALONE_PREAMBLE
 from daedalus.identity import build_persona
@@ -104,6 +105,7 @@ app.include_router(playground_router)
 app.include_router(published_apps_router)
 app.include_router(admin_compat_router)
 app.include_router(harness_router)
+app.include_router(catalog_router)
 if _UI_STATIC.is_dir():
     app.mount("/admin/static", StaticFiles(directory=_UI_STATIC), name="admin-static")
 if _STATIC.is_dir():
@@ -115,6 +117,9 @@ class ChatBody(BaseModel):
     message: str = Field(..., min_length=1, max_length=20000)
     session_id: str = Field(default="default", max_length=128)
     effort: str = Field(default="auto", max_length=16)
+    skill_ids: list[str] = Field(default_factory=list)
+    mcp_ids: list[str] = Field(default_factory=list)
+    attachment_ids: list[str] = Field(default_factory=list)
 
 
 class MeshBody(BaseModel):
@@ -169,10 +174,10 @@ async def capabilities() -> dict:
             "effort-routing", "world-kit", "world-runtime", "long-horizon",
             "owner-token", "typed-tools", "atomic-router", "durable-runs",
             "one-builder", "quality-gate", "engine-runners", "godot-runtime",
-            "gameplay-bot", "asset-pipeline-v2", "skill-memory", "production-layer",
+            "gameplay-bot", "asset-pipeline-v2",             "skill-memory", "production-layer",
             "unity-mcp", "game-agent-bench",
             "math3d", "game-lint", "profiler", "game-canon", "spatial",
-            "tool-router",
+            "tool-router", "session-context", "skill-catalog",
         ],
         "mesh_endpoint": "/api/iyveris",
         "studio": "/",
@@ -244,6 +249,9 @@ async def chat(body: ChatBody) -> dict:
             message=body.message,
             session_id=body.session_id,
             effort=body.effort,
+            skill_ids=body.skill_ids,
+            mcp_ids=body.mcp_ids,
+            attachment_ids=body.attachment_ids,
         )
     except HTTPException:
         raise

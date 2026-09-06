@@ -107,10 +107,23 @@ _SKILL_SOURCES = [
     {
         "repo": "Prat011/awesome-llm-skills",
         "description": "Curated LLM skills (Markdown) for Claude/Gemini/Codex",
-        "skill_file": "SKILL.md",   # look for this file in each subdirectory
+        "skill_file": "SKILL.md",
         "category": "llm-skill",
+        "trusted": True,
+    },
+    {
+        "repo": "addyosmani/agent-skills",
+        "description": "Production engineering skills (spec, plan, TDD, review, ship)",
+        "skill_file": "SKILL.md",
+        "root": "skills",
+        "category": "engineering",
+        "trusted": True,
     },
 ]
+
+TRUSTED_REPOS = frozenset(
+    str(s["repo"]) for s in _SKILL_SOURCES if s.get("trusted")
+) | frozenset({"multica-ai/andrej-karpathy-skills"})
 
 # Extra individual documents — well-known technique guides fetched directly
 _EXTRA_DOCS: list[dict] = [
@@ -882,23 +895,25 @@ def _fetch_repo_skills(source: dict) -> list[dict]:
     repo = source["repo"]
     skill_file = source.get("skill_file", "SKILL.md")
     category = source.get("category", "llm-skill")
+    root = str(source.get("root") or "").strip().strip("/")
     skills = []
 
-    # List top-level directories
-    contents = _gh_get(f"/repos/{repo}/contents/")
+    list_path = f"/repos/{repo}/contents/{root}" if root else f"/repos/{repo}/contents/"
+    contents = _gh_get(list_path)
     if not contents or not isinstance(contents, list):
         log.warning("skill_catalog: cannot list %s contents", repo)
         return skills
 
+    skip_dirs = {"docs", "assets", "images", ".github", "references", "scripts"}
     for item in contents:
         if item.get("type") != "dir":
             continue
         dir_name = item["name"]
-        if dir_name.startswith(".") or dir_name in ("docs", "assets", "images", ".github"):
+        if dir_name.startswith(".") or dir_name in skip_dirs:
             continue
 
-        # Fetch SKILL.md from this directory
-        skill_data = _gh_get(f"/repos/{repo}/contents/{dir_name}/{skill_file}")
+        rel = f"{root}/{dir_name}/{skill_file}" if root else f"{dir_name}/{skill_file}"
+        skill_data = _gh_get(f"/repos/{repo}/contents/{rel}")
         if not skill_data or isinstance(skill_data, list) or "content" not in skill_data:
             continue
 
@@ -906,7 +921,6 @@ def _fetch_repo_skills(source: dict) -> list[dict]:
         if len(text.strip()) < 50:
             continue
 
-        # Extract title from first H1/H2 line
         title = dir_name.replace("-", " ").replace("_", " ").title()
         for line in text.splitlines()[:10]:
             line = line.strip()
@@ -920,10 +934,42 @@ def _fetch_repo_skills(source: dict) -> list[dict]:
             "category": category,
             "source_repo": repo,
             "dir": dir_name,
-            "text": text[:3000],  # cap at 3000 chars for embedding quality
+            "rel": rel,
+            "trusted": bool(source.get("trusted")),
+            "text": text[:3000],
         })
 
     log.info("skill_catalog: fetched %d skills from %s", len(skills), repo)
+    return skills
+
+
+def _fetch_voltagent_index() -> list[dict]:
+    """Index entries from VoltAgent/awesome-agent-skills (discovery, not full bodies)."""
+    data = _gh_get("/repos/VoltAgent/awesome-agent-skills/contents/README.md")
+    if not data or isinstance(data, list) or "content" not in data:
+        log.warning("skill_catalog: cannot read VoltAgent awesome README")
+        return []
+    text = _decode_b64(data["content"])
+    import re
+
+    skills: list[dict] = []
+    for m in re.finditer(r"- \*\*\[([^\]]+)\]\(([^)]+)\)\*\* - ([^\n]+)", text):
+        name, url, desc = m.group(1).strip(), m.group(2).strip(), m.group(3).strip()
+        if not name or name.lower() in {"voltagent", "official"}:
+            continue
+        skills.append({
+            "id": f"index:voltagent/{name}",
+            "title": name,
+            "category": "index",
+            "source_repo": "VoltAgent/awesome-agent-skills",
+            "url": url,
+            "dir": name,
+            "trusted": False,
+            "text": f"{name}\n{desc}\n{url}"[:1500],
+        })
+        if len(skills) >= 800:
+            break
+    log.info("skill_catalog: indexed %d VoltAgent listings", len(skills))
     return skills
 
 
@@ -960,6 +1006,11 @@ def refresh_catalog(force: bool = False) -> dict[str, Any]:
         except Exception as exc:
             errors.append(f"{source['repo']}: {exc}")
             log.warning("skill_catalog: fetch error for %s: %s", source["repo"], exc)
+    try:
+        all_skills.extend(_fetch_voltagent_index())
+    except Exception as exc:
+        errors.append(f"VoltAgent/awesome-agent-skills: {exc}")
+        log.warning("skill_catalog: VoltAgent index failed: %s", exc)
 
     if not all_skills:
         return {"ok": False, "error": "No skills fetched", "errors": errors}
@@ -972,6 +1023,9 @@ def refresh_catalog(force: bool = False) -> dict[str, Any]:
         "category": s.get("category", ""),
         "source":   s.get("source_repo", "builtin"),
         "dir":      s.get("dir", ""),
+        "rel":      s.get("rel", ""),
+        "url":      s.get("url", ""),
+        "trusted":  "1" if s.get("trusted") else "0",
     } for s in all_skills]
 
     try:
@@ -1013,15 +1067,22 @@ def search_skills(query: str, top_k: int = 5) -> list[dict[str, Any]]:
             include=["documents", "metadatas", "distances"],
         )
         results = []
+        ids_list   = (res.get("ids") or [[]])[0]
         docs_list  = (res.get("documents") or [[]])[0]
         metas_list = (res.get("metadatas") or [[]])[0]
         dists_list = (res.get("distances") or [[]])[0]
-        for doc, meta, dist in zip(docs_list, metas_list, dists_list):
+        for cid, doc, meta, dist in zip(ids_list, docs_list, metas_list, dists_list):
             score = round(1.0 - float(dist), 3)  # cosine similarity 0-1
+            meta = meta or {}
             results.append({
+                "id":       cid,
                 "title":    meta.get("title", "?"),
                 "category": meta.get("category", ""),
                 "source":   meta.get("source", ""),
+                "dir":      meta.get("dir", ""),
+                "url":      meta.get("url", ""),
+                "rel":      meta.get("rel", ""),
+                "trusted":  str(meta.get("trusted") or "") in ("1", "true", "True"),
                 "score":    score,
                 "text":     (doc or "")[:800],
             })
@@ -1029,6 +1090,166 @@ def search_skills(query: str, top_k: int = 5) -> list[dict[str, Any]]:
     except Exception as exc:
         log.warning("skill_catalog: search error: %s", exc)
         return []
+
+
+def peek_catalog(limit: int = 40) -> list[dict[str, Any]]:
+    col = _get_col()
+    if col is None:
+        return []
+    try:
+        if col.count() == 0:
+            return []
+        res = col.get(limit=max(1, min(limit, 80)), include=["metadatas", "documents"])
+    except Exception as exc:
+        log.warning("skill_catalog: peek failed: %s", exc)
+        return []
+    out: list[dict[str, Any]] = []
+    ids = res.get("ids") or []
+    metas = res.get("metadatas") or []
+    docs = res.get("documents") or []
+    for cid, meta, doc in zip(ids, metas, docs):
+        meta = meta or {}
+        if str(meta.get("category") or "") == "technique":
+            continue
+        out.append({
+            "id": cid,
+            "title": meta.get("title", cid),
+            "category": meta.get("category", ""),
+            "source": meta.get("source", ""),
+            "dir": meta.get("dir", ""),
+            "url": meta.get("url", ""),
+            "trusted": str(meta.get("trusted") or "") in ("1", "true", "True"),
+            "text": (doc or "")[:400],
+        })
+        if len(out) >= limit:
+            break
+    return out
+
+
+def get_catalog_entry(skill_id: str) -> dict[str, Any] | None:
+    sid = (skill_id or "").strip()
+    if not sid:
+        return None
+    col = _get_col()
+    if col is None:
+        return None
+    try:
+        res = col.get(ids=[sid], include=["metadatas", "documents"])
+    except Exception:
+        return None
+    ids = res.get("ids") or []
+    if not ids:
+        return None
+    meta = (res.get("metadatas") or [{}])[0] or {}
+    doc = (res.get("documents") or [""])[0] or ""
+    return {
+        "id": ids[0],
+        "title": meta.get("title", ids[0]),
+        "category": meta.get("category", ""),
+        "source": meta.get("source", ""),
+        "dir": meta.get("dir", ""),
+        "rel": meta.get("rel", ""),
+        "url": meta.get("url", ""),
+        "trusted": str(meta.get("trusted") or "") in ("1", "true", "True"),
+        "text": doc,
+    }
+
+
+def _parse_frontmatter_local(raw: str) -> tuple[dict[str, str], str]:
+    from .learned_skills import _parse_frontmatter
+    return _parse_frontmatter(raw)
+
+
+def _github_skill_md(repo: str, rel: str) -> str:
+    data = _gh_get(f"/repos/{repo}/contents/{rel}")
+    if not data or isinstance(data, list) or "content" not in data:
+        return ""
+    return _decode_b64(data["content"])
+
+
+def install_skill(skill_id: str) -> dict[str, Any]:
+    """Copy a catalog SKILL.md into installed_skills (trusted) or a pending draft."""
+    sid = (skill_id or "").strip()
+    if not sid or ".." in sid:
+        return {"ok": False, "error": "invalid skill id"}
+
+    entry = get_catalog_entry(sid)
+    repo = ""
+    rel = ""
+    url = ""
+    title = sid
+    trusted = False
+    if entry:
+        repo = str(entry.get("source") or "")
+        rel = str(entry.get("rel") or "")
+        url = str(entry.get("url") or "")
+        title = str(entry.get("title") or sid)
+        trusted = bool(entry.get("trusted")) or repo in TRUSTED_REPOS
+    elif sid.startswith("skill:") and sid.count("/") >= 2:
+        _, rest = sid.split(":", 1)
+        parts = rest.split("/")
+        repo = "/".join(parts[:2])
+        dirname = "/".join(parts[2:])
+        source = next((s for s in _SKILL_SOURCES if s["repo"] == repo), None)
+        root = str((source or {}).get("root") or "").strip().strip("/")
+        rel = f"{root}/{dirname}/SKILL.md" if root else f"{dirname}/SKILL.md"
+        trusted = repo in TRUSTED_REPOS
+        title = dirname
+
+    body = ""
+    if repo and rel:
+        body = _github_skill_md(repo, rel)
+    if not body and url and "github.com" in url:
+        import re
+        m = re.search(r"github\.com/([^/]+)/([^/]+)/(?:blob|tree)/[^/]+/(.+)", url)
+        if m:
+            repo = f"{m.group(1)}/{m.group(2)}"
+            path = m.group(3).rstrip("/")
+            if not path.endswith("SKILL.md"):
+                path = f"{path}/SKILL.md"
+            body = _github_skill_md(repo, path)
+            trusted = trusted or repo in TRUSTED_REPOS
+    if not body and entry and (entry.get("text") or "").startswith("---"):
+        body = str(entry.get("text") or "")
+    if not body or len(body.strip()) < 50:
+        return {
+            "ok": False,
+            "error": "No SKILL.md to install. Search found an index listing — open the source URL, or pick an Addy Osmani / builtin skill.",
+            "url": url,
+            "id": sid,
+        }
+
+    meta, md_body = _parse_frontmatter_local(body)
+    name = meta.get("name") or (rel.split("/")[-2] if rel else title)
+    desc = meta.get("description") or title
+    from .learned_skills import list_skills, queue_draft, write_installed
+
+    live_ids = {s["id"] for s in list_skills()}
+    slug_guess = name.replace(" ", "-").lower()
+    if slug_guess in live_ids and any(
+        s["id"] == slug_guess and s.get("origin") == "builtin" for s in list_skills()
+    ):
+        return {"ok": False, "error": f"'{slug_guess}' is a builtin Daedalus skill — pin it instead of installing."}
+
+    if not trusted:
+        rec = queue_draft(
+            name=str(name),
+            description=str(desc)[:240],
+            body=md_body[:4000],
+            origin="catalog",
+            kind="catalog",
+            extra={"source": repo or url or sid},
+        )
+        return {
+            "ok": True,
+            "pending": True,
+            "id": rec.get("id"),
+            "name": rec.get("name"),
+            "message": "Untrusted catalog skill queued as a Lesson. Approve it in Studio before it injects.",
+        }
+
+    path = write_installed(name=str(name), description=str(desc), body=md_body, source=repo or sid)
+    return {"ok": True, "pending": False, "id": path.stem, "path": str(path), "name": path.stem}
 
 
 def catalog_status() -> dict[str, Any]:
@@ -1045,6 +1266,7 @@ def catalog_status() -> dict[str, Any]:
         "total_skills": cnt,
         "last_refresh": last_ts,
         "chroma_path": str(_chroma_path()),
+        "sources": [s["repo"] for s in _SKILL_SOURCES] + ["VoltAgent/awesome-agent-skills"],
     }
 
 
@@ -1052,6 +1274,7 @@ def catalog_status() -> dict[str, Any]:
 # FastAPI router
 # ---------------------------------------------------------------------------
 from fastapi import APIRouter as _APIRouter, Query as _Query, Depends as _Depends
+from pydantic import BaseModel as _BaseModel, Field as _Field
 
 try:
     from argos_data_nexus.admin import require_admin as _require_admin
@@ -1068,7 +1291,22 @@ async def skill_catalog_list(q: str = _Query("", description="Search query (empt
     if q.strip():
         results = search_skills(q, top_k=8)
         return {"query": q, "count": len(results), "results": results}
-    return {"status": catalog_status()}
+    st = catalog_status()
+    st["items"] = peek_catalog(40)
+    return {"status": st, "items": st["items"]}
+
+
+class _InstallBody(_BaseModel):
+    id: str = _Field(..., min_length=1, max_length=220)
+
+
+@catalog_router.post(
+    "/api/v1/daedalus/skill-catalog/install",
+    dependencies=[_Depends(_require_admin)],
+)
+async def skill_catalog_install(body: _InstallBody):
+    """Install one catalog SKILL.md locally. Untrusted sources wait for Approve."""
+    return install_skill(body.id)
 
 
 @catalog_router.post(

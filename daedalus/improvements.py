@@ -731,6 +731,8 @@ def select_skills(user_message: str, intent: str, hint: str = "") -> list[str]:
         "capacitor_ship": ["capacitor", "ionic", "pakeplus", "hybrid mobile",
                            "webview wrap", "npx cap", "ios+android wrap",
                            "същата игра на телефон"],
+        "karpathy": ["karpathy", "think before coding", "simplicity first",
+                     "surgical change", "overcomplicat", "drive-by"],
     }
     for name in _SKILLS_CACHE:
         kws = keywords.get(name, [name.split("_")[0]])

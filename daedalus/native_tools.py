@@ -999,10 +999,27 @@ async def execute_native_tool(
 
         if name == "mcp_call":
             from . import mcp_client
+            from .session_context import mcp_allowed
             server = str(args.get("server") or "")
+            ok_mcp, why = mcp_allowed(server)
+            if not ok_mcp:
+                return f"── mcp_call BLOCKED ──\n{why}"
             if args.get("list_tools") or not args.get("tool"):
                 if not server:
-                    return "── mcp ──\n" + json.dumps(mcp_client.status(), ensure_ascii=False, indent=2)[:3000]
+                    status = mcp_client.status()
+                    pack = None
+                    try:
+                        from .session_context import current as _turn
+                        pack = _turn()
+                    except Exception:
+                        pack = None
+                    if pack and pack.mcp_ids:
+                        servers = status.get("servers") or {}
+                        status["servers"] = {
+                            k: v for k, v in servers.items() if k in pack.mcp_ids
+                        }
+                        status["pinned"] = list(pack.mcp_ids)
+                    return "── mcp ──\n" + json.dumps(status, ensure_ascii=False, indent=2)[:3000]
                 r = await mcp_client.list_tools(server)
             else:
                 r = await mcp_client.call_tool(
