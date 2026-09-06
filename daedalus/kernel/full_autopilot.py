@@ -207,11 +207,13 @@ async def run_full_autopilot(
     try:
         from daedalus.learned_skills import disclose
         from daedalus.game_engineer import extra_skill_ids, prefer_skill_id
+        from daedalus.session_context import load as load_session_ctx
         desc = state.description
         lessons = disclose(
             f"{kind} {desc}",
             extra_ids=extra_skill_ids(desc, kind=kind),
             prefer_id=prefer_skill_id(desc, kind=kind),
+            pin_ids=load_session_ctx(state.slug).get("skill_ids") or [],
             limit=2,
         )
     except Exception:

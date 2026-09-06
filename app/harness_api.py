@@ -5,9 +5,9 @@ import asyncio
 import json
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 router = APIRouter(tags=["harness"])
 
@@ -124,6 +124,66 @@ async def skills_reject(draft_id: str, reason: str = "") -> dict[str, Any]:
     if not result.get("ok"):
         code = 404 if "unknown" in str(result.get("error") or "") else 400
         raise HTTPException(status_code=code, detail=result.get("error") or "not found")
+    return result
+
+
+class SessionContextBody(BaseModel):
+    session_id: str = Field(..., min_length=1, max_length=128)
+    skill_ids: list[str] | None = None
+    mcp_ids: list[str] | None = None
+
+    @field_validator("skill_ids", "mcp_ids")
+    @classmethod
+    def _cap_pins(cls, v: list[str] | None) -> list[str] | None:
+        if v is None:
+            return v
+        from daedalus.session_context import clean_ids
+        return clean_ids(v, limit=16)
+
+
+class ProjectAttachBody(BaseModel):
+    session_id: str = Field(..., min_length=1, max_length=128)
+    slug: str = Field(..., min_length=1, max_length=80)
+    path: str = Field(..., min_length=1, max_length=400)
+
+
+@router.get("/api/v1/daedalus/session-context")
+async def session_context_get(session_id: str = "default") -> dict[str, Any]:
+    from daedalus.session_context import load
+    return {"ok": True, **load(session_id)}
+
+
+@router.put("/api/v1/daedalus/session-context")
+async def session_context_put(body: SessionContextBody) -> dict[str, Any]:
+    from daedalus.session_context import save
+    row = save(body.session_id, skill_ids=body.skill_ids, mcp_ids=body.mcp_ids)
+    return {"ok": True, **row}
+
+
+@router.post("/api/v1/daedalus/chat/attachments")
+async def chat_attachment_upload(
+    file: UploadFile = File(...),
+    session_id: str = Form(default="default"),
+) -> dict[str, Any]:
+    from daedalus.chat_attachments import save_bytes
+    raw = await file.read()
+    result = save_bytes(
+        session_id,
+        file.filename or "file",
+        raw,
+        content_type=file.content_type or "",
+    )
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error") or "upload failed")
+    return result
+
+
+@router.post("/api/v1/daedalus/chat/attachments/project")
+async def chat_attachment_project(body: ProjectAttachBody) -> dict[str, Any]:
+    from daedalus.chat_attachments import ingest_project_file
+    result = ingest_project_file(body.session_id, body.slug, body.path)
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error") or "attach failed")
     return result
 
 
@@ -570,9 +630,23 @@ async def evolution_cycle(body: EvolutionCycleBody = EvolutionCycleBody()) -> di
 # ── Studio chat jobs (SSE; blocking POST /api/v1/daedalus/chat stays) ────────
 
 class ChatJobBody(BaseModel):
-    message: str = Field(..., min_length=1, max_length=20000)
+    message: str = Field(..., min_length=0, max_length=20000)
     session_id: str = Field(default="default", max_length=128)
     effort: str = Field(default="auto", max_length=16)
+    skill_ids: list[str] = Field(default_factory=list)
+    mcp_ids: list[str] = Field(default_factory=list)
+    attachment_ids: list[str] = Field(default_factory=list)
+
+    @field_validator("skill_ids", "mcp_ids", "attachment_ids")
+    @classmethod
+    def _cap_ids(cls, v: list[str]) -> list[str]:
+        from daedalus.session_context import clean_ids
+        return clean_ids(v, limit=16)
+
+    @field_validator("message")
+    @classmethod
+    def _msg_or_context(cls, v: str) -> str:
+        return v or ""
 
 
 def _chat_sse(event: str, data: Any) -> str:
@@ -583,10 +657,15 @@ def _chat_sse(event: str, data: Any) -> str:
 @router.post("/api/v1/daedalus/chat/jobs")
 async def chat_job_start(body: ChatJobBody) -> dict[str, Any]:
     from daedalus.chat_jobs import start_chat
+    if not (body.message or "").strip() and not body.attachment_ids:
+        raise HTTPException(status_code=400, detail="message or attachment required")
     return await start_chat(
-        message=body.message,
+        message=body.message or "(see attached context)",
         session_id=body.session_id,
         effort=body.effort,
+        skill_ids=body.skill_ids,
+        mcp_ids=body.mcp_ids,
+        attachment_ids=body.attachment_ids,
     )
 
 

@@ -21,8 +21,9 @@ from .paths import data_root, package_root
 
 log = logging.getLogger(__name__)
 
-MAX_CATALOG = 5
+MAX_CATALOG = 8
 MAX_BODY = 1
+MAX_PIN_BODY = 3
 MAX_SKILL_CHARS = 1600
 MAX_INJECT = MAX_CATALOG  # back-compat alias
 
@@ -41,6 +42,12 @@ def pending_dir() -> Path:
 
 def builtin_dir() -> Path:
     return package_root() / "skills"
+
+
+def installed_dir() -> Path:
+    p = learned_dir().parent / "installed_skills"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
 
 
 def _now() -> str:
@@ -68,25 +75,36 @@ def _parse_frontmatter(raw: str) -> tuple[dict[str, str], str]:
 
 
 def list_skills() -> list[dict[str, Any]]:
-    """Approved + builtin SKILL.md files. Pending drafts are excluded."""
+    """Approved + builtin + installed SKILL.md files. Pending drafts are excluded."""
     rows: list[dict[str, Any]] = []
-    for root, origin in ((builtin_dir(), "builtin"), (learned_dir(), "learned")):
+    seen: set[str] = set()
+    # Learned overrides installed overrides builtin when stems collide.
+    for root, origin in (
+        (learned_dir(), "learned"),
+        (installed_dir(), "installed"),
+        (builtin_dir(), "builtin"),
+    ):
         if not root.is_dir():
             continue
         for path in sorted(root.glob("*.md")):
+            if path.stem in seen:
+                continue
             try:
                 raw = path.read_text(encoding="utf-8")
             except OSError:
                 continue
             meta, body = _parse_frontmatter(raw)
+            seen.add(path.stem)
             rows.append({
                 "id": path.stem,
                 "name": meta.get("name") or path.stem,
                 "description": meta.get("description") or (body.splitlines()[0][:180] if body else ""),
                 "origin": meta.get("origin") or origin,
+                "source": meta.get("source") or "",
                 "path": str(path),
                 "updated_at": path.stat().st_mtime,
             })
+    rows.sort(key=lambda r: str(r.get("name") or r["id"]))
     return rows
 
 
@@ -94,7 +112,7 @@ def load_skill(skill_id: str) -> dict[str, Any] | None:
     sid = (skill_id or "").strip()
     if not sid or "/" in sid or "\\" in sid or sid in (".", ".."):
         return None
-    for root in (learned_dir(), builtin_dir()):
+    for root in (learned_dir(), installed_dir(), builtin_dir()):
         path = root / f"{sid}.md"
         if path.is_file():
             raw = path.read_text(encoding="utf-8")
@@ -130,6 +148,33 @@ def write_skill(
     )
     target.write_text(text, encoding="utf-8")
     log.info("learned skill written: %s", target.name)
+    return target
+
+
+def write_installed(
+    *,
+    name: str,
+    description: str,
+    body: str,
+    source: str = "",
+    overwrite: bool = True,
+) -> Path:
+    slug = _slug(name)
+    target = installed_dir() / f"{slug}.md"
+    if not overwrite and target.exists():
+        n = 2
+        while target.exists():
+            target = installed_dir() / f"{slug}-{n}.md"
+            n += 1
+            if n > 20:
+                break
+    src = (source or "").strip()[:120]
+    text = (
+        f"---\nname: {target.stem}\ndescription: {description[:240]}\n"
+        f"origin: installed\nsource: {src}\nupdated: {int(time.time())}\n---\n\n{body.strip()}\n"
+    )
+    target.write_text(text, encoding="utf-8")
+    log.info("installed skill written: %s", target.name)
     return target
 
 
@@ -273,35 +318,78 @@ def disclose(
     *,
     extra_ids: list[str] | None = None,
     prefer_id: str | None = None,
+    pin_ids: list[str] | None = None,
     limit: int = MAX_CATALOG,
     body_limit: int = MAX_BODY,
 ) -> str:
-    """Progressive disclosure: catalog first, then at most one SKILL.md body.
+    """Progressive disclosure: catalog first, then SKILL.md bodies.
 
-    ``prefer_id`` wins the body slot so a game job loads ``senior_tools`` even
-    when ``arcade_craft`` scored higher on keywords like "игра".
+    Auto path: at most one body (``prefer_id`` wins that slot).
+    Owner pins: those ids always appear in the catalog and load up to
+    ``MAX_PIN_BODY`` full bodies. Pending drafts never inject.
     """
+    live = list_skills()
+    by_id = {r["id"]: r for r in live}
+    by_name = {str(r.get("name") or ""): r for r in live}
+    pins: list[dict[str, Any]] = []
+    seen_pins: set[str] = set()
+    for raw in pin_ids or []:
+        sid = str(raw or "").strip()
+        row = by_id.get(sid) or by_name.get(sid)
+        if not row or row["id"] in seen_pins:
+            continue
+        seen_pins.add(row["id"])
+        pins.append(row)
     extra = {str(x).strip() for x in (extra_ids or []) if str(x).strip()}
+    extra |= seen_pins
+    extra |= {str(p.get("name") or "") for p in pins}
     pref = (prefer_id or "").strip()
     if pref:
         extra.add(pref)
     scored = _score(query, extra)
-    picks = [r for _, r in scored[: max(1, limit)]]
+    picks: list[dict[str, Any]] = list(pins)
+    have = {p["id"] for p in picks}
+    cap = max(limit, len(pins))
+    for _, r in scored:
+        if r["id"] in have:
+            continue
+        picks.append(r)
+        have.add(r["id"])
+        if len(picks) >= cap:
+            break
     if pref:
-        pref_row = next((r for r in list_skills() if r["id"] == pref), None)
-        if pref_row:
-            picks = [pref_row] + [r for r in picks if r["id"] != pref]
-            picks = picks[: max(1, limit)]
+        pref_row = by_id.get(pref) or by_name.get(pref)
+        if pref_row and pref_row["id"] not in have:
+            picks = [pref_row] + picks
+            have.add(pref_row["id"])
+        elif pref_row:
+            picks = [pref_row] + [r for r in picks if r["id"] != pref_row["id"]]
+        picks = picks[: max(1, cap)]
     if not picks:
         return ""
     lines = [
         "━━━ SKILL CATALOG (name + description) ━━━",
         "Load a full body with native tool skill action=load. Pending drafts wait for owner Approve.",
     ]
+    if pins:
+        lines.append("Owner-pinned skills have bodies below. Follow them this turn.")
     for row in picks:
+        mark = " [pinned]" if row["id"] in seen_pins else ""
         desc = (row.get("description") or "")[:180]
-        lines.append(f"- {row.get('name') or row['id']}: {desc}")
-    for row in picks[: max(0, body_limit)]:
+        lines.append(f"- {row.get('name') or row['id']}{mark}: {desc}")
+    body_rows: list[dict[str, Any]] = list(pins[:MAX_PIN_BODY])
+    body_ids = {r["id"] for r in body_rows}
+    if pref and len(body_rows) < MAX_PIN_BODY:
+        pref_row = by_id.get(pref) or by_name.get(pref)
+        if pref_row and pref_row["id"] not in body_ids:
+            body_rows.append(pref_row)
+            body_ids.add(pref_row["id"])
+    if not pins:
+        for row in picks[: max(0, body_limit)]:
+            if row["id"] not in body_ids:
+                body_rows.append(row)
+                break
+    for row in body_rows:
         loaded = load_skill(row["id"])
         if not loaded:
             continue

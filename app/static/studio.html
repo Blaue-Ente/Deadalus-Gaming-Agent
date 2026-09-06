@@ -74,6 +74,14 @@
         <div class="row tight"><button id="prefadd" type="button" data-i18n="studio.save">Save</button></div>
         <div class="list" id="preflist"></div>
       </div>
+      <div class="session-skills">
+        <p class="kicker" data-i18n="studio.sessionSkills">Session skills</p>
+        <p class="hint" data-i18n="studio.sessionSkillsHint">Pinned for this chat. + adds a skill for one turn.</p>
+        <label class="sr-only" for="skillpick" data-i18n="studio.ctxSkills">Skills</label>
+        <select id="skillpick" data-i18n-aria="studio.ctxSkills" aria-label="Skills"></select>
+        <div class="row tight"><button id="skillpin" type="button" data-i18n="studio.pin">Pin</button></div>
+        <div class="list" id="skillpins"></div>
+      </div>
       <div class="lessons">
         <p class="kicker" data-i18n="studio.lessons">Lessons</p>
         <p class="hint" data-i18n="studio.lessonsHint" data-i18n-html>Failures wait for <b>Approve</b>. The agent does not inject them into the next turn.</p>
@@ -85,7 +93,11 @@
       <p class="kicker" data-i18n="studio.chat">Chat</p>
       <div class="msgs" id="msgs"></div>
       <div class="composer">
-        <textarea id="prompt" data-i18n-placeholder="studio.promptPh" placeholder="Write freely. Shift+Enter for a new line. Auto picks whisper / craft / epic." data-i18n-aria="studio.promptAria" aria-label="Message to Daedalus"></textarea>
+        <div class="chip-row" id="ctxchips" hidden></div>
+        <div class="compose-row">
+          <button type="button" class="ctx-plus" id="ctxplus" data-i18n-aria="studio.plusAria" aria-label="Add context">+</button>
+          <textarea id="prompt" data-i18n-placeholder="studio.promptPh" placeholder="Write freely. Shift+Enter for a new line. Auto picks whisper / craft / epic." data-i18n-aria="studio.promptAria" aria-label="Message to Daedalus"></textarea>
+        </div>
         <div class="meta-row">
           <span class="effort-note" id="effortnote"></span>
           <div class="row">
@@ -94,6 +106,26 @@
             <button class="primary" id="send" type="button" data-i18n="studio.send">Send</button>
           </div>
         </div>
+        <div class="ctx-sheet" id="ctxsheet" hidden>
+          <div class="ctx-head">
+            <button type="button" class="ctx-x" id="ctxclose" data-i18n-aria="studio.ctxClose" aria-label="Close">×</button>
+            <h2 data-i18n="studio.context">Context</h2>
+          </div>
+          <p class="kicker" data-i18n="studio.ctxMode">Mode</p>
+          <p class="hint" id="ctxmode"></p>
+          <p class="kicker" data-i18n="studio.ctxAdd">Add</p>
+          <div class="ctx-menu">
+            <button type="button" data-ctx="skills"><span data-i18n="studio.ctxSkills">Skills</span> <em id="ctxskilln">0</em></button>
+            <button type="button" data-ctx="files"><span data-i18n="studio.ctxFiles">Files</span></button>
+            <button type="button" data-ctx="images"><span data-i18n="studio.ctxImages">Images</span></button>
+            <button type="button" data-ctx="project"><span data-i18n="studio.ctxProject">Project file</span></button>
+            <button type="button" data-ctx="mcp"><span data-i18n="studio.ctxMcp">MCP Servers</span> <em id="ctxmcpn">0</em></button>
+          </div>
+          <div class="ctx-sub" id="ctxsub" hidden></div>
+        </div>
+        <input type="file" id="ctxfile" class="sr-only" multiple
+          accept=".txt,.md,.py,.js,.ts,.jsx,.tsx,.json,.csv,.yaml,.yml,.xml,.html,.css,.sql,.sh,.toml,.ini,.log,.gd,.svg" />
+        <input type="file" id="ctximage" class="sr-only" multiple accept="image/png,image/jpeg,image/gif,image/webp,.png,.jpg,.jpeg,.gif,.webp" />
       </div>
     </main>
 

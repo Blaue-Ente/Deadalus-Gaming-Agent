@@ -8,10 +8,11 @@ description: Progressive skill catalog. Failure/success drafts wait for owner Ap
 **When**: a repair pattern, a "what worked" note, or the owner mentions уроци / Approve / skill catalog.
 
 **How**:
-1. Prompt gets a catalog (name + description) and at most one SKILL.md body.
+1. Prompt gets a catalog (name + description) and at most one SKILL.md body unless the owner pinned skills (up to three bodies).
 2. Load more with native tool `skill` action catalog | load | pending.
 3. `draft_from_failure` / `draft_from_success` write JSON under `learned_skills/pending/`. They must not enter the next turn until Approve.
-4. Owner Approve / Reject is Studio **Уроци** or HTTP. There is no native approve action.
+4. Owner Approve / Reject is Studio **Lessons** or HTTP. There is no native approve action.
+5. Studio **+** / session pins inject via `disclose(pin_ids=…)`. Pending drafts still never inject.
 
 **Anti-patterns**:
 - Dumping full builtin SKILL.md files into every turn.
