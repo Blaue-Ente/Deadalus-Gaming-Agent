@@ -112,7 +112,7 @@ _MAX_TOKENS = 8192
 from .llm_config import get_config
 
 
-async def _call_claude(system: str, messages: list[dict[str, str]],
+async def _call_claude(system: str, messages: list[dict[str, Any]],
                        *,
                        use_cache_override: bool | None = None) -> str:
     """Unified async LLM call with rate-limit fallback chain.
@@ -126,7 +126,7 @@ async def _call_claude(system: str, messages: list[dict[str, str]],
     )
 
 
-async def _call_claude_primary(system: str, messages: list[dict[str, str]],
+async def _call_claude_primary(system: str, messages: list[dict[str, Any]],
                                 *,
                                 use_cache_override: bool | None = None) -> str:
     """Direct provider call (the original logic). Used by call_with_fallback."""
@@ -1525,12 +1525,25 @@ class Daedalus:
                 _prefer = prefer_skill_id(user_message, intent=_intent_for_skills)
             except Exception:
                 _prefer = None
+            _pin_ids: list[str] = []
+            try:
+                from .session_context import current as _turn_now
+                _pack = _turn_now()
+                if _pack:
+                    _pin_ids = list(_pack.skill_ids)
+            except Exception:
+                _pack = None
             _skill_block = _disclose(
-                user_message, extra_ids=_skill_names, prefer_id=_prefer,
+                user_message, extra_ids=_skill_names, prefer_id=_prefer, pin_ids=_pin_ids,
             )
             if _skill_block:
                 parts.append(_skill_block)
-                log.info("skills disclosed: %s (session=%s)", _skill_names, session_id[:10])
+                log.info("skills disclosed: %s pins=%s (session=%s)", _skill_names, _pin_ids, session_id[:10])
+            if _pack and _pack.mcp_ids:
+                from .session_context import mcp_prompt_block as _mcp_block
+                _mb = _mcp_block(_pack.mcp_ids)
+                if _mb:
+                    parts.append(_mb)
         except Exception as _sk_exc:
             log.debug("skill injection skipped: %s", _sk_exc)
         if injected:
@@ -1781,12 +1794,18 @@ class Daedalus:
                 log.warning("native tools preflight failed (non-fatal): %s", _nt_exc)
                 _native_log = []
 
+        try:
+            from .session_context import user_llm_payload as _user_payload
+            _llm_user_content = _user_payload(user_content)
+        except Exception:
+            _llm_user_content = user_content
+
         if not _planning_succeeded:
             # Normal path: full-persona initial call
             try:
                 async with _keepalive(session_id, "reasoning", 0,
                                       "Дедал генерира първоначалния отговор…"):
-                    raw = await _call_claude(_call_persona, [{"role": "user", "content": user_content}])
+                    raw = await _call_claude(_call_persona, [{"role": "user", "content": _llm_user_content}])
             except DaedalusError:
                 raise
             except Exception as exc:
@@ -4628,7 +4647,10 @@ class Daedalus:
             pass
 
     async def chat(self, message: str, session_id: str | None = None,
-                   for_self: bool = False, effort: str = "auto") -> dict[str, Any]:
+                   for_self: bool = False, effort: str = "auto",
+                   skill_ids: list[str] | None = None,
+                   mcp_ids: list[str] | None = None,
+                   attachment_ids: list[str] | None = None) -> dict[str, Any]:
         """Free-form conversation with Daedalus (no JSON contract).
 
         ``for_self=True`` marks the turn as "searching for improvements to
@@ -4683,7 +4705,17 @@ class Daedalus:
         if brief:
             msg = brief + "\n\n" + msg
 
-        with bind_effort(effort_dec):
+        from .session_context import bind as bind_turn, resolve_turn
+        turn_pack = resolve_turn(
+            session_id,
+            skill_ids=skill_ids,
+            mcp_ids=mcp_ids,
+            attachment_ids=attachment_ids,
+        )
+        if turn_pack.attachment_text:
+            msg = turn_pack.attachment_text + "\n\n" + msg
+
+        with bind_effort(effort_dec), bind_turn(turn_pack):
             raw, summary = await self._build_context_and_call(
                 user_message=msg,
                 session_id=session_id,

@@ -47,7 +47,15 @@ def get_job(job_id: str) -> dict[str, Any] | None:
     }
 
 
-async def start_chat(*, message: str, session_id: str, effort: str = "auto") -> dict[str, Any]:
+async def start_chat(
+    *,
+    message: str,
+    session_id: str,
+    effort: str = "auto",
+    skill_ids: list[str] | None = None,
+    mcp_ids: list[str] | None = None,
+    attachment_ids: list[str] | None = None,
+) -> dict[str, Any]:
     _gc()
     job_id = uuid.uuid4().hex[:12]
     sid = (session_id or "").strip() or f"studio-{job_id}"
@@ -74,6 +82,9 @@ async def start_chat(*, message: str, session_id: str, effort: str = "auto") -> 
                 message=message,
                 session_id=sid,
                 effort=effort,
+                skill_ids=skill_ids,
+                mcp_ids=mcp_ids,
+                attachment_ids=attachment_ids,
             )
             if row.get("cancelled"):
                 row["status"] = "cancelled"

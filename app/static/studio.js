@@ -8,6 +8,14 @@
     lastCwd: "",
     chatJob: null,
     chatSource: null,
+    skillIndex: [],
+    pinSkills: [],
+    pinMcp: [],
+    turnSkills: [],
+    turnMcp: [],
+    attachments: [],
+    ctxPane: "",
+    addons: [],
   };
   localStorage.setItem("dx.session", state.session);
 
@@ -286,6 +294,7 @@
     });
     syncProjectChrome();
     refreshWorld();
+    refreshSessionPins();
   }
 
   async function refreshPrefs() {
@@ -379,6 +388,481 @@
     }
   }
 
+  function sessionId() {
+    return state.slug || state.session;
+  }
+
+  function skillById(id) {
+    return state.skillIndex.find((s) => s.id === id || s.name === id) || null;
+  }
+
+  function renderSkillSelect() {
+    const sel = $("skillpick");
+    if (!sel) return;
+    const keep = sel.value;
+    sel.replaceChildren();
+    const blank = document.createElement("option");
+    blank.value = "";
+    text(blank, t("studio.ctxSkills"));
+    sel.appendChild(blank);
+    state.skillIndex.forEach((s) => {
+      const o = document.createElement("option");
+      o.value = s.id;
+      text(o, (s.name || s.id) + (s.origin === "installed" ? " · catalog" : ""));
+      sel.appendChild(o);
+    });
+    if (keep && [...sel.options].some((o) => o.value === keep)) sel.value = keep;
+  }
+
+  function renderSessionPins() {
+    const box = $("skillpins");
+    if (!box) return;
+    box.replaceChildren();
+    if (!state.pinSkills.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      text(empty, t("studio.ctxEmpty"));
+      box.appendChild(empty);
+      return;
+    }
+    state.pinSkills.forEach((id) => {
+      const s = skillById(id);
+      const el = itemEl(s ? (s.name || id) : id, s ? (s.description || s.origin || "") : "pinned", true);
+      el.title = t("studio.unpin");
+      el.onclick = () => unpinSkill(id);
+      box.appendChild(el);
+    });
+  }
+
+  function renderChips() {
+    const box = $("ctxchips");
+    if (!box) return;
+    box.replaceChildren();
+    const bits = [];
+    state.pinSkills.forEach((id) => bits.push({ kind: "skill", id, pin: true, label: (skillById(id) || {}).name || id }));
+    state.turnSkills.forEach((id) => {
+      if (!state.pinSkills.includes(id)) bits.push({ kind: "skill", id, pin: false, label: (skillById(id) || {}).name || id });
+    });
+    state.attachments.forEach((a) => bits.push({ kind: a.kind === "image" ? "image" : "file", id: a.id, pin: false, label: a.name || a.id }));
+    const mcp = [...new Set([...state.pinMcp, ...state.turnMcp])];
+    mcp.forEach((id) => bits.push({ kind: "mcp", id, pin: state.pinMcp.includes(id), label: id }));
+    if (!bits.length) {
+      box.hidden = true;
+      return;
+    }
+    box.hidden = false;
+    bits.forEach((bit) => {
+      const chip = document.createElement("span");
+      chip.className = "ctx-chip" + (bit.pin ? "" : " turn");
+      const lab = document.createElement("span");
+      text(lab, bit.label);
+      const x = document.createElement("button");
+      x.type = "button";
+      text(x, "×");
+      x.onclick = () => dropChip(bit);
+      chip.append(lab, x);
+      box.appendChild(chip);
+    });
+    const sn = $("ctxskilln");
+    const mn = $("ctxmcpn");
+    if (sn) text(sn, String([...new Set([...state.pinSkills, ...state.turnSkills])].length));
+    if (mn) text(mn, String(mcp.length));
+  }
+
+  function dropChip(bit) {
+    if (bit.kind === "file" || bit.kind === "image") {
+      state.attachments = state.attachments.filter((a) => a.id !== bit.id);
+    } else if (bit.kind === "mcp") {
+      state.turnMcp = state.turnMcp.filter((x) => x !== bit.id);
+      if (state.pinMcp.includes(bit.id)) unpinMcp(bit.id);
+    } else if (bit.pin) {
+      unpinSkill(bit.id);
+    } else {
+      state.turnSkills = state.turnSkills.filter((x) => x !== bit.id);
+    }
+    renderChips();
+  }
+
+  async function persistPins() {
+    try {
+      await api("/api/v1/daedalus/session-context", {
+        method: "PUT",
+        body: JSON.stringify({
+          session_id: sessionId(),
+          skill_ids: state.pinSkills,
+          mcp_ids: state.pinMcp,
+        }),
+      });
+    } catch (e) {
+      add("bot", t("studio.catalogErr") + ": " + errText(e));
+    }
+  }
+
+  async function pinSkill(id) {
+    if (!id || state.pinSkills.includes(id)) return;
+    state.pinSkills = state.pinSkills.concat(id);
+    state.turnSkills = state.turnSkills.filter((x) => x !== id);
+    await persistPins();
+    renderSessionPins();
+    renderChips();
+  }
+
+  async function unpinSkill(id) {
+    state.pinSkills = state.pinSkills.filter((x) => x !== id);
+    await persistPins();
+    renderSessionPins();
+    renderChips();
+  }
+
+  async function unpinMcp(id) {
+    state.pinMcp = state.pinMcp.filter((x) => x !== id);
+    await persistPins();
+    renderChips();
+  }
+
+  async function refreshSkillIndex() {
+    try {
+      const data = await api("/api/v1/daedalus/learned-skills");
+      state.skillIndex = data.skills || [];
+      renderSkillSelect();
+      renderSessionPins();
+      renderChips();
+    } catch {
+      state.skillIndex = [];
+    }
+  }
+
+  async function refreshSessionPins() {
+    try {
+      const data = await api("/api/v1/daedalus/session-context?session_id=" + encodeURIComponent(sessionId()));
+      state.pinSkills = data.skill_ids || [];
+      state.pinMcp = data.mcp_ids || [];
+    } catch {
+      state.pinSkills = [];
+      state.pinMcp = [];
+    }
+    renderSessionPins();
+    renderChips();
+  }
+
+  async function refreshAddons() {
+    try {
+      const data = await api("/api/v1/daedalus/addons");
+      state.addons = data.addons || [];
+    } catch {
+      state.addons = [];
+    }
+  }
+
+  function setSheet(open) {
+    const sheet = $("ctxsheet");
+    const plus = $("ctxplus");
+    if (!sheet || !plus) return;
+    sheet.hidden = !open;
+    plus.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) {
+      text($("ctxmode"), t("studio.effort." + state.effort) + " — " + t("studio.effortNote." + (state.effort === "auto" ? "auto" : state.effort)));
+      if (state.ctxPane) openCtxPane(state.ctxPane);
+    }
+  }
+
+  function ctxRow(title, sub, actions) {
+    const row = document.createElement("div");
+    row.className = "ctx-row";
+    const grow = document.createElement("div");
+    grow.className = "grow";
+    const b = document.createElement("b");
+    text(b, title);
+    const s = document.createElement("small");
+    text(s, sub || "");
+    grow.append(b, s);
+    row.appendChild(grow);
+    (actions || []).forEach((btn) => row.appendChild(btn));
+    return row;
+  }
+
+  function miniBtn(label, fn, primary) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    if (primary) btn.className = "primary";
+    text(btn, label);
+    btn.onclick = fn;
+    return btn;
+  }
+
+  async function openCtxPane(pane) {
+    state.ctxPane = pane;
+    const sub = $("ctxsub");
+    if (!sub) return;
+    sub.hidden = false;
+    sub.replaceChildren();
+    if (pane === "files") {
+      $("ctxfile").click();
+      sub.hidden = true;
+      return;
+    }
+    if (pane === "images") {
+      $("ctximage").click();
+      sub.hidden = true;
+      return;
+    }
+    if (pane === "skills") {
+      const search = document.createElement("input");
+      search.type = "search";
+      search.placeholder = t("studio.ctxSearch");
+      sub.appendChild(search);
+      const list = document.createElement("div");
+      sub.appendChild(list);
+      const draw = (rows) => {
+        list.replaceChildren();
+        if (!rows.length) {
+          const empty = document.createElement("div");
+          empty.className = "empty";
+          text(empty, t("studio.ctxEmpty"));
+          list.appendChild(empty);
+          return;
+        }
+        rows.slice(0, 40).forEach((s) => {
+          const id = s.id || s.name;
+          const on = state.pinSkills.includes(id) || state.turnSkills.includes(id);
+          list.appendChild(ctxRow(
+            (s.name || s.title || id) + (on ? " ✓" : ""),
+            s.description || s.text || s.origin || s.source || "",
+            [
+              miniBtn(t("studio.ctxAddTurn"), () => {
+                if (!state.turnSkills.includes(id) && !state.pinSkills.includes(id)) {
+                  state.turnSkills = state.turnSkills.concat(id);
+                  renderChips();
+                  draw(rows);
+                }
+              }),
+              miniBtn(t("studio.ctxPinSession"), () => pinSkill(id), true),
+            ]
+          ));
+        });
+      };
+      draw(state.skillIndex);
+      let timer = 0;
+      search.addEventListener("input", () => {
+        clearTimeout(timer);
+        timer = setTimeout(async () => {
+          const q = search.value.trim().toLowerCase();
+          if (!q) {
+            draw(state.skillIndex);
+            return;
+          }
+          const local = state.skillIndex.filter((s) =>
+            ((s.name || "") + " " + (s.description || "") + " " + (s.id || "")).toLowerCase().includes(q)
+          );
+          let remote = [];
+          try {
+            const cat = await api("/api/v1/daedalus/skill-catalog?q=" + encodeURIComponent(q), { timeoutMs: 12000 });
+            remote = (cat.results || []).map((r) => ({
+              id: r.id,
+              name: r.title,
+              description: (r.text || "").split("\n")[0],
+              source: r.source,
+              catalog: true,
+            }));
+          } catch { /* offline catalog */ }
+          const box = [];
+          local.forEach((s) => box.push(s));
+          remote.forEach((r) => {
+            if (!box.some((s) => s.id === r.id || s.name === r.name)) box.push(r);
+          });
+          list.replaceChildren();
+          if (!box.length) {
+            const empty = document.createElement("div");
+            empty.className = "empty";
+            text(empty, t("studio.ctxEmpty"));
+            list.appendChild(empty);
+            return;
+          }
+          box.slice(0, 40).forEach((s) => {
+            const id = s.id || s.name;
+            const actions = s.catalog
+              ? [miniBtn(t("studio.ctxInstall"), async () => {
+                  try {
+                    const out = await api("/api/v1/daedalus/skill-catalog/install", {
+                      method: "POST",
+                      body: JSON.stringify({ id }),
+                    });
+                    add("bot", out.pending ? t("studio.installPending") : t("studio.installOk") + ": " + (out.name || id));
+                    await refreshSkillIndex();
+                    if (!out.pending && out.id) await pinSkill(out.id);
+                    await refreshLessons();
+                  } catch (e) {
+                    add("bot", t("studio.installErr") + ": " + errText(e));
+                  }
+                }, true)]
+              : [
+                  miniBtn(t("studio.ctxAddTurn"), () => {
+                    if (!state.turnSkills.includes(id) && !state.pinSkills.includes(id)) {
+                      state.turnSkills = state.turnSkills.concat(id);
+                      renderChips();
+                    }
+                  }),
+                  miniBtn(t("studio.ctxPinSession"), () => pinSkill(id), true),
+                ];
+            list.appendChild(ctxRow(s.name || s.title || id, s.description || s.source || "", actions));
+          });
+        }, 220);
+      });
+      const refresh = miniBtn(t("studio.ctxRefresh"), async () => {
+        refresh.disabled = true;
+        try {
+          await api("/api/v1/daedalus/skill-catalog/refresh?force=true", { method: "POST", timeoutMs: 120000 });
+          add("bot", t("studio.ctxRefresh"));
+        } catch (e) {
+          add("bot", t("studio.catalogErr") + ": " + errText(e));
+        } finally {
+          refresh.disabled = false;
+        }
+      });
+      sub.appendChild(refresh);
+      return;
+    }
+    if (pane === "project") {
+      if (!state.slug) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        text(empty, t("studio.ctxNoProject"));
+        sub.appendChild(empty);
+        return;
+      }
+      try {
+        const data = await api("/api/v1/playground/projects/" + encodeURIComponent(state.slug));
+        const files = data.files || [];
+        if (!files.length) {
+          const empty = document.createElement("div");
+          empty.className = "empty";
+          text(empty, t("studio.ctxEmpty"));
+          sub.appendChild(empty);
+          return;
+        }
+        files.slice(0, 80).forEach((f) => {
+          const path = f.path || f;
+          sub.appendChild(ctxRow(path, String(f.size || ""), [
+            miniBtn(t("studio.ctxAddTurn"), async () => {
+              try {
+                const att = await api("/api/v1/daedalus/chat/attachments/project", {
+                  method: "POST",
+                  body: JSON.stringify({ session_id: sessionId(), slug: state.slug, path }),
+                });
+                state.attachments.push(att);
+                renderChips();
+              } catch (e) {
+                add("bot", t("studio.catalogErr") + ": " + errText(e));
+              }
+            }, true),
+          ]));
+        });
+      } catch (e) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        text(empty, errText(e));
+        sub.appendChild(empty);
+      }
+      return;
+    }
+    if (pane === "mcp") {
+      await refreshAddons();
+      const mcp = (state.addons || []).filter((a) => a.kind === "mcp");
+      if (!mcp.length) {
+        const empty = document.createElement("div");
+        empty.className = "empty";
+        text(empty, t("studio.ctxEmpty"));
+        sub.appendChild(empty);
+        return;
+      }
+      mcp.forEach((a) => {
+        const on = state.pinMcp.includes(a.id) || state.turnMcp.includes(a.id);
+        const actions = [];
+        if (!a.enabled) {
+          actions.push(miniBtn(t("studio.ctxEnable"), async () => {
+            try {
+              await api("/api/v1/daedalus/addons", { method: "POST", body: JSON.stringify({ id: a.id }) });
+              await refreshAddons();
+              openCtxPane("mcp");
+            } catch (e) {
+              add("bot", errText(e));
+            }
+          }));
+        } else {
+          actions.push(miniBtn(t("studio.ctxAddTurn"), () => {
+            if (!state.turnMcp.includes(a.id) && !state.pinMcp.includes(a.id)) {
+              state.turnMcp = state.turnMcp.concat(a.id);
+              renderChips();
+              openCtxPane("mcp");
+            }
+          }));
+          actions.push(miniBtn(t("studio.ctxPinSession"), async () => {
+            if (!state.pinMcp.includes(a.id)) {
+              state.pinMcp = state.pinMcp.concat(a.id);
+              state.turnMcp = state.turnMcp.filter((x) => x !== a.id);
+              await persistPins();
+              renderChips();
+              openCtxPane("mcp");
+            }
+          }, true));
+        }
+        sub.appendChild(ctxRow(
+          (a.label || a.id) + (on ? " ✓" : ""),
+          a.enabled ? (a.blurb || "") : t("studio.mcpOff") + " — " + (a.blurb || ""),
+          actions
+        ));
+      });
+    }
+  }
+
+  async function uploadFiles(fileList, asImage) {
+    const files = [...fileList];
+    for (const file of files) {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("session_id", sessionId());
+      try {
+        const res = await fetch("/api/v1/daedalus/chat/attachments", { method: "POST", body: fd });
+        const raw = await res.text();
+        let data = {};
+        try { data = raw ? JSON.parse(raw) : {}; } catch { data = { detail: raw.slice(0, 200) }; }
+        if (!res.ok) throw new Error(data.detail || data.error || ("HTTP " + res.status));
+        if (asImage && data.kind !== "image") data.kind = data.kind || "file";
+        state.attachments.push(data);
+      } catch (e) {
+        add("bot", t("studio.catalogErr") + ": " + errText(e));
+      }
+    }
+    renderChips();
+  }
+
+  $("skillpin") && ($("skillpin").onclick = () => {
+    const id = $("skillpick").value;
+    if (id) pinSkill(id);
+  });
+  $("ctxplus") && ($("ctxplus").onclick = () => setSheet($("ctxsheet").hidden));
+  $("ctxclose") && ($("ctxclose").onclick = () => setSheet(false));
+  document.querySelectorAll("[data-ctx]").forEach((btn) => {
+    btn.onclick = () => openCtxPane(btn.getAttribute("data-ctx"));
+  });
+  $("ctxfile") && $("ctxfile").addEventListener("change", (ev) => {
+    uploadFiles(ev.target.files || [], false);
+    ev.target.value = "";
+  });
+  $("ctximage") && $("ctximage").addEventListener("change", (ev) => {
+    uploadFiles(ev.target.files || [], true);
+    ev.target.value = "";
+  });
+  const composer = document.querySelector(".composer");
+  if (composer) {
+    composer.addEventListener("dragover", (ev) => { ev.preventDefault(); });
+    composer.addEventListener("drop", (ev) => {
+      ev.preventDefault();
+      const files = ev.dataTransfer && ev.dataTransfer.files;
+      if (files && files.length) uploadFiles(files, false);
+    });
+  }
+
   $("pcreate").onclick = async () => {
     const name = $("pname").value.trim();
     if (!name) return;
@@ -457,11 +941,25 @@
 
   async function sendChat() {
     const message = $("prompt").value.trim();
-    if (!message || $("send").disabled) return;
+    if ($("send").disabled) return;
+    if (!message && !state.attachments.length) {
+      add("bot", t("studio.needMessage"));
+      return;
+    }
     $("prompt").value = "";
-    add("user", message);
+    const metaBits = [];
+    state.attachments.forEach((a) => metaBits.push((a.kind === "image" ? "🖼 " : "📄 ") + (a.name || a.id)));
+    [...new Set([...state.pinSkills, ...state.turnSkills])].forEach((id) => metaBits.push("skill:" + id));
+    add("user", message || t("studio.context"), metaBits.join(" · ") || undefined);
     const last = add("bot", t("studio.thinking"));
     chatBusy(true);
+    const skillIds = [...new Set([...state.pinSkills, ...state.turnSkills])];
+    const mcpIds = [...new Set([...state.pinMcp, ...state.turnMcp])];
+    const attachmentIds = state.attachments.map((a) => a.id);
+    state.turnSkills = [];
+    state.turnMcp = [];
+    state.attachments = [];
+    renderChips();
     try {
       if (window.DaedalusAuth && DaedalusAuth.ensureToken) {
         await DaedalusAuth.ensureToken();
@@ -469,9 +967,12 @@
       const job = await api("/api/v1/daedalus/chat/jobs", {
         method: "POST",
         body: JSON.stringify({
-          message,
-          session_id: state.slug || state.session,
+          message: message || "(see attached context)",
+          session_id: sessionId(),
           effort: state.effort,
+          skill_ids: skillIds,
+          mcp_ids: mcpIds,
+          attachment_ids: attachmentIds,
         }),
         timeoutMs: 20000,
       });
@@ -1051,6 +1552,9 @@
     refreshProjects();
     refreshPrefs();
     refreshLessons();
+    refreshSkillIndex();
+    refreshSessionPins();
+    refreshAddons();
     refreshEvolution();
     refreshWorld();
     refreshComputer();
@@ -1070,6 +1574,9 @@
   refreshProjects();
   refreshPrefs();
   refreshLessons();
+  refreshSkillIndex();
+  refreshSessionPins();
+  refreshAddons();
   refreshConnectors();
   refreshEvolution();
   refreshComputer();
