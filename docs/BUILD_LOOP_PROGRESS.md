@@ -16,7 +16,7 @@ approves.
 | S1 | Closed build loop instead of post-mortem DoD | **This MR** — awaiting owner approval |
 | S3 | Tool results as navigation (paths, slug, NEXT) | Pending |
 | S4 | Write-time quality gate (syntax) + arcade lint | Pending |
-| S2 | Kernel-run scaffold/verify, phase-gated tools | Pending |
+| S2 | Kernel-run scaffold/verify, phase-gated tools | Pending — see `docs/GODOGEN_STUDY.md` (visual proof) |
 | S6 | Router: negations, explicit merge only | Pending |
 | S5 | One build layer, model roles, wrap-up sanitizing | Pending |
 
@@ -82,3 +82,11 @@ The syntax error in `game.js` is S4's job.
    `native_tools.run_native_discovery_pass`, and the `strict` contract.
 2. `DAEDALUS_STANDALONE=1 python3 -m pytest tests/test_build_loop.py tests/test_tool_router.py -q`.
 3. Reply that S1 is approved. S3 starts next.
+
+## Research input for S2 (not started)
+
+Internal study `docs/GODOGEN_STUDY.md` (2026-09-07): a thin Godot/Bevy/Babylon
+runtime that judges "done" from a 15–20s recording the model watches. Public
+docs stay Daedalus-only. **Do not start S2 from that file.** When S2 is the
+active stage, the steal is kernel-run browser/engine + proof frames injected
+as vision + `complete` gated on that artifact — not deleting playbooks.
