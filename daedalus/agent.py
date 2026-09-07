@@ -171,11 +171,13 @@ async def _call_claude_primary(system: str, messages: list[dict[str, Any]],
             else:
                 system_param = system
 
+            from .native_tools import to_anthropic_messages as _to_anth_msgs
+
             resp = await client.messages.create(
                 model=model,
                 max_tokens=_MAX_TOKENS,
                 system=system_param,
-                messages=messages,
+                messages=_to_anth_msgs(messages),
             )
             block = resp.content[0]
             return block.text if block.type == "text" else ""
@@ -234,7 +236,7 @@ async def _call_claude_with_tools(
 ) -> dict[str, Any]:
     """Native tool round for Anthropic *and* OpenAI-compatible providers (incl. Ollama)."""
     from .local_llm import dummy_api_key, is_local_provider
-    from .native_tools import openai_tool_specs, to_openai_messages
+    from .native_tools import openai_tool_specs, to_anthropic_messages, to_openai_messages
 
     cfg = get_config()
     api_key = cfg.get("api_key", "")
@@ -269,7 +271,7 @@ async def _call_claude_with_tools(
             model=model,
             max_tokens=_MAX_TOKENS,
             system=system,
-            messages=messages,
+            messages=to_anthropic_messages(messages),
             tools=anthropic_tools,
         )
         content = []
@@ -1711,6 +1713,7 @@ class Daedalus:
         # Phase 2 — native tool API. Playground/game: BUILD with a tight tool
         # subset. Everything else: recon over the full catalog.
         _native_log: list[dict[str, Any]] = []
+        _loop = None
         if (
             not _planning_succeeded
             and not _is_conversational
@@ -1793,12 +1796,23 @@ class Daedalus:
             except Exception as _nt_exc:
                 log.warning("native tools preflight failed (non-fatal): %s", _nt_exc)
                 _native_log = []
+                _loop = None
 
         try:
             from .session_context import user_llm_payload as _user_payload
             _llm_user_content = _user_payload(user_content)
         except Exception:
             _llm_user_content = user_content
+        if _loop is not None:
+            _proof_vision = list(getattr(_loop, "proof_vision", None) or [])
+            if _proof_vision:
+                if isinstance(_llm_user_content, str):
+                    _llm_user_content = [
+                        {"type": "text", "text": _llm_user_content},
+                        *_proof_vision,
+                    ]
+                elif isinstance(_llm_user_content, list):
+                    _llm_user_content = list(_llm_user_content) + _proof_vision
 
         if not _planning_succeeded:
             # Normal path: full-persona initial call

@@ -20,6 +20,7 @@ from typing import Any
 
 from .task_playbooks import Step
 from .tool_catalog import canonical
+from .visual_proof import PROOF_TOOLS, enabled as visual_proof_enabled, is_visual_kind
 
 log = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ _SLUG_TOOLS = frozenset({
     "write_file", "read_file", "playtest", "browser", "run_command", "game_lint",
     "assets", "engine", "world", "production", "playground_run",
 })
+_WRITE_TOOLS = frozenset({"write_file", "need_playground_write"})
 
 
 def fix_rounds_from_env() -> int:
@@ -117,6 +119,10 @@ class BuildLoop:
         self.slug = ""
         self.last_verdict: BuildVerdict | None = None
         self.stop_reason = ""
+        self.proof_frames: list[str] = []
+        self.proof_vision: list[dict[str, Any]] = []
+        self.proof_gap = ""
+        self.kernel_proof_ran = False
         for row in self.seed_log:
             self._capture_slug(row.get("input") or {}, "")
 
@@ -154,6 +160,69 @@ class BuildLoop:
 
     def tool_calls(self) -> list[dict[str, Any]]:
         return [*self.seed_log, *(o.as_call() for o in self.observations)]
+
+    def _has_writes(self) -> bool:
+        for o in self.observations:
+            if canonical(o.tool).lower() in _WRITE_TOOLS and o.ok:
+                return True
+        for row in self.seed_log:
+            if canonical(str(row.get("tool") or "")).lower() in _WRITE_TOOLS and row.get("ok"):
+                return True
+        return False
+
+    def _proof_hits(self) -> list[ToolObservation]:
+        return [o for o in self.observations if canonical(o.tool).lower() in PROOF_TOOLS]
+
+    def _has_successful_proof(self) -> bool:
+        return any(o.ok for o in self._proof_hits())
+
+    def _writes_after_last_proof(self) -> bool:
+        last = -1
+        for i, o in enumerate(self.observations):
+            if canonical(o.tool).lower() in PROOF_TOOLS:
+                last = i
+        if last < 0:
+            return True
+        return any(
+            canonical(o.tool).lower() in _WRITE_TOOLS and o.ok
+            for o in self.observations[last + 1:]
+        )
+
+    def _required_build_pending(self) -> bool:
+        for row in self.progress():
+            if not row.step.required or row.status == "done":
+                continue
+            if (row.step.tool or "").lower() in PROOF_TOOLS:
+                continue
+            return True
+        return False
+
+    def wants_kernel_proof(self) -> bool:
+        """Quiet round should open the running game before declaring done."""
+        if not visual_proof_enabled() or not self.active:
+            return False
+        if not is_visual_kind(self.kind):
+            return False
+        if not self.slug or not self._has_writes():
+            return False
+        if self._required_build_pending():
+            return False
+        if self.proof_gap:
+            return False
+        if self._has_successful_proof():
+            return False
+        if not self.kernel_proof_ran:
+            return True
+        return self._writes_after_last_proof()
+
+    def note_kernel_proof(self, result: Any) -> None:
+        self.kernel_proof_ran = True
+        self.proof_gap = str(getattr(result, "honest_gap", "") or "")
+        self.proof_frames = list(getattr(result, "frames", None) or [])
+        try:
+            self.proof_vision = list(result.vision_blocks())
+        except Exception:
+            self.proof_vision = []
 
     # ── plan bookkeeping ──────────────────────────────────────────────────
 
@@ -206,6 +275,41 @@ class BuildLoop:
             next_step=nxt,
             failed_calls=self.unrecovered_failures(),
         )
+        if (
+            visual_proof_enabled()
+            and is_visual_kind(self.kind)
+            and self._has_writes()
+            and not missing
+        ):
+            if self.proof_gap:
+                v.complete = False
+                gap = {
+                    "chromium_missing": (
+                        "Chromium is not on PATH — visual proof was not taken (not a skip-pass)."
+                    ),
+                    "godot_missing": (
+                        "Godot is not on PATH — engine proof was not taken (files are not Play)."
+                    ),
+                    "unity_local": "Unity Editor is not in this process. Scaffold is not Play.",
+                    "no_slug": "No Playground slug — cannot open the game.",
+                }.get(self.proof_gap, f"Visual proof unavailable ({self.proof_gap}).")
+                if gap not in v.blockers:
+                    v.blockers.append(gap)
+            elif not self._has_successful_proof():
+                v.complete = False
+                msg = (
+                    "Няма visual proof от работещата игра (browser/engine). "
+                    "Compile не е доказателство."
+                )
+                if msg not in v.blockers:
+                    v.blockers.append(msg)
+                if nxt is None or (nxt.tool and nxt.tool not in PROOF_TOOLS):
+                    prove = next(
+                        (r.step for r in rows if (r.step.tool or "") in PROOF_TOOLS and r.status != "done"),
+                        None,
+                    )
+                    if prove is not None:
+                        v.next_step = prove
         self.last_verdict = v
         return v
 
@@ -219,6 +323,9 @@ class BuildLoop:
             return None
         if not self.active:
             self.stop_reason = "passive"
+            return None
+        if self.proof_gap and self.kernel_proof_ran:
+            self.stop_reason = "visual proof unavailable"
             return None
         if self.nudges >= self.fix_rounds:
             self.stop_reason = "fix budget exhausted"
@@ -274,11 +381,19 @@ class BuildLoop:
             )
         elif v.failed_calls:
             o = v.failed_calls[-1]
-            head.append(
-                f"NEXT: repeat {o.tool} with corrected arguments"
-                + (f" (slug={self.slug})" if self.slug and o.tool in _SLUG_TOOLS else "")
-                + ", then finish the plan."
-            )
+            if canonical(o.tool).lower() in PROOF_TOOLS:
+                head.append(
+                    "NEXT: fix the files with write_file"
+                    + (f" slug={self.slug}" if self.slug else "")
+                    + " so the running game is not blank/broken. "
+                    "The kernel will open it again after you stop."
+                )
+            else:
+                head.append(
+                    f"NEXT: repeat {o.tool} with corrected arguments"
+                    + (f" (slug={self.slug})" if self.slug and o.tool in _SLUG_TOOLS else "")
+                    + ", then finish the plan."
+                )
         head.append(
             "Call the tool now; do not describe it. Do not explore the harness "
             "(no list_dir / find outside the slug). No NEED_* markers, no SQL."
@@ -300,9 +415,13 @@ class BuildLoop:
         ]
         if v.complete:
             lines.append("Plan complete — summarize what was built and how to open it.")
+            if self.proof_frames:
+                lines.append("Visual proof frames: " + ", ".join(self.proof_frames[:4]))
         else:
             lines.append("Plan NOT complete. Say so plainly; list what remains:")
             lines.extend(f"  • {b}" for b in v.blockers)
+            if self.proof_frames:
+                lines.append("Last proof frames: " + ", ".join(self.proof_frames[:4]))
         return "\n".join(lines)
 
     def log_row(self) -> dict[str, Any]:
@@ -316,4 +435,6 @@ class BuildLoop:
             "stop_reason": self.stop_reason,
             "missing": list(v.missing_steps),
             "slug": self.slug,
+            "proof_frames": list(self.proof_frames),
+            "proof_gap": self.proof_gap,
         }

@@ -1,8 +1,8 @@
 # Godogen study — proof from the running game
 
 Internal research (2026-09-07). Public README / ARCHITECTURE stay Daedalus-only.
-This file is a decision brief. No harness change ships from it until the owner
-approves a slice (likely **S2** in `docs/BUILD_LOOP_PROGRESS.md`).
+This file is a decision brief. The owner asked to ship the useful steal:
+**S2** (kernel visual proof) is on this branch — see `docs/BUILD_LOOP_PROGRESS.md`.
 
 Source studied: [htdt/godogen](https://github.com/htdt/godogen) (MIT, Alex Ermolov),
 cloned 2026-09-07. ~6.7k GitHub stars. Demos: 15–20s recordings of Godot / Bevy /
@@ -415,13 +415,19 @@ not more Python.
 
 ---
 
-## 8. Approval
+## 8. What shipped from this study
 
-This study does not change runtime code.
+S2 on this branch (owner: “do what helps Daedalus”):
 
-If the owner agrees the steal is **visual proof into S2**, reply that S2 may
-include: kernel-run browser/engine, proof clip or paced frames, vision inject,
-`complete` gated on that artifact.
+- Kernel-run visual proof after the last Playground write (`daedalus/visual_proof.py`)
+- Frames in `studio/proof/` + vision on the persona turn
+- Honest Chromium / Godot / Unity gaps (skip ≠ pass)
+- Slug-path hints on `write_file` / `playground_new` / failed `run_command`
+- Godot silent-failure traps in the skill
+- Durable project README Status + Assets Size table
+
+Not in this MR: paced 8–12-frame movie / `--write-movie` mp4 (stills + bridge
+screenshot are the first cut), S4 syntax gate, C# Godot kind, vendored asset-gen.
 
 C# Godot, scene builders, and asset-gen CLI remain unnamed until the owner
 names them as a phase.

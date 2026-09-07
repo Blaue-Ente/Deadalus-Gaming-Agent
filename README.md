@@ -294,9 +294,10 @@ Each project is `playground/projects/{slug}/` with a kind:
 ## Verify and ship
 
 1. **Smoke** — compile / HTTP probe.
-2. **Browser** — Chromium: blank screen, console, screenshot.
-3. **Playtest** — 4–6 simulated players (Studio → World, or after autopilot). Fun gate: wayfinding, fail state, visible pickups.
-4. **Ship**
+2. **Kernel visual proof** — after the last write the harness opens the running game (Chromium for web; Godot headless when `GODOT_BIN` is set) and stores frames in `studio/proof/`. A clean compile is not proof. Missing Chromium or Godot is an honest gap, not a pass.
+3. **Browser** — Chromium: blank screen, console, screenshot.
+4. **Playtest** — 4–6 simulated players (Studio → World, or after autopilot). Fun gate: wayfinding, fail state, visible pickups.
+5. **Ship**
    - **Capsule** — zip (USB / send a file). Static: unzip, open `index.html`.
    - **Local /apps/** — Studio “To /apps/”.
    - **Live** — public `https`: Netlify token → GitLab Pages → 1-hour Netlify preview. Static / vite / expo-web only.

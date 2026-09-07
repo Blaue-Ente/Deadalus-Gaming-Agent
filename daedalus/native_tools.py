@@ -789,16 +789,97 @@ def to_openai_messages(system: str, messages: list[dict[str, Any]]) -> list[dict
                 ]
             oa.append(row)
         else:
-            for block in content:
-                if block.get("type") == "tool_result":
-                    oa.append({
-                        "role": "tool",
-                        "tool_call_id": block.get("tool_use_id") or "",
-                        "content": block.get("content") or "",
-                    })
-                elif block.get("type") == "text":
-                    oa.append({"role": "user", "content": block.get("text") or ""})
+            tool_results = [b for b in content if b.get("type") == "tool_result"]
+            text_parts = [b.get("text") or "" for b in content if b.get("type") == "text"]
+            images = [b for b in content if b.get("type") == "image_url"]
+            for block in tool_results:
+                oa.append({
+                    "role": "tool",
+                    "tool_call_id": block.get("tool_use_id") or "",
+                    "content": block.get("content") or "",
+                })
+            if images:
+                vision: list[dict[str, Any]] = []
+                blob = "\n".join(t for t in text_parts if t).strip()
+                if blob:
+                    vision.append({"type": "text", "text": blob})
+                vision.extend(images)
+                oa.append({"role": "user", "content": vision})
+            elif text_parts:
+                oa.append({"role": "user", "content": "\n".join(text_parts)})
     return oa
+
+
+def _image_url_to_anthropic(block: dict[str, Any]) -> dict[str, Any] | None:
+    url = ""
+    img = block.get("image_url")
+    if isinstance(img, dict):
+        url = str(img.get("url") or "")
+    elif isinstance(img, str):
+        url = img
+    if not url.startswith("data:") or "," not in url:
+        return None
+    header, data = url.split(",", 1)
+    mime = "image/png"
+    if ":" in header:
+        mime = header.split(":", 1)[1].split(";", 1)[0].strip() or mime
+    if not data:
+        return None
+    return {
+        "type": "image",
+        "source": {"type": "base64", "media_type": mime, "data": data},
+    }
+
+
+def to_anthropic_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Pass-through with OpenAI image_url blocks converted to Anthropic images."""
+    out: list[dict[str, Any]] = []
+    for msg in messages:
+        content = msg.get("content")
+        if isinstance(content, str) or content is None:
+            out.append(msg)
+            continue
+        if not isinstance(content, list):
+            out.append(msg)
+            continue
+        blocks: list[dict[str, Any]] = []
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") == "image_url":
+                conv = _image_url_to_anthropic(block)
+                if conv:
+                    blocks.append(conv)
+                continue
+            blocks.append(block)
+        row = dict(msg)
+        row["content"] = blocks
+        out.append(row)
+    return out
+
+
+def _user_turn(text: str, vision: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    if vision:
+        blocks: list[dict[str, Any]] = [{"type": "text", "text": text}]
+        blocks.extend(vision)
+        return {"role": "user", "content": blocks}
+    return {"role": "user", "content": text}
+
+
+async def _kernel_visual_proof(loop: Any) -> str:
+    from .visual_proof import run_visual_proof
+
+    result = await run_visual_proof(getattr(loop, "slug", "") or "", getattr(loop, "kind", "") or "static")
+    loop.note_kernel_proof(result)
+    ok = bool(result.ok) and not result.skipped
+    loop.observe(
+        result.tool,
+        {"slug": loop.slug, "action": "kernel_proof"},
+        result.as_tool_text(),
+        ok=ok,
+        blocked=False,
+    )
+    return result.nudge_block()
 
 
 def before_tool_call(tool_name: str, *, marker_name: str | None = None) -> tuple[bool, str]:
@@ -892,7 +973,10 @@ async def execute_native_tool(
             slug = (proj or {}).get("slug") or ""
             return (
                 f"── playground_new OK slug={slug} kind={(proj or {}).get('kind')} ──\n"
-                f"Write files with write_file slug={slug}."
+                f"Write files with write_file slug={slug}. "
+                f"Paths are inside the Playground project `{slug}` "
+                f"(playground/projects/{slug}/), not /workspace. "
+                "README.md holds Status (built / left / proof) and an Assets size table."
             )
 
         if name == "write_file":
@@ -912,7 +996,20 @@ async def execute_native_tool(
                     slug, kind="static", source="built", description="auto-created on write", slug=slug,
                 )
             pg.write_file(slug, path, content)
-            return f"── write_file OK {slug}/{path} ({len(content)} chars) ──"
+            try:
+                from .project_status import record_built
+                from .playground import project_dir as _pdir
+                record_built(_pdir(slug), f"wrote {path}")
+            except Exception:
+                pass
+            return (
+                f"── write_file OK {slug}/{path} ({len(content)} chars) ──\n"
+                f"File is `{path}` in Playground slug `{slug}` "
+                f"(playground/projects/{slug}/{path}). "
+                "Do not find /workspace or list the harness. "
+                "Keep write_file with this slug. "
+                "When you stop, the kernel opens the running game for visual proof."
+            )
 
         if name == "run_command":
             cmd = str(args.get("command") or "")
@@ -927,9 +1024,19 @@ async def execute_native_tool(
             )
             body = (r.get("stdout") or "") + (("\n" + r["stderr"]) if r.get("stderr") else "")
             status = "OK" if r.get("ok") else "FAILED"
+            hint = ""
+            if status == "FAILED":
+                slug_h = str(args.get("slug") or "").strip()
+                low = body.lower()
+                if "no such file" in low or "not found" in low:
+                    hint = (
+                        "\nHint: Playground files live in the project slug, not /workspace. "
+                        "Pass slug=" + (slug_h or "<project>") + " (cwd = that folder). "
+                        "Do not find / or list_dir the harness."
+                    )
             return (
                 f"── run_command {status} exit={r.get('exit_code')} cwd={r.get('cwd')} ──\n"
-                f"{body[:8000]}"
+                f"{body[:8000]}{hint}"
             )
 
         if name == "web_search":
@@ -1513,15 +1620,28 @@ async def run_native_discovery_pass(
 
         if not tool_uses:
             final = "\n".join(text_parts).strip()
+            proof_block = ""
+            if loop is not None and getattr(loop, "wants_kernel_proof", lambda: False)():
+                try:
+                    proof_block = await _kernel_visual_proof(loop)
+                    if loop.observations:
+                        tool_log.append(loop.observations[-1].as_call())
+                except Exception as exc:
+                    log.warning("kernel visual proof failed: %s", exc)
+                    proof_block = f"━━━ VISUAL PROOF (kernel) ━━━\nProof crashed: {exc}\n"
             nudge = loop.on_quiet(final) if loop is not None else None
             if nudge:
+                extra = "\n\n".join(p for p in (proof_block, nudge) if p)
                 messages.append({
                     "role": "assistant",
                     "content": assistant_content or [{"type": "text", "text": final or "(no reply)"}],
                 })
-                messages.append({"role": "user", "content": nudge})
+                vision = list(getattr(loop, "proof_vision", None) or []) if loop is not None else []
+                messages.append(_user_turn(extra, vision or None))
                 budget += loop.rounds_per_fix
                 continue
+            if proof_block:
+                all_results.append(proof_block)
             if all_results:
                 combined = (
                     "━━━ NATIVE TOOL RESULTS ━━━\n"
