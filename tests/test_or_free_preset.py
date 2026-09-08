@@ -129,3 +129,13 @@ def test_or_free_in_preset_library():
     assert "or_free" in ids
     row = next(r for r in library() if r["id"] == "or_free")
     assert row["scores"]["economy"] >= 90
+
+
+def test_openrouter_tool_rounds_require_parameters():
+    from daedalus.llm_config import openai_compat_extra_body
+
+    assert openai_compat_extra_body("openrouter", with_tools=True) == {
+        "provider": {"require_parameters": True},
+    }
+    assert openai_compat_extra_body("openrouter", with_tools=False) == {}
+    assert openai_compat_extra_body("novita", with_tools=True) == {}

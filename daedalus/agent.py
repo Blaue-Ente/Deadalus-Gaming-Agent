@@ -199,7 +199,13 @@ async def _call_claude_primary(system: str, messages: list[dict[str, Any]],
                     "(set DAEDALUS_API_KEY env var or configure in Admin › LLM, "
                     "or DAEDALUS_PROVIDER=ollama for a local model)"
                 )
-        oa_client = AsyncOpenAI(api_key=api_key, base_url=base_url or None)
+        from .llm_config import openai_compat_headers
+        oa_client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=base_url or None,
+            max_retries=1,
+            default_headers=(openai_compat_headers(provider) or None),
+        )
         oa_messages = [{"role": "system", "content": system}] + list(messages)
         resp = await oa_client.chat.completions.create(
             model=model,
@@ -291,20 +297,46 @@ async def _call_claude_with_tools(
         from openai import AsyncOpenAI
     except ImportError:
         return {"stop_reason": "end_turn", "content": []}
-    client = AsyncOpenAI(api_key=api_key, base_url=base_url or None, max_retries=0)
-    oa_messages = to_openai_messages(system, messages)
-    resp = await client.chat.completions.create(
-        model=model,
-        max_tokens=_MAX_TOKENS,
-        messages=oa_messages,
-        tools=openai_tool_specs(tools),
-        tool_choice="auto",
+    from .llm_config import openai_compat_extra_body, openai_compat_headers
+    extra = openai_compat_headers(provider)
+    client = AsyncOpenAI(
+        api_key=api_key,
+        base_url=base_url or None,
+        max_retries=1,
+        default_headers=extra or None,
     )
+    oa_messages = to_openai_messages(system, messages)
+    create_kw: dict[str, Any] = {
+        "model": model,
+        "max_tokens": _MAX_TOKENS,
+        "messages": oa_messages,
+        "tools": openai_tool_specs(tools),
+        "tool_choice": "auto",
+    }
+    extra_body = openai_compat_extra_body(provider, with_tools=True)
+    if extra_body:
+        create_kw["extra_body"] = extra_body
+    try:
+        resp = await client.chat.completions.create(**create_kw)
+    except Exception as exc:
+        log.warning("tool LLM %s/%s failed: %s", provider, model, exc)
+        return {
+            "stop_reason": "end_turn",
+            "content": [{"type": "text", "text": f"LLM error: {exc}"[:800]}],
+        }
     choice = resp.choices[0] if resp.choices else None
     msg = choice.message if choice else None
     content = []
-    if msg and msg.content:
-        content.append({"type": "text", "text": msg.content})
+    text = getattr(msg, "content", None) if msg else None
+    if isinstance(text, str) and text:
+        content.append({"type": "text", "text": text})
+    elif isinstance(text, list):
+        # MiniMax / some OpenRouter hosts return mixed content blocks.
+        for block in text:
+            if isinstance(block, dict) and block.get("type") == "text" and block.get("text"):
+                content.append({"type": "text", "text": str(block.get("text") or "")})
+            elif isinstance(block, str) and block:
+                content.append({"type": "text", "text": block})
     for tc in (getattr(msg, "tool_calls", None) or []):
         args: Any = {}
         raw_args = getattr(getattr(tc, "function", None), "arguments", "") or "{}"
@@ -319,6 +351,18 @@ async def _call_claude_with_tools(
             "input": args,
         })
     stop = "tool_use" if any(b.get("type") == "tool_use" for b in content) else "end_turn"
+    try:
+        usage = getattr(resp, "usage", None)
+        if usage:
+            log.info(
+                "tool LLM %s/%s stop=%s tools=%d prompt=%s completion=%s",
+                provider, model, stop,
+                sum(1 for b in content if b.get("type") == "tool_use"),
+                getattr(usage, "prompt_tokens", None),
+                getattr(usage, "completion_tokens", None),
+            )
+    except Exception:
+        pass
     return {"stop_reason": stop, "content": content}
 
 
