@@ -57,7 +57,20 @@ HUD text on a navy clear-color is no longer a visual-proof pass. `frame_shows_sc
 
 The native loop now runs `<NEED_WORKER>` and a cheap **fast** reviewer after the first HTML/JS write. Live eval pins worker slots to MiniMax, not Claude Sonnet. Play Lab (`computer.open_project_computer`) is opened after the build — local HTTP on this machine. SmolVM is optional and not installed here.
 
+S4 also rejects U+2212 (unicode minus) in JS — Claude's pass 3 used `−1` in vertex arrays; that is a SyntaxError, so WebGL never ran.
+
 Pytest sets `DAEDALUS_WRITE_REVIEW=0` / `DAEDALUS_WORKERS=0` so unit tests never spend tokens.
+
+## Live eval 2026-09-08 — pass 3 / pass 4 (same day)
+
+| Pass | What happened |
+|------|---------------|
+| 3 (~$0.91, 12 rounds) | MiniMax **fast** worker probe `PONG`. Kernel write-review ran (MiniMax, ~1.3KB). Play Lab local HTTP booted. Chromium proof still HUD on black — Claude wrote **U+2212** in `mkBox` arrays so the script never executed. `shows_scene=false`. S4 now fails that write. |
+| 4 (~$0.51, 11 rounds) | ASCII `-1`. **complete=true**. Proof + Play Lab screenshots: green floor, lime / red / gold cubes, HUD `Keys 1 / 2 / 3`. `frame_shows_scene=true` on all three exported PNGs. Chroma still missing. SmolVM still missing. Cheap worker was called; this pass the review body was empty (kernel now treats that as not-ok). |
+
+Screenshots: `slerp-lookat-pass3-frame_000.png` (black HUD), `slerp-lookat-pass4-lab.png` (painted greybox).
+
+Total spend this branch ~**$2.83** (pass 1+2 $1.41 + pass 3 $0.91 + pass 4 $0.51).
 
 ## S1 — Closed build loop (done)
 
@@ -129,7 +142,7 @@ FAILED so the loop's NEXT is a corrected `write_file`, not eight hunting rounds.
 ## How to review S3+S4
 
 1. `DAEDALUS_STANDALONE=1 python3 -m pytest tests/test_write_gate.py tests/test_visual_proof.py tests/test_build_loop.py tests/test_tool_router.py tests/test_or_free_preset.py tests/test_frame_geometry.py -q`
-2. Live 3D: `scripts/live_eval_build.py --better --preset slerp --max-rounds 12 --shot-tag pass3`
+2. Live 3D: `scripts/live_eval_build.py --better --preset slerp --max-rounds 12 --shot-tag pass4`
 
 ## Research
 

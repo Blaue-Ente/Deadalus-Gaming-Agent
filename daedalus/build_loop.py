@@ -226,6 +226,28 @@ class BuildLoop:
         except Exception:
             self.proof_vision = []
 
+    def adopt_model_proof(self) -> None:
+        """Model called browser itself — still stash frames so the next turn can see them."""
+        if not self.slug:
+            self.kernel_proof_ran = True
+            return
+        try:
+            from . import playground as pg
+            from .visual_proof import vision_blocks_for_paths
+
+            root = pg.project_dir(self.slug)
+            proof = root / "studio" / "proof"
+            frames = [f"studio/proof/{p.name}" for p in sorted(proof.glob("frame_*.png"))]
+            extra = root / "assets" / "_verify_screenshot.png"
+            if extra.is_file():
+                frames.append("assets/_verify_screenshot.png")
+            self.kernel_proof_ran = True
+            if frames:
+                self.proof_frames = frames[:3]
+                self.proof_vision = vision_blocks_for_paths(root, self.proof_frames)
+        except Exception:
+            self.kernel_proof_ran = True
+
     # ── plan bookkeeping ──────────────────────────────────────────────────
 
     def progress(self) -> list[StepProgress]:

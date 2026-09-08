@@ -332,3 +332,25 @@ def test_need_worker_quiet_round_keeps_building(fake_tools, monkeypatch):
     assert any(r.get("tool") == "math3d" for r in log)
     assert loop.stop_reason == "complete"
     assert text and "NATIVE TOOL RESULTS" in text
+
+
+def test_model_browser_stashes_proof_frames(fake_tools, tmp_path, monkeypatch):
+    from daedalus.png_codec import encode_rgba
+
+    proof = tmp_path / "studio" / "proof"
+    proof.mkdir(parents=True)
+    pix = bytes([10, 200, 40, 255] * (16 * 16))
+    (proof / "frame_000.png").write_bytes(encode_rgba(16, 16, pix))
+    monkeypatch.setattr("daedalus.playground.project_dir", lambda slug: tmp_path)
+
+    rt = route(SNAKE)
+    loop = BuildLoop(rt, SNAKE, fix_rounds=2)
+    model = ScriptedModel([
+        [_use("write_file", slug="snake-game", path="index.html", content="<canvas>")],
+        [_use("browser", slug="snake-game", action="verify")],
+        [_text("Готово.")],
+    ])
+    _run("sys", SNAKE, model, loop=loop, max_rounds=4)
+    assert loop.kernel_proof_ran is True
+    assert loop.proof_frames
+    assert any("frame_000.png" in f for f in loop.proof_frames)

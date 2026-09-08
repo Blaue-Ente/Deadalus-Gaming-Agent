@@ -968,7 +968,12 @@ async def _kernel_write_review(loop: Any, path: str, content: str) -> str:
     if isinstance(log_rows, list):
         log_rows.extend(results)
     blob = format_worker_results(results)
-    loop.observe("workers", {"slot": "fast", "path": path}, blob[:1500], ok=True)
+    spoke = any(len(str(r.get("result") or "").strip()) > 40 for r in results)
+    if not spoke:
+        blob = (blob + "\nEmpty cheap review — not a pass.").strip()
+        for r in results:
+            r["ok"] = False
+    loop.observe("workers", {"slot": "fast", "path": path}, blob[:1500], ok=spoke)
     return blob
 
 
@@ -1947,6 +1952,8 @@ async def run_native_discovery_pass(
                     tname, tinput if isinstance(tinput, dict) else {}, result_text,
                     ok=ok, blocked=blocked,
                 )
+                if tname in ("browser", "visual_proof"):
+                    loop.adopt_model_proof()
             tool_result_blocks.append({
                 "type": "tool_result",
                 "tool_use_id": tid,
