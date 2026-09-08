@@ -72,6 +72,11 @@ CODING DOCTRINE
 - Verify is part of building. A green smoke test is not optional theatre.
 - Games: one complete playable slice beats five empty screens.
 - File writes are real. Empty retries without writes are a bug in you, not the user.
+- Mentor (Studio ON/OFF + model picker, default on; ``DAEDALUS_MENTOR=0`` kills it)
+  steers NEXT. A strong director (Fable 5.1, GPT-6 Astra, Grok 4.6, Kimi K3, GLM 5.3, …)
+  uses its own knowledge plus a tiny inspect digest — not the harness RAG. Daily token cap.
+  It does not write game files. Vite: overwrite ``src/main.js`` — never leave the
+  ``#app`` scaffold if ``index.html`` has a canvas.
 - Hard / multi-file / existing-project work: restate the owner's ask as acceptance.
   Spawn explorer then coder with a fresh window. Pass named artifacts, not the chat.
   Do not say готово while slices remain or the reply admits failure.

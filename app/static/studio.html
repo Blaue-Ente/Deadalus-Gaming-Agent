@@ -29,6 +29,16 @@
         <button type="button" data-effort="craft" aria-pressed="false" data-i18n="studio.effort.craft">Craft</button>
         <button type="button" data-effort="epic" aria-pressed="false" data-i18n="studio.effort.epic">Epic</button>
       </div>
+      <div class="mentor-wrap">
+        <div class="mentor" role="group" data-i18n-aria="studio.mentorAria" aria-label="Mentor">
+          <button type="button" data-mentor="on" aria-pressed="true" data-i18n="studio.mentor.on">ON</button>
+          <button type="button" data-mentor="off" aria-pressed="false" data-i18n="studio.mentor.off">OFF</button>
+        </div>
+        <label class="sr-only" for="mentor-choice" data-i18n="studio.mentorChoiceAria">Mentor model</label>
+        <select id="mentor-choice" class="mentor-choice" data-i18n-aria="studio.mentorChoiceAria" aria-label="Mentor model"></select>
+        <button type="button" id="mentor-custom" class="mentor-custom" data-i18n-aria="studio.mentorCustomAria" aria-label="Custom mentor model" title="Custom model">⋯</button>
+        <span id="mentor-spend" class="mentor-spend" title=""></span>
+      </div>
       <div class="dx-lang" role="group" data-i18n-aria="lang.aria" aria-label="Language">
         <button type="button" data-lang="en" aria-pressed="true">EN</button>
         <button type="button" data-lang="bg" aria-pressed="false">BG</button>
@@ -202,6 +212,28 @@
       </div>
     </section>
   </div>
+  <dialog id="mentor-custom-dlg" class="mentor-dlg">
+    <form method="dialog" id="mentor-custom-form">
+      <p class="kicker" data-i18n="studio.mentorCustomTitle">Director model</p>
+      <p class="hint" data-i18n="studio.mentorCustomHint">Any OpenRouter / AllToken / Novita id. Mentor still caps tokens.</p>
+      <label class="sr-only" for="mentor-prov" data-i18n="studio.mentorProvider">Provider</label>
+      <select id="mentor-prov" aria-label="Provider">
+        <option value="openrouter">openrouter</option>
+        <option value="alltoken">alltoken</option>
+        <option value="novita">novita</option>
+        <option value="openai">openai</option>
+        <option value="nvidia">nvidia</option>
+        <option value="anthropic">anthropic</option>
+      </select>
+      <label class="sr-only" for="mentor-model" data-i18n="studio.mentorModel">Model</label>
+      <input id="mentor-model" list="mentor-model-list" autocomplete="off" placeholder="anthropic/claude-fable-5.1" />
+      <datalist id="mentor-model-list"></datalist>
+      <div class="row tight">
+        <button type="submit" class="primary" id="mentor-custom-apply" data-i18n="studio.mentorCustomApply">Use this</button>
+        <button type="button" id="mentor-custom-cancel" data-i18n="studio.mentorCustomCancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
   <script src="/static/studio.js"></script>
 </body>
 </html>

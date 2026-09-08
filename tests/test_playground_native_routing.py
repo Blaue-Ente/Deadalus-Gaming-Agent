@@ -35,6 +35,7 @@ def test_fast_path_classifies_napravi_playground_as_code_change():
     b = _fast_path(SNAKE)
     assert b is not None
     assert b.intent == "code_change"
+    assert "NEED_PROPOSE" not in (b.tools or [])
 
 
 def test_unavailable_navigator_does_not_mark_game_build_as_chat():

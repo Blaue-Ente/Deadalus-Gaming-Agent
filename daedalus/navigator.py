@@ -217,15 +217,24 @@ def _fast_path(user_msg: str) -> Briefing | None:
         "search":       ["NEED_CODE_SEARCH", "NEED_ENDPOINTS"],
     }
     tools = tool_map.get(top_intent, [])
+    try:
+        from .game_engineer import looks_like_game
+        if looks_like_game(msg) and top_intent == "code_change":
+            tools = []
+    except Exception:
+        pass
 
     # Only use fast-path if signal is moderately strong (≥2) OR query is very short
     if top_score >= 2 or len(msg) < 80:
+        hint = f"Fast-path classification (score={top_score})."
+        if not tools and top_intent == "code_change":
+            hint = "Playground/game build — kernel native tools, not NEED_PROPOSE."
         return Briefing(
             intent=top_intent,
             contexts=ctxs,
             tools=tools,
             budget="normal",
-            hint=f"Fast-path classification (score={top_score}).",
+            hint=hint,
             fast_path=True,
         )
     return None

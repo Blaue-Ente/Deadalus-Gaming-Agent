@@ -67,6 +67,7 @@ header.app {
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 1rem;
   padding: 0 1.1rem;
   border-bottom: 1px solid var(--line);
@@ -151,6 +152,82 @@ button.chip {
 .effort button[aria-pressed="true"] {
   background: rgba(201, 162, 39, 0.16);
   color: var(--gold-2);
+}
+
+.mentor {
+  display: inline-flex;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.mentor button {
+  border: 0;
+  border-radius: 0;
+  padding: 0.32rem 0.7rem;
+  font-size: 0.75rem;
+  background: transparent;
+  color: var(--muted);
+}
+.mentor button[aria-pressed="true"] {
+  background: rgba(201, 162, 39, 0.16);
+  color: var(--gold-2);
+}
+.mentor button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.mentor-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+.mentor-choice {
+  width: auto;
+  max-width: 13.5rem;
+  padding: 0.28rem 0.5rem;
+  font-size: 0.72rem;
+  border-radius: 999px;
+  background: var(--bg-input);
+}
+.mentor-custom {
+  flex-shrink: 0;
+  width: 1.85rem;
+  height: 1.85rem;
+  padding: 0;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  line-height: 1;
+  color: var(--muted);
+}
+.mentor-dlg {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raise);
+  color: var(--ink);
+  padding: 0.9rem 1rem;
+  max-width: 22rem;
+}
+.mentor-dlg::backdrop {
+  background: rgba(8, 6, 4, 0.55);
+}
+.mentor-dlg .kicker { margin: 0 0 0.25rem; }
+.mentor-dlg .hint { margin: 0 0 0.65rem; }
+.mentor-dlg select, .mentor-dlg input {
+  width: 100%;
+  margin: 0 0 0.45rem;
+}
+.mentor-dlg .row { margin-top: 0.2rem; }
+.mentor-spend {
+  font-size: 0.68rem;
+  color: var(--faint);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.mentor-spend.warn {
+  color: var(--warn);
 }
 
 .dx-lang {

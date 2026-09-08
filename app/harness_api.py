@@ -484,6 +484,14 @@ class EffortBody(BaseModel):
     effort: str = Field(default="auto", max_length=16)
 
 
+class MentorBody(BaseModel):
+    enabled: bool | None = None
+    choice_id: str = Field(default="", max_length=80)
+    provider: str = Field(default="", max_length=40)
+    model: str = Field(default="", max_length=200)
+    day_token_cap: int | None = Field(default=None, ge=0, le=2_000_000)
+
+
 @router.get("/api/v1/daedalus/effort")
 async def effort_preview(q: str = "", effort: str = "auto") -> dict[str, Any]:
     from daedalus.task_effort import classify
@@ -494,6 +502,22 @@ async def effort_preview(q: str = "", effort: str = "auto") -> dict[str, Any]:
 async def effort_classify(body: EffortBody) -> dict[str, Any]:
     from daedalus.task_effort import classify
     return classify(body.text, requested=body.effort)
+
+
+@router.get("/api/v1/daedalus/mentor")
+async def mentor_status() -> dict[str, Any]:
+    from daedalus.mentor import status
+    return status()
+
+
+@router.post("/api/v1/daedalus/mentor")
+async def mentor_set(body: MentorBody) -> dict[str, Any]:
+    from daedalus.mentor import apply_update
+    try:
+        st = apply_update(body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, **st}
 
 
 @router.get("/api/v1/llm/wardrobe")

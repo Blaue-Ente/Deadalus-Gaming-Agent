@@ -13,6 +13,12 @@ from daedalus.build_loop import BuildLoop
 from daedalus.job_contract import evaluate, unrecovered_failure_indexes
 from daedalus.tool_router import route, run_consult
 
+
+@pytest.fixture(autouse=True)
+def _mentor_off_for_loop_tests(monkeypatch):
+    """Existing loop tests pin the pre-Mentor NEXT / budget behaviour."""
+    monkeypatch.setenv("DAEDALUS_MENTOR", "0")
+
 SNAKE = (
     "Направи нова Playground игра snake: HTML canvas, стрелки, расте при ябълка, "
     "game over при стена/опашка. Една завършена среза."
@@ -56,7 +62,8 @@ def fake_tools(monkeypatch):
 
     async def _exec(name, args, **_kw):
         if name == "playground_new":
-            return f"── playground_new OK slug={args.get('name')} kind=static ──"
+            kind = args.get("kind") or args.get("type") or "static"
+            return f"── playground_new OK slug={args.get('name')} kind={kind} ──"
         if name == "write_file":
             return f"── write_file OK {args.get('slug')}/{args.get('path')} ({len(args.get('content') or '')} chars) ──"
         if name == "run_command":
@@ -65,6 +72,8 @@ def fake_tools(monkeypatch):
             return "── run_command OK exit=0 cwd=/data/playground/snake-game ──\nHTML OK"
         if name == "math3d":
             return '── math3d quat_slerp OK ──\n{"ok": true, "verdict": "match"}'
+        if name == "generate_image":
+            return "── generate_image FAILED 403 ──"
         return f"── {name} OK ──"
 
     async def _proof(slug, kind="static"):
@@ -293,3 +302,43 @@ def test_kernel_runs_visual_proof_after_writes(fake_tools):
     assert any(r.get("tool") == "browser" for r in log)
     assert loop.stop_reason == "complete"
     assert text and "VISUAL PROOF" in text
+
+
+def test_playground_new_syncs_kind_from_result():
+    rt = route(SNAKE)
+    loop = BuildLoop(rt, SNAKE, fix_rounds=3)
+    assert loop.kind == "static"
+    loop.observe(
+        "playground_new",
+        {"name": "lumen-bloom", "kind": "vite"},
+        "── playground_new OK slug=lumen-bloom kind=vite ──",
+        ok=True,
+    )
+    assert loop.slug == "lumen-bloom"
+    assert loop.kind == "vite"
+
+
+def test_progress_block_does_not_repeat_capped_generate_image():
+    rt = route(SNAKE)
+    loop = BuildLoop(rt, SNAKE, fix_rounds=3)
+    loop.observe("write_file", {"slug": "snake-game", "path": "index.html"}, "── write_file OK ──", ok=True)
+    loop.observe("generate_image", {"prompt": "x"}, "── generate_image FAILED 403 ──", ok=False)
+    loop.observe("generate_image", {"prompt": "x"}, "── generate_image FAILED 403 ──", ok=False)
+    block = loop.progress_block()
+    assert "repeat generate_image" not in block
+    assert "write_file" in block
+    assert loop.retry_capped("generate_image") is True
+
+
+def test_budget_exhaust_after_writes_still_proofs(fake_tools):
+    rt = route(SNAKE)
+    loop = BuildLoop(rt, SNAKE, fix_rounds=3)
+    model = ScriptedModel([
+        [_use("write_file", slug="snake-game", path="index.html", content="<canvas>")],
+        [_use("run_command", command="ls", slug="snake-game")],
+        [_use("run_command", command="ls", slug="snake-game")],
+    ])
+    _run("sys", SNAKE, model, loop=loop, max_rounds=2)
+    assert loop.stop_reason == "round budget exhausted"
+    assert loop.kernel_proof_ran is True
+    assert loop.browser_ok_for_dod() is True

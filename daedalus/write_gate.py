@@ -39,8 +39,19 @@ def _issue(severity: str, code: str, message: str, *, row: int = 0) -> dict[str,
 
 
 def _has_loop(text: str) -> bool:
+    """Canvas rAF *or* an engine ticker. Phaser.Game is the loop for Vite slices."""
     low = (text or "").lower()
-    return "requestanimationframe" in low or bool(re.search(r"\bsetinterval\s*\(", low))
+    if "requestanimationframe" in low or bool(re.search(r"\bsetinterval\s*\(", low)):
+        return True
+    if re.search(r"new\s+phaser\.game\b", low):
+        return True
+    if "this.scene.start" in low or re.search(r"\bscene\.start\s*\(", low):
+        return True
+    if re.search(r"\bticker\.(?:add|start)\s*\(", low):
+        return True
+    if "new pixi.application" in low:
+        return True
+    return False
 
 
 def arcade_blockers(path: str, content: str, kind: str) -> list[dict[str, Any]]:
@@ -62,14 +73,14 @@ def arcade_blockers(path: str, content: str, kind: str) -> list[dict[str, Any]]:
         if not _has_loop(content) and not has_ext_script:
             issues.append(_issue(
                 "error", "arcade-missing-loop",
-                "no requestAnimationFrame / setInterval — the canvas will not animate. "
+                "no requestAnimationFrame / setInterval / Phaser.Game — the canvas will not animate. "
                 "Put the loop here or in a <script src=…> file.",
             ))
     elif name in _MAIN_JS:
         if not _has_loop(content):
             issues.append(_issue(
                 "error", "arcade-missing-loop",
-                f"{name} has no requestAnimationFrame / setInterval.",
+                f"{name} has no requestAnimationFrame / setInterval / Phaser.Game.",
             ))
     return issues
 
