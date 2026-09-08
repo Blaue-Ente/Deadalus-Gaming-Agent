@@ -123,7 +123,7 @@ NATIVE TOOLS
   world({action: status|prove|talk|travel, slug})
   assets({action: atlas|tileset|sfx|font|mesh|greybox, slug})
   skill({action: catalog|load|pending, id})
-  production(action=status|prove|map|pipeline, slug)
+  production(action=status|prove|map|pipeline|qa, slug)
   git_forge({action: status|clone|push|pull_request|merge_request, slug, url, repo})
   math3d({op: slerp|ray_triangle|dot|cross|look_at|perspective, claimed})
   spatial({action: advise|aabb|scan, n, dim}) — grid/quad/octree/BVH; no O(N²)
