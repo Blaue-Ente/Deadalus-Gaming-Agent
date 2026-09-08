@@ -106,8 +106,8 @@ async def probe_tools(model: str) -> dict:
 
 
 async def run_build(prompt: str, max_rounds: int) -> dict:
-    from daedalus.agent import _call_claude_with_tools
     from daedalus.build_loop import BuildLoop
+    from daedalus.llm_client import call_with_tools
     from daedalus.llm_config import get_config
     from daedalus.native_tools import run_native_discovery_pass
     from daedalus.tool_router import format_system, native_specs, route, run_consult
@@ -122,7 +122,7 @@ async def run_build(prompt: str, max_rounds: int) -> dict:
     text, tool_log = await run_native_discovery_pass(
         system,
         prompt,
-        _call_claude_with_tools,
+        call_with_tools,
         memory=None,
         session_id="playground:live-eval",
         read_file_fn=lambda *a, **k: {},
