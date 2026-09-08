@@ -126,6 +126,9 @@ class BuildLoop:
         self.kernel_proof_ran = False
         self.proof_blank = False
         self.mentor_grants = 0
+        self.mentor_steer = None
+        self.mentor_fp = ""
+        self.mentor_llm_calls = 0
         for row in self.seed_log:
             self._capture_slug(row.get("input") or {}, "")
             self._capture_kind("playground_new", row.get("input") or {}, "")

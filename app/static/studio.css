@@ -67,6 +67,7 @@ header.app {
   grid-column: 1 / -1;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 1rem;
   padding: 0 1.1rem;
   border-bottom: 1px solid var(--line);
@@ -175,6 +176,30 @@ button.chip {
 .mentor button:disabled {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+.mentor-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+.mentor-choice {
+  width: auto;
+  max-width: 11.5rem;
+  padding: 0.28rem 0.5rem;
+  font-size: 0.72rem;
+  border-radius: 999px;
+  background: var(--bg-input);
+}
+.mentor-spend {
+  font-size: 0.68rem;
+  color: var(--faint);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.mentor-spend.warn {
+  color: var(--warn);
 }
 
 .dx-lang {

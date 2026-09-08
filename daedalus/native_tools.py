@@ -1889,6 +1889,7 @@ async def run_native_discovery_pass(
                 extra = 0
                 try:
                     from . import mentor as _mentor
+                    await _mentor.refresh_helm(loop)
                     extra = int(_mentor.extra_round_budget(loop) or 0)
                 except Exception:
                     extra = 0
@@ -1944,7 +1945,14 @@ async def run_native_discovery_pass(
                 except Exception as exc:
                     log.warning("kernel visual proof failed: %s", exc)
                     proof_block = f"━━━ VISUAL PROOF (kernel) ━━━\nProof crashed: {exc}\n"
-            nudge = loop.on_quiet(final) if loop is not None else None
+            nudge = None
+            if loop is not None:
+                try:
+                    from . import mentor as _mentor
+                    await _mentor.refresh_helm(loop)
+                except Exception:
+                    pass
+                nudge = loop.on_quiet(final)
             if nudge:
                 extra = "\n\n".join(p for p in (proof_block, nudge) if p)
                 messages.append({

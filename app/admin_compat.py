@@ -267,17 +267,25 @@ async def daedalus_get_mentor():
 
 @router.post("/daedalus/mentor")
 async def daedalus_set_mentor(request: Request):
-    from daedalus.mentor import set_enabled, status
+    from daedalus.mentor import apply_update
     body = await _body(request)
     raw = body.get("enabled", body.get("on", body.get("mentor")))
-    if raw is None:
-        return JSONResponse({"error": "enabled bool required"}, status_code=400)
-    if isinstance(raw, str):
-        flag = raw.strip().lower() not in {"0", "false", "off", "no"}
-    else:
-        flag = bool(raw)
-    set_enabled(flag)
-    return JSONResponse({"ok": True, **status()})
+    payload: dict = {}
+    if raw is not None:
+        if isinstance(raw, str):
+            payload["enabled"] = raw.strip().lower() not in {"0", "false", "off", "no"}
+        else:
+            payload["enabled"] = bool(raw)
+    for key in ("choice_id", "id", "provider", "model", "day_token_cap"):
+        if key in body:
+            payload[key] = body[key]
+    if not payload:
+        return JSONResponse({"error": "enabled, choice_id, or day_token_cap required"}, status_code=400)
+    try:
+        st = apply_update(payload)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    return JSONResponse({"ok": True, **st})
 
 
 @router.get("/daedalus/sessions")

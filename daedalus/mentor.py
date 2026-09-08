@@ -13,6 +13,10 @@ Toggle (highest wins):
 1. ``DAEDALUS_MENTOR=0/false/off`` — off for this process (tests/CI).
 2. ``DAEDALUS_MENTOR=1/true/on`` — on, even if Studio saved off.
 3. KV ``adn:daedalus_mentor`` — Studio persist. Default **on** when unset.
+
+The director LLM (owner-chosen strong model, tight token budget) lives in
+``daedalus.mentor_helm``. ``steer()`` stays deterministic so tests and the
+unambiguous Vite-scaffold path never spend tokens.
 """
 from __future__ import annotations
 
@@ -94,13 +98,37 @@ def status() -> dict[str, Any]:
         persisted = None
     else:
         persisted = persisted_enabled()
-    return {
+    out: dict[str, Any] = {
         "enabled": enabled(),
         "env_locked": ov is not None,
         "env_override": ov,
         "persisted": persisted,
         "default": _DEFAULT_ON,
     }
+    try:
+        from . import mentor_helm
+        out["llm"] = mentor_helm.status_llm()
+    except Exception:
+        out["llm"] = {"enabled": False}
+    return out
+
+
+def apply_update(body: dict[str, Any] | None) -> dict[str, Any]:
+    """Studio POST: toggle and/or director choice / daily token cap."""
+    body = body or {}
+    if body.get("enabled") is not None:
+        set_enabled(bool(body["enabled"]))
+    cid = str(body.get("choice_id") or body.get("id") or "").strip()
+    provider = str(body.get("provider") or "").strip()
+    model = str(body.get("model") or "").strip()
+    if cid or (provider and model):
+        from . import mentor_helm
+        mentor_helm.set_choice(body)
+    cap = body.get("day_token_cap")
+    if cap is not None and cap != "":
+        from . import mentor_helm
+        mentor_helm.set_day_token_cap(int(cap))
+    return status()
 
 
 @dataclass
@@ -216,14 +244,14 @@ def _failed_tools(loop: Any) -> list[str]:
 
 
 def extra_round_budget(loop: Any) -> int:
-    """Bounded LLM recover rounds after native budget exhaust. 0 when off."""
+    """Bounded recover rounds after native budget exhaust. 0 when off."""
     if not enabled() or loop is None:
         return 0
     if getattr(loop, "mentor_grants", 0) >= _MAX_GRANTS:
         return 0
     if not getattr(loop, "_has_writes", lambda: False)():
         return 0
-    decision = steer(loop)
+    decision = _decision_for(loop)
     if decision is None or decision.action != "continue" or not decision.next_tool:
         return 0
     from .tool_catalog import canonical
@@ -402,9 +430,117 @@ def steer(loop: Any) -> Steer | None:
     )
 
 
+def inspect_digest(loop: Any) -> dict[str, Any]:
+    """Tiny JSON brief for the director LLM — flags and last fails, not source."""
+    slug = str(getattr(loop, "slug", "") or "")
+    kind = str(getattr(loop, "kind", "") or "")
+    view = inspect_project(slug, kind=kind)
+    last_fails: list[str] = []
+    for o in getattr(loop, "unrecovered_failures", lambda: [])()[:4]:
+        tool = str(getattr(o, "tool", "") or "")
+        snippet = str(getattr(o, "head", "") or "")[:80]
+        last_fails.append(f"{tool}:{snippet}" if snippet else tool)
+    flags = {
+        "scaffold_vite_app_div": bool(view.scaffold_main),
+        "has_canvas": bool(view.has_canvas),
+        "entry_boots": bool(view.entry_boots),
+        "has_phaser_boot": bool(view.has_phaser_boot),
+        "proof_blank": bool(getattr(loop, "proof_blank", False)),
+        "kernel_proof_ran": bool(getattr(loop, "kernel_proof_ran", False)),
+        "image_retry_capped": bool(getattr(loop, "retry_capped", lambda _t: False)("generate_image")),
+    }
+    return {
+        "kind": kind,
+        "scaffold": bool(view.scaffold_main),
+        "loop_ok": bool(view.entry_boots),
+        "has_src_main": bool(view.main_js),
+        "has_index_html": bool(view.index_html),
+        "play_url": "",
+        "proof_blank": bool(getattr(loop, "proof_blank", False)),
+        "flags": flags,
+        "last_fails": last_fails,
+        "native_hint": str(getattr(loop, "stop_reason", "") or ""),
+    }
+
+
+def steer_payload(decision: Steer | None) -> dict[str, Any]:
+    if decision is None:
+        return {
+            "ok": False,
+            "action": "continue",
+            "next_tool": None,
+            "next_args": {},
+            "reason": "",
+            "forbid_tools": [],
+            "blockers": [],
+            "source": "rules",
+        }
+    action = decision.action
+    if action == "continue" and decision.next_tool:
+        action = "call_tool"
+    return {
+        "ok": True,
+        "action": action,
+        "next_tool": decision.next_tool or None,
+        "next_args": dict(decision.next_args or {}),
+        "reason": (decision.reason or "")[:140],
+        "forbid_tools": list(decision.forbid_tools or []),
+        "blockers": list(decision.blockers or []),
+        "source": "rules",
+        "rag_refs": list(decision.rag_refs or [])[:3],
+    }
+
+
+def steer_from_payload(payload: dict[str, Any]) -> Steer:
+    action = str(payload.get("action") or "continue")
+    if action == "call_tool":
+        action = "continue"
+    if action not in {"continue", "ship", "stop"}:
+        action = "continue"
+    return Steer(
+        action=action,
+        next_tool=str(payload.get("next_tool") or ""),
+        next_args=dict(payload.get("next_args") or {}) if isinstance(payload.get("next_args"), dict) else {},
+        reason=str(payload.get("reason") or "")[:140],
+        blockers=[str(x) for x in (payload.get("blockers") or []) if x][:8],
+        forbid_tools=[str(x) for x in (payload.get("forbid_tools") or []) if x][:12],
+        rag_refs=[str(x) for x in (payload.get("rag_refs") or []) if x][:3],
+    )
+
+
+def _decision_for(loop: Any) -> Steer | None:
+    if not enabled() or loop is None:
+        return None
+    cached = getattr(loop, "mentor_steer", None)
+    if isinstance(cached, dict) and cached.get("ok"):
+        return steer_from_payload(cached)
+    return steer(loop)
+
+
+async def refresh_helm(loop: Any) -> dict[str, Any] | None:
+    """Ask the director (or skip) and cache on the loop. Safe to await often."""
+    if not enabled() or loop is None:
+        return None
+    from . import mentor_helm
+
+    inspect = inspect_digest(loop)
+    rules = steer_payload(steer(loop))
+    fp = mentor_helm.digest_fingerprint(inspect)
+    cached = getattr(loop, "mentor_steer", None)
+    if isinstance(cached, dict) and cached.get("ok") and getattr(loop, "mentor_fp", None) == fp:
+        return cached
+    turn_calls = int(getattr(loop, "mentor_llm_calls", 0) or 0)
+    out = await mentor_helm.consult(inspect, rules, turn_calls=turn_calls)
+    loop.mentor_steer = out
+    loop.mentor_fp = fp
+    if out.get("source") == "llm":
+        loop.mentor_llm_calls = turn_calls + 1
+    return out
+
+
 def progress_next(loop: Any, *, fallback: str = "") -> str:
     """PLAN PROGRESS NEXT line. Empty string → caller uses the old heuristic."""
-    decision = steer(loop)
+    decision = _decision_for(loop)
     if decision is None:
         return fallback
     slug = str(getattr(loop, "slug", "") or "")
@@ -419,8 +555,10 @@ def progress_next(loop: Any, *, fallback: str = "") -> str:
 def persona_wrapup(loop: Any) -> str:
     if not enabled() or loop is None:
         return ""
-    decision = steer(loop)
-    lines = ["━━━ MENTOR (kernel helm) ━━━"]
+    decision = _decision_for(loop)
+    cached = getattr(loop, "mentor_steer", None)
+    director = isinstance(cached, dict) and cached.get("source") == "llm"
+    lines = ["━━━ MENTOR (director) ━━━" if director else "━━━ MENTOR (kernel helm) ━━━"]
     if decision is None:
         return ""
     if decision.action == "ship":
@@ -453,7 +591,7 @@ def persona_wrapup(loop: Any) -> str:
 def maybe_capture_lesson(loop: Any, memory: Any = None) -> None:
     if not enabled() or loop is None or memory is None:
         return
-    decision = steer(loop)
+    decision = _decision_for(loop)
     if decision is None or not decision.forbid_tools:
         return
     try:

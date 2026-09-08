@@ -29,9 +29,14 @@
         <button type="button" data-effort="craft" aria-pressed="false" data-i18n="studio.effort.craft">Craft</button>
         <button type="button" data-effort="epic" aria-pressed="false" data-i18n="studio.effort.epic">Epic</button>
       </div>
-      <div class="mentor" role="group" data-i18n-aria="studio.mentorAria" aria-label="Mentor">
-        <button type="button" data-mentor="on" aria-pressed="true" data-i18n="studio.mentor.on">ON</button>
-        <button type="button" data-mentor="off" aria-pressed="false" data-i18n="studio.mentor.off">OFF</button>
+      <div class="mentor-wrap">
+        <div class="mentor" role="group" data-i18n-aria="studio.mentorAria" aria-label="Mentor">
+          <button type="button" data-mentor="on" aria-pressed="true" data-i18n="studio.mentor.on">ON</button>
+          <button type="button" data-mentor="off" aria-pressed="false" data-i18n="studio.mentor.off">OFF</button>
+        </div>
+        <label class="sr-only" for="mentor-choice" data-i18n="studio.mentorChoiceAria">Mentor model</label>
+        <select id="mentor-choice" class="mentor-choice" data-i18n-aria="studio.mentorChoiceAria" aria-label="Mentor model"></select>
+        <span id="mentor-spend" class="mentor-spend" title=""></span>
       </div>
       <div class="dx-lang" role="group" data-i18n-aria="lang.aria" aria-label="Language">
         <button type="button" data-lang="en" aria-pressed="true">EN</button>

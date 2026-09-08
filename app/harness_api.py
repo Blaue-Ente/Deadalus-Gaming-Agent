@@ -485,7 +485,11 @@ class EffortBody(BaseModel):
 
 
 class MentorBody(BaseModel):
-    enabled: bool = True
+    enabled: bool | None = None
+    choice_id: str = Field(default="", max_length=80)
+    provider: str = Field(default="", max_length=40)
+    model: str = Field(default="", max_length=200)
+    day_token_cap: int | None = Field(default=None, ge=0, le=2_000_000)
 
 
 @router.get("/api/v1/daedalus/effort")
@@ -508,9 +512,12 @@ async def mentor_status() -> dict[str, Any]:
 
 @router.post("/api/v1/daedalus/mentor")
 async def mentor_set(body: MentorBody) -> dict[str, Any]:
-    from daedalus.mentor import set_enabled, status
-    set_enabled(body.enabled)
-    return {"ok": True, **status()}
+    from daedalus.mentor import apply_update
+    try:
+        st = apply_update(body.model_dump())
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, **st}
 
 
 @router.get("/api/v1/llm/wardrobe")

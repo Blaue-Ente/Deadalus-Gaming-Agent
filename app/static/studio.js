@@ -140,6 +140,64 @@
     if (group) {
       group.title = locked ? t("studio.mentorLocked") : t("studio.mentorHint");
     }
+    const llm = (data && data.llm) || {};
+    const sel = $("mentor-choice");
+    if (sel) {
+      const catalog = Array.isArray(llm.catalog) ? llm.catalog : [];
+      const choice = llm.choice || {};
+      const cur = String(choice.id || "auto");
+      const groups = { recommended: [], also: [], choice: [] };
+      catalog.forEach((row) => {
+        const g = row.group && groups[row.group] ? row.group : "choice";
+        groups[g].push(row);
+      });
+      sel.innerHTML = "";
+      [
+        ["recommended", t("studio.mentorGroup.recommended")],
+        ["also", t("studio.mentorGroup.also")],
+        ["choice", t("studio.mentorGroup.choice")],
+      ].forEach(([key, label]) => {
+        const rows = groups[key] || [];
+        if (!rows.length) return;
+        const og = document.createElement("optgroup");
+        og.label = label;
+        rows.forEach((row) => {
+          const opt = document.createElement("option");
+          opt.value = row.id;
+          let name = row.label || row.id;
+          if (row.available === false && row.needs_key) name += " · " + t("studio.mentorNoKey");
+          opt.textContent = name;
+          opt.title = row.why || "";
+          og.appendChild(opt);
+        });
+        sel.appendChild(og);
+      });
+      if (cur === "custom" && !catalog.some((r) => r.id === "custom")) {
+        const opt = document.createElement("option");
+        opt.value = "custom";
+        opt.textContent = choice.label || choice.model || "custom";
+        sel.appendChild(opt);
+      }
+      sel.value = cur;
+      sel.disabled = !!llm.choice_locked;
+    }
+    const spendEl = $("mentor-spend");
+    if (spendEl) {
+      const spend = llm.spend || {};
+      const used = Number(spend.tokens) || 0;
+      const cap = Number(spend.cap) || 0;
+      const fmt = (n) => {
+        if (n >= 10000) return Math.round(n / 1000) + "k";
+        if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+        return String(n);
+      };
+      spendEl.textContent = cap ? t("studio.mentorSpend", { used: fmt(used), cap: fmt(cap) }) : "";
+      spendEl.classList.toggle("warn", cap > 0 && used >= cap * 0.8);
+      const bits = [];
+      if (llm.choice && llm.choice.warn) bits.push(llm.choice.warn);
+      if (llm.recommended && llm.recommended.why) bits.push(llm.recommended.why);
+      spendEl.title = bits.join(" ");
+    }
   }
 
   async function loadMentor() {
@@ -156,6 +214,19 @@
       const data = await api("/api/v1/daedalus/mentor", {
         method: "POST",
         body: JSON.stringify({ enabled: !!on }),
+        timeoutMs: 8000,
+      });
+      paintMentor(data);
+    } catch (e) {
+      add("bot", t("studio.mentorAria") + ": " + errText(e));
+    }
+  }
+
+  async function setMentorChoice(choiceId) {
+    try {
+      const data = await api("/api/v1/daedalus/mentor", {
+        method: "POST",
+        body: JSON.stringify({ choice_id: choiceId }),
         timeoutMs: 8000,
       });
       paintMentor(data);
@@ -229,6 +300,10 @@
   document.querySelectorAll(".mentor button").forEach((btn) => {
     btn.onclick = () => setMentor(btn.dataset.mentor === "on");
   });
+  const mentorChoice = $("mentor-choice");
+  if (mentorChoice) {
+    mentorChoice.onchange = () => setMentorChoice(mentorChoice.value);
+  }
 
   async function refreshHealth() {
     try {
