@@ -15,6 +15,8 @@ description: Godot 4.3 API pin — CharacterBody2D, typed signals, .import sidec
 - Autoload `Game` for score/fail/win. Autoload `DaedalusBridge` is harness-owned — do not edit it
 - `engine({action: run|inspect|input|errors, slug})` after a slice. Files are not Play
 - PNG/GLB under `res://assets/` plus a `.import` sidecar (Daedalus writes one if missing)
+- Primitive collision from the mesh AABB. Never `create_trimesh_shape()` on an imported GLB
+- `.gdignore` only under `screenshots/` / `studio/proof/` — never `assets/`
 
 ## Do not use (hallucination magnets)
 - `KinematicBody2D` / `KinematicBody` (Godot 3)

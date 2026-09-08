@@ -470,6 +470,11 @@ async def create_project(
         _write_scaffold(pdir, kind, name, slug, description)
         # Re-detect after scaffold (picks up run_cmd / entry from real files)
         kind, run_cmd, entry = detect_kind(pdir)
+    try:
+        from .project_status import ensure_status_readme
+        ensure_status_readme(pdir, name=name or slug, kind=kind, description=description)
+    except Exception:
+        log.debug("status README skipped", exc_info=True)
     if source == "built":
         try:
             from .world_kit import needed as world_needed, write as write_world
