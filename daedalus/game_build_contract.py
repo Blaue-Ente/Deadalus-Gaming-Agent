@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from .job_contract import evaluate
+from .job_contract import JobContract, evaluate
 from .capability_registry import platform_for_kind, proof_kinds
 
 
