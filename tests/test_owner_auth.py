@@ -237,6 +237,43 @@ def test_argv_python_dash_c(auth_tmp):
     assert "2" in row["stdout"]
 
 
+def test_peel_package_command_drops_pipes():
+    from daedalus.shell_center import peel_package_command
+    assert peel_package_command(
+        "npm install --no-audit --no-fund --loglevel=error 2>&1 | tail -40"
+    ) == "npm install --no-audit --no-fund --loglevel=error"
+    assert peel_package_command("npm install && npm run build") == "npm install"
+    assert peel_package_command("npx vite build | cat") == "npx vite build"
+    assert peel_package_command("echo hello | wc -l") is None
+    assert peel_package_command("npm install") is None
+
+
+def test_shell_peels_npm_pipe_and_runs_argv(auth_tmp, monkeypatch):
+    from daedalus.shell_center import run_command
+
+    seen: list[list[str]] = []
+
+    class _P:
+        returncode = 0
+        stdout = "added 2 packages\n"
+        stderr = ""
+
+    def fake_run(argv, **kwargs):
+        seen.append(list(argv) if isinstance(argv, (list, tuple)) else [str(argv)])
+        assert kwargs.get("shell") is False
+        return _P()
+
+    monkeypatch.setattr("daedalus.shell_center.subprocess.run", fake_run)
+    row = run_command(
+        "npm install --no-audit --no-fund --loglevel=error 2>&1 | tail -40",
+        timeout=30,
+    )
+    assert row["ok"] is True
+    assert row["blocked"] is False
+    assert row["ran"] == "npm install --no-audit --no-fund --loglevel=error"
+    assert seen and seen[0][:2] == ["npm", "install"]
+
+
 def test_public_bind_disables_shell_without_isolation(auth_tmp, monkeypatch):
     monkeypatch.setenv("DAEDALUS_BIND_HOST", "0.0.0.0")
     monkeypatch.delenv("DAEDALUS_SHELL_ISOLATION", raising=False)

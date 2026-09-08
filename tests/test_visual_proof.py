@@ -188,6 +188,40 @@ def test_new_project_gets_status_readme(tmp_path, monkeypatch):
     reset_sqlite_pool()
 
 
+def test_vite_verify_compile_fail_does_not_open_chromium(monkeypatch, tmp_path):
+    from daedalus.playground_browser import verify_app
+
+    called = {"browser": False}
+
+    async def fake_gate(root, *, slug="", kind="vite"):
+        return {
+            "ok": False, "skipped": False, "install_ok": True,
+            "error": "Could not resolve ./scenes/Boot.js", "logs": ["[build] fail"],
+        }
+
+    async def fake_browser(*a, **k):
+        called["browser"] = True
+        return {"ok": True, "summary": "should not run"}
+
+    monkeypatch.setattr("daedalus.playground_runner.vite_compile_gate", fake_gate)
+    monkeypatch.setattr("daedalus.playground_browser.browser_verify", fake_browser)
+    monkeypatch.setattr("daedalus.playground.project_dir", lambda slug: tmp_path)
+    (tmp_path / "package.json").write_text('{"dependencies":{"phaser":"^3.80"}}', encoding="utf-8")
+    result = asyncio.run(verify_app("glass-orchard", "vite"))
+    assert result["ok"] is False
+    assert called["browser"] is False
+    assert "compile" in (result.get("summary") or "").lower() or "Vite" in (result.get("summary") or "")
+    assert any("Boot.js" in str(e) for e in (result.get("page_errors") or []))
+
+
+def test_vite_compile_gate_skips_without_package_json(tmp_path):
+    from daedalus.playground_runner import vite_compile_gate
+
+    result = asyncio.run(vite_compile_gate(tmp_path, slug="x", kind="vite"))
+    assert result["ok"] is True
+    assert result["skipped"] is True
+
+
 def test_proof_result_tool_text_and_nudge():
     r = ProofResult(
         ok=False, skipped=False, kind="static", slug="s", tool="browser",

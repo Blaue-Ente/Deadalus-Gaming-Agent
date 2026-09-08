@@ -43,6 +43,9 @@ _BLOCKED = (
 
 _SECRET_ENV = re.compile(r"(API_KEY|SECRET|TOKEN|PASSWORD|PRIVATE_KEY|CREDENTIAL)$", re.I)
 _META = re.compile(r"[|;&`$<>\n]")
+# npm/pnpm/npx vite — peel pipes/&& so a writer command still runs.
+_PKG_HEAD = re.compile(r"^(npm|pnpm|npx)\b", re.I)
+_REDIRECT_TOKEN = re.compile(r"\s+\d*>&?\d*|\s+[<>]+\s*\S+")
 
 _SAFE_ENV = {
     "PATH", "HOME", "LANG", "LC_ALL", "TERM", "TZ", "USER", "TMPDIR",
@@ -118,6 +121,23 @@ def shell_enabled() -> bool:
     return bind_is_loopback()
 
 
+def peel_package_command(command: str) -> str | None:
+    """Keep the npm/pnpm/npx argv prefix; drop ``| tail``, ``&&``, ``2>&1``.
+
+    Isolation refuses metacharacters. Writers (and GDD copy) still emit
+    ``npm install 2>&1 | tail``. The install is allowlisted; the sugar is not.
+    ``echo hello | wc`` does not match and stays blocked.
+    """
+    text = (command or "").strip()
+    if not text or not _META.search(text):
+        return None
+    head = re.split(r"[|;&`$\n]", text, maxsplit=1)[0]
+    head = _REDIRECT_TOKEN.sub("", head).strip()
+    if not head or _META.search(head) or not _PKG_HEAD.match(head):
+        return None
+    return head
+
+
 def _blocked(command: str) -> str | None:
     text = command.strip()
     if not text:
@@ -128,8 +148,9 @@ def _blocked(command: str) -> str | None:
     if _META.search(text) and not legacy_shell_enabled():
         return (
             "shell metacharacters refused "
-            "(pipes, redirection, and $ expansion need DAEDALUS_SHELL_LEGACY=1; "
-            "this is still not a container)"
+            "(pipes, redirection, and && need a plain command: "
+            "npm install with slug=, no | or 2>&1. "
+            "DAEDALUS_SHELL_LEGACY=1 is still not a container)"
         )
     return None
 
@@ -223,7 +244,12 @@ def run_command(
             "shell disabled: public bind requires DAEDALUS_SHELL_ISOLATION=1",
             disabled=True,
         )
-    reason = _blocked(command)
+    peeled = peel_package_command(command)
+    effective = command
+    if peeled and peeled != command.strip():
+        log.info("shell peeled package sugar %r → %r", command[:160], peeled)
+        effective = peeled
+    reason = _blocked(effective)
     if reason:
         return _fail(command, reason)
     try:
@@ -232,19 +258,21 @@ def run_command(
         return _fail(command, str(exc), cwd=cwd or "")
 
     timeout_s = DEFAULT_TIMEOUT_S if timeout is None else int(timeout)
+    if timeout is None and _PKG_HEAD.match(effective.strip()):
+        timeout_s = 120
     timeout_s = max(1, min(timeout_s, MAX_TIMEOUT_S))
     use_shell = legacy_shell_enabled()
     argv: list[str] | None = None
     if not use_shell:
         try:
-            argv = shlex.split(command, posix=True)
+            argv = shlex.split(effective, posix=True)
         except ValueError as exc:
             return _fail(command, f"could not parse command: {exc}", cwd=str(workdir))
         if not argv:
             return _fail(command, "empty command", cwd=str(workdir))
     try:
         proc = subprocess.run(
-            command if use_shell else argv,
+            effective if use_shell else argv,
             shell=use_shell,
             cwd=str(workdir),
             env=_child_env(),
@@ -260,6 +288,7 @@ def run_command(
             "disabled": False,
             "error": "" if proc.returncode == 0 else f"exit {proc.returncode}",
             "command": command,
+            "ran": effective,
             "stdout": stdout,
             "stderr": stderr,
             "exit_code": proc.returncode,

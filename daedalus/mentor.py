@@ -427,8 +427,12 @@ def steer(loop: Any) -> Steer | None:
         return Steer(
             action="continue",
             next_tool="run_command",
-            next_args={"slug": slug, "command": "npm install", "timeout": 90},
-            reason="RETURN TO WRITER: Vite/Phaser deps are not installed. npm install, then the kernel will open the game.",
+            next_args={"slug": slug, "command": "npm install", "timeout": 120},
+            reason=(
+                "RETURN TO WRITER: Vite/Phaser deps are not installed. "
+                'run_command command="npm install" slug=' + (slug or "<project>")
+                + " — no pipes, no &&. Then the kernel will open the game."
+            ),
             blockers=blockers,
             rag_refs=rag,
             forbid_tools=forbid,

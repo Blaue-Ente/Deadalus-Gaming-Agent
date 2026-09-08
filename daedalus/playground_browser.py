@@ -345,6 +345,21 @@ async def verify_app(slug: str, kind: str) -> dict[str, Any]:
             stop()
 
     if kind in ("vite", "vite-react"):
+        from . import playground_runner as runner
+        gate = await runner.vite_compile_gate(root, slug=slug, kind=kind)
+        if not gate.get("ok") and not gate.get("skipped"):
+            err = str(gate.get("error") or "vite compile gate failed")[:400]
+            logs = "\n".join((gate.get("logs") or [])[-12:])
+            return {
+                "ok": False, "reachable": False, "blank_screen": False,
+                "console_errors": [],
+                "page_errors": [f"vite compile gate: {err}"],
+                "failed_requests": [], "dom_text_len": 0, "has_canvas": False,
+                "screenshot_path": None,
+                "summary": f"❌ Vite install/build failed — Chromium not opened. {err}"[:240],
+                "error": err,
+                "compile_logs": logs,
+            }
         dist = root / "dist"
         serve_dir = dist if (dist.exists() and (dist / "index.html").exists()) else root
         base, stop = _serve_static(serve_dir)

@@ -262,3 +262,34 @@ def test_mentor_failed_proof_returns_to_writer_not_browser(tmp_path, monkeypatch
     assert "RETURN TO WRITER" in (decision.reason or "")
     extra = mentor.extra_round_budget(loop)
     assert extra == 2
+
+
+def test_mentor_compile_fail_proof_still_returns_to_writer(tmp_path, monkeypatch):
+    from daedalus import mentor
+    from daedalus.visual_proof import ProofResult
+
+    monkeypatch.setenv("DAEDALUS_MENTOR", "1")
+    monkeypatch.setattr("daedalus.mentor._rag_hits", lambda q: [])
+    slug = "glass-orchard"
+    root = tmp_path / slug
+    (root / "src").mkdir(parents=True)
+    (root / "node_modules" / "phaser").mkdir(parents=True)
+    (root / "index.html").write_text('<div id="game"></div>', encoding="utf-8")
+    (root / "src" / "main.js").write_text(PHASER_BOOT, encoding="utf-8")
+    (root / "package.json").write_text('{"dependencies":{"phaser":"^3.80"}}', encoding="utf-8")
+    monkeypatch.setattr("daedalus.playground.project_dir", lambda s: root)
+    rt = route(LUMEN)
+    loop = BuildLoop(rt, LUMEN, fix_rounds=3)
+    loop.slug = slug
+    loop.kind = "vite"
+    loop.observe("write_file", {"slug": slug, "path": "src/main.js"}, "── write_file OK ──", ok=True)
+    loop.note_kernel_proof(ProofResult(
+        ok=False, skipped=False, kind="vite", slug=slug, tool="browser",
+        summary="Vite install/build failed", blank_screen=False,
+        details={"page_errors": ["vite compile gate: Could not resolve ./scenes/Grove.js"]},
+    ))
+    decision = mentor.steer(loop)
+    assert decision is not None
+    assert decision.next_tool == "write_file"
+    assert "RETURN TO WRITER" in (decision.reason or "")
+    assert decision.next_tool != "browser"

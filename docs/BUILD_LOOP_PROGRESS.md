@@ -88,6 +88,8 @@ When Mentor is on: PLAN PROGRESS NEXT comes from `daedalus/mentor.py` (inspect s
 
 A **failed check returns to the writer**. Missing `node_modules` → `npm install`. Phaser `parent` id missing in `index.html` → `write_file` the mount. Chromium uncaught / blank / broken requests → `write_file` the entry, **not** another `browser`. The kernel proof already ran; repeating it without a file change is a skip-loop. Mentor still does **not** write `index.html` / `src/main.js`.
 
+**Hole closed 2026-09-08 (cheap MiniMax M3 Glass Orchard):** Mentor *did* say RETURN TO WRITER → `npm install`. The writer called `npm install … 2>&1 | tail`. Isolation refused the pipe, so `node_modules` never appeared and proof stayed "renders, 1 uncaught". Vite proof also used to serve the **source** tree when `dist/` was missing (stub `<canvas>` counted as painted). Now: (1) `run_command` peels npm/pnpm/npx pipes/`&&` and runs the argv prefix; (2) Vite proof runs `npm install` + `vite build` before Chromium — compile fail is a failed check, not a skip. Cheap eval pool: DeepSeek V4 Flash, GLM 5.2, MiniMax M3, Poolside — not Claude.
+
 ## Live eval 2026-09-08 — Glass Orchard, Mentor GLM 5.3 vs GPT-6 Astra
 
 Full `Daedalus.chat` (`scripts/live_eval_agent_chat.py --better --preset glass --mentor-choice …`). Builder: Claude Sonnet 4.6. Effort craft. Isolated `$DAEDALUS_DATA`. Long GDD (kind=vite + Phaser 3, lantern harvest, Grove/Dusk). Playbook **playground.vite**.
