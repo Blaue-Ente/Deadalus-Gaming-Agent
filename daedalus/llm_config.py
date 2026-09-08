@@ -76,6 +76,19 @@ def openai_compat_headers(provider: str) -> dict[str, str]:
     return {"HTTP-Referer": referer, "X-Title": title}
 
 
+def openai_compat_extra_body(provider: str, *, with_tools: bool = False) -> dict:
+    """Extra JSON body for OpenAI-compatible providers.
+
+    OpenRouter otherwise may pick a host that ignores ``tools`` and just
+    writes prose — MiniMax/DeepSeek then look like they cannot call tools.
+    """
+    if (provider or "").strip().lower() != "openrouter":
+        return {}
+    if with_tools:
+        return {"provider": {"require_parameters": True}}
+    return {}
+
+
 PROVIDER_DEFAULTS: dict[str, dict] = {
     "anthropic": {
         "base_url": "https://api.anthropic.com",
