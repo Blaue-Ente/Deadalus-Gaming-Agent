@@ -122,6 +122,7 @@ def _inspect_quality(slug: str) -> dict:
                 pass
         if p.suffix.lower() == ".png" and "studio/proof" not in rel.replace("\\", "/"):
             png.append({"path": rel, "bytes": p.stat().st_size})
+    sprite_png = [p for p in png if "font" not in p["path"].lower()]
     blob = "\n".join(t for _, t in js)
     pkg = root / "package.json"
     pkg_txt = pkg.read_text(encoding="utf-8") if pkg.is_file() else ""
@@ -130,8 +131,8 @@ def _inspect_quality(slug: str) -> dict:
     dist = (root / "dist" / "index.html").is_file()
     rect_hits = _RECT_RE.findall(blob)[:12]
     sprite_hits = _SPRITE_RE.findall(blob)[:12]
-    boutique = bool(png) and bool(sprite_hits) and has_phaser and has_vite
-    rectangles_only = bool(rect_hits) and not png and not sprite_hits
+    boutique = bool(sprite_png) and bool(sprite_hits) and has_phaser and has_vite
+    rectangles_only = bool(rect_hits) and not sprite_png and not sprite_hits
     return {
         "root": str(root),
         "kind_guess": "vite" if has_vite else "static",
@@ -141,6 +142,7 @@ def _inspect_quality(slug: str) -> dict:
         "has_dist": dist,
         "png_assets": png,
         "png_count": len(png),
+        "sprite_png_count": len(sprite_png),
         "sprite_api_hits": sprite_hits,
         "rectangle_hits": rect_hits,
         "boutique_heuristic": boutique,

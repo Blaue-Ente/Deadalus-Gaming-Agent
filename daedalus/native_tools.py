@@ -1667,7 +1667,7 @@ async def execute_native_tool(
             )
 
         if name == "generate_image":
-            from .image_client import generate_image
+            from .image_client import decode_image_bytes, generate_image
             from .paths import data_root, playground_projects_dir
             prompt = str(args.get("prompt") or "")
             slug = str(args.get("slug") or "")
@@ -1678,13 +1678,12 @@ async def execute_native_tool(
             if not images:
                 return f"── generate_image FAILED: no images ({img}) ──"
             first = images[0]
-            raw_b64 = first.get("b64") or ""
             dest_dir = (playground_projects_dir() / slug / "assets") if slug else (data_root() / "generated")
             dest_dir.mkdir(parents=True, exist_ok=True)
             dest = dest_dir / filename
-            if raw_b64:
-                import base64
-                dest.write_bytes(base64.b64decode(raw_b64))
+            decoded = decode_image_bytes(first)
+            if decoded:
+                dest.write_bytes(decoded)
             elif first.get("url"):
                 import httpx
                 async with httpx.AsyncClient(timeout=30.0) as client:
