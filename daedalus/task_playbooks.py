@@ -204,12 +204,17 @@ PLAYBOOKS: tuple[Playbook, ...] = (
         keywords=("godot", "gdscript", ".tscn", "метroid", "metroidvania"),
         regex=r"\b(godot|gdscript|\.tscn)\b",
         tools=_CORE + (
-            "engine", "game_canon", "game_lint", "assets", "world", "browser",
+            "edit_file", "engine", "game_canon", "game_lint", "assets", "world", "browser",
         ),
         expected_files=("project.godot", "scenes/main.tscn"),
         notes=(
-            "Scaffold already has project.godot. One .tscn/.gd per slice. "
-            "engine run is Play when GODOT_BIN exists. Preview HTML is not Play."
+            "Godot-first order: preflight → contract → context → slice → runtime → "
+            "visual → review → export → publish. "
+            "kind=godot. Scaffold already has project.godot. "
+            "Patch with edit_file; do not rewrite whole .gd/.tscn each turn. "
+            "engine({action: pipeline, slug}) walks the order. "
+            "Preview HTML is not Play. Missing Godot/export is FAIL, not skip. "
+            "No world/ campaign until this slice is green (unless epic)."
         ),
         steps=(
             Step(
@@ -219,6 +224,14 @@ PLAYBOOKS: tuple[Playbook, ...] = (
                 args={"action": "load", "id": "godot"},
                 docs=("skills/godot.md", "skills/godot_api.md"),
                 why="Godot 4.3 pin: CharacterBody2D, typed .connect, autoload Game.",
+            ),
+            Step(
+                id="preflight",
+                tool="engine",
+                auto=True,
+                args={"action": "preflight"},
+                depends_on=("skill_godot",),
+                why="Refuse the build when Godot 4.3 or headless runner is missing. Skip is fail.",
             ),
             Step(
                 id="create",
@@ -233,13 +246,15 @@ PLAYBOOKS: tuple[Playbook, ...] = (
                 tool="write_file",
                 required=True,
                 depends_on=("create",),
-                why="scenes/*.tscn and scripts/*.gd — do not rewrite project.godot every turn.",
+                accept_any=("write_file", "edit_file"),
+                why="scenes/*.tscn and scripts/*.gd — patch with edit_file; do not rewrite project.godot.",
             ),
             Step(
                 id="engine",
                 tool="engine",
                 depends_on=("write",),
-                why="engine({action: run|inspect, slug}) when GODOT_BIN exists. Files alone are not Play.",
+                accept_any=("engine", "visual_proof"),
+                why="engine({action: pipeline, slug}) walks the order. Files alone are not Play.",
             ),
         ),
     ),

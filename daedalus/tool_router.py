@@ -415,6 +415,10 @@ def _exec_consult(name: str, args: dict[str, Any]) -> tuple[str, bool]:
                 return f"skill {sid} not found", False
             body = (loaded.get("body") or "")[:1600]
             return body, True
+        if name == "engine":
+            from .godot_first import preflight
+            r = preflight(None)
+            return _clip(r), bool(r.get("ok")) and not r.get("skipped")
         if name == "math3d":
             from .math3d import run_action
             op = str(args.get("op") or args.get("action") or "catalog")

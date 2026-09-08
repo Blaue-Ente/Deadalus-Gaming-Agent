@@ -459,6 +459,9 @@ async def create_project(
         run_cmd, entry = "", ""
     else:
         _, run_cmd, entry = detect_kind(pdir)
+    if not _requested_auto:
+        from .godot_first import coerce_kind
+        kind = coerce_kind(kind, name, description)
     if kind not in VALID_KINDS:
         kind = "static"
     if source not in VALID_SOURCES:
@@ -466,10 +469,13 @@ async def create_project(
 
     # Write scaffold if this is a freshly built project (no existing files)
     # ``auto`` — empty workspace; autopilot resolves platform before first build.
+    requested_kind = kind
     if source == "built" and not _requested_auto and not any(pdir.iterdir()):
         _write_scaffold(pdir, kind, name, slug, description)
         # Re-detect after scaffold (picks up run_cmd / entry from real files)
         kind, run_cmd, entry = detect_kind(pdir)
+        if requested_kind == "godot":
+            kind = "godot"
     try:
         from .project_status import ensure_status_readme
         ensure_status_readme(pdir, name=name or slug, kind=kind, description=description)
@@ -477,8 +483,11 @@ async def create_project(
         log.debug("status README skipped", exc_info=True)
     if source == "built":
         try:
+            from .godot_first import allow_world_kit
             from .world_kit import needed as world_needed, write as write_world
-            if world_needed(description, effort=effort):
+            if world_needed(description, effort=effort) and allow_world_kit(
+                kind, description, effort
+            ):
                 write_world(pdir, name=name, slug=slug, description=description, kind=kind)
         except Exception:
             log.debug("world kit skipped", exc_info=True)

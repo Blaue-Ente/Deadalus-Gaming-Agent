@@ -1,6 +1,6 @@
 """Godot 4.3 Playground scaffold — text project an LLM can extend.
 
-M0: one player, floor, fail/reset autoload. Not a CrewAI dump.
+M0: player, camera, collision, one goal, fail/win/reset, HUD. Not a CrewAI dump.
 """
 from __future__ import annotations
 
@@ -40,9 +40,10 @@ renderer/rendering_method="forward_plus"
 """
 
 _MAIN_TSCN = """\
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://scripts/player.gd" id="1_player"]
+[ext_resource type="Script" path="res://scripts/hud.gd" id="2_hud"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_player"]
 size = Vector2(24, 32)
@@ -52,6 +53,9 @@ size = Vector2(1600, 40)
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_hazard"]
 size = Vector2(1600, 24)
+
+[sub_resource type="RectangleShape2D" id="RectangleShape2D_goal"]
+size = Vector2(40, 40)
 
 [node name="Main" type="Node2D"]
 
@@ -89,6 +93,29 @@ collision_mask = 2
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Pit"]
 shape = SubResource("RectangleShape2D_hazard")
+
+[node name="Goal" type="Area2D" parent="."]
+position = Vector2(520, 640)
+collision_layer = 4
+collision_mask = 2
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Goal"]
+shape = SubResource("RectangleShape2D_goal")
+
+[node name="GoalVisual" type="Polygon2D" parent="Goal"]
+color = Color(0.95, 0.78, 0.2, 1)
+polygon = PackedVector2Array(-16, -16, 16, -16, 16, 16, -16, 16)
+
+[node name="HUD" type="CanvasLayer" parent="."]
+script = ExtResource("2_hud")
+
+[node name="Status" type="Label" parent="HUD"]
+offset_left = 16.0
+offset_top = 12.0
+offset_right = 420.0
+offset_bottom = 48.0
+theme_override_font_sizes/font_size = 22
+text = "HP  -  SCORE 0"
 """
 
 _PLAYER_GD = '''\
@@ -103,6 +130,9 @@ func _ready() -> void:
 	var pit := get_parent().get_node_or_null("Pit")
 	if pit and not pit.body_entered.is_connected(_on_pit):
 		pit.body_entered.connect(_on_pit)
+	var goal := get_parent().get_node_or_null("Goal")
+	if goal and not goal.body_entered.is_connected(_on_goal):
+		goal.body_entered.connect(_on_goal)
 
 func _physics_process(delta: float) -> void:
 	if not is_on_floor():
@@ -118,38 +148,62 @@ func _physics_process(delta: float) -> void:
 func _on_pit(body: Node2D) -> void:
 	if body == self:
 		Game.fail("pit")
+
+func _on_goal(body: Node2D) -> void:
+	if body == self:
+		Game.win("goal")
 '''
 
 _GAME_GD = '''\
 extends Node
-## Autoload Game — score, fail, reset. UI reads this; gameplay does not duplicate it.
+## Autoload Game — score, fail, win, reset. UI reads this; gameplay does not duplicate it.
 
 signal failed(reason: String)
+signal won(reason: String)
 signal scored(total: int)
 
 var score: int = 0
 var is_failed: bool = false
+var is_won: bool = false
 
 func add_score(amount: int = 1) -> void:
-	if is_failed:
+	if is_failed or is_won:
 		return
 	score += amount
 	scored.emit(score)
 
 func fail(reason: String = "fail") -> void:
-	if is_failed:
+	if is_failed or is_won:
 		return
 	is_failed = true
 	failed.emit(reason)
 
+func win(reason: String = "win") -> void:
+	if is_failed or is_won:
+		return
+	is_won = true
+	won.emit(reason)
+
 func reset() -> void:
 	score = 0
 	is_failed = false
+	is_won = false
 	get_tree().reload_current_scene()
 
 func _unhandled_input(event: InputEvent) -> void:
-	if is_failed and event.is_action_pressed("ui_accept"):
+	if (is_failed or is_won) and event.is_action_pressed("ui_accept"):
 		reset()
+'''
+
+_HUD_GD = '''\
+extends CanvasLayer
+## HUD only — no gameplay logic.
+
+@onready var status: Label = $Status
+
+func _process(_dt: float) -> void:
+	var state := "WIN" if Game.is_won else ("FAIL" if Game.is_failed else "PLAY")
+	status.text = "HP  -  SCORE %d  -  %s" % [Game.score, state]
 '''
 
 _ICON_SVG = """\
@@ -161,7 +215,7 @@ _ICON_SVG = """\
 
 _PREVIEW_HTML = """\
 <!DOCTYPE html>
-<html lang="bg">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -177,11 +231,10 @@ _PREVIEW_HTML = """\
   <h1>Godot 4 — __NAME__</h1>
   <p>__DESC__</p>
   <div class="card">
-    <p><strong>Локално:</strong> инсталирай Godot 4.3 → Import → тази папка.</p>
+    <p><strong>This page is not Play.</strong> Open the folder in Godot 4.3.</p>
     <p>Main scene: <code>scenes/main.tscn</code>. Autoload: <code>Game</code>.</p>
-    <p>CLI (ако binary е в PATH): <code>godot --headless --path . --quit</code></p>
+    <p>CLI: <code>godot --headless --path . --quit</code></p>
   </div>
-  <p class="card">3D meshes: <code>python -m daedalus.blender_mcp</code> или <code>tools/blender/*.py</code> с <code>blender -b --python</code>.</p>
 </body>
 </html>
 """
@@ -189,15 +242,15 @@ _PREVIEW_HTML = """\
 _README = """\
 # __NAME__ — Godot 4 (Daedalus)
 
-M0 vertical slice: player, floor, pit fail, autoload Game.
+M0 vertical slice: player, camera, collision, gold goal (win), pit fail, HUD, restart.
 
 ## Open
 Godot 4.3 → Import → this folder. Play `scenes/main.tscn`.
 
-## Pipeline (Daedalus roles, not a second CrewAI loop)
-M0 architecture → M1 gameplay → M2 HUD → M3 NPC → M4 VFX → M5 audio → M6 GLB import → M7 QA.
+## Godot-first order
+preflight → contract → context → slice → runtime → visual → review → export → publish.
 
-One `.tscn` or `.gd` per autopilot stage. Hero GLB: emit a Blender job, do not invent vertices.
+Preview HTML is not Play. `engine({action: pipeline, slug})` walks the order.
 
 ## Optional CLI
 ```bash
@@ -209,7 +262,6 @@ _GITIGNORE = """\
 .godot/
 *.translation
 export.cfg
-export_presets.cfg
 """
 
 
@@ -226,6 +278,7 @@ def godot_scaffold_files(name: str, slug: str, description: str = "") -> dict[st
         "project.godot": _PROJECT_GODOT,
         "scenes/main.tscn": _MAIN_TSCN,
         "scripts/player.gd": _PLAYER_GD,
+        "scripts/hud.gd": _HUD_GD,
         "scripts/autoload/game.gd": _GAME_GD,
         "icon.svg": _ICON_SVG,
         "studio/preview/index.html": _PREVIEW_HTML,
@@ -263,6 +316,14 @@ def write_godot_scaffold(pdir: Path, name: str, slug: str, description: str = ""
     if BRIDGE_REL not in written:
         written.append(BRIDGE_REL)
     ensure_import_sidecars(pdir)
+    try:
+        from .godot_first import ensure_contract
+        ensure_contract(pdir, slug=slug, name=name)
+        for rel in ("studio/godot_contract.json", "studio/release_manifest.json", "export_presets.cfg"):
+            if rel not in written and (pdir / rel).is_file():
+                written.append(rel)
+    except Exception:
+        log.debug("godot contract skipped", extra={"slug": slug})
     if written:
         log.info("godot scaffold: %s → %s", slug, written)
     return written

@@ -222,6 +222,20 @@ async def publish(
         publish_root = web_build
         kind = "static"
         entry = "index.html"
+    elif kind == "godot":
+        from .godot_first import run_pipeline
+        pipe = await asyncio.to_thread(run_pipeline, slug, through="publish")
+        pub = (pipe.get("stages") or {}).get("publish") or {}
+        if not pub.get("ok"):
+            raise RuntimeError(
+                pub.get("error")
+                or "Godot publish requires a green Stage 7 export. Preview HTML is not a release."
+            )
+        artifact = Path(str(pub.get("artifact") or ""))
+        if not artifact.is_file():
+            raise RuntimeError("Godot publish has no immutable Stage 7 artifact")
+        publish_root = artifact.parent
+        entry = artifact.name
 
     data = _zip_dir(publish_root)
     object_path = f"{_OBJ_PREFIX}/{slug}.zip"
@@ -265,7 +279,11 @@ async def publish(
         "ok": True, "slug": slug, "kind": kind, "entry": entry,
         "size_bytes": len(data), "durable": stored,
         "url": f"/apps/{slug}/",
-        "built_from": "dist" if proj.get("kind") in ("vite", "vite-react", "expo") else "workspace",
+        "built_from": (
+            "godot_export" if proj.get("kind") == "godot"
+            else "dist" if proj.get("kind") in ("vite", "vite-react", "expo")
+            else "workspace"
+        ),
     }
 
 

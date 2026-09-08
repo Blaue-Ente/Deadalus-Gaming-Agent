@@ -32,7 +32,7 @@ _SLUG_TOOLS = frozenset({
     "write_file", "read_file", "playtest", "browser", "run_command", "game_lint",
     "assets", "engine", "world", "production", "playground_run",
 })
-_WRITE_TOOLS = frozenset({"write_file", "need_playground_write"})
+_WRITE_TOOLS = frozenset({"write_file", "need_playground_write", "edit_file", "need_playground_edit"})
 
 
 def fix_rounds_from_env() -> int:
