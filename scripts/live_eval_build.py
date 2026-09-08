@@ -63,7 +63,8 @@ SLERP = (
     "Клавиши 1/2/3 сменят целта; камерата прави quaternion SLERP към целта. "
     "Извикай math3d с claimed числа (quat_slerp и look_at) преди JS формулите. "
     "За евтин чеклист можеш <NEED_WORKER: fast | WebGL1 traps>, но файловете "
-    "се пишат само с write_file. Не прави змия, tetris или pong."
+    "се пишат само с write_file. JS само ASCII минус: -1, никога unicode − . "
+    "Не прави змия, tetris или pong."
 )
 
 CHEAP_WORKER = "minimax/minimax-m2.7"
@@ -253,6 +254,7 @@ async def _shot_url(url: str, dest: Path) -> dict:
     except Exception as exc:
         return {"ok": False, "error": f"playwright: {exc}"[:200]}
     dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = Path("/tmp") / f"daedalus-lab-{dest.name}"
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(
@@ -270,8 +272,9 @@ async def _shot_url(url: str, dest: Path) -> dict:
             page = await browser.new_page(viewport={"width": 1280, "height": 800})
             await page.goto(url, wait_until="domcontentloaded", timeout=25000)
             await page.wait_for_timeout(2800)
-            await page.screenshot(path=str(dest), full_page=False)
+            await page.screenshot(path=str(tmp), full_page=False)
             await browser.close()
+        shutil.copy2(tmp, dest)
         return {"ok": dest.is_file(), "path": str(dest), "bytes": dest.stat().st_size if dest.is_file() else 0}
     except Exception as exc:
         return {"ok": False, "error": str(exc)[:300]}
