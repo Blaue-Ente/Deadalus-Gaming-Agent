@@ -208,12 +208,16 @@ PLAYBOOKS: tuple[Playbook, ...] = (
         ),
         expected_files=("project.godot", "scenes/main.tscn"),
         notes=(
+            "Engine adapter of the shared capability pipeline "
+            "(plan → context → build → runtime → gameplay → visual → export → publish). "
             "Godot-first order: preflight → contract → context → slice → runtime → "
             "visual → review → export → publish. "
             "kind=godot. Scaffold already has project.godot. "
             "Patch with edit_file; do not rewrite whole .gd/.tscn each turn. "
-            "engine({action: pipeline, slug}) walks the order. "
+            "engine({action: pipeline, slug}) walks the Godot order. "
+            "production({action: pipeline, slug}) is the same kernel for web/mobile. "
             "Preview HTML is not Play. Missing Godot/export is FAIL, not skip. "
+            "Vite/HTML are a different adapter — never a Godot fallback. "
             "No world/ campaign until this slice is green (unless epic)."
         ),
         steps=(
@@ -297,6 +301,63 @@ PLAYBOOKS: tuple[Playbook, ...] = (
         ),
     ),
     Playbook(
+        id="playground.mobile",
+        title="Mobile (Expo / Capacitor)",
+        priority=82,
+        kind="static",
+        kinds=("expo",),
+        keywords=(
+            "expo", "react native", "capacitor", "ios", "iphone", "android",
+            "app store", "play store", "eas",
+        ),
+        regex=(
+            r"\b(expo|react[- ]native|capacitor|eas(?:\s+build)?|"
+            r"ios|iphone|ipad|android|apk|aab|ipa|app store|play store)\b"
+        ),
+        tools=_CORE + ("production", "browser", "playtest", "skill", "assets"),
+        notes=(
+            "Mobile adapter of the shared pipeline: plan → context → build → "
+            "runtime → gameplay → visual → export → publish. "
+            "Expo/React Native for native UI. Capacitor wraps the same Vite/HTML "
+            "canvas — do not rewrite to Expo. "
+            "Emulator/device smoke is required. Expo web export is not a native pass. "
+            "Godot on iOS stays EngineAdapter (editor-export), not Capacitor. "
+            "production({action: pipeline, slug}) walks the order. Skip is fail."
+        ),
+        steps=(
+            Step(
+                id="skill_capability",
+                tool="skill",
+                auto=True,
+                args={"action": "load", "id": "capability"},
+                docs=("skills/capability.md", "skills/capacitor_ship.md"),
+                why="Shared stages; checks swap by target. Missing runner is FAIL.",
+            ),
+            Step(
+                id="create",
+                tool="playground_new",
+                required=True,
+                accept_any=("playground_new", "write_file"),
+                why="kind=expo only for React Native. Vite/static stay web + Capacitor wrap.",
+            ),
+            Step(
+                id="write",
+                tool="write_file",
+                required=True,
+                depends_on=("create",),
+                why="RN views or the existing canvas. Never Godot→HTML or canvas→Expo rewrite.",
+            ),
+            Step(
+                id="pipeline",
+                tool="production",
+                depends_on=("write",),
+                args={"action": "pipeline"},
+                accept_any=("production", "browser"),
+                why="Device/emulator smoke. A web preview is not a mobile pass.",
+            ),
+        ),
+    ),
+    Playbook(
         id="playground.epic",
         title="Epic / world-kit campaign",
         priority=80,
@@ -344,12 +405,16 @@ PLAYBOOKS: tuple[Playbook, ...] = (
         ),
         regex=r"\b(snake|tetris|pong|canvas|змия|аркад|2d|2-d)\b",
         tools=_CORE + (
-            "assets", "generate_image", "playtest", "browser", "game_canon",
+            "assets", "generate_image", "playtest", "browser", "game_canon", "production",
         ),
         expected_files=("index.html",),
         notes=(
+            "Web adapter of the shared pipeline: plan → context → build → runtime → "
+            "gameplay → visual → export → publish. Chromium is the runner. "
             "Playable loop: input → update → render → win/lose. "
-            "No math3d unless the ask names quaternions. Static preview — no RUN."
+            "Not Godot. Missing Chromium is FAIL, not skip. "
+            "production({action: pipeline, slug}) walks the order. "
+            "No math3d unless the ask names quaternions."
         ),
         steps=(
             Step(

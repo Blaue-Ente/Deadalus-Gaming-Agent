@@ -289,8 +289,12 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
         "name": "spawn_subagent",
         "description": (
             "Run an isolated sub-agent with a fresh context window, jailed to a playground slug. "
-            "role=explorer|verify is read-only; role=coder may write. Pass return_contexts "
-            "so the sub-agent returns named artifacts; pass context_refs to inject prior artifacts."
+            "Roles: planner (read-only contract), builder/coder (version-checked patches), "
+            "specialist (adapter files), verifier (prove, do not write), "
+            "polish (only after a visual-quality failure). "
+            "No parallel writers on the same file. Pass files[] to claim exclusive paths. "
+            "Pass return_contexts so the sub-agent returns named artifacts; "
+            "pass context_refs to inject prior artifacts."
         ),
         "input_schema": {
             "type": "object",
@@ -300,7 +304,15 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
                 "max_rounds": {"type": "integer"},
                 "role": {
                     "type": "string",
-                    "description": "explorer (read-only), coder (writes), or verify (read-only check)",
+                    "description": (
+                        "planner | explorer | builder | coder | specialist | "
+                        "verifier | verify | polish"
+                    ),
+                },
+                "files": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Exclusive write paths. Two writers cannot share a file.",
                 },
                 "job_id": {"type": "string"},
                 "original_ask": {"type": "string"},
@@ -437,10 +449,13 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
     {
         "name": "engine",
         "description": (
-            "Drive a running Godot or Unity project, or the Godot-first pipeline. "
+            "Drive a running Godot or Unity project, or the EngineAdapter pipeline. "
+            "Godot is the engine adapter of the shared capability pipeline "
+            "(plan → context → build → runtime → gameplay → visual → export → publish). "
             "Godot: headless TCP bridge; optional DAEDALUS_GODOT_MCP. "
             "Pipeline (no live session): preflight | contract | context | slice | "
             "pipeline | review | export | publish | runtime_dod. "
+            "Vite/HTML/Phaser and Expo/Capacitor use production({action: pipeline}), not this tool. "
             "Live: run | inspect | input | screenshot | tree | errors | fps | wait | quit | status. "
             "Unity: DAEDALUS_UNITY_MCP for a local Editor, else UNITY_PATH batchmode "
             "(import is not Play). Without either: honest refuse — we do not vendor Unity. "
@@ -548,18 +563,21 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
     {
         "name": "production",
         "description": (
-            "Production layer vs the prototype wall. "
-            "action: status | prove | seed | runtime | map | promote. "
+            "Production layer vs the prototype wall, plus the capability pipeline. "
+            "action: status | prove | seed | runtime | map | promote | pipeline. "
+            "pipeline walks plan → context → build → runtime → gameplay → visual → "
+            "export → publish on the adapter for the kind (Web / Engine / Mobile). "
             "Empty systems map is not a production layer. "
             "store-ready / готово за стора on a prototype fails. "
-            "seed writes design/systems.json only — do not inject into the Vite racer M0."
+            "seed writes design/systems.json only — do not inject into the Vite racer M0. "
+            "Skip is not a pass. Godot is not HTML. Expo web is not a device build."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "action": {
                     "type": "string",
-                    "description": "status | prove | seed | runtime | map | promote",
+                    "description": "status | prove | seed | runtime | map | promote | pipeline",
                 },
                 "slug": {"type": "string"},
                 "claim": {
@@ -571,6 +589,17 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
                 },
                 "layer": {"type": "string", "description": "prototype | production"},
                 "build_mode": {"type": "string"},
+                "through": {
+                    "type": "string",
+                    "description": "pipeline stop: plan|context|build|runtime|gameplay|visual|export|publish",
+                },
+                "target": {
+                    "type": "string",
+                    "description": "web | engine | mobile (optional; inferred from kind)",
+                },
+                "kind": {"type": "string"},
+                "text": {"type": "string", "description": "Owner ask — used to pick Capacitor vs Expo"},
+                "plan": {"type": "string"},
             },
             "required": ["action", "slug"],
         },
@@ -1363,6 +1392,7 @@ async def execute_native_tool(
                 context_refs=list(refs) if isinstance(refs, list) else None,
                 context_bootstrap=list(boot) if isinstance(boot, list) else None,
                 task_id=str(args.get("task_id") or ""),
+                files=list(args.get("files") or []) if isinstance(args.get("files"), list) else None,
             )
             status = "OK" if r.get("ok") else "FAILED"
             extra = f" {r.get('role') or ''} {r.get('verdict') or ''}".rstrip()
@@ -1537,6 +1567,11 @@ async def execute_native_tool(
                 systems=args.get("systems"),
                 layer=str(args.get("layer") or ""),
                 build_mode=str(args.get("build_mode") or ""),
+                through=str(args.get("through") or ""),
+                kind=str(args.get("kind") or ""),
+                target=str(args.get("target") or ""),
+                text=str(args.get("text") or ""),
+                plan=str(args.get("plan") or ""),
             )
             status = "OK" if r.get("ok") else "FAILED"
             return (

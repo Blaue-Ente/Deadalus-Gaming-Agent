@@ -303,6 +303,16 @@ def run_action(action: str, slug: str, **fields: Any) -> dict[str, Any]:
         return {"ok": True, "path": str(map_path(root)), "map": doc}
     if action == "promote":
         return promote(root)
+    if action == "pipeline":
+        from .capability import production_pipeline_action
+        return production_pipeline_action(
+            slug,
+            through=str(fields.get("through") or "publish"),
+            kind=str(fields.get("kind") or ""),
+            target=str(fields.get("target") or ""),
+            text=str(fields.get("text") or fields.get("claim") or ""),
+            plan=str(fields.get("plan") or ""),
+        )
     return {"ok": False, "error": f"unknown action {action}"}
 
 

@@ -37,6 +37,7 @@ def test_playbooks_are_a_graph():
     assert "playground.math3d" in ids
     assert "playground.godot" in ids
     assert "playground.arcade" in ids
+    assert "playground.mobile" in ids
     math_pb = next(pb for pb in PLAYBOOKS if pb.id == "playground.math3d")
     assert any(s.tool == "math3d" and s.required for s in math_pb.steps)
     assert any(s.depends_on for s in math_pb.steps)
