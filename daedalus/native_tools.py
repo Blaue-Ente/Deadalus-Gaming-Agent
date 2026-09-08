@@ -704,6 +704,30 @@ _HARNESS_JAIL = (
     "Call math3d / spatial / game_canon when the slice needs them."
 )
 
+_PG_SLUG_PATH = re.compile(r"playground/projects/([A-Za-z0-9_-]+)", re.I)
+
+
+def _slug_from_text(*blobs: str) -> str:
+    for blob in blobs:
+        m = _PG_SLUG_PATH.search(blob or "")
+        if m:
+            return m.group(1)
+    return ""
+
+
+def _nav_hint(*, slug: str = "", path: str = "", next_line: str = "") -> str:
+    """S3: every Playground tool result names the slug path so the model stops hunting."""
+    slug = (slug or "").strip() or _slug_from_text(path)
+    loc = f"playground/projects/{slug}/" if slug else "playground/projects/{slug}/"
+    lines = [
+        f"Playground files live under {loc} Do not find /workspace or list the harness.",
+    ]
+    if slug:
+        lines.append(f"Keep tools on slug={slug}.")
+    if next_line:
+        lines.append(next_line)
+    return "\n" + "\n".join(lines)
+
 
 def playground_build_specs(
     message: str = "",
@@ -943,6 +967,7 @@ async def execute_native_tool(
     try:
         if name == "read_file":
             path = str(args.get("path", ""))
+            slug_h = str(args.get("slug") or "").strip() or _slug_from_text(path)
             if _playground_session(session_id) and _harness_target(path):
                 return f"── read_file BLOCKED ──\n{_HARNESS_JAIL}"
             ls = args.get("line_start")
@@ -950,17 +975,35 @@ async def execute_native_tool(
             r = read_file_fn(path, int(ls) if ls else None, int(le) if le else None)
             if r.get("ok"):
                 trunc = " [TRUNCATED]" if r.get("truncated") else ""
-                return f"── read_file {r['path']}{trunc} ──\n{r['content']}"
+                loc = str(r.get("path") or path)
+                return (
+                    f"── read_file {loc}{trunc} ──\n{r['content']}"
+                    + _nav_hint(
+                        slug=slug_h or _slug_from_text(loc),
+                        path=loc,
+                        next_line=(
+                            f"NEXT: call write_file with slug={slug_h or '<project>'} "
+                            f"path={path or 'index.html'} if you are changing this file."
+                        ),
+                    )
+                )
             err = r.get("error") or "path required"
             return (
-                f"── read_file FAILED: {err} ──\n"
-                "Playground files live under playground/projects/{slug}/. "
-                "Pass path like index.html plus slug, not /workspace."
+                f"── read_file FAILED: {err} ──"
+                + _nav_hint(
+                    slug=slug_h,
+                    path=path,
+                    next_line=(
+                        f"NEXT: pass path like index.html plus slug={slug_h or '<project>'}, "
+                        "not /workspace."
+                    ),
+                )
             )
 
         if name == "list_dir":
             from .shell_center import resolve_cwd
             rel = str(args.get("path") or ".")
+            slug_h = str(args.get("slug") or "").strip() or _slug_from_text(rel)
             if _playground_session(session_id) and _harness_target(rel):
                 from .paths import playground_projects_dir
                 root = playground_projects_dir()
@@ -972,15 +1015,40 @@ async def execute_native_tool(
                 return (
                     f"── list_dir playground (harness listing refused) ──\n"
                     f"{listing}\n{_HARNESS_JAIL}"
+                    + _nav_hint(
+                        slug=slug_h,
+                        next_line=(
+                            "NEXT: call write_file with slug= from playground_new. "
+                            "Do not find /workspace."
+                        ),
+                    )
                 )
             try:
                 root = resolve_cwd(rel)
             except ValueError as exc:
-                return f"── list_dir FAILED: {exc} ──"
+                return (
+                    f"── list_dir FAILED: {exc} ──"
+                    + _nav_hint(
+                        slug=slug_h,
+                        path=rel,
+                        next_line="NEXT: list playground/projects/{slug}/ or pass slug=.",
+                    )
+                )
             names = []
             for p in sorted(root.iterdir())[:80]:
                 names.append(p.name + ("/" if p.is_dir() else ""))
-            return f"── list_dir {root} ──\n" + "\n".join(names)
+            return (
+                f"── list_dir {root} ──\n"
+                + "\n".join(names)
+                + _nav_hint(
+                    slug=slug_h or _slug_from_text(str(root)),
+                    path=str(root),
+                    next_line=(
+                        f"NEXT: call write_file with slug={slug_h or '<project>'} "
+                        "— listing is not a substitute for writing the game."
+                    ),
+                )
+            )
 
         if name == "playground_new":
             from . import playground as pg
@@ -1033,7 +1101,20 @@ async def execute_native_tool(
                 await pg.create_project(
                     slug, kind="static", source="built", description="auto-created on write", slug=slug,
                 )
+                existing = {"slug": slug, "kind": "static"}
+            kind = str((existing or {}).get("kind") or "static")
             pg.write_file(slug, path, content)
+            from .write_gate import check_write
+            gate = check_write(path, content, kind=kind, slug=slug)
+            if not gate.ok:
+                return (
+                    f"── write_file FAILED {slug}/{path} ──\n"
+                    f"Wrote playground/projects/{slug}/{path} ({len(content)} chars) "
+                    "but the quality gate rejected it.\n"
+                    f"{gate.summary()}\n"
+                    f"NEXT: call write_file with slug={slug} path={path} and fix the blockers. "
+                    "Do not find /workspace or list the harness."
+                )
             try:
                 from .project_status import record_built
                 from .playground import project_dir as _pdir
@@ -1301,9 +1382,10 @@ async def execute_native_tool(
 
         if name == "engine":
             from .engine_session import run_action
+            slug_e = str(args.get("slug") or "").strip()
             r = await run_action(
                 str(args.get("action") or "run"),
-                str(args.get("slug") or ""),
+                slug_e,
                 path=str(args.get("path") or ""),
                 prop=str(args.get("prop") or ""),
                 value=args.get("value"),
@@ -1315,9 +1397,15 @@ async def execute_native_tool(
                 frames=args.get("frames"),
             )
             status = "OK" if r.get("ok") else "FAILED"
+            nxt = (
+                f"NEXT: call write_file with slug={slug_e or '<project>'} then engine again."
+                if status == "FAILED"
+                else f"Keep engine on slug={slug_e}." if slug_e else ""
+            )
             return (
-                f"── engine {args.get('action')} {status} {args.get('slug')} ──\n"
+                f"── engine {args.get('action')} {status} {slug_e} ──\n"
                 f"{json.dumps(r, ensure_ascii=False, default=str)[:6000]}"
+                + _nav_hint(slug=slug_e, next_line=nxt)
             )
 
         if name == "world":
@@ -1543,40 +1631,73 @@ async def execute_native_tool(
         if name == "math3d":
             from .math3d import run_action as math3d_action
             op = str(args.get("action") or args.get("op") or "catalog")
-            payload = {k: v for k, v in args.items() if k not in ("action", "op")}
+            slug_m = str(args.get("slug") or "").strip()
+            payload = {k: v for k, v in args.items() if k not in ("action", "op", "slug")}
             r = math3d_action(op, **payload)
             status = "OK" if r.get("ok") else "FAILED"
             if r.get("verdict") == "mismatch":
-                status = "MISMATCH"
+                status = "FAILED"
+            op_l = op.strip().lower().replace("-", "_")
+            if op_l in {"catalog", "help", "ops", "status"}:
+                nxt = (
+                    "NEXT: call math3d with op=quat_slerp (or look_at) and claimed numbers, "
+                    f"then write_file slug={slug_m or '<project>'}."
+                )
+            elif status == "FAILED":
+                nxt = (
+                    "NEXT: call math3d again with the corrected claim, then "
+                    f"write_file slug={slug_m or '<project>'}."
+                )
+            else:
+                nxt = (
+                    f"NEXT: call write_file with slug={slug_m or '<project>'} "
+                    "using the verified numbers. Do not list_dir the harness."
+                )
             return (
                 f"── math3d {op} {status} ──\n"
                 f"{json.dumps(r, ensure_ascii=False, default=str)[:6000]}"
+                + _nav_hint(slug=slug_m, next_line=nxt)
             )
 
         if name == "spatial":
             from .spatial import run_action as spatial_action
             op = str(args.get("action") or "advise")
+            slug_s = str(args.get("slug") or "").strip()
             payload = {k: v for k, v in args.items() if k != "action"}
             r = spatial_action(op, **payload)
             status = "OK" if r.get("ok") else "FAILED"
+            nxt = (
+                f"NEXT: call write_file with slug={slug_s or '<project>'} "
+                "using the advised structure. Do not nest O(N²) loops."
+            )
             return (
                 f"── spatial {op} {status} ──\n"
                 f"{json.dumps(r, ensure_ascii=False, default=str)[:6000]}"
+                + _nav_hint(slug=slug_s, next_line=nxt)
             )
 
         if name == "game_lint":
             from .game_lint import run_action as game_lint_action
+            slug_g = str(args.get("slug") or "").strip()
+            path_g = str(args.get("path") or "")
             r = game_lint_action(
                 str(args.get("action") or "status"),
-                path=str(args.get("path") or ""),
-                slug=str(args.get("slug") or ""),
+                path=path_g,
+                slug=slug_g,
                 content=args.get("content"),
                 format_diff=bool(args.get("format_diff")),
             )
             status = "OK" if r.get("ok") else "FAILED"
+            nxt = (
+                f"NEXT: call write_file with slug={slug_g or '<project>'} "
+                f"path={path_g or 'index.html'} and fix the blockers."
+                if status == "FAILED"
+                else f"Keep writing under playground/projects/{slug_g or '{slug}'}/."
+            )
             return (
                 f"── game_lint {args.get('action')} {status} ──\n"
                 f"{json.dumps(r, ensure_ascii=False, default=str)[:6000]}"
+                + _nav_hint(slug=slug_g, path=path_g, next_line=nxt)
             )
 
         if name == "profiler":

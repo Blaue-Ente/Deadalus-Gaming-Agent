@@ -10,6 +10,23 @@ log = logging.getLogger(__name__)
 _TOOL_MAX_TOKENS = 12288
 
 
+def _usage_dict(usage: Any) -> dict[str, int]:
+    if usage is None:
+        return {}
+    prompt = getattr(usage, "prompt_tokens", None)
+    completion = getattr(usage, "completion_tokens", None)
+    if prompt is None:
+        prompt = getattr(usage, "input_tokens", None)
+    if completion is None:
+        completion = getattr(usage, "output_tokens", None)
+    out: dict[str, int] = {}
+    if prompt is not None:
+        out["prompt_tokens"] = int(prompt)
+    if completion is not None:
+        out["completion_tokens"] = int(completion)
+    return out
+
+
 def _as_openai_response(text: str, *, provider: str, model: str) -> dict[str, Any]:
     return {
         "ok": True,
@@ -168,7 +185,11 @@ async def call_with_tools(
                     "name": block.name,
                     "input": block.input,
                 })
-        return {"stop_reason": resp.stop_reason, "content": content}
+        return {
+            "stop_reason": resp.stop_reason,
+            "content": content,
+            "usage": _usage_dict(getattr(resp, "usage", None)),
+        }
 
     try:
         from openai import AsyncOpenAI
@@ -226,8 +247,8 @@ async def call_with_tools(
             "input": args,
         })
     stop = "tool_use" if any(b.get("type") == "tool_use" for b in content) else "end_turn"
+    usage = getattr(resp, "usage", None)
     try:
-        usage = getattr(resp, "usage", None)
         if usage:
             log.info(
                 "tool LLM %s/%s stop=%s tools=%d prompt=%s completion=%s",
@@ -238,4 +259,8 @@ async def call_with_tools(
             )
     except Exception:
         pass
-    return {"stop_reason": stop, "content": content}
+    return {
+        "stop_reason": stop,
+        "content": content,
+        "usage": _usage_dict(usage),
+    }

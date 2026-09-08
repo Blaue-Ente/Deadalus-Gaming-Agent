@@ -89,6 +89,15 @@ def test_vision_blocks_and_anthropic_convert(tmp_path: Path):
     assert "text" in kinds
 
 
+CLEAN_CANVAS = (
+    "<!DOCTYPE html><html><body>"
+    '<canvas id="g" width="320" height="240"></canvas>'
+    "<script>function loop(t){requestAnimationFrame(loop);}"
+    "requestAnimationFrame(loop);</script>"
+    "</body></html>"
+)
+
+
 def test_write_file_result_names_the_slug_path(monkeypatch):
     async def fake_get(slug):
         return {"slug": slug, "kind": "static"}
@@ -99,9 +108,10 @@ def test_write_file_result_names_the_slug_path(monkeypatch):
 
     text = asyncio.run(native_tools.execute_native_tool(
         "write_file",
-        {"slug": "snake-game", "path": "index.html", "content": "<canvas>"},
+        {"slug": "snake-game", "path": "index.html", "content": CLEAN_CANVAS},
         memory=None, session_id="", read_file_fn=lambda *a, **k: {},
     ))
+    assert "FAILED" not in text
     assert "playground/projects/snake-game/index.html" in text
     assert "Do not find /workspace" in text
     assert "visual proof" in text.lower()
@@ -117,7 +127,7 @@ def test_write_file_accepts_filename_alias(monkeypatch):
 
     text = asyncio.run(native_tools.execute_native_tool(
         "write_file",
-        {"project": "dungeon-keys", "filename": "index.html", "code": "<canvas>"},
+        {"project": "dungeon-keys", "filename": "index.html", "code": CLEAN_CANVAS},
         memory=None, session_id="", read_file_fn=lambda *a, **k: {},
     ))
     assert "FAILED" not in text

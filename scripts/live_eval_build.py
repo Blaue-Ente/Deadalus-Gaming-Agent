@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Live Playground build against OpenRouter (MiniMax / DeepSeek).
+"""Live Playground build against OpenRouter.
 
-Probes tool-calling first, then runs the kernel native build loop (S1+S2)
-on a slice that is not Snake. Writes a JSON report under $DAEDALUS_DATA.
+Probes tool-calling first, then runs the kernel native build loop on a slice
+that is not Snake. Writes a JSON report under $DAEDALUS_DATA and copies
+Chromium proof frames to --screenshots (default: /opt/cursor/artifacts/screenshots).
 
-  DAEDALUS_STANDALONE=1 python3 scripts/live_eval_build.py
+  DAEDALUS_STANDALONE=1 python3 scripts/live_eval_build.py --preset slerp
 """
 from __future__ import annotations
 
@@ -13,6 +14,7 @@ import asyncio
 import json
 import logging
 import os
+import shutil
 import sys
 import time
 from pathlib import Path
@@ -22,6 +24,23 @@ CANDIDATES = (
     "deepseek/deepseek-v3.2",
 )
 
+# Stronger than MiniMax M2.7, still inside a $2–3 Playground budget.
+BETTER_CANDIDATES = (
+    "anthropic/claude-sonnet-4.6",
+    "anthropic/claude-sonnet-4.5",
+    "z-ai/glm-5.1",
+    "moonshotai/kimi-k2.6",
+)
+
+_RATES_USD_PER_1M = {
+    "anthropic/claude-sonnet-4.6": (3.0, 15.0),
+    "anthropic/claude-sonnet-4.5": (3.0, 15.0),
+    "z-ai/glm-5.1": (0.98, 3.08),
+    "moonshotai/kimi-k2.6": (0.73, 3.49),
+    "minimax/minimax-m2.7": (0.28, 1.20),
+    "deepseek/deepseek-v3.2": (0.27, 1.10),
+}
+
 DUNGEON = (
     "Направи нова Playground игра: top-down dungeon crawler на HTML canvas "
     "(kind=static, slug dungeon-keys). Три стаи свързани с врати. В първата "
@@ -29,8 +48,22 @@ DUNGEON = (
     "ключа. Един slime враг с HP, играчът се движи със стрелки, атака с "
     "Space, HP лента, game over при 0 HP, победа при изхода. Една завършена "
     "playable среза: input → update → render → win/lose. Не прави змия, "
-    "tetris или pong. Не чети daedalus/agent.py."
+    "tetris или pong."
 )
+
+SLERP = (
+    "Направи нова Playground 3D среза (kind=static, slug slerp-lookat): "
+    "WebGL или Three.js от CDN, без vite. Сива кутия: под, няколко блока и "
+    "една ярка цел. Камерата прави quaternion SLERP към целта и look-at към нея. "
+    "Клавиши 1/2/3 сменят целта. Извикай math3d с конкретни claimed числа "
+    "(quat_slerp и look_at) преди да пишеш формулите в JS. "
+    "Една playable среза: видима 3D сцена, не черен екран. "
+    "Не прави змия, tetris или pong."
+)
+
+PROMPTS = {"dungeon": DUNGEON, "slerp": SLERP}
+
+ARTIFACT_SHOTS = Path("/opt/cursor/artifacts/screenshots")
 
 
 def _pin_openrouter(model: str) -> None:
@@ -44,6 +77,7 @@ def _pin_openrouter(model: str) -> None:
     os.environ["DAEDALUS_BASE_URL"] = "https://openrouter.ai/api/v1"
     os.environ.setdefault("DAEDALUS_NATIVE_TOOLS", "1")
     os.environ.setdefault("DAEDALUS_VISUAL_PROOF", "1")
+    os.environ.setdefault("DAEDALUS_WRITE_GATE", "1")
 
 
 def _client():
@@ -105,12 +139,30 @@ async def probe_tools(model: str) -> dict:
     }
 
 
+def _estimate_usd(model: str, prompt_tokens: int, completion_tokens: int) -> float | None:
+    rates = _RATES_USD_PER_1M.get(model)
+    if not rates:
+        return None
+    cin, cout = rates
+    return (prompt_tokens / 1_000_000.0) * cin + (completion_tokens / 1_000_000.0) * cout
+
+
 async def run_build(prompt: str, max_rounds: int) -> dict:
     from daedalus.build_loop import BuildLoop
     from daedalus.llm_client import call_with_tools
     from daedalus.llm_config import get_config
     from daedalus.native_tools import run_native_discovery_pass
     from daedalus.tool_router import format_system, native_specs, route, run_consult
+
+    usage_acc = {"prompt_tokens": 0, "completion_tokens": 0, "rounds": 0}
+
+    async def tracked_call(system, messages, tools, **kwargs):
+        row = await call_with_tools(system, messages, tools, **kwargs)
+        usage_acc["rounds"] += 1
+        u = row.get("usage") or {}
+        usage_acc["prompt_tokens"] += int(u.get("prompt_tokens") or 0)
+        usage_acc["completion_tokens"] += int(u.get("completion_tokens") or 0)
+        return row
 
     cfg = get_config()
     rt = route(prompt, session_id="playground:live-eval")
@@ -122,7 +174,7 @@ async def run_build(prompt: str, max_rounds: int) -> dict:
     text, tool_log = await run_native_discovery_pass(
         system,
         prompt,
-        call_with_tools,
+        tracked_call,
         memory=None,
         session_id="playground:live-eval",
         read_file_fn=lambda *a, **k: {},
@@ -131,9 +183,11 @@ async def run_build(prompt: str, max_rounds: int) -> dict:
         loop=loop,
     )
     row = loop.log_row()
+    model = str(cfg.get("model") or "")
+    est = _estimate_usd(model, usage_acc["prompt_tokens"], usage_acc["completion_tokens"])
     return {
         "provider": cfg.get("provider"),
-        "model": cfg.get("model"),
+        "model": model,
         "playbook": rt.playbook.id,
         "kind": rt.kind,
         "ms": int((time.time() - t0) * 1000),
@@ -146,6 +200,7 @@ async def run_build(prompt: str, max_rounds: int) -> dict:
         "kernel_proof_ran": loop.kernel_proof_ran,
         "slug": loop.slug,
         "nudges": loop.nudges,
+        "usage": {**usage_acc, "estimated_usd": est},
         "tool_log": [
             {"tool": r.get("tool"), "ok": r.get("ok"), "blocked": r.get("blocked")}
             for r in (tool_log or [])
@@ -167,12 +222,35 @@ def _project_snapshot(slug: str) -> dict:
                 files.append({"path": rel, "bytes": p.stat().st_size})
     readme = root / "README.md"
     proof = root / "studio" / "proof"
+    extra_shot = root / "assets" / "_verify_screenshot.png"
     return {
         "root": str(root),
         "files": files,
         "readme": readme.read_text(encoding="utf-8")[:1500] if readme.is_file() else "",
         "proof_dir": sorted(x.name for x in proof.iterdir()) if proof.is_dir() else [],
+        "verify_screenshot": extra_shot.is_file(),
     }
+
+
+def _export_screenshots(slug: str, dest: Path) -> list[str]:
+    if not slug:
+        return []
+    from daedalus import playground as pg
+    root = pg.project_dir(slug)
+    dest.mkdir(parents=True, exist_ok=True)
+    copied: list[str] = []
+    candidates: list[Path] = []
+    proof = root / "studio" / "proof"
+    if proof.is_dir():
+        candidates.extend(sorted(proof.glob("*.png")))
+    extra = root / "assets" / "_verify_screenshot.png"
+    if extra.is_file():
+        candidates.append(extra)
+    for src in candidates:
+        out = dest / f"{slug}-{src.name}"
+        shutil.copy2(src, out)
+        copied.append(str(out))
+    return copied
 
 
 async def main_async(args: argparse.Namespace) -> int:
@@ -182,6 +260,7 @@ async def main_async(args: argparse.Namespace) -> int:
     )
     probes = []
     chosen = args.model.strip() if args.model else ""
+    pool = BETTER_CANDIDATES if args.better else CANDIDATES
     if chosen:
         row = await probe_tools(chosen)
         probes.append(row)
@@ -189,7 +268,7 @@ async def main_async(args: argparse.Namespace) -> int:
             print(json.dumps({"error": "probe_failed", "probes": probes}, ensure_ascii=False, indent=2))
             return 2
     else:
-        for mid in CANDIDATES:
+        for mid in pool:
             try:
                 row = await probe_tools(mid)
             except Exception as exc:
@@ -218,17 +297,25 @@ async def main_async(args: argparse.Namespace) -> int:
     print(f"build model={chosen} playbook-probe…", flush=True)
     build = await run_build(args.prompt, args.max_rounds)
     snap = _project_snapshot(str(build.get("slug") or ""))
+    shots_dir = Path(args.screenshots) if args.screenshots else ARTIFACT_SHOTS
+    try:
+        shots = _export_screenshots(str(build.get("slug") or ""), shots_dir)
+    except Exception as exc:
+        shots = []
+        logging.warning("screenshot export failed: %s", exc)
     report = {
         "probes": probes,
         "chosen": chosen,
         "prompt": args.prompt,
         "build": build,
         "project": snap,
+        "screenshots": shots,
     }
     out_dir = Path(os.environ.get("DAEDALUS_DATA") or "data/daedalus") / "live_eval"
     out_dir.mkdir(parents=True, exist_ok=True)
     dest = out_dir / "latest.json"
     dest.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    usage = build.get("usage") or {}
     print(json.dumps({
         "chosen": chosen,
         "playbook": build.get("playbook"),
@@ -241,6 +328,8 @@ async def main_async(args: argparse.Namespace) -> int:
         "tools": [r["tool"] for r in build.get("tool_log") or []],
         "files": [f["path"] for f in snap.get("files") or []],
         "proof_on_disk": snap.get("proof_dir") or [],
+        "screenshots": shots,
+        "usage": usage,
         "report": str(dest),
     }, ensure_ascii=False, indent=2))
     return 0 if build.get("kernel_proof_ran") or build.get("complete") else 1
@@ -248,10 +337,17 @@ async def main_async(args: argparse.Namespace) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Live Playground build (OpenRouter)")
-    parser.add_argument("--model", default="", help="OpenRouter id; empty = probe MiniMax then DeepSeek")
-    parser.add_argument("--prompt", default=DUNGEON)
-    parser.add_argument("--max-rounds", type=int, default=10)
+    parser.add_argument("--model", default="", help="OpenRouter id; empty = probe the candidate pool")
+    parser.add_argument("--preset", choices=sorted(PROMPTS), default="", help="dungeon or slerp prompt")
+    parser.add_argument("--prompt", default="")
+    parser.add_argument("--max-rounds", type=int, default=12)
+    parser.add_argument("--better", action="store_true", help="Probe Claude / GLM / Kimi instead of MiniMax")
+    parser.add_argument("--screenshots", default=str(ARTIFACT_SHOTS), help="Directory for copied proof PNGs")
     args = parser.parse_args()
+    if args.preset and not args.prompt:
+        args.prompt = PROMPTS[args.preset]
+    if not args.prompt:
+        args.prompt = SLERP if args.better else DUNGEON
     data = os.environ.get("DAEDALUS_DATA") or str(Path("/tmp/daedalus-live-eval"))
     os.environ.setdefault("DAEDALUS_DATA", data)
     os.environ.setdefault("DAEDALUS_PLAYGROUND", str(Path(data) / "projects"))

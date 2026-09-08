@@ -65,6 +65,7 @@ Studio → Connectors **Brain** (or Studio → Brain wardrobe) switches models w
 | `DAEDALUS_NATIVE_TOOLS` | `0` = NEED_* markers only; native tools are on by default |
 | `DAEDALUS_BUILD_FIX_ROUNDS` | Fix nudges when the plan is incomplete (default `3`; `0` = old passive stop) |
 | `DAEDALUS_VISUAL_PROOF` | `0` turns off kernel-run browser/Godot proof after the last write (default on). Missing Chromium/Godot is not a skip-pass. |
+| `DAEDALUS_WRITE_GATE` | `0` turns off the `write_file` syntax/arcade gate (default on). Duplicate `let` and missing canvas/loop become FAILED writes. |
 | `DAEDALUS_QUALITY` | `0` turns the visual critic off (default on). Unparsed critic / skipped browser is not a pass. |
 | `DAEDALUS_EVOLUTION` | `1` turns the gardener on at boot; `0` is a kill switch |
 | `GODOT_BIN` | Path to Godot 4.3. Missing binary fails Godot kinds. When set, the TCP runtime bridge (player must move) is required — static files are not a playtest. |
