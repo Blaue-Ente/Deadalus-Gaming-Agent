@@ -101,10 +101,23 @@ def _topo(steps: tuple[Step, ...]) -> list[Step]:
 def _kw_hit(pb: Playbook, blob: str, kind: str) -> bool:
     if kind and pb.kinds and kind.lower() in {k.lower() for k in pb.kinds}:
         return True
-    low = blob.lower()
-    if pb.regex and re.search(pb.regex, blob, re.I):
+    low = _strip_negations(blob).lower()
+    if pb.regex and re.search(pb.regex, _strip_negations(blob), re.I):
         return True
     return any(k.lower() in low for k in pb.keywords)
+
+
+_NEGATED = re.compile(
+    r"(?:не\s+чети|don't\s+read|do\s+not\s+read|do\s+not\s+open|"
+    r"не\s+прави|don't\s+(?:make|build|write)|do\s+not\s+(?:make|build|write))\s+"
+    r".{0,160}",
+    re.I,
+)
+
+
+def _strip_negations(blob: str) -> str:
+    """Drop 'don't read daedalus/agent.py' so it cannot pull harness.fix into a game."""
+    return _NEGATED.sub(" ", blob or "")
 
 
 def _copy_step(step: Step, new_id: str) -> Step:
@@ -122,7 +135,16 @@ def _copy_step(step: Step, new_id: str) -> Step:
 
 
 def _merge_playbooks(hits: list[Playbook]) -> Playbook:
-    """Union graphs when the ask hits more than one kind (SLERP + octree)."""
+    """Union graphs when the ask hits more than one kind (SLERP + octree).
+
+    A game playbook plus harness.fix is not a union — the model was told
+    *not* to read daedalus/agent.py. Keep the playground graph.
+    """
+    playground = [pb for pb in hits if pb.id.startswith("playground.")]
+    if playground and any(pb.id == "harness.fix" for pb in hits):
+        hits = [pb for pb in hits if pb.id != "harness.fix"]
+        if len(hits) == 1:
+            return hits[0]
     primary = hits[0]
     tools: list[str] = []
     for pb in hits:
