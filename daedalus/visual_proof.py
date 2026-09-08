@@ -80,6 +80,14 @@ class ProofResult:
         return (
             f"── visual_proof {status} tool={self.tool} slug={self.slug} "
             f"kind={self.kind}{gap}{frames} ──\n{self.summary}{err}"
+            f"\nPlayground files live under playground/projects/{self.slug or '{slug}'}/. "
+            "Do not find /workspace."
+            + (
+                f"\nNEXT: call write_file with slug={self.slug or '<project>'} "
+                "to fix what the frame shows."
+                if status == "FAILED"
+                else "\nThe kernel saw the running page."
+            )
         )[:4000]
 
     def nudge_block(self) -> str:

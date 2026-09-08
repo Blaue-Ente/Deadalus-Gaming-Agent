@@ -8,6 +8,7 @@ Native tool: ``game_lint``. CLI: ``python -m daedalus.game_lint``.
 """
 from __future__ import annotations
 
+import ast
 import json
 import re
 import shutil
@@ -23,6 +24,13 @@ _CPP = {".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".inl"}
 _CS = {".cs"}
 _PY = {".py", ".pyw"}
 _GD = {".gd"}
+_JS = {".js", ".mjs", ".cjs"}
+_HTML = {".html", ".htm"}
+_IDENT = re.compile(r"[A-Za-z_$][\w$]*")
+_SCRIPT = re.compile(
+    r"<script\b(?![^>]*\bsrc\s*=)[^>]*>(.*?)</script>",
+    re.I | re.S,
+)
 
 _CLANG_TIDY_CHECKS = (
     "clang-analyzer-cplusplus.NewDeleteLeaks,"
@@ -48,6 +56,10 @@ def _lang_for(path: str) -> str:
         return "python"
     if suffix in _GD:
         return "gdscript"
+    if suffix in _JS:
+        return "javascript"
+    if suffix in _HTML:
+        return "html"
     return "unknown"
 
 
@@ -169,6 +181,158 @@ def heuristic_gdscript(text: str) -> list[dict[str, Any]]:
     return issues
 
 
+def heuristic_javascript(text: str) -> list[dict[str, Any]]:
+    """Duplicate ``let``/``const`` in the same brace scope, plus unbalanced delimiters.
+
+    The Snake ``game.js`` had two top-level ``let gameLoopId`` — a SyntaxError the
+    model never saw because nothing parsed the file at write time.
+    """
+    issues: list[dict[str, Any]] = []
+    n = len(text or "")
+    i = 0
+    line = 1
+    depth = 0
+    paren = 0
+    bracket = 0
+    binds: list[set[str]] = [set()]
+
+    while i < n:
+        c = text[i]
+        nxt = text[i + 1] if i + 1 < n else ""
+        if c == "\n":
+            line += 1
+            i += 1
+            continue
+        if c == "/" and nxt == "/":
+            i += 2
+            while i < n and text[i] != "\n":
+                i += 1
+            continue
+        if c == "/" and nxt == "*":
+            i += 2
+            while i + 1 < n and not (text[i] == "*" and text[i + 1] == "/"):
+                if text[i] == "\n":
+                    line += 1
+                i += 1
+            i = min(n, i + 2)
+            continue
+        if c in "'\"":
+            quote = c
+            i += 1
+            while i < n:
+                if text[i] == "\\":
+                    i += 2
+                    continue
+                if text[i] == "\n":
+                    line += 1
+                if text[i] == quote:
+                    i += 1
+                    break
+                i += 1
+            continue
+        if c == "`":
+            i += 1
+            while i < n and text[i] != "`":
+                if text[i] == "\\":
+                    i += 2
+                    continue
+                if text[i] == "\n":
+                    line += 1
+                i += 1
+            i = min(n, i + 1)
+            continue
+        if c == "{":
+            depth += 1
+            while len(binds) <= depth:
+                binds.append(set())
+            binds[depth] = set()
+            i += 1
+            continue
+        if c == "}":
+            if depth > 0:
+                binds[depth] = set()
+                depth -= 1
+            else:
+                issues.append(_issue("error", "js-unbalanced", "extra closing brace", row=line))
+            i += 1
+            continue
+        if c == "(":
+            paren += 1
+            i += 1
+            continue
+        if c == ")":
+            paren -= 1
+            i += 1
+            continue
+        if c == "[":
+            bracket += 1
+            i += 1
+            continue
+        if c == "]":
+            bracket -= 1
+            i += 1
+            continue
+        if c.isalpha() or c in "_$":
+            m = _IDENT.match(text, i)
+            word = m.group(0) if m else c
+            if word in ("let", "const"):
+                j = i + len(word)
+                while j < n and text[j] in " \t":
+                    j += 1
+                m2 = _IDENT.match(text, j)
+                if m2:
+                    name = m2.group(0)
+                    d = max(0, min(depth, len(binds) - 1))
+                    if name in binds[d]:
+                        issues.append(_issue(
+                            "error",
+                            "js-duplicate-binding",
+                            f"duplicate {word} {name} (same scope) — SyntaxError in JS",
+                            row=line,
+                        ))
+                    else:
+                        binds[d].add(name)
+                    i = m2.end()
+                    continue
+                i = j
+                continue
+            i += len(word)
+            continue
+        i += 1
+
+    if depth != 0:
+        issues.append(_issue("error", "js-unbalanced", f"unbalanced braces (depth {depth})"))
+    if paren != 0:
+        issues.append(_issue("error", "js-unbalanced", "unbalanced parentheses"))
+    if bracket != 0:
+        issues.append(_issue("error", "js-unbalanced", "unbalanced brackets"))
+    # WebGL 1: the transpose argument to uniformMatrix*fv must be false.
+    # Claude's 3D slice used transpose=true for row-major mats — INVALID_VALUE,
+    # the canvas clears but never draws.
+    if re.search(r"uniformMatrix[234]fv\s*\([^)]*\btrue\b", text):
+        issues.append(_issue(
+            "error",
+            "webgl-transpose",
+            "WebGL 1 requires uniformMatrix*fv transpose=false. "
+            "transpose=true is INVALID_VALUE — the scene will not draw.",
+        ))
+    return issues
+
+
+def heuristic_html(text: str) -> list[dict[str, Any]]:
+    issues: list[dict[str, Any]] = []
+    blob = text or ""
+    for m in _SCRIPT.finditer(blob):
+        chunk = m.group(1) or ""
+        row0 = blob[: m.start(1)].count("\n")
+        for issue in heuristic_javascript(chunk):
+            row = dict(issue)
+            if row.get("row"):
+                row["row"] = int(row["row"]) + row0
+            issues.append(row)
+    return issues
+
+
 def _ruff(path: str, content: str | None) -> tuple[list[dict[str, Any]], list[dict[str, Any]], str]:
     from .lint_gate import lint_content, lint_file
 
@@ -286,10 +450,27 @@ def check(
     backends: dict[str, Any] = {}
 
     if lang == "python":
+        try:
+            ast.parse(text)
+        except SyntaxError as exc:
+            blockers.append(_issue(
+                "error", "python-syntax", str(exc).split("\n", 1)[0][:240],
+                row=int(exc.lineno or 0),
+            ))
         b, w, err = _ruff(disk_path or rel, content)
         blockers.extend(b)
         warnings.extend(w)
         backends["ruff"] = {"ran": True, "error": err}
+    elif lang == "javascript":
+        js = heuristic_javascript(text)
+        blockers.extend(i for i in js if i.get("severity") == "error")
+        warnings.extend(i for i in js if i.get("severity") != "error")
+        backends["javascript"] = {"ran": True, "backend": "heuristic"}
+    elif lang == "html":
+        js = heuristic_html(text)
+        blockers.extend(i for i in js if i.get("severity") == "error")
+        warnings.extend(i for i in js if i.get("severity") != "error")
+        backends["html"] = {"ran": True, "backend": "script-heuristic"}
     elif lang == "cpp":
         warnings.extend(heuristic_cpp(text))
         tidy, tidy_need = _clang_tidy(disk_path or "")
