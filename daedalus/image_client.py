@@ -7,9 +7,38 @@ import os
 import time
 from typing import Any
 
+import base64
 import httpx
 
 log = logging.getLogger(__name__)
+
+
+def payload_b64(image: dict[str, Any] | None) -> str:
+    """Return base64 payload from ``b64`` or a ``data:`` URL.
+
+    OpenRouter image models return ``data:image/png;base64,…`` in ``url``.
+    ``httpx.get`` on that string raises ``URL too long`` and the sprite never
+    lands on disk — eight times in the 2026-09-08 Lumen Bloom live eval.
+    """
+    row = image or {}
+    raw = str(row.get("b64") or "").strip()
+    if raw:
+        return raw
+    url = str(row.get("url") or "").strip()
+    if url.startswith("data:") and "," in url:
+        return url.split(",", 1)[1]
+    return ""
+
+
+def decode_image_bytes(image: dict[str, Any] | None) -> bytes | None:
+    blob = payload_b64(image)
+    if not blob:
+        return None
+    try:
+        return base64.b64decode(blob)
+    except Exception:
+        return None
+
 
 _NOVITA_MODELS = {
     "sdxl": {"sd_name": "sd_xl_base_1.0.safetensors", "sampler": "DPM++ 2M Karras", "steps": 25, "guidance": 7.0},
@@ -178,7 +207,14 @@ async def _openrouter_image(*, prompt: str, model: str, size: str, t0: float) ->
         for img in raw_imgs:
             u = img.get("image_url", {}).get("url", "") if isinstance(img, dict) else ""
             if u:
-                images.append({"url": u, "width": w, "height": h})
+                b64 = payload_b64({"url": u})
+                images.append({
+                    "url": "" if b64 else u,
+                    "b64": b64,
+                    "width": w,
+                    "height": h,
+                })
+
         if not images:
             raise RuntimeError(
                 f"Image model {or_model} returned no images. "
