@@ -2006,6 +2006,17 @@ async def run_native_discovery_pass(
                     tname, tinput if isinstance(tinput, dict) else {}, result_text,
                     ok=ok, blocked=blocked,
                 )
+                from .tool_catalog import canonical as _can
+                if _can(tname).lower() in {"browser", "engine", "visual_proof"} and not ok:
+                    try:
+                        from . import mentor as _mentor
+                        if _mentor.enabled():
+                            ret = _mentor.progress_next(loop)
+                            if ret:
+                                result_text = result_text + "\n" + ret
+                                all_results[-1] = result_text
+                    except Exception:
+                        pass
             tool_result_blocks.append({
                 "type": "tool_result",
                 "tool_use_id": tid,

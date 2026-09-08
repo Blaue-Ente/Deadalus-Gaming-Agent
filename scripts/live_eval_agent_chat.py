@@ -30,6 +30,7 @@ import live_eval_build as _leb  # noqa: E402
 
 ARTIFACT_SHOTS = _leb.ARTIFACT_SHOTS
 BETTER_CANDIDATES = _leb.BETTER_CANDIDATES
+CHEAP_CANDIDATES = _leb.CHEAP_CANDIDATES
 CANDIDATES = _leb.CANDIDATES
 _export_screenshots = _leb._export_screenshots
 _pin_openrouter = _leb._pin_openrouter
@@ -107,7 +108,7 @@ GLASS = (
 )
 
 PROMPTS = {"lumen": LUMEN, "glass": GLASS}
-MENTOR_CHOICES = ("or-glm-53", "or-astra", "or-fable-51", "or-grok-46", "or-kimi-k3", "rules")
+MENTOR_CHOICES = ("or-glm-53", "or-glm-53-flash", "or-astra", "or-fable-51", "or-grok-46", "or-kimi-k3", "rules")
 
 _RECT_RE = re.compile(
     r"fillRect|fillStyle\s*=|background:\s*linear-gradient|ctx\.fillRect|"
@@ -319,6 +320,11 @@ def main() -> None:
     parser.add_argument("--preset", choices=sorted(PROMPTS), default="lumen")
     parser.add_argument("--prompt", default="")
     parser.add_argument("--better", action="store_true")
+    parser.add_argument(
+        "--cheap",
+        action="store_true",
+        help="Probe MiniMax M3 / DeepSeek V4 / GLM 5.2 / Poolside — never Claude.",
+    )
     parser.add_argument("--effort", default="craft")
     parser.add_argument("--screenshots", default=str(ARTIFACT_SHOTS))
     parser.add_argument("--data", default="/tmp/daedalus-live-eval-chat")
@@ -341,7 +347,7 @@ def main() -> None:
     async def _go() -> int:
         probes = []
         chosen = args.model.strip() if args.model else ""
-        pool = BETTER_CANDIDATES if args.better else CANDIDATES
+        pool = CHEAP_CANDIDATES if args.cheap else (BETTER_CANDIDATES if args.better else CANDIDATES)
         if chosen:
             row = await probe_tools(chosen)
             probes.append(row)

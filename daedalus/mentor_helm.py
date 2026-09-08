@@ -521,6 +521,12 @@ def rules_unambiguous(inspect: dict[str, Any], steer: dict[str, Any]) -> bool:
         return True
     if flags.get("scaffold_vite_app_div") and nxt in {"write_file", "write_in_tree"}:
         return True
+    if flags.get("needs_npm") and nxt == "run_command":
+        return True
+    if flags.get("mount_mismatch") and nxt == "write_file":
+        return True
+    if flags.get("proof_failed") and nxt == "write_file":
+        return True
     return False
 
 

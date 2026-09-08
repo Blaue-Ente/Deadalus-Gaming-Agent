@@ -24,6 +24,15 @@ CANDIDATES = (
     "deepseek/deepseek-v3.2",
 )
 
+# Owner-cheap pool — no Claude. Probe MiniMax M3 first, then DeepSeek V4 / GLM 5.2.
+CHEAP_CANDIDATES = (
+    "minimax/minimax-m3",
+    "deepseek/deepseek-v4-flash",
+    "z-ai/glm-5.2",
+    "minimax/minimax-m2.7",
+    "poolside/laguna-s-2.1:free",
+)
+
 # Stronger than MiniMax M2.7, still inside a $2–3 Playground budget.
 BETTER_CANDIDATES = (
     "anthropic/claude-sonnet-4.6",

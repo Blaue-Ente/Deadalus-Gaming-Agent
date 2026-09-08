@@ -162,3 +162,103 @@ def test_mentor_http_toggle(tmp_path, monkeypatch):
     assert off.json()["ok"] is True
     on = client.post("/api/v1/daedalus/mentor", json={"enabled": True})
     assert on.json()["enabled"] is True
+
+def test_mentor_missing_npm_returns_to_writer_install(tmp_path, monkeypatch):
+    from daedalus import mentor
+
+    monkeypatch.setenv("DAEDALUS_MENTOR", "1")
+    monkeypatch.setattr("daedalus.mentor._rag_hits", lambda q: [])
+    slug = "glass-orchard"
+    root = tmp_path / slug
+    (root / "src").mkdir(parents=True)
+    (root / "index.html").write_text('<div id="game"></div>', encoding="utf-8")
+    (root / "src" / "main.js").write_text(PHASER_BOOT, encoding="utf-8")
+    (root / "package.json").write_text(
+        '{"dependencies":{"phaser":"^3.80.1"},"devDependencies":{"vite":"^5.2.0"}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("daedalus.playground.project_dir", lambda s: root)
+    rt = route(LUMEN)
+    loop = BuildLoop(rt, LUMEN, fix_rounds=3)
+    loop.slug = slug
+    loop.kind = "vite"
+    loop.observe("playground_new", {"kind": "vite"}, f"── playground_new OK slug={slug} kind=vite ──", ok=True)
+    loop.observe("write_file", {"slug": slug, "path": "src/main.js"}, "── write_file OK ──", ok=True)
+    view = mentor.inspect_project(slug, kind="vite")
+    assert view.needs_npm is True
+    assert view.entry_boots is True
+    decision = mentor.steer(loop)
+    assert decision is not None
+    assert decision.next_tool == "run_command"
+    assert "npm install" in str(decision.next_args.get("command") or "")
+    nxt = mentor.progress_next(loop)
+    assert "RETURN TO WRITER" in nxt
+    assert "run_command" in nxt
+
+
+def test_mentor_mount_mismatch_returns_to_writer(tmp_path, monkeypatch):
+    from daedalus import mentor
+
+    monkeypatch.setenv("DAEDALUS_MENTOR", "1")
+    monkeypatch.setattr("daedalus.mentor._rag_hits", lambda q: [])
+    slug = "glass-orchard"
+    root = tmp_path / slug
+    (root / "src").mkdir(parents=True)
+    (root / "node_modules" / "phaser").mkdir(parents=True)
+    (root / "index.html").write_text(
+        '<canvas id="game-canvas"></canvas><script type="module" src="/src/main.js"></script>',
+        encoding="utf-8",
+    )
+    (root / "src" / "main.js").write_text(
+        "import Phaser from 'phaser';\n"
+        "new Phaser.Game({ type: Phaser.AUTO, parent: 'app', scene: [] });\n",
+        encoding="utf-8",
+    )
+    (root / "package.json").write_text('{"dependencies":{"phaser":"^3.80"}}', encoding="utf-8")
+    monkeypatch.setattr("daedalus.playground.project_dir", lambda s: root)
+    rt = route(LUMEN)
+    loop = BuildLoop(rt, LUMEN, fix_rounds=3)
+    loop.slug = slug
+    loop.kind = "vite"
+    loop.observe("write_file", {"slug": slug, "path": "src/main.js"}, "── write_file OK ──", ok=True)
+    view = mentor.inspect_project(slug, kind="vite")
+    assert view.mount_mismatch is True
+    assert view.phaser_parent == "app"
+    decision = mentor.steer(loop)
+    assert decision is not None
+    assert decision.next_tool == "write_file"
+    assert decision.next_args.get("path") == "index.html"
+    assert "RETURN TO WRITER" in (decision.reason or "")
+
+
+def test_mentor_failed_proof_returns_to_writer_not_browser(tmp_path, monkeypatch):
+    from daedalus import mentor
+    from daedalus.visual_proof import ProofResult
+
+    monkeypatch.setenv("DAEDALUS_MENTOR", "1")
+    monkeypatch.setattr("daedalus.mentor._rag_hits", lambda q: [])
+    slug = "glass-orchard"
+    root = tmp_path / slug
+    (root / "src").mkdir(parents=True)
+    (root / "node_modules" / "phaser").mkdir(parents=True)
+    (root / "index.html").write_text('<div id="game"></div>', encoding="utf-8")
+    (root / "src" / "main.js").write_text(PHASER_BOOT, encoding="utf-8")
+    (root / "package.json").write_text('{"dependencies":{"phaser":"^3.80"}}', encoding="utf-8")
+    monkeypatch.setattr("daedalus.playground.project_dir", lambda s: root)
+    rt = route(LUMEN)
+    loop = BuildLoop(rt, LUMEN, fix_rounds=3)
+    loop.slug = slug
+    loop.kind = "vite"
+    loop.observe("write_file", {"slug": slug, "path": "src/main.js"}, "── write_file OK ──", ok=True)
+    loop.note_kernel_proof(ProofResult(
+        ok=False, skipped=False, kind="vite", slug=slug, tool="browser",
+        summary="1 uncaught", blank_screen=False,
+        details={"page_errors": ["Failed to resolve 'phaser'"]},
+    ))
+    loop.observe("browser", {"slug": slug}, "── visual_proof FAILED ──", ok=False)
+    decision = mentor.steer(loop)
+    assert decision is not None
+    assert decision.next_tool == "write_file"
+    assert "RETURN TO WRITER" in (decision.reason or "")
+    extra = mentor.extra_round_budget(loop)
+    assert extra == 2

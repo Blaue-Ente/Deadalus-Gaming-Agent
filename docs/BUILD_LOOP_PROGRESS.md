@@ -84,9 +84,9 @@ Director: Studio model picker (Claude Fable 5.1, GPT-6 Astra, GPT-5.5 / 5.6, Opu
 
 Always on even when Mentor is off: Phaser.Game counts as a loop; `playground.vite` playbook; kind sync; proof on exhaust; retry cap; `browser_ok` on chat DoD; no `NEED_PROPOSE` on game fast-path.
 
-When Mentor is on: PLAN PROGRESS NEXT comes from `daedalus/mentor.py` (inspect slug, RAG, forbid `generate_image` after two fails), overlayed by the director cache after quiet/exhaust. Extra recover rounds after native budget exhaust (once, +2). Persona wrap-up tells the model not to dump leftover JS.
+When Mentor is on: PLAN PROGRESS NEXT comes from `daedalus/mentor.py` (inspect slug, RAG, forbid `generate_image` after two fails), overlayed by the director cache after quiet/exhaust. Extra recover rounds after native budget exhaust (twice, +2 each). Persona wrap-up tells the model not to dump leftover JS.
 
-Mentor does **not** write `index.html` / `src/main.js`. Two writers stay forbidden.
+A **failed check returns to the writer**. Missing `node_modules` → `npm install`. Phaser `parent` id missing in `index.html` → `write_file` the mount. Chromium uncaught / blank / broken requests → `write_file` the entry, **not** another `browser`. The kernel proof already ran; repeating it without a file change is a skip-loop. Mentor still does **not** write `index.html` / `src/main.js`.
 
 ## Live eval 2026-09-08 — Glass Orchard, Mentor GLM 5.3 vs GPT-6 Astra
 
