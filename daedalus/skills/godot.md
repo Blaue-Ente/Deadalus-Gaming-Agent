@@ -10,7 +10,7 @@ description: Build Godot 4 games as text (.tscn / GDScript) — vertical slice, 
 **Godot-first order** (EngineAdapter of the shared capability pipeline; kernel walks this; do not skip):
 preflight → contract → context → slice → runtime → visual → review → export → publish.
 
-`engine({action: pipeline, slug})` runs the order. Missing Godot or export templates is **FAIL**, not skip. Preview HTML is not Play. Vite/Phaser are not this kind.
+`engine({action: pipeline, slug})` and `production({action: pipeline, slug})` both land on the Godot adapter. The capability registry platform is `godot` (not Vite, not HTML). Missing Godot or export templates is **FAIL**, not skip. Preview HTML is not Play. Vite/Phaser are not this kind. Files on disk are not gameplay proof.
 
 **How**:
 1. Playground kind `godot`. Scaffold already has `project.godot`, `scenes/main.tscn`, `scripts/player.gd`, autoload `Game`, HUD, win/lose/restart.

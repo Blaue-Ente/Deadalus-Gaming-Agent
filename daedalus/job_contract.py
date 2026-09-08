@@ -9,6 +9,7 @@ import re
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from .capability_registry import proof_kinds
 from .dod import is_coding_task
 
 _DONE_WORDS = (
@@ -19,7 +20,6 @@ _CONTRADICTION_PHRASES = (
     "не мога", "не можах", "could not complete", "cannot be automated",
     "requires manual", "needs human", "task_blocked", "blocked:",
 )
-_VISUAL_KINDS = frozenset({"static", "vite", "vite-react", "streamlit", "expo", "phaser", "godot"})
 
 
 @dataclass
@@ -136,7 +136,7 @@ def evaluate(
         "no_false_done": not (coding and honest_fail),
         "slices_closed": not (coding and open_slices > 0 and claims_done),
     }
-    if coding and kind in _VISUAL_KINDS and browser_ok is not None:
+    if coding and kind in proof_kinds() and browser_ok is not None:
         checks["browser"] = bool(browser_ok)
 
     blockers: list[str] = []

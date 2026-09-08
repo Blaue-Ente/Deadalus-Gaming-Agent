@@ -18,9 +18,9 @@ from .capability import (
     cap,
     finalize_evidence,
     gates_green,
+    gated_publish,
     publish_ready,
     stage_row,
-    store_release,
 )
 
 CONTEXT_REL = "studio/build_context.json"
@@ -112,6 +112,7 @@ def probe(_root: Path | None = None) -> dict[str, dict[str, Any]]:
         "render_proof": cap(run_ok, reason=miss),
         "gameplay_proof": cap(run_ok, reason=miss),
         "export": cap(toolchain and run_ok, reason="native toolchain / device missing"),
+        "device_smoke": cap(run_ok, reason=miss),
         "publish": cap(True),
         "rollback": cap(True),
     }
@@ -190,7 +191,7 @@ def ensure_contract(root: Path, *, slug: str = "", kind: str = "") -> dict[str, 
             blockers.append("web_entry")
     contract = {
         "kind": kind or ("expo" if flavor == "expo" else "static"),
-        "target": "mobile",
+        "target": "expo" if flavor == "expo" else "capacitor",
         "adapter": "MobileAdapter",
         "flavor": flavor,
         "slug": slug,
@@ -283,14 +284,27 @@ def runtime_verify(root: Path, *, flavor: str) -> dict[str, Any]:
         )
     # A real smoke would install the debug build. Cloud does not fake it.
     dev = device_probe()
+    # A listed device is not a smoke pass. Native launch + touch must run.
+    proofs = {
+        "native_build": False,
+        "app_launched": bool(dev.get("ok")),
+        "touch": False,
+        "flow": False,
+        "no_startup_crash": False,
+    }
     return stage_row(
         "runtime",
-        ok=bool(dev.get("ok")),
+        ok=False,
         skipped=not dev.get("ok"),
-        blockers=[] if dev.get("ok") else ["runtime_skipped"],
-        error="" if dev.get("ok") else "device present but smoke was not executed in-cloud",
+        blockers=["device_smoke"] if not all(proofs.values()) else [],
+        error=(
+            "" if all(proofs.values())
+            else "web preview does not replace device_smoke"
+        ),
         device=dev,
         flavor=flavor,
+        proofs=proofs,
+        checks=[{"id": k, "ok": v} for k, v in proofs.items()],
     )
 
 
@@ -304,12 +318,23 @@ def gameplay_verify(root: Path, *, flavor: str) -> dict[str, Any]:
             blockers=["gameplay_skipped", "emulator_missing"],
             error="No device — cannot smoke-test input on iOS/Android.",
         )
+    proofs = {
+        "started": False,
+        "input_accepted": False,
+        "state_changed": False,
+        "mechanic": False,
+        "outcome": False,
+        "no_console_errors": False,
+    }
     return stage_row(
         "gameplay",
-        ok=True,
+        ok=False,
         skipped=False,
-        blockers=[],
+        blockers=["device_input_not_run"],
         flavor=flavor,
+        proofs=proofs,
+        checks=[{"id": k, "ok": v} for k, v in proofs.items()],
+        error="web preview does not replace device_smoke",
         note="device listed; in-cloud does not inject input into a store binary",
     )
 
@@ -442,8 +467,13 @@ def run_pipeline(
     if stop_at >= 7:
         exp = rows.get("export") or {}
         if publish_ready(rows) and exp.get("ok") and exp.get("artifact"):
-            rows["publish"] = store_release(
-                root, slug=slug, artifact=Path(str(exp["artifact"])), target="mobile",
+            rows["publish"] = gated_publish(
+                root,
+                slug=slug,
+                artifact=Path(str(exp["artifact"])),
+                target="expo" if flavor == "expo" else "capacitor",
+                stages=rows,
+                hashes={rel: file_hash(root, rel) for rel in tracked(root, flavor)},
             )
         else:
             rows["publish"] = stage_row(
@@ -458,7 +488,7 @@ def run_pipeline(
         root,
         slug=slug,
         kind=kind or ("expo" if flavor == "expo" else "static"),
-        target="mobile",
+        target="expo" if flavor == "expo" else "capacitor",
         adapter="MobileAdapter",
         caps=caps,
         hashes=hashes,
@@ -472,7 +502,7 @@ def run_pipeline(
         "ok": bool(ok) and doc.get("verdict") == "APPROVED",
         "slug": slug,
         "kind": kind or ("expo" if flavor == "expo" else "static"),
-        "target": "mobile",
+        "target": "expo" if flavor == "expo" else "capacitor",
         "adapter": "MobileAdapter",
         "flavor": flavor,
         "through": want,

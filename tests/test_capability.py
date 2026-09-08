@@ -35,11 +35,11 @@ def _snake_html() -> str:
 
 
 def test_resolve_target_godot_never_web():
-    assert resolve_target("godot", "html canvas phaser") == "engine"
-    assert resolve_target("static", "Godot 4 GDScript") == "engine"
+    assert resolve_target("godot", "html canvas phaser") == "godot"
+    assert resolve_target("static", "Godot 4 GDScript") == "godot"
     assert resolve_target("static", "snake canvas") == "web"
-    assert resolve_target("static", "snake on iOS with Capacitor") == "mobile"
-    assert resolve_target("expo", "todo app") == "mobile"
+    assert resolve_target("static", "snake on iOS with Capacitor") == "capacitor"
+    assert resolve_target("expo", "todo app") == "expo"
     assert resolve_target("unity", "fps") == "unity"
 
 
@@ -49,7 +49,7 @@ def test_refuse_crosswalk():
     assert "no_crosswalk" in godot_web["blockers"]
     expo_web = refuse_crosswalk("expo", "web")
     assert expo_web and expo_web["ok"] is False
-    unity = refuse_crosswalk("unity", "engine")
+    unity = refuse_crosswalk("unity", "godot")
     assert unity and unity.get("honest_gap") == "unity_local"
 
 
@@ -93,7 +93,7 @@ def test_mobile_fails_without_emulator(tmp_path: Path, monkeypatch):
     monkeypatch.setattr("daedalus.playground.project_dir", lambda slug: tmp_path)
     (tmp_path / "index.html").write_text(_snake_html(), encoding="utf-8")
     pipe = run_pipeline("app", kind="static", through="runtime", text="iOS Capacitor wrap")
-    assert pipe["target"] == "mobile"
+    assert pipe["target"] == "capacitor"
     assert pipe["ok"] is False
     assert pipe["stages"]["runtime"]["skipped"] is True
     assert "emulator_missing" in str(pipe["stages"]["runtime"]["blockers"])
@@ -169,8 +169,8 @@ def test_arcade_stays_static_not_godot():
     assert rt.kind == "static"
 
 
-def test_godot_on_ios_stays_engine():
-    assert resolve_target("godot", "export to iOS") == "engine"
+def test_godot_on_ios_stays_godot():
+    assert resolve_target("godot", "export to iOS") == "godot"
     pb = match_playbook("Направи Godot 4 игра: CharacterBody2D, scenes/main.tscn, GDScript on iOS")
     assert "godot" in pb.id
     assert pb.kind == "godot"

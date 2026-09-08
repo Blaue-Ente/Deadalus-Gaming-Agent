@@ -187,14 +187,34 @@ def run_unity(slug: str, *, timeout: int = 180) -> dict[str, Any]:
 
 
 async def gameplay_for_kind(slug: str, kind: str, *, milestone_id: str = "M0") -> dict[str, Any]:
-    """Playwright interaction for visual web kinds; N/A otherwise (not a skip-pass)."""
+    """Adapter gameplay. Chromium is not Godot; web preview is not device_smoke."""
+    from .capability_registry import BROWSER_VISUAL_KINDS, platform_for_kind
     from .playground_gameplay_verify import gameplay_verify_app
-    from .playground_runtime import VISUAL_KINDS
 
     k = (kind or "").strip().lower()
-    if k in ("godot", "unity"):
-        return {"ok": True, "skipped": False, "na": True, "summary": f"{k} uses engine runner, not Chromium"}
-    if k not in VISUAL_KINDS:
+    platform = platform_for_kind(k)
+    if k == "unity" or platform is None and k == "unity":
+        return {
+            "ok": False,
+            "skipped": False,
+            "na": False,
+            "summary": "unsupported platform",
+            "blockers": ["unsupported_platform"],
+        }
+    if platform == "godot":
+        from . import playground as pg
+        from .godot_first import gameplay_probe
+
+        root = pg.project_dir(slug)
+        return skip_is_not_ok(gameplay_probe(root))
+    if platform in {"expo", "capacitor"}:
+        return skip_is_not_ok({
+            "ok": False,
+            "skipped": True,
+            "summary": "web preview does not replace device_smoke",
+            "blockers": ["device_smoke"],
+        })
+    if k not in BROWSER_VISUAL_KINDS:
         return {"ok": True, "skipped": False, "na": True, "summary": f"no gameplay for {k}"}
     raw = await gameplay_verify_app(slug, k, milestone_id=milestone_id)
     return skip_is_not_ok(raw)

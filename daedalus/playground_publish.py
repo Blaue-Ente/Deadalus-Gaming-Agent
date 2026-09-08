@@ -210,6 +210,12 @@ async def publish(
     kind = proj.get("kind", "static")
     entry = proj.get("entry") or "index.html"
 
+    from .capability_registry import is_workspace_path, platform_for_kind
+
+    platform = platform_for_kind(str(kind))
+    if platform in {"expo", "capacitor"}:
+        raise RuntimeError("web preview does not replace device_smoke")
+
     try:
         from .capability import adn_publish_block
         blocked = adn_publish_block(root, kind)
@@ -227,11 +233,6 @@ async def publish(
         publish_root = dist
         kind = "static"
         entry = "index.html"
-    elif kind == "expo":
-        web_build = await _build_expo(root)
-        publish_root = web_build
-        kind = "static"
-        entry = "index.html"
     elif kind == "godot":
         from .godot_first import run_pipeline
         pipe = await asyncio.to_thread(run_pipeline, slug, through="publish")
@@ -244,6 +245,8 @@ async def publish(
         artifact = Path(str(pub.get("artifact") or ""))
         if not artifact.is_file():
             raise RuntimeError("Godot publish has no immutable Stage 7 artifact")
+        if is_workspace_path(root, artifact):
+            raise RuntimeError("Publish uses the last verified artifact, not the workspace folder.")
         publish_root = artifact.parent
         entry = artifact.name
 

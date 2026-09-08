@@ -24,6 +24,9 @@ from . import playground_runner as pgr
 from .workers import call_workers_parallel
 
 
+from .capability_registry import playground_kind
+
+
 def builder_slot_for_role(role: AgentRole) -> str:
     """Map pipeline roles to worker slots.
 
@@ -53,17 +56,6 @@ def builder_slot_for_role(role: AgentRole) -> str:
         }.get(preferred, "balanced")
     return preferred
 
-_KIND_MAP = {
-    "static": "static",
-    "vite-react": "vite-react",
-    "vite-game": "vite",
-    "node-api": "node",
-    "auto": "auto",
-    "expo": "expo",
-    "fastapi": "fastapi",
-    "streamlit": "streamlit",
-}
-
 
 async def create_builder_project(
     name: str,
@@ -71,7 +63,7 @@ async def create_builder_project(
     kind: str = "vite-react",
     description: str = "",
 ) -> dict[str, Any]:
-    pg_kind = _KIND_MAP.get(kind, "vite-react")
+    pg_kind = playground_kind(kind, default="vite-react")
     proj = await pg.create_project(
         name,
         kind=pg_kind,

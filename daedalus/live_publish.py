@@ -20,9 +20,9 @@ import time
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-log = logging.getLogger(__name__)
+from .capability_registry import allows_static_live_publish
 
-NON_STATIC = frozenset({"fastapi", "streamlit", "node", "unity"})
+log = logging.getLogger(__name__)
 PAGES_CI = """pages:
   stage: deploy
   script:
@@ -162,14 +162,15 @@ async def ensure_local(slug: str) -> dict[str, Any]:
     if not proj:
         return {"ok": False, "error": f"project '{slug}' not found"}
     kind = (proj.get("kind") or "static").lower()
-    if kind in NON_STATIC:
+    if not allows_static_live_publish(kind):
         return {
             "ok": False,
             "static": False,
             "kind": kind,
             "error": (
-                f"{kind} не е static сайт. Наживо качва HTML/canvas/vite/expo-web. "
-                "За Unity ползвай Git push. FastAPI остава на /apps/ само ако имаш процес."
+                f"{kind} is not a static live-publish target. "
+                "Godot/Expo/Capacitor need a hashed immutable artifact; "
+                "web preview does not replace device_smoke."
             ),
         }
     published = await pub.publish(slug, icon="🎮")

@@ -251,12 +251,11 @@ def test_engine_gameplay_is_na_not_skip_pass():
     from daedalus.game_build_contract import verified
 
     godot = asyncio.run(gameplay_for_kind("demo", "godot"))
-    assert godot.get("na") is True
-    assert godot.get("skipped") is not True
-    assert verified(godot) is True
+    assert godot.get("na") is not True
+    assert verified(godot) is False
     unity = asyncio.run(gameplay_for_kind("demo", "unity"))
-    assert unity.get("na") is True
-    assert verified(unity) is True
+    assert unity.get("na") is not True
+    assert verified(unity) is False
 
 
 def test_maybe_critic_na_when_quality_off(monkeypatch):
