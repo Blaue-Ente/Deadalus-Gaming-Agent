@@ -70,7 +70,11 @@ def fake_tools(monkeypatch):
     async def _proof(slug, kind="static"):
         return _ok_proof(slug, kind)
 
+    async def _no_review(*_a, **_k):
+        return ""
+
     monkeypatch.setattr(native_tools, "execute_native_tool", _exec)
+    monkeypatch.setattr(native_tools, "_kernel_write_review", _no_review)
     monkeypatch.setattr("daedalus.visual_proof.run_visual_proof", _proof)
     return _exec
 
@@ -293,3 +297,38 @@ def test_kernel_runs_visual_proof_after_writes(fake_tools):
     assert any(r.get("tool") == "browser" for r in log)
     assert loop.stop_reason == "complete"
     assert text and "VISUAL PROOF" in text
+
+
+def test_need_worker_quiet_round_keeps_building(fake_tools, monkeypatch):
+    monkeypatch.setenv("DAEDALUS_WORKERS", "1")
+
+    async def fake_workers(calls):
+        assert calls and calls[0]["slot"] == "fast"
+        return [{
+            "slot": "fast",
+            "model": "minimax/minimax-m2.7",
+            "ok": True,
+            "task_preview": "WebGL traps",
+            "result": "- transpose=true is INVALID_VALUE on WebGL1",
+        }]
+
+    monkeypatch.setattr("daedalus.workers.call_workers_parallel", fake_workers)
+    rt = route(SLERP)
+    loop = BuildLoop(rt, SLERP, fix_rounds=2)
+    model = ScriptedModel([
+        [_text("<NEED_WORKER: fast | list WebGL1 traps for this greybox>")],
+        [_use("math3d", op="quat_slerp", t=0.5),
+         _use("write_file", slug="slerp-lookat", path="index.html", content="<canvas>")],
+        [_text("Готово: greybox written.")],
+    ])
+    text, log = _run("sys", SLERP, model, loop=loop, max_rounds=4)
+    workers_turns = [t for t in _user_texts(sum(model.seen, [])) if "WORKERS (kernel ran NEED_WORKER)" in t]
+    assert workers_turns
+    assert loop.worker_log
+    row = loop.log_row()
+    assert row["workers"]
+    assert row["workers"][0]["slot"] == "fast"
+    assert row["workers"][0]["ok"] is True
+    assert any(r.get("tool") == "math3d" for r in log)
+    assert loop.stop_reason == "complete"
+    assert text and "NATIVE TOOL RESULTS" in text

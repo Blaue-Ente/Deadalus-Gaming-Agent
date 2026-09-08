@@ -110,12 +110,9 @@ async def browser_verify(
 
     def _on_console(msg) -> None:
         try:
-            if msg.type != "error":
+            if msg.type not in {"error", "warning"}:
                 return
             t = msg.text or ""
-            # Chromium puts the failing URL in msg.location, not msg.text — a
-            # favicon.ico 404 shows up as a bare "Failed to load resource: …404".
-            # Check the location URL too so benign assets don't fail the build.
             loc_url = ""
             try:
                 loc = msg.location or {}
@@ -124,12 +121,13 @@ async def browser_verify(
                 loc_url = ""
             if _is_benign(t) or (loc_url and _is_benign(loc_url)):
                 return
-            # "Failed to load resource" console lines mirror the network layer.
-            # _on_response / _on_requestfailed already record the ones that matter
-            # (filtered to _CRITICAL_RESOURCE_TYPES), so counting them here too would
-            # double-fault on benign assets (favicon/image/font). Drop them — the
-            # network handlers are the single source of truth for failed requests.
             if "failed to load resource" in t.lower():
+                return
+            low = t.lower()
+            webgl_fatal = "webgl" in low and (
+                "invalid_value" in low or "invalid_operation" in low or "invalid_enum" in low
+            )
+            if msg.type == "warning" and not webgl_fatal:
                 return
             console_errors.append(f"{msg.type}: {t[:300]}")
         except Exception:
@@ -163,12 +161,21 @@ async def browser_verify(
     reachable = False
     dom_text_len = 0
     has_canvas = False
+    has_webgl = False
 
     try:
         async with async_playwright() as p:
             browser = await p.chromium.launch(
                 headless=True, executable_path=chrome,
-                args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--ignore-gpu-blocklist",
+                    "--enable-webgl",
+                    "--enable-unsafe-swiftshader",
+                    "--use-gl=angle",
+                    "--use-angle=swiftshader",
+                ],
             )
             page = await browser.new_page(viewport={"width": 1280, "height": 800})
             page.on("console", _on_console)
@@ -201,6 +208,24 @@ async def browser_verify(
                 )
             except Exception:
                 has_canvas = False
+            try:
+                has_webgl = await page.evaluate(
+                    """() => {
+                        const nodes = [...document.querySelectorAll('canvas')];
+                        for (const c of nodes) {
+                            let gl = null;
+                            try {
+                                gl = c.getContext('webgl2')
+                                    || c.getContext('webgl')
+                                    || c.getContext('experimental-webgl');
+                            } catch (e) { gl = null; }
+                            if (gl) return true;
+                        }
+                        return false;
+                    }"""
+                )
+            except Exception:
+                has_webgl = False
 
             # Vite error overlay: shown instead of the real app when there is a
             # runtime import/module error (e.g. "No matching export in …").
@@ -259,11 +284,26 @@ async def browser_verify(
 
     # ── Verdict ──────────────────────────────────────────────────────────
     blank_screen = reachable and dom_text_len < 8 and not has_canvas
+    empty_scene = False
+    if screenshot_path and not blank_screen and has_webgl:
+        try:
+            from .frame_geometry import frame_shows_scene
+            shot_abs = pg.project_dir(slug) / screenshot_path
+            if shot_abs.is_file() and not frame_shows_scene(shot_abs):
+                empty_scene = True
+                blank_screen = True
+        except Exception:
+            empty_scene = False
     has_fatal = bool(page_errors) or bool(failed_requests) or bool(console_errors)
     ok = reachable and (not blank_screen) and (not has_fatal)
 
     if not reachable:
         summary = "❌ Приложението не се зареди в браузъра"
+    elif empty_scene:
+        summary = (
+            "❌ Canvas/HUD painted but the screenshot center is a flat clear-color — "
+            "no 3D geometry in view. Fix the camera/draw (write_file)."
+        )
     elif blank_screen:
         summary = "❌ Бял екран — нищо не се рендерира (DOM празен)"
     elif has_fatal:
@@ -280,6 +320,7 @@ async def browser_verify(
 
     return {
         "ok": ok, "reachable": reachable, "blank_screen": blank_screen,
+        "empty_scene": empty_scene, "has_webgl": bool(has_webgl),
         "console_errors": console_errors, "page_errors": page_errors,
         "failed_requests": failed_requests, "dom_text_len": dom_text_len,
         "has_canvas": has_canvas, "screenshot_path": screenshot_path,

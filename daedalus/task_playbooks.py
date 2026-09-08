@@ -94,7 +94,9 @@ PLAYBOOKS: tuple[Playbook, ...] = (
         expected_files=("index.html",),
         notes=(
             "Call math3d with claimed numbers before writing shaders/JS. "
-            "Study GLM structure; never paste books. Static preview — no dev server."
+            "Study GLM structure; never paste books. Static preview — no dev server. "
+            "Coloured greybox must occupy the screenshot center; HUD on a clear-color is not a slice. "
+            "WebGL1: uniformMatrix*fv(loc, false, columnMajor) — transpose=true is INVALID_VALUE."
         ),
         steps=(
             Step(

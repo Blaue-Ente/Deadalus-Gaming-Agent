@@ -52,14 +52,22 @@ DUNGEON = (
 )
 
 SLERP = (
-    "Направи нова Playground 3D среза (kind=static, slug slerp-lookat): "
-    "WebGL или Three.js от CDN, без vite. Сива кутия: под, няколко блока и "
-    "една ярка цел. Камерата прави quaternion SLERP към целта и look-at към нея. "
-    "Клавиши 1/2/3 сменят целта. Извикай math3d с конкретни claimed числа "
-    "(quat_slerp и look_at) преди да пишеш формулите в JS. "
-    "Една playable среза: видима 3D сцена, не черен екран. "
-    "Не прави змия, tetris или pong."
+    "Направи нова Playground 3D среза (kind=static, slug slerp-lookat). "
+    "Само raw WebGL1 в index.html — без Three.js, без CDN, без vite. "
+    "Продуктът е геометрия в центъра на Chromium screenshot, не HUD. "
+    "На първия кадър (t=0, преди SLERP) нарисувай: под (12x12, тъмно зелено) "
+    "и три кутии около origin — червена (0,0.5,0), лайм (-2.2,0.5,0), "
+    "златна (2.2,0.5,0). Камера eye=(0,5,12) look-at origin, up=(0,1,0). "
+    "clearColor navy е ОК; центърът на кадъра трябва да е цветните кутии. "
+    "WebGL1: uniformMatrix4fv(loc, false, Float32Array) — никога transpose=true. "
+    "Клавиши 1/2/3 сменят целта; камерата прави quaternion SLERP към целта. "
+    "Извикай math3d с claimed числа (quat_slerp и look_at) преди JS формулите. "
+    "За евтин чеклист можеш <NEED_WORKER: fast | WebGL1 traps>, но файловете "
+    "се пишат само с write_file. Не прави змия, tetris или pong."
 )
+
+CHEAP_WORKER = "minimax/minimax-m2.7"
+CHEAP_SLOTS = ("fast", "balanced", "deep", "coder", "planner", "reviewer")
 
 PROMPTS = {"dungeon": DUNGEON, "slerp": SLERP}
 
@@ -78,6 +86,9 @@ def _pin_openrouter(model: str) -> None:
     os.environ.setdefault("DAEDALUS_NATIVE_TOOLS", "1")
     os.environ.setdefault("DAEDALUS_VISUAL_PROOF", "1")
     os.environ.setdefault("DAEDALUS_WRITE_GATE", "1")
+    os.environ["DAEDALUS_WRITE_REVIEW"] = "1"
+    os.environ["DAEDALUS_WORKERS"] = "1"
+    os.environ.setdefault("DAEDALUS_LAB_BACKEND", "local")
 
 
 def _client():
@@ -137,6 +148,142 @@ async def probe_tools(model: str) -> dict:
         "completion_tokens": getattr(usage, "completion_tokens", None) if usage else None,
         "ms": int((time.time() - t0) * 1000),
     }
+
+
+def _pin_cheap_workers(data_dir: Path) -> dict:
+    """Master stays on Claude. Workers are MiniMax — not Sonnet reviewer."""
+    cfg = {
+        slot: {
+            "model": CHEAP_WORKER,
+            "provider": "openrouter",
+            "enabled": True,
+            "base_url": "https://openrouter.ai/api/v1",
+        }
+        for slot in CHEAP_SLOTS
+    }
+    dest = data_dir / "worker_config.json"
+    dest.write_text(json.dumps(cfg, indent=2) + "\n", encoding="utf-8")
+    return cfg
+
+
+def _trim_workers(rows: list | None) -> list[dict]:
+    out = []
+    for r in rows or []:
+        out.append({
+            "slot": r.get("slot"),
+            "model": r.get("model"),
+            "ok": r.get("ok"),
+            "task_preview": str(r.get("task_preview") or "")[:160],
+            "result_head": str(r.get("result") or "")[:700],
+        })
+    return out
+
+
+def _knowledge_report(rt, extra: str) -> dict:
+    chroma: dict
+    try:
+        import chromadb  # noqa: F401
+        chroma = {"import": True, "error": ""}
+    except Exception as exc:
+        chroma = {"import": False, "error": str(exc)[:200]}
+    docs: list[str] = []
+    auto: list[str] = []
+    for s in rt.ordered_steps:
+        docs.extend(s.docs or ())
+        if s.auto and s.tool:
+            auto.append(s.tool)
+    return {
+        "chroma": chroma,
+        "consult_auto": auto,
+        "plan_docs": list(dict.fromkeys(docs)),
+        "extra_has_glm": "glm" in (extra or "").lower(),
+        "extra_head": (extra or "")[:1400],
+        "note": (
+            "Live eval uses llm_client.call_with_tools (no agent.py / Chroma). "
+            "PLAN DOCS + AUTO consult are harness knowledge, not semantic RAG."
+        ),
+    }
+
+
+def _host_report() -> dict:
+    try:
+        from daedalus.computer import probe
+        return probe()
+    except Exception as exc:
+        return {"error": str(exc)[:200]}
+
+
+async def probe_worker() -> dict:
+    from daedalus.workers import call_workers_parallel, get_worker_config
+
+    cfg = get_worker_config()
+    fast = (cfg.get("fast") or {})
+    t0 = time.time()
+    try:
+        rows = await call_workers_parallel([
+            {"slot": "fast", "task": "Reply with the single word PONG. Nothing else."},
+        ])
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": str(exc)[:400],
+            "configured_model": fast.get("model"),
+            "ms": int((time.time() - t0) * 1000),
+        }
+    row = rows[0] if rows else {}
+    return {
+        "ok": bool(row.get("ok")),
+        "slot": row.get("slot"),
+        "model": row.get("model") or fast.get("model"),
+        "result_head": str(row.get("result") or "")[:240],
+        "ms": int((time.time() - t0) * 1000),
+        "configured_model": fast.get("model"),
+        "source": fast.get("source"),
+    }
+
+
+async def _shot_url(url: str, dest: Path) -> dict:
+    from daedalus.playground_browser import _find_chrome
+
+    chrome = _find_chrome()
+    if not chrome:
+        return {"ok": False, "error": "chromium_not_found"}
+    try:
+        from playwright.async_api import async_playwright
+    except Exception as exc:
+        return {"ok": False, "error": f"playwright: {exc}"[:200]}
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(
+                headless=True, executable_path=chrome,
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--ignore-gpu-blocklist",
+                    "--enable-webgl",
+                    "--enable-unsafe-swiftshader",
+                    "--use-gl=angle",
+                    "--use-angle=swiftshader",
+                ],
+            )
+            page = await browser.new_page(viewport={"width": 1280, "height": 800})
+            await page.goto(url, wait_until="domcontentloaded", timeout=25000)
+            await page.wait_for_timeout(2800)
+            await page.screenshot(path=str(dest), full_page=False)
+            await browser.close()
+        return {"ok": dest.is_file(), "path": str(dest), "bytes": dest.stat().st_size if dest.is_file() else 0}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)[:300]}
+
+
+def _open_lab(slug: str) -> dict:
+    from daedalus.computer import open_project_computer
+
+    try:
+        return open_project_computer(slug)
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)[:300]}
 
 
 def _estimate_usd(model: str, prompt_tokens: int, completion_tokens: int) -> float | None:
@@ -200,6 +347,9 @@ async def run_build(prompt: str, max_rounds: int) -> dict:
         "kernel_proof_ran": loop.kernel_proof_ran,
         "slug": loop.slug,
         "nudges": loop.nudges,
+        "workers": row.get("workers") or [],
+        "worker_log": _trim_workers(loop.worker_log),
+        "knowledge": _knowledge_report(rt, extra),
         "usage": {**usage_acc, "estimated_usd": est},
         "tool_log": [
             {"tool": r.get("tool"), "ok": r.get("ok"), "blocked": r.get("blocked")}
@@ -232,7 +382,7 @@ def _project_snapshot(slug: str) -> dict:
     }
 
 
-def _export_screenshots(slug: str, dest: Path) -> list[str]:
+def _export_screenshots(slug: str, dest: Path, tag: str = "") -> list[str]:
     if not slug:
         return []
     from daedalus import playground as pg
@@ -246,8 +396,9 @@ def _export_screenshots(slug: str, dest: Path) -> list[str]:
     extra = root / "assets" / "_verify_screenshot.png"
     if extra.is_file():
         candidates.append(extra)
+    prefix = f"{slug}-{tag}-" if tag else f"{slug}-"
     for src in candidates:
-        out = dest / f"{slug}-{src.name}"
+        out = dest / f"{prefix}{src.name}"
         shutil.copy2(src, out)
         copied.append(str(out))
     return copied
@@ -293,23 +444,66 @@ async def main_async(args: argparse.Namespace) -> int:
     from daedalus import playground as pg
     pg.PROJECTS_DIR = playground_projects_dir()
     playground_projects_dir().mkdir(parents=True, exist_ok=True)
+    worker_cfg = _pin_cheap_workers(data_root())
+    print(f"workers pinned → {CHEAP_WORKER} slots={list(worker_cfg)}", flush=True)
+    worker_probe = await probe_worker()
+    print(
+        f"worker probe ok={worker_probe.get('ok')} model={worker_probe.get('model')} "
+        f"ms={worker_probe.get('ms')}",
+        flush=True,
+    )
+    host = _host_report()
 
     print(f"build model={chosen} playbook-probe…", flush=True)
     build = await run_build(args.prompt, args.max_rounds)
     snap = _project_snapshot(str(build.get("slug") or ""))
     shots_dir = Path(args.screenshots) if args.screenshots else ARTIFACT_SHOTS
+    tag = (args.shot_tag or "").strip()
     try:
-        shots = _export_screenshots(str(build.get("slug") or ""), shots_dir)
+        shots = _export_screenshots(str(build.get("slug") or ""), shots_dir, tag=tag)
     except Exception as exc:
         shots = []
         logging.warning("screenshot export failed: %s", exc)
+
+    lab = {}
+    lab_shot = {}
+    slug = str(build.get("slug") or "")
+    if slug:
+        lab = _open_lab(slug)
+        url = str((lab or {}).get("url") or "")
+        if url:
+            lab_png = shots_dir / f"{slug}-{tag + '-' if tag else ''}lab.png"
+            lab_shot = await _shot_url(url, lab_png)
+            if lab_shot.get("ok"):
+                shots.append(str(lab_png))
+
+    from daedalus.frame_geometry import frame_shows_scene
+    geometry = []
+    for p in shots:
+        try:
+            geometry.append({"path": p, "shows_scene": frame_shows_scene(p)})
+        except Exception as exc:
+            geometry.append({"path": p, "error": str(exc)[:120]})
+
     report = {
         "probes": probes,
         "chosen": chosen,
         "prompt": args.prompt,
+        "worker_probe": worker_probe,
+        "worker_config": {k: {"model": v.get("model"), "provider": v.get("provider")} for k, v in worker_cfg.items()},
+        "host": host,
+        "lab": {
+            "ok": lab.get("ok"),
+            "lab_id": lab.get("lab_id") or lab.get("id"),
+            "url": lab.get("url"),
+            "backend": (lab.get("computer") or lab).get("backend") if isinstance(lab.get("computer"), dict) else lab.get("backend"),
+            "error": lab.get("error"),
+            "shot": lab_shot,
+        },
         "build": build,
         "project": snap,
         "screenshots": shots,
+        "geometry": geometry,
     }
     out_dir = Path(os.environ.get("DAEDALUS_DATA") or "data/daedalus") / "live_eval"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -325,14 +519,20 @@ async def main_async(args: argparse.Namespace) -> int:
         "kernel_proof_ran": build.get("kernel_proof_ran"),
         "proof_gap": build.get("proof_gap"),
         "proof_frames": build.get("proof_frames"),
+        "workers": build.get("workers"),
+        "worker_probe": worker_probe,
+        "lab": report["lab"],
+        "knowledge": (build.get("knowledge") or {}).get("chroma"),
         "tools": [r["tool"] for r in build.get("tool_log") or []],
         "files": [f["path"] for f in snap.get("files") or []],
         "proof_on_disk": snap.get("proof_dir") or [],
         "screenshots": shots,
+        "geometry": geometry,
         "usage": usage,
         "report": str(dest),
     }, ensure_ascii=False, indent=2))
-    return 0 if build.get("kernel_proof_ran") or build.get("complete") else 1
+    painted = any(g.get("shows_scene") for g in geometry)
+    return 0 if painted or build.get("complete") else 1
 
 
 def main() -> None:
@@ -343,6 +543,7 @@ def main() -> None:
     parser.add_argument("--max-rounds", type=int, default=12)
     parser.add_argument("--better", action="store_true", help="Probe Claude / GLM / Kimi instead of MiniMax")
     parser.add_argument("--screenshots", default=str(ARTIFACT_SHOTS), help="Directory for copied proof PNGs")
+    parser.add_argument("--shot-tag", default="pass3", help="Filename prefix so we do not overwrite pass1/pass2")
     args = parser.parse_args()
     if args.preset and not args.prompt:
         args.prompt = PROMPTS[args.preset]

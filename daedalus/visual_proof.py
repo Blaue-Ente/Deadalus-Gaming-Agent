@@ -105,7 +105,13 @@ class ProofResult:
                 "Godot is not on PATH (set GODOT_BIN). A .tscn on disk is not Play."
             )
         elif self.blank_screen:
-            lines.append("The page painted nothing. Fix the render (write_file), then stop — the kernel will open it again.")
+            if "geometry" in (self.summary or "").lower() or "clear-color" in (self.summary or "").lower():
+                lines.append(
+                    "HUD-only is a fail. Put coloured meshes in the camera frustum at t=0 "
+                    "(write_file). WebGL1: uniformMatrix*fv(loc, false, columnMajor)."
+                )
+            else:
+                lines.append("The page painted nothing. Fix the render (write_file), then stop — the kernel will open it again.")
         elif not self.ok:
             lines.append("The running game failed proof. Fix the defect; do not claim готово.")
         else:
@@ -266,6 +272,8 @@ async def _prove_web(slug: str, kind: str, root: Path) -> ProofResult:
         blank_screen=bool(raw.get("blank_screen")),
         details={
             "reachable": raw.get("reachable"),
+            "empty_scene": raw.get("empty_scene"),
+            "has_webgl": raw.get("has_webgl"),
             "console_errors": (raw.get("console_errors") or [])[:5],
             "page_errors": (raw.get("page_errors") or [])[:5],
         },

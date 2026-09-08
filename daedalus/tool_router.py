@@ -295,6 +295,19 @@ def format_system(rt: Route, *, extra: str = "", user_message: str = "") -> str:
         if s.docs:
             lines.append(f"      docs: {', '.join(s.docs)}")
     lines.append("When the slice files exist, stop and summarize. No NEED_* dumps, no SQL.")
+    if pb.id.startswith("playground."):
+        lines.append(
+            "Cheap workers: emit <NEED_WORKER: fast | short checklist> for HUD copy "
+            "or WebGL1 traps. Do not use NEED_WORKER to write files — that is write_file. "
+            "The kernel also runs a cheap reviewer after the first game write."
+        )
+    if pb.id == "playground.math3d":
+        lines.append(
+            "3D product: at t=0 the screenshot CENTER must show coloured boxes "
+            "(red/lime/gold) and a floor. Camera eye (0,5,12) look-at origin. "
+            "HUD-only on navy clearColor is FAILED. Raw WebGL1, no CDN. "
+            "uniformMatrix4fv(loc, false, Float32Array) — never transpose=true."
+        )
     sys = "\n".join(lines)
     docs = _docs_block(rt.ordered_steps)
     if docs:

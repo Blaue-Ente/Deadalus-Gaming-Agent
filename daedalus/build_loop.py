@@ -123,6 +123,8 @@ class BuildLoop:
         self.proof_vision: list[dict[str, Any]] = []
         self.proof_gap = ""
         self.kernel_proof_ran = False
+        self.worker_log: list[dict[str, Any]] = []
+        self._reviewed_write = False
         for row in self.seed_log:
             self._capture_slug(row.get("input") or {}, "")
 
@@ -437,4 +439,8 @@ class BuildLoop:
             "slug": self.slug,
             "proof_frames": list(self.proof_frames),
             "proof_gap": self.proof_gap,
+            "workers": [
+                {"slot": w.get("slot"), "model": w.get("model"), "ok": w.get("ok")}
+                for w in self.worker_log
+            ],
         }

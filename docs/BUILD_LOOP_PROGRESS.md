@@ -49,7 +49,15 @@ OpenRouter `anthropic/claude-sonnet-4.6` (~$3/$15 per 1M). Budget cap $2–3. Ru
 
 Total model spend ~**$1.41**. Screenshots: `slerp-lookat-pass1-hud.png`, `slerp-lookat-pass2.png`.
 
-S4 now fails `uniformMatrix*fv(..., true)` so the next write can ship WebGL 1-legal matrices. The remaining gap is "page painted ≠ 3D greybox in view" — that is still model camera/matrix quality, not a skip-pass.
+The remaining gap is "page painted ≠ 3D greybox in view" — that is still model camera/matrix quality, not a skip-pass.
+
+## This MR — empty 3D frames fail; cheap workers; Play Lab
+
+HUD text on a navy clear-color is no longer a visual-proof pass. `frame_shows_scene` looks at the **center** of the PNG. WebGL `INVALID_VALUE` is a console fail. Headless Chromium launches with ANGLE/SwiftShader (`--disable-gpu` was painting a black WebGL canvas).
+
+The native loop now runs `<NEED_WORKER>` and a cheap **fast** reviewer after the first HTML/JS write. Live eval pins worker slots to MiniMax, not Claude Sonnet. Play Lab (`computer.open_project_computer`) is opened after the build — local HTTP on this machine. SmolVM is optional and not installed here.
+
+Pytest sets `DAEDALUS_WRITE_REVIEW=0` / `DAEDALUS_WORKERS=0` so unit tests never spend tokens.
 
 ## S1 — Closed build loop (done)
 
@@ -120,8 +128,8 @@ FAILED so the loop's NEXT is a corrected `write_file`, not eight hunting rounds.
 
 ## How to review S3+S4
 
-1. `DAEDALUS_STANDALONE=1 python3 -m pytest tests/test_write_gate.py tests/test_visual_proof.py tests/test_build_loop.py tests/test_tool_router.py tests/test_or_free_preset.py -q`
-2. Live 3D: `scripts/live_eval_build.py --better --preset slerp --max-rounds 12`
+1. `DAEDALUS_STANDALONE=1 python3 -m pytest tests/test_write_gate.py tests/test_visual_proof.py tests/test_build_loop.py tests/test_tool_router.py tests/test_or_free_preset.py tests/test_frame_geometry.py -q`
+2. Live 3D: `scripts/live_eval_build.py --better --preset slerp --max-rounds 12 --shot-tag pass3`
 
 ## Research
 

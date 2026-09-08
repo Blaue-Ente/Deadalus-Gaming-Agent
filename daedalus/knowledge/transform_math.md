@@ -2,6 +2,14 @@
 
 Use native `math3d` as the numeric referee. Conventions in this harness: quaternion `[x, y, z, w]`, matrices **row-major**, right-handed, Y-up, camera looks down −Z (OpenGL-style). Mixing Unity column-major samples with OpenGL formulas is the usual silent bug.
 
+## WebGL 1 greybox (this harness)
+
+`uniformMatrix4fv(loc, false, columnMajor)`. `transpose=true` is `INVALID_VALUE` on WebGL 1 — the canvas stays a clear-color and the HUD still paints.
+
+Put the camera at `(0, 5, 12)` looking at the origin. Draw at least three boxes with distinct colours (red / lime / gold) around the origin **on the first frame**, before any SLERP. `gl.clearColor` navy is fine; the *center* of a Chromium screenshot must show the meshes, not only HUD text.
+
+Headless Chromium here uses software WebGL (ANGLE / SwiftShader). Do not require a GPU extension. Prefer raw WebGL in `index.html` — a Three.js CDN is often blocked.
+
 ## Vectors
 
 Dot product `a·b = |a||b|cosθ`. For a unit view direction `v` and a unit surface normal `n`, `n·v > 0` means the face points toward the viewer (or along the ray). Backface culling is that test.

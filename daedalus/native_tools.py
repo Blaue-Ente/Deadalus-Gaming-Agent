@@ -908,6 +908,70 @@ def _user_turn(text: str, vision: list[dict[str, Any]] | None = None) -> dict[st
     return {"role": "user", "content": text}
 
 
+async def _run_worker_markers(text: str, loop: Any) -> str:
+    """Execute <NEED_WORKER: slot | task> from the model. Cheap slots, no files."""
+    if os.environ.get("DAEDALUS_WORKERS", "1").strip().lower() in {"0", "false", "no", "off"}:
+        return ""
+    from .workers import call_workers_parallel, format_worker_results, parse_worker_markers
+
+    calls = parse_worker_markers(text or "")
+    if not calls:
+        return ""
+    try:
+        results = await call_workers_parallel(calls)
+    except Exception as exc:
+        log.warning("NEED_WORKER failed: %s", exc)
+        return f"━━━ WORKERS ERROR ━━━\n{exc}"
+    if loop is not None:
+        log_rows = getattr(loop, "worker_log", None)
+        if isinstance(log_rows, list):
+            log_rows.extend(results)
+        loop.observe(
+            "workers",
+            {"slots": [c.get("slot") for c in calls]},
+            format_worker_results(results)[:1500],
+            ok=any(bool(r.get("ok")) for r in results),
+        )
+    return format_worker_results(results)
+
+
+async def _kernel_write_review(loop: Any, path: str, content: str) -> str:
+    """Cheap fast worker reviews the first game write. Master stays on the expensive model.
+
+    Off when ``DAEDALUS_WRITE_REVIEW=0`` (pytest does this) so unit tests never
+    spend owner tokens. Live eval / Studio leave it on.
+    """
+    if os.environ.get("DAEDALUS_WRITE_REVIEW", "1").strip().lower() in {"0", "false", "no", "off"}:
+        return ""
+    if loop is None or getattr(loop, "_reviewed_write", False):
+        return ""
+    if not (path or "").lower().endswith((".html", ".htm", ".js", ".mjs")):
+        return ""
+    if len(content or "") < 200:
+        return ""
+    loop._reviewed_write = True
+    from .workers import call_workers_parallel, format_worker_results
+
+    task = (
+        "You are a cheap reviewer. This Playground file must SHOW geometry in a "
+        "Chromium screenshot, not only HUD text. Flag WebGL1 transpose=true, "
+        "camera looking at empty space, missing requestAnimationFrame, missing draw. "
+        f"File {path} ({len(content)} chars):\n{(content or '')[:4500]}\n"
+        "Max 8 bullets. Bulgarian or English. No code rewrite — only defects."
+    )
+    try:
+        results = await call_workers_parallel([{"slot": "fast", "task": task}])
+    except Exception as exc:
+        log.warning("kernel write review failed: %s", exc)
+        return f"━━━ WORKER [fast] ✗ ━━━\n{exc}"
+    log_rows = getattr(loop, "worker_log", None)
+    if isinstance(log_rows, list):
+        log_rows.extend(results)
+    blob = format_worker_results(results)
+    loop.observe("workers", {"slot": "fast", "path": path}, blob[:1500], ok=True)
+    return blob
+
+
 async def _kernel_visual_proof(loop: Any) -> str:
     from .visual_proof import run_visual_proof
 
@@ -1796,6 +1860,18 @@ async def run_native_discovery_pass(
 
         if not tool_uses:
             final = "\n".join(text_parts).strip()
+            worker_block = await _run_worker_markers(final, loop)
+            if worker_block:
+                messages.append({
+                    "role": "assistant",
+                    "content": assistant_content or [{"type": "text", "text": final or "(no reply)"}],
+                })
+                messages.append(_user_turn(
+                    "━━━ WORKERS (kernel ran NEED_WORKER) ━━━\n" + worker_block
+                    + "\nContinue the TASK PLAN. write_file for files. Do not hunt /workspace."
+                ))
+                all_results.append(worker_block)
+                continue
             proof_block = ""
             if loop is not None and getattr(loop, "wants_kernel_proof", lambda: False)():
                 try:
@@ -1845,6 +1921,18 @@ async def run_native_discovery_pass(
                 memory=memory, session_id=session_id,
                 read_file_fn=read_file_fn,
             )
+            if (
+                tname == "write_file"
+                and "write_file OK" in result_text
+                and isinstance(tinput, dict)
+            ):
+                review = await _kernel_write_review(
+                    loop,
+                    str(tinput.get("path") or tinput.get("filename") or ""),
+                    str(tinput.get("content") or tinput.get("code") or ""),
+                )
+                if review:
+                    result_text = result_text + "\n" + review
             all_results.append(result_text)
             blocked = "BLOCKED" in result_text
             ok = blocked or ("FAILED" not in result_text and "ERROR" not in result_text)

@@ -155,9 +155,13 @@ def test_native_build_system_contains_plan():
     assert "TASK PLAN" in sys
     assert "math3d" in sys
     assert "playground.math3d" in sys
+    assert "NEED_WORKER" in sys
+    assert "PLAN DOCS" in sys
+    assert "uniformMatrix" in sys or "WebGL" in sys
     arcade = native_build_system(SNAKE)
     assert "playground.arcade" in arcade
     assert "REQUIRED" in arcade
+    assert "NEED_WORKER" in arcade
 
 
 def test_tools_http():
