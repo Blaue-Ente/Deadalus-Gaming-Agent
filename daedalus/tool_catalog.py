@@ -243,7 +243,10 @@ _NATIVE_META: dict[str, dict[str, Any]] = {
     "engine": {
         "module": "daedalus.engine_session",
         "tags": ("games", "godot", "unity", "verify"),
-        "when": "Godot-first pipeline (preflight…publish) or headless bridge. A loaded .tscn is not Play.",
+        "when": (
+            "Godot EngineAdapter pipeline (preflight…publish) or headless bridge. "
+            "Web/mobile use production({action: pipeline}). A loaded .tscn is not Play."
+        ),
         "knowledge": ("skills/godot.md", "skills/godot_api.md", "skills/unity_runtime.md"),
         "args_hint": "action=preflight|pipeline|run|inspect|export|publish, slug",
     },
@@ -271,8 +274,12 @@ _NATIVE_META: dict[str, dict[str, Any]] = {
     "production": {
         "module": "daedalus.production_layer",
         "tags": ("games", "ship"),
-        "when": "Prototype vs store-ready systems map. Empty JSON is not a production layer.",
-        "knowledge": ("skills/production_layer.md",),
+        "when": (
+            "Prototype vs store-ready systems map, or the capability pipeline "
+            "(Web / Engine / Mobile). Empty JSON is not a production layer."
+        ),
+        "knowledge": ("skills/production_layer.md", "skills/capability.md"),
+        "args_hint": "action=status|prove|seed|pipeline, slug, through, target",
     },
     "math3d": {
         "module": "daedalus.math3d",

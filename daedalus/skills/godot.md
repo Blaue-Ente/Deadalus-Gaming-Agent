@@ -7,7 +7,7 @@ description: Build Godot 4 games as text (.tscn / GDScript) — vertical slice, 
 
 **When**: owner asks for Godot, GDScript, Metroidvania / 2D RPG on desktop, or Playground kind is `godot`.
 
-**Godot-first order** (kernel walks this; do not skip):
+**Godot-first order** (EngineAdapter of the shared capability pipeline; kernel walks this; do not skip):
 preflight → contract → context → slice → runtime → visual → review → export → publish.
 
 `engine({action: pipeline, slug})` runs the order. Missing Godot or export templates is **FAIL**, not skip. Preview HTML is not Play. Vite/Phaser are not this kind.

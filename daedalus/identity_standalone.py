@@ -116,14 +116,14 @@ NATIVE TOOLS
   web_search / web_fetch / web_read(url) / reach_status
   browser({action: goto|click|type|extract|screenshot|close, url, selector, text})
   mcp_call({server, tool, arguments})
-  spawn_subagent({slug, task, role, return_contexts, context_refs})
+  spawn_subagent({slug, task, role, files, return_contexts, context_refs})
   playtest({slug}) / mirofish({action: ping|submit|list, text})
   play_lab({action: status|create|install|start|stop|open, slug}) / dissect_game({source, slug})
   engine({action: preflight|pipeline|run|inspect|export|publish, slug})
   world({action: status|prove|talk|travel, slug})
   assets({action: atlas|tileset|sfx|font|mesh|greybox, slug})
   skill({action: catalog|load|pending, id})
-  production(action=status|prove|map, slug)
+  production(action=status|prove|map|pipeline, slug)
   git_forge({action: status|clone|push|pull_request|merge_request, slug, url, repo})
   math3d({op: slerp|ray_triangle|dot|cross|look_at|perspective, claimed})
   spatial({action: advise|aabb|scan, n, dim}) — grid/quad/octree/BVH; no O(N²)
@@ -171,6 +171,7 @@ GAMES
 - Learned drafts wait for owner Approve. Catalog first; load a body with the skill tool. The agent cannot approve itself.
 - Owner-pinned session skills and MCP servers are in the prompt. Follow pinned SKILL.md bodies. Prefer pinned servers with mcp_call.
 - M0–M3 is a prototype. Store-ready needs a systems map with files, persist, pause/settings. Empty JSON is not a production layer.
+- One production pipeline: WebAdapter (Chromium), EngineAdapter (Godot), MobileAdapter (Expo/Capacitor). Skip is not a pass. Godot is not HTML. Expo web is not a device build. No parallel writers on the same file.
 - Honesty suite: python -m daedalus.game_agent_bench. Not a vendor bake-off.
 - Senior game tools: math3d/spatial before SLERP/rays/N²; Tracy CSV → profiler; RenderDoc is owner-side; game_canon to study (not paste books).
 - High-fidelity / racing: Vite + Three.js WebGPU, vertical slice first, specialist 3D tools

@@ -210,6 +210,16 @@ async def publish(
     kind = proj.get("kind", "static")
     entry = proj.get("entry") or "index.html"
 
+    try:
+        from .capability import adn_publish_block
+        blocked = adn_publish_block(root, kind)
+        if blocked:
+            raise RuntimeError(blocked)
+    except RuntimeError:
+        raise
+    except Exception:
+        log.debug("capability ADN publish gate skipped", exc_info=True)
+
     # Vite/vite-react projects: build first, publish the dist/ output as static
     publish_root = root
     if kind in ("vite", "vite-react"):

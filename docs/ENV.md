@@ -77,6 +77,8 @@ Studio → Connectors **Brain** (or Studio → Brain wardrobe) switches models w
 
 Web visual kinds need Chromium on PATH for the `playtest/scenario.json` bot (pixel-diff, FPS). Missing Chromium fails closed — it is not a skip-pass.
 
+MobileAdapter (`production({action: pipeline})` on Expo or a Capacitor wrap) needs a device or emulator (`adb devices` and/or `xcrun simctl`). Missing runner is FAIL. Expo web export is not an iOS/Android artifact. Optional: `ANDROID_HOME` / `ANDROID_SDK_ROOT`, `EAS_TOKEN`.
+
 ## 3D mesh jobs (optional)
 
 Atlas / tileset / SFX / bitmap font need **no** keys. Hero GLB submit fails closed unless one of these is set:

@@ -227,6 +227,11 @@ async def run_visual_proof(slug: str, kind: str = "static") -> ProofResult:
     else:
         result = await _prove_web(slug, kind, root)
     _write_manifest(root, result)
+    try:
+        from .capability import ingest_visual_proof
+        ingest_visual_proof(slug, kind, result)
+    except Exception:
+        log.debug("capability evidence ingest skipped", exc_info=True)
     return result
 
 
