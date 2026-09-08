@@ -226,8 +226,8 @@ PLAYBOOKS: tuple[Playbook, ...] = (
                 tool="skill",
                 auto=True,
                 args={"action": "load", "id": "godot"},
-                docs=("skills/godot.md", "skills/godot_api.md"),
-                why="Godot 4.3 pin: CharacterBody2D, typed .connect, autoload Game.",
+                docs=("skills/godot.md", "skills/godot_api.md", "skills/platform_acceptance_qa.md"),
+                why="Godot 4.3 pin: CharacterBody2D, typed .connect, autoload Game. Live scene+input is Play.",
             ),
             Step(
                 id="preflight",
@@ -330,8 +330,8 @@ PLAYBOOKS: tuple[Playbook, ...] = (
                 tool="skill",
                 auto=True,
                 args={"action": "load", "id": "capability"},
-                docs=("skills/capability.md", "skills/capacitor_ship.md"),
-                why="Shared stages; checks swap by target. Missing runner is FAIL.",
+                docs=("skills/capability.md", "skills/capacitor_ship.md", "skills/platform_acceptance_qa.md"),
+                why="Shared stages; checks swap by target. Missing runner is FAIL. Device smoke required.",
             ),
             Step(
                 id="create",
@@ -417,6 +417,14 @@ PLAYBOOKS: tuple[Playbook, ...] = (
             "No math3d unless the ask names quaternions."
         ),
         steps=(
+            Step(
+                id="skill_qa",
+                tool="skill",
+                auto=True,
+                args={"action": "load", "id": "platform_acceptance_qa"},
+                docs=("skills/platform_acceptance_qa.md", "skills/capability.md"),
+                why="Fail-closed platform matrix. Chromium gameplay. skipped is not pass.",
+            ),
             Step(
                 id="create",
                 tool="playground_new",

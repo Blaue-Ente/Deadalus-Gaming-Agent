@@ -66,7 +66,7 @@ def extra_skill_ids(text: str, intent: str = "", hint: str = "", kind: str = "")
     blob = f"{text or ''} {intent or ''} {hint or ''} {kind or ''}"
     if not looks_like_game(blob, kind=kind, intent=intent):
         return []
-    ids = ["senior_tools", "spatial_simd"]
+    ids = ["senior_tools", "spatial_simd", "platform_acceptance_qa"]
     low = blob.lower()
     if any(k in low for k in ("3d", "quaternion", "slerp", "shader", "camera", "matrix", "ray")):
         ids.append("transform_math")
@@ -84,6 +84,13 @@ def extra_skill_ids(text: str, intent: str = "", hint: str = "", kind: str = "")
 
 
 def prefer_skill_id(text: str, *, kind: str = "", intent: str = "") -> str | None:
+    blob = f"{text or ''} {intent or ''}"
+    try:
+        from .platform_acceptance import looks_like_qa
+        if looks_like_qa(blob):
+            return "platform_acceptance_qa"
+    except Exception:
+        pass
     if looks_like_game(text, kind=kind, intent=intent):
         return "senior_tools"
     return None
