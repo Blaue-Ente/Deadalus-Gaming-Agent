@@ -306,7 +306,8 @@ def format_system(rt: Route, *, extra: str = "", user_message: str = "") -> str:
             "3D product: at t=0 the screenshot CENTER must show coloured boxes "
             "(red/lime/gold) and a floor. Camera eye (0,5,12) look-at origin. "
             "HUD-only on navy clearColor is FAILED. Raw WebGL1, no CDN. "
-            "uniformMatrix4fv(loc, false, Float32Array) — never transpose=true."
+            "uniformMatrix4fv(loc, false, Float32Array) — never transpose=true. "
+            "ASCII hyphen-minus in JS only: -1. Unicode − is a SyntaxError and a black canvas."
         )
     sys = "\n".join(lines)
     docs = _docs_block(rt.ordered_steps)

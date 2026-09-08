@@ -35,6 +35,21 @@ def test_webgl_transpose_true_is_a_blocker():
     assert not any(i["code"] == "webgl-transpose" for i in ok)
 
 
+def test_unicode_minus_is_a_blocker():
+    src = "const S=[[−1,−1,+1],[+1,−1,+1]];\n"
+    issues = heuristic_javascript(src)
+    assert any(i["code"] == "js-unicode-minus" for i in issues)
+    gate = check_write(
+        "index.html",
+        CLEAN_CANVAS.replace("function loop", "const n=−1;function loop"),
+        kind="static",
+    )
+    assert gate.ok is False
+    assert any(b["code"] == "js-unicode-minus" for b in gate.blockers)
+    ascii_ok = heuristic_javascript("const n=-1;\n")
+    assert not any(i["code"] == "js-unicode-minus" for i in ascii_ok)
+
+
 def test_js_duplicate_let_same_scope():
     issues = heuristic_javascript(
         "let gameLoopId = null;\nfunction loop(){}\nlet gameLoopId = 1;\n"

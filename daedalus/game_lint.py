@@ -300,6 +300,13 @@ def heuristic_javascript(text: str) -> list[dict[str, Any]]:
             continue
         i += 1
 
+    if "\u2212" in (text or ""):
+        issues.append(_issue(
+            "error",
+            "js-unicode-minus",
+            "U+2212 unicode minus (−) is a SyntaxError in JavaScript. "
+            "Use ASCII hyphen-minus: -1, not −1. The canvas will stay black.",
+        ))
     if depth != 0:
         issues.append(_issue("error", "js-unbalanced", f"unbalanced braces (depth {depth})"))
     if paren != 0:

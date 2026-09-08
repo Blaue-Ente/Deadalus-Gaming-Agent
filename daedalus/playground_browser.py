@@ -300,9 +300,16 @@ async def browser_verify(
     if not reachable:
         summary = "❌ Приложението не се зареди в браузъра"
     elif empty_scene:
+        extra = ""
+        if page_errors:
+            extra = " Runtime: " + page_errors[0][:220]
+        elif console_errors:
+            extra = " Console: " + console_errors[0][:220]
         summary = (
             "❌ Canvas/HUD painted but the screenshot center is a flat clear-color — "
             "no 3D geometry in view. Fix the camera/draw (write_file)."
+            " ASCII hyphen-minus only in JS (−1 is a SyntaxError)."
+            + extra
         )
     elif blank_screen:
         summary = "❌ Бял екран — нищо не се рендерира (DOM празен)"
