@@ -88,7 +88,7 @@ def test_route_glass_orchard_vite():
     ask = (
         "Направи нова Playground игра: kind=vite, slug=glass-orchard, име Glass Orchard. "
         "Движок Phaser 3 през npm заедно с Vite vanilla. "
-        "src/main.js overwrite with Phaser.Game, Boot Menu Grove Dusk Result. "
+        "src/main.js overwrite with Phaser.Game type Phaser.WEBGL, Boot Menu Grove Dusk Result. "
         "Не прави Godot. Не прави Expo."
     )
     rt = route(ask)
