@@ -28,6 +28,21 @@ from .playground_runtime import VISUAL_KINDS
 
 log = logging.getLogger("argos.daedalus.playground_browser")
 
+# Headless WebGL: --disable-gpu makes Phaser.AUTO paint a black canvas.
+# Swiftshader keeps screenshots honest without a host GPU.
+CHROME_ARGS = (
+    "--no-sandbox",
+    "--disable-dev-shm-usage",
+    "--use-gl=angle",
+    "--use-angle=swiftshader",
+    "--enable-webgl",
+    "--ignore-gpu-blocklist",
+)
+
+# A 1280×800 PNG of a real Phaser frame is tens of KB. A solid #0b1020
+# compresses to ~4–8 KB — that is a blank screen, not a boutique title.
+_BLANK_SHOT_BYTES = 12_000
+
 # Console warnings that are noise, not real failures — never fail a build on these.
 _BENIGN_CONSOLE = (
     "Download the React DevTools",
@@ -44,7 +59,7 @@ _BENIGN_CONSOLE = (
 )
 
 # Resource types whose failed requests actually matter (broken app assets / APIs).
-_CRITICAL_RESOURCE_TYPES = ("script", "stylesheet", "fetch", "xhr", "document")
+_CRITICAL_RESOURCE_TYPES = ("script", "stylesheet", "fetch", "xhr", "document", "image")
 
 
 def _find_chrome() -> str | None:
@@ -54,6 +69,18 @@ def _find_chrome() -> str | None:
         if p:
             return p
     return None
+
+
+def screenshot_looks_blank(path: Path | str | None) -> bool:
+    """True when the PNG is a solid-color / empty frame (highly compressed)."""
+    if not path:
+        return False
+    p = Path(path)
+    try:
+        n = p.stat().st_size
+    except OSError:
+        return False
+    return n > 0 and n < _BLANK_SHOT_BYTES
 
 
 def _is_benign(text: str) -> bool:
@@ -168,7 +195,7 @@ async def browser_verify(
         async with async_playwright() as p:
             browser = await p.chromium.launch(
                 headless=True, executable_path=chrome,
-                args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+                args=list(CHROME_ARGS),
             )
             page = await browser.new_page(viewport={"width": 1280, "height": 800})
             page.on("console", _on_console)
@@ -242,6 +269,9 @@ async def browser_verify(
                 shot_file = shot_dir / "_verify_screenshot.png"
                 await page.screenshot(path=str(shot_file), full_page=False)
                 screenshot_path = "assets/_verify_screenshot.png"
+                if screenshot_looks_blank(shot_file):
+                    await page.wait_for_timeout(2000)
+                    await page.screenshot(path=str(shot_file), full_page=False)
             except Exception as shot_exc:
                 log.warning("browser_verify screenshot failed for %s: %s", slug, shot_exc)
 
@@ -257,13 +287,23 @@ async def browser_verify(
             "error": str(exc)[:200],
         }
 
-    # ── Verdict ──────────────────────────────────────────────────────────
-    blank_screen = reachable and dom_text_len < 8 and not has_canvas
+    shot_abs = None
+    if screenshot_path:
+        try:
+            shot_abs = pg.project_dir(slug) / screenshot_path
+        except Exception:
+            shot_abs = None
+    dark_frame = screenshot_looks_blank(shot_abs)
+    blank_screen = reachable and (
+        (dom_text_len < 8 and not has_canvas) or dark_frame
+    )
     has_fatal = bool(page_errors) or bool(failed_requests) or bool(console_errors)
     ok = reachable and (not blank_screen) and (not has_fatal)
 
     if not reachable:
         summary = "❌ Приложението не се зареди в браузъра"
+    elif dark_frame:
+        summary = "❌ Тъмен кадър — canvas/WebGL не е нарисувал сцена (не е boutique title)"
     elif blank_screen:
         summary = "❌ Бял екран — нищо не се рендерира (DOM празен)"
     elif has_fatal:
@@ -364,7 +404,7 @@ async def verify_app(slug: str, kind: str) -> dict[str, Any]:
         serve_dir = dist if (dist.exists() and (dist / "index.html").exists()) else root
         base, stop = _serve_static(serve_dir)
         try:
-            return await browser_verify(slug, base + "/", kind=kind)
+            return await browser_verify(slug, base + "/", kind=kind, settle_ms=4000)
         finally:
             stop()
 

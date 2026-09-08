@@ -34,6 +34,13 @@ CHEAP_CANDIDATES = (
     "minimax/minimax-m2.7",
 )
 
+# Owner pick: latest Qwen, then Kimi K3, then Poolside. Not Claude as writer.
+CRAFT_CANDIDATES = (
+    "qwen/qwen3.8-max-0902",
+    "moonshotai/kimi-k3",
+    "poolside/laguna-s-2.1:free",
+)
+
 # Stronger than MiniMax M2.7, still inside a $2–3 Playground budget.
 BETTER_CANDIDATES = (
     "anthropic/claude-sonnet-4.6",

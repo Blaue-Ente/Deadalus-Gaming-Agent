@@ -662,6 +662,11 @@ def progress_next(loop: Any, *, fallback: str = "") -> str:
             "RETURN TO WRITER: a check failed. You (the model that writes files) "
             "must fix it. Mentor does not write game files."
         )
+        if nxt == "write_file":
+            lines.append(
+                "Do not list_dir / playground_read / find. The check already named the defect. "
+                "write_file the fix now."
+            )
     lines.append(decision.next_line(slug=slug))
     if decision.forbid_tools:
         lines.append("FORBID: " + ", ".join(decision.forbid_tools) + " (same error twice — change approach).")

@@ -228,6 +228,20 @@ def test_stage_web_assets_skips_verify_shots(tmp_path):
     assert not (tmp_path / "dist" / "assets" / "_verify_screenshot.png").exists()
 
 
+def test_screenshot_looks_blank_tiny_png(tmp_path):
+    from daedalus.playground_browser import CHROME_ARGS, screenshot_looks_blank
+
+    assert "--disable-gpu" not in CHROME_ARGS
+    assert "--use-angle=swiftshader" in CHROME_ARGS
+    tiny = tmp_path / "frame.png"
+    tiny.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 200)
+    assert screenshot_looks_blank(tiny) is True
+    fat = tmp_path / "painted.png"
+    fat.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\xff" * 20_000)
+    assert screenshot_looks_blank(fat) is False
+    assert screenshot_looks_blank(None) is False
+
+
 def test_vite_compile_gate_skips_without_package_json(tmp_path):
     from daedalus.playground_runner import vite_compile_gate
 

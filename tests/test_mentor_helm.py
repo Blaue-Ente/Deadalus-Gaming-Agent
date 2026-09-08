@@ -231,6 +231,16 @@ def test_refresh_helm_caches_fingerprint(tmp_path, monkeypatch):
     assert loop.mentor_steer["next_tool"] == "run_command"
 
 
+def test_proof_failed_is_not_rules_unambiguous():
+    from daedalus.mentor_helm import rules_unambiguous
+
+    inspect = {"flags": {"proof_failed": True, "kernel_proof_ran": True}}
+    steer = {"action": "continue", "next_tool": "write_file"}
+    assert rules_unambiguous(inspect, steer) is False
+    inspect_npm = {"flags": {"needs_npm": True}}
+    assert rules_unambiguous(inspect_npm, {"action": "continue", "next_tool": "run_command"}) is True
+
+
 def test_http_choice_and_status_catalog(tmp_path, monkeypatch):
     _data(tmp_path, monkeypatch)
     monkeypatch.delenv("DAEDALUS_MENTOR", raising=False)

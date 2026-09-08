@@ -31,6 +31,7 @@ import live_eval_build as _leb  # noqa: E402
 ARTIFACT_SHOTS = _leb.ARTIFACT_SHOTS
 BETTER_CANDIDATES = _leb.BETTER_CANDIDATES
 CHEAP_CANDIDATES = _leb.CHEAP_CANDIDATES
+CRAFT_CANDIDATES = _leb.CRAFT_CANDIDATES
 CANDIDATES = _leb.CANDIDATES
 _export_screenshots = _leb._export_screenshots
 _pin_openrouter = _leb._pin_openrouter
@@ -326,6 +327,11 @@ def main() -> None:
         action="store_true",
         help="Probe MiniMax M3 / DeepSeek V4 / GLM 5.2 / Poolside — never Claude.",
     )
+    parser.add_argument(
+        "--craft-writer",
+        action="store_true",
+        help="Probe Qwen 3.8 Max, then Kimi K3, then Poolside — never Claude as writer.",
+    )
     parser.add_argument("--effort", default="craft")
     parser.add_argument("--screenshots", default=str(ARTIFACT_SHOTS))
     parser.add_argument("--data", default="/tmp/daedalus-live-eval-chat")
@@ -348,7 +354,11 @@ def main() -> None:
     async def _go() -> int:
         probes = []
         chosen = args.model.strip() if args.model else ""
-        pool = CHEAP_CANDIDATES if args.cheap else (BETTER_CANDIDATES if args.better else CANDIDATES)
+        pool = (
+            CRAFT_CANDIDATES if args.craft_writer
+            else CHEAP_CANDIDATES if args.cheap
+            else (BETTER_CANDIDATES if args.better else CANDIDATES)
+        )
         if chosen:
             row = await probe_tools(chosen)
             probes.append(row)

@@ -262,6 +262,9 @@ def test_mentor_failed_proof_returns_to_writer_not_browser(tmp_path, monkeypatch
     assert "RETURN TO WRITER" in (decision.reason or "")
     extra = mentor.extra_round_budget(loop)
     assert extra == 2
+    nxt = mentor.progress_next(loop)
+    assert "write_file" in nxt
+    assert "list_dir" in nxt or "playground_read" in nxt
 
 
 def test_mentor_compile_fail_proof_still_returns_to_writer(tmp_path, monkeypatch):
