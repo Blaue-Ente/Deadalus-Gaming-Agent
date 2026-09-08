@@ -232,8 +232,9 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
     {
         "name": "browser",
         "description": (
-            "Interactive Chromium session: goto, click, type, extract, screenshot, close. "
-            "Use for exploring a live page, not just smoke verify."
+            "Open a page in Chromium: goto, click, type, extract, screenshot. "
+            "For a Playground game pass slug (or a playground/projects/… path) — "
+            "the kernel opens the running slice. Do not invent file:// or localhost URLs."
         ),
         "input_schema": {
             "type": "object",
@@ -731,6 +732,23 @@ def _playground_session(session_id: str) -> bool:
     return sid.startswith(("playground:", "pg-", "pg_auto", "autopilot", "pg-auto"))
 
 
+_PG_SLUG_IN_URL = re.compile(
+    r"(?:playground/projects/|(?:localhost|127\.0\.0\.1):\d+/)([A-Za-z0-9_-]+)",
+    re.I,
+)
+
+
+def _slug_from_browser_url(url: str) -> str:
+    blob = url or ""
+    m = _PG_SLUG_IN_URL.search(blob)
+    if m:
+        return m.group(1)
+    m = re.match(r"https?://([A-Za-z0-9_-]+)/?$", blob.strip())
+    if m and m.group(1).lower() not in {"localhost", "www"}:
+        return m.group(1)
+    return ""
+
+
 def _harness_target(path: str) -> bool:
     p = (path or "").replace("\\", "/").lower().strip()
     if not p:
@@ -933,7 +951,12 @@ async def execute_native_tool(
             if r.get("ok"):
                 trunc = " [TRUNCATED]" if r.get("truncated") else ""
                 return f"── read_file {r['path']}{trunc} ──\n{r['content']}"
-            return f"── read_file FAILED: {r.get('error')} ──"
+            err = r.get("error") or "path required"
+            return (
+                f"── read_file FAILED: {err} ──\n"
+                "Playground files live under playground/projects/{slug}/. "
+                "Pass path like index.html plus slug, not /workspace."
+            )
 
         if name == "list_dir":
             from .shell_center import resolve_cwd
@@ -981,11 +1004,26 @@ async def execute_native_tool(
 
         if name == "write_file":
             from . import playground as pg
-            slug = str(args.get("slug") or "")
-            path = str(args.get("path") or "")
-            content = str(args.get("content") or "")
+            slug = str(
+                args.get("slug") or args.get("project") or args.get("name") or ""
+            ).strip()
+            path = str(
+                args.get("path")
+                or args.get("file")
+                or args.get("filename")
+                or args.get("file_path")
+                or ""
+            ).strip()
+            content = str(args.get("content") or args.get("text") or args.get("code") or "")
+            if "/" in slug and not path:
+                slug, path = slug.split("/", 1)
             if not slug or not path:
-                return "── write_file FAILED: slug and path required ──"
+                keys = ",".join(sorted(str(k) for k in args if k != "content"))
+                return (
+                    "── write_file FAILED: slug and path required ──\n"
+                    f"Got keys={keys or '(none)'}. "
+                    "Example: write_file slug=<project> path=index.html content=…"
+                )
             existing = None
             try:
                 existing = await pg.get_project(slug)
@@ -1091,13 +1129,30 @@ async def execute_native_tool(
             return "\n".join(lines)
 
         if name == "browser":
+            slug = str(args.get("slug") or "").strip() or _slug_from_browser_url(
+                str(args.get("url") or "")
+            )
+            action = str(args.get("action") or "extract").strip().lower()
+            if slug and action in {
+                "", "extract", "goto", "screenshot", "kernel_proof", "verify", "open",
+            }:
+                from . import playground as pg
+                from .visual_proof import run_visual_proof
+                kind = "static"
+                try:
+                    proj = await pg.get_project(slug)
+                    kind = str((proj or {}).get("kind") or "static")
+                except Exception:
+                    pass
+                result = await run_visual_proof(slug, kind)
+                return result.as_tool_text()
             from .browser_session import run_action
             r = await run_action(
                 str(args.get("action") or "extract"),
                 url=str(args.get("url") or ""),
                 selector=str(args.get("selector") or ""),
                 text=str(args.get("text") or ""),
-                slug=str(args.get("slug") or ""),
+                slug=slug,
             )
             if r.get("ok"):
                 text = r.get("text") or r.get("path") or r.get("title") or ""

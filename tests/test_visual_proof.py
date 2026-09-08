@@ -107,6 +107,46 @@ def test_write_file_result_names_the_slug_path(monkeypatch):
     assert "visual proof" in text.lower()
 
 
+def test_write_file_accepts_filename_alias(monkeypatch):
+    async def fake_get(slug):
+        return {"slug": slug, "kind": "static"}
+
+    monkeypatch.setattr("daedalus.playground.get_project", fake_get)
+    monkeypatch.setattr("daedalus.playground.write_file", lambda *a, **k: None)
+    monkeypatch.setattr("daedalus.project_status.record_built", lambda *a, **k: None)
+
+    text = asyncio.run(native_tools.execute_native_tool(
+        "write_file",
+        {"project": "dungeon-keys", "filename": "index.html", "code": "<canvas>"},
+        memory=None, session_id="", read_file_fn=lambda *a, **k: {},
+    ))
+    assert "FAILED" not in text
+    assert "dungeon-keys/index.html" in text
+
+
+def test_browser_playground_url_runs_visual_proof(monkeypatch, tmp_path):
+    from daedalus.visual_proof import ProofResult
+
+    async def fake_get(slug):
+        return {"slug": slug, "kind": "static"}
+
+    async def fake_proof(slug, kind="static"):
+        return ProofResult(
+            ok=True, skipped=False, kind=kind, slug=slug, tool="browser",
+            summary="kernel opened the canvas", frames=["studio/proof/frame_000.png"],
+        )
+
+    monkeypatch.setattr("daedalus.playground.get_project", fake_get)
+    monkeypatch.setattr("daedalus.visual_proof.run_visual_proof", fake_proof)
+    text = asyncio.run(native_tools.execute_native_tool(
+        "browser",
+        {"action": "goto", "url": "https://file///playground/projects/dungeon-keys/index.html"},
+        memory=None, session_id="playground:live-eval", read_file_fn=lambda *a, **k: {},
+    ))
+    assert "visual_proof OK" in text
+    assert "dungeon-keys" in text
+
+
 def test_new_project_gets_status_readme(tmp_path, monkeypatch):
     monkeypatch.setenv("DAEDALUS_STANDALONE", "1")
     monkeypatch.setenv("DAEDALUS_DATA", str(tmp_path / "data"))

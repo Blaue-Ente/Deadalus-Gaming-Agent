@@ -7,7 +7,7 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-_TOOL_MAX_TOKENS = 8192
+_TOOL_MAX_TOKENS = 12288
 
 
 def _as_openai_response(text: str, *, provider: str, model: str) -> dict[str, Any]:
