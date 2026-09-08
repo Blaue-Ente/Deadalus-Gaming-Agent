@@ -27,6 +27,14 @@ let gameLoopId = requestAnimationFrame(loop);
 """
 
 
+def test_webgl_transpose_true_is_a_blocker():
+    src = "gl.uniformMatrix4fv(LOC.uMVP, true, MVP);\n"
+    issues = heuristic_javascript(src)
+    assert any(i["code"] == "webgl-transpose" for i in issues)
+    ok = heuristic_javascript("gl.uniformMatrix4fv(LOC.uMVP, false, MVP);\n")
+    assert not any(i["code"] == "webgl-transpose" for i in ok)
+
+
 def test_js_duplicate_let_same_scope():
     issues = heuristic_javascript(
         "let gameLoopId = null;\nfunction loop(){}\nlet gameLoopId = 1;\n"

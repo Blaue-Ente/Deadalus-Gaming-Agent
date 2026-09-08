@@ -306,6 +306,16 @@ def heuristic_javascript(text: str) -> list[dict[str, Any]]:
         issues.append(_issue("error", "js-unbalanced", "unbalanced parentheses"))
     if bracket != 0:
         issues.append(_issue("error", "js-unbalanced", "unbalanced brackets"))
+    # WebGL 1: the transpose argument to uniformMatrix*fv must be false.
+    # Claude's 3D slice used transpose=true for row-major mats — INVALID_VALUE,
+    # the canvas clears but never draws.
+    if re.search(r"uniformMatrix[234]fv\s*\([^)]*\btrue\b", text):
+        issues.append(_issue(
+            "error",
+            "webgl-transpose",
+            "WebGL 1 requires uniformMatrix*fv transpose=false. "
+            "transpose=true is INVALID_VALUE — the scene will not draw.",
+        ))
     return issues
 
 
