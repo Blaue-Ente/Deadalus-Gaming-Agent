@@ -74,6 +74,44 @@ def arcade_blockers(path: str, content: str, kind: str) -> list[dict[str, Any]]:
     return issues
 
 
+_HTML_IN_GDSCRIPT = re.compile(
+    r"\bimport\s+Phaser\b|from ['\"]phaser['\"]|require\(['\"]phaser['\"]\)|"
+    r"document\.getelementbyid|<canvas[\s>]|new\s+phaser\.game",
+    re.I,
+)
+_GODOT_PATHS = (".gd", ".tscn", "project.godot")
+
+
+def godot_write_issues(
+    path: str, content: str, *, kind: str = "", slug: str = "",
+) -> list[dict[str, Any]]:
+    """Phaser/HTML gameplay and blind whole-file rewrites are not Godot patches."""
+    rel = (path or "").replace("\\", "/")
+    kind_l = (kind or "").strip().lower()
+    is_godot_file = rel.endswith(_GODOT_PATHS) or rel.endswith("project.godot")
+    if kind_l != "godot" and not is_godot_file:
+        return []
+    issues: list[dict[str, Any]] = []
+    if is_godot_file and _HTML_IN_GDSCRIPT.search(content or ""):
+        issues.append(_issue(
+            "error", "godot-html-gameplay",
+            "Phaser/HTML gameplay does not belong in a Godot file. Patch GDScript/.tscn.",
+        ))
+    if slug and is_godot_file:
+        try:
+            from .godot_first import rewrite_is_blind
+            from . import playground as pg
+            root = pg.project_dir(slug)
+            if rewrite_is_blind(root, rel, content or ""):
+                issues.append(_issue(
+                    "error", "godot-blind-rewrite",
+                    "Do not rewrite a whole existing .gd/.tscn. Use edit_file for a small patch.",
+                ))
+        except Exception:
+            pass
+    return issues
+
+
 @dataclass
 class GateResult:
     ok: bool
@@ -99,13 +137,20 @@ class GateResult:
 def check_write(path: str, content: str, *, kind: str = "", slug: str = "") -> GateResult:
     if not enabled():
         return GateResult(ok=True, skipped=True)
+    godot_issues = godot_write_issues(path, content, kind=kind, slug=slug)
     suffix = Path(path or "").suffix.lower()
     if suffix not in _GATED:
-        return GateResult(ok=True, skipped=True)
+        blockers = [i for i in godot_issues if i.get("severity") == "error"]
+        warnings = [i for i in godot_issues if i.get("severity") != "error"]
+        if not blockers and not warnings:
+            return GateResult(ok=True, skipped=True)
+        return GateResult(ok=len(blockers) == 0, blockers=blockers, warnings=warnings)
     from .game_lint import check as lint_check
 
     lint = lint_check(path, content=content, slug=slug)
     blockers = [dict(x) for x in (lint.get("blockers") or [])]
     warnings = [dict(x) for x in (lint.get("warnings") or [])]
     blockers.extend(arcade_blockers(path, content, kind))
+    blockers.extend(i for i in godot_issues if i.get("severity") == "error")
+    warnings.extend(i for i in godot_issues if i.get("severity") != "error")
     return GateResult(ok=len(blockers) == 0, blockers=blockers, warnings=warnings)

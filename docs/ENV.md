@@ -69,6 +69,8 @@ Studio → Connectors **Brain** (or Studio → Brain wardrobe) switches models w
 | `DAEDALUS_QUALITY` | `0` turns the visual critic off (default on). Unparsed critic / skipped browser is not a pass. |
 | `DAEDALUS_EVOLUTION` | `1` turns the gardener on at boot; `0` is a kill switch |
 | `GODOT_BIN` | Path to Godot 4.3. Missing binary fails Godot kinds. When set, the TCP runtime bridge (player must move) is required — static files are not a playtest. |
+| `GODOT_EXPORT_TEMPLATES` | Directory of Godot 4.3 export templates. Missing templates fail Stage 7 export (skip is not a pass). Default lookup: `~/.local/share/godot/export_templates/4.3.stable`. |
+| `DAEDALUS_GODOT_PIN` | `0` allows other Godot 4.x binaries; default pins 4.3. Godot 3 always fails. |
 | `DAEDALUS_GODOT_MCP` | Optional name of a Godot MCP server in `$DAEDALUS_DATA/mcp.json`. Headless bridge is the default; MCP is an adapter, not a second Editor. |
 | `UNITY_PATH` | Path to the Unity Editor. Missing Editor fails Unity kinds (batchmode). Batchmode import is not Play mode. |
 | `DAEDALUS_UNITY_MCP` | Optional name of a Unity MCP server in `$DAEDALUS_DATA/mcp.json`. Local Editor plugin — we do not vendor Unity. Without this or `UNITY_PATH`, `engine` on a Unity project refuses honestly. |

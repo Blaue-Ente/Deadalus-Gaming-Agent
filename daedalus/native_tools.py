@@ -28,6 +28,7 @@ PERM_MAP: dict[str, str | None] = {
     "list_modules": None,
     "run_command": None,
     "write_file": None,
+    "edit_file": None,
     "playground_new": None,
     "generate_image": None,
     "remember": None,
@@ -80,7 +81,8 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
         "description": (
             "Write a file in a Playground project (slug required). "
             "Call playground_new first if the slug does not exist — "
-            "otherwise a static project is created. "
+            "otherwise a static project is created (Godot paths create kind=godot). "
+            "For existing .gd/.tscn prefer edit_file. "
             "Do not use this to patch the Daedalus harness — propose instead."
         ),
         "input_schema": {
@@ -94,11 +96,30 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "edit_file",
+        "description": (
+            "Surgical search/replace in one Playground file. "
+            "search must match exactly once. Prefer this over rewriting a whole "
+            ".gd/.tscn. write_file is for new files."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "slug": {"type": "string"},
+                "path": {"type": "string"},
+                "search": {"type": "string"},
+                "replace": {"type": "string"},
+            },
+            "required": ["slug", "path", "search", "replace"],
+        },
+    },
+    {
         "name": "playground_new",
         "description": (
             "Create a Playground project and return its slug. "
             "kind=static for HTML/canvas; vite / vite-react / godot / unity / expo when asked. "
-            "Then write_file with that slug. Do not map the Daedalus harness."
+            "Godot words or kind=godot never become Vite/HTML. "
+            "Then write_file / edit_file with that slug. Do not map the Daedalus harness."
         ),
         "input_schema": {
             "type": "object",
@@ -416,19 +437,25 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
     {
         "name": "engine",
         "description": (
-            "Drive a running Godot or Unity project. "
+            "Drive a running Godot or Unity project, or the Godot-first pipeline. "
             "Godot: headless TCP bridge; optional DAEDALUS_GODOT_MCP. "
+            "Pipeline (no live session): preflight | contract | context | slice | "
+            "pipeline | review | export | publish | runtime_dod. "
+            "Live: run | inspect | input | screenshot | tree | errors | fps | wait | quit | status. "
             "Unity: DAEDALUS_UNITY_MCP for a local Editor, else UNITY_PATH batchmode "
             "(import is not Play). Without either: honest refuse — we do not vendor Unity. "
-            "action: run | inspect | input | screenshot | tree | errors | fps | wait | quit | status. "
-            "Files are not Play."
+            "Files are not Play. Missing Godot/export is FAIL, not skip."
         ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "action": {
                     "type": "string",
-                    "description": "run | inspect | input | screenshot | tree | errors | fps | wait | quit | set | call | status",
+                    "description": (
+                        "pipeline: preflight | contract | context | slice | pipeline | "
+                        "review | export | publish | runtime_dod. "
+                        "live: run | inspect | input | screenshot | tree | errors | fps | wait | quit | set | call | status"
+                    ),
                 },
                 "slug": {"type": "string"},
                 "path": {"type": "string", "description": "Node path for inspect/set/call"},
@@ -692,7 +719,7 @@ def native_tools_enabled() -> bool:
 
 
 _PLAYGROUND_BUILD_NAMES = frozenset({
-    "playground_new", "write_file", "read_file", "list_dir",
+    "playground_new", "write_file", "edit_file", "read_file", "list_dir",
     "math3d", "spatial", "game_canon", "game_lint", "profiler",
     "assets", "generate_image", "playtest", "browser",
     "run_command", "skill", "engine", "world",
@@ -1058,13 +1085,15 @@ async def execute_native_tool(
             kind = str(args.get("kind") or "static").strip() or "static"
             desc = str(args.get("description") or "")
             slug_in = str(args.get("slug") or "")
+            from .godot_first import coerce_kind
+            kind = coerce_kind(kind, name_, desc, slug_in)
             proj = await pg.create_project(
                 name_, kind=kind, source="built", description=desc, slug=slug_in,
             )
             slug = (proj or {}).get("slug") or ""
             return (
                 f"── playground_new OK slug={slug} kind={(proj or {}).get('kind')} ──\n"
-                f"Write files with write_file slug={slug}. "
+                f"Write files with write_file slug={slug}. Patch with edit_file. "
                 f"Paths are inside the Playground project `{slug}` "
                 f"(playground/projects/{slug}/), not /workspace. "
                 "README.md holds Status (built / left / proof) and an Assets size table."
@@ -1098,10 +1127,13 @@ async def execute_native_tool(
             except Exception:
                 existing = None
             if not existing:
+                from .godot_first import coerce_kind
+                kind_new = coerce_kind("static", slug, "auto-created on write", path)
                 await pg.create_project(
-                    slug, kind="static", source="built", description="auto-created on write", slug=slug,
+                    slug, kind=kind_new, source="built",
+                    description="auto-created on write", slug=slug,
                 )
-                existing = {"slug": slug, "kind": "static"}
+                existing = {"slug": slug, "kind": kind_new}
             kind = str((existing or {}).get("kind") or "static")
             pg.write_file(slug, path, content)
             from .write_gate import check_write
@@ -1128,6 +1160,46 @@ async def execute_native_tool(
                 "Do not find /workspace or list the harness. "
                 "Keep write_file with this slug. "
                 "When you stop, the kernel opens the running game for visual proof."
+            )
+
+        if name == "edit_file":
+            from . import playground as pg
+            slug = str(args.get("slug") or args.get("project") or "").strip()
+            path = str(args.get("path") or args.get("file") or "").strip()
+            search = str(args.get("search") or args.get("old") or "")
+            replace = str(args.get("replace") or args.get("new") or "")
+            if not slug or not path:
+                return (
+                    "── edit_file FAILED: slug and path required ──\n"
+                    "Example: edit_file slug=<project> path=scripts/player.gd "
+                    "search=… replace=…"
+                )
+            existing = None
+            try:
+                existing = await pg.get_project(slug)
+            except Exception:
+                existing = None
+            if not existing:
+                return (
+                    f"── edit_file FAILED {slug}/{path} ──\n"
+                    "Project does not exist. Call playground_new first, or write_file for a new file."
+                )
+            r = pg.edit_file(slug, path, search, replace)
+            if not r.get("ok"):
+                return (
+                    f"── edit_file FAILED {slug}/{path} ──\n"
+                    f"{r.get('error') or 'search/replace failed'}\n"
+                    f"NEXT: read_file slug={slug} path={path} then edit_file with exact search text."
+                )
+            return (
+                f"── edit_file OK {slug}/{path} ──\n"
+                f"Replaced one block in playground/projects/{slug}/{path} "
+                f"({r.get('old_size')} → {r.get('new_size')} chars)."
+                + _nav_hint(
+                    slug=slug,
+                    path=path,
+                    next_line=f"Keep edit_file / write_file with slug={slug}.",
+                )
             )
 
         if name == "run_command":

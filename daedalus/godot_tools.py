@@ -83,11 +83,12 @@ def glb_instance_tscn(
     return "\n".join(lines)
 
 
-def export_command(*, preset: str = "Web", path: str = ".") -> str:
-    """Documented CLI. Cloud agents do not assume `godot` exists."""
+def export_command(*, preset: str = "Linux", path: str = ".", slug: str = "") -> str:
+    """Stage 7 CLI. Cloud agents do not assume `godot` exists; skip is fail."""
+    out = f"build/linux/{slug or 'game'}.x86_64" if preset == "Linux" else "build/export"
     return (
-        f"godot --headless --path {path} --export-release {preset} build/export "
-        f"# only if Godot 4.3+ is installed locally"
+        f"godot --headless --path {path} --export-release {preset} {out} "
+        "# Stage 7 of daedalus.godot_first; missing templates fail the pipeline"
     )
 
 

@@ -161,7 +161,14 @@ def dod_v2_static(pdir: Path) -> dict[str, Any]:
     else:
         add("moves", "CharacterBody2D" in player and "move_and_slide" in player,
             "2D player moves")
+        add("camera", "Camera2D" in tscn, "Camera2D in main scene")
+        add("collision", "CollisionShape2D" in tscn, "CollisionShape2D in main scene")
         add("fail", "Game.fail" in player, "Fail state")
+        add(
+            "goal",
+            any(tok in tscn for tok in ('name="Goal"', 'name="Pit"', 'name="Coin"')),
+            "Goal/Pit present — one mechanic",
+        )
 
     sig = dod_signals_static(root)
     add(

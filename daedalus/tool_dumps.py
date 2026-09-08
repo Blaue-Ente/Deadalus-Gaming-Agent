@@ -18,8 +18,10 @@ _DECODER = json.JSONDecoder()
 
 _ALIASES = {
     "playground_write": "write_file",
+    "playground_edit": "edit_file",
     "playground_read": "read_file",
     "need_playground_write": "write_file",
+    "need_playground_edit": "edit_file",
     "need_playground_new": "playground_new",
     "need_playground_run": "run_command",
     "shell": "run_command",
