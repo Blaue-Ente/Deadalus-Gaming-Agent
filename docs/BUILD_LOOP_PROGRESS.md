@@ -88,6 +88,24 @@ When Mentor is on: PLAN PROGRESS NEXT comes from `daedalus/mentor.py` (inspect s
 
 Mentor does **not** write `index.html` / `src/main.js`. Two writers stay forbidden.
 
+## Live eval 2026-09-08 — Glass Orchard, Mentor GLM 5.3 vs GPT-6 Astra
+
+Full `Daedalus.chat` (`scripts/live_eval_agent_chat.py --better --preset glass --mentor-choice …`). Builder: Claude Sonnet 4.6. Effort craft. Isolated `$DAEDALUS_DATA`. Long GDD (kind=vite + Phaser 3, lantern harvest, Grove/Dusk). Playbook **playground.vite**.
+
+| | GLM 5.3 director | GPT-6 Astra director |
+|--|--|--|
+| Wall | ~494s | ~946s |
+| Mentor LLM | **timeout** (30s, 0 tokens, `llm_error` → rules fallback NEXT=`browser`) | **ok** 4.4s, 335 tokens, NEXT=`run_command` (npm/build) |
+| `src/main.js` | `Phaser.Game` parent `#game` | `Phaser.Game` parent `#app` (HTML has `#game-canvas`, no `#app`) |
+| Scenes on disk | Boot / Menu / Play / Over (catch-and-sort, not the lantern GDD) | Boot / Menu / Grove / Dusk + GameScene / Lantern / Harvest / Hud |
+| `npm install` | never | yes (`node_modules` present) |
+| PNG | 7 via `generate_image` (Novita 403 → OpenRouter `data:` decode **works**) | 4 orbs + bg generated; Boot then **ignored** them (procedural canvas textures) |
+| Proof | dark frame, 1 uncaught (no Phaser npm) | dark frame, 1 uncaught (missing `#app` mount) |
+| DoD | `complete=false`, browser fail | `complete=false`, browser fail |
+| Persona | leftover `NEED_` XML for Grove.js that was never written | claimed the game runs |
+
+Kernel visual proof ran on exhaust both times. Mentor still does not write files. GLM-5.3 hidden reasoning did not return JSON inside 30s — rules helm then sent the model to `browser` instead of `npm install`. Astra's steer (`run_command`) is the right next move; the blank frame is a mount mismatch the director digest does not currently see.
+
 ## S1 — Closed build loop (done)
 
 The plan drives the model. Quiet + incomplete → PLAN PROGRESS inside the native

@@ -741,7 +741,7 @@ async def consult(
             timeout=llm_timeout_s() + 1.0,
         )
     except Exception as exc:
-        log.info("mentor helm LLM failed: %s", exc)
+        log.info("mentor helm LLM failed: %s: %s", type(exc).__name__, exc or "(empty)")
         return _rules_fallback(rules_steer, "llm_error")
     parsed = parse_director_json(text or "")
     out_tok = estimate_tokens(text or "")
