@@ -42,6 +42,14 @@ class ScriptedModel:
         return {"stop_reason": "tool_use", "content": self.rounds.pop(0)}
 
 
+def _ok_proof(slug, kind="static", **_k):
+    from daedalus.visual_proof import ProofResult
+    return ProofResult(
+        ok=True, skipped=False, kind=kind or "static", slug=slug or "x",
+        tool="browser", summary="fake render ok", frames=[],
+    )
+
+
 @pytest.fixture
 def fake_tools(monkeypatch):
     """Native tools answer like the real ones would, without touching disk or LLM."""
@@ -59,7 +67,11 @@ def fake_tools(monkeypatch):
             return '── math3d quat_slerp OK ──\n{"ok": true, "verdict": "match"}'
         return f"── {name} OK ──"
 
+    async def _proof(slug, kind="static"):
+        return _ok_proof(slug, kind)
+
     monkeypatch.setattr(native_tools, "execute_native_tool", _exec)
+    monkeypatch.setattr("daedalus.visual_proof.run_visual_proof", _proof)
     return _exec
 
 
@@ -74,7 +86,19 @@ def _run(system, user, model, *, loop, max_rounds=4):
 
 
 def _user_texts(messages: list[dict]) -> list[str]:
-    return [m["content"] for m in messages if m["role"] == "user" and isinstance(m["content"], str)]
+    out: list[str] = []
+    for m in messages:
+        if m.get("role") != "user":
+            continue
+        c = m.get("content")
+        if isinstance(c, str):
+            out.append(c)
+        elif isinstance(c, list):
+            out.append("\n".join(
+                str(b.get("text") or "") for b in c
+                if isinstance(b, dict) and b.get("type") == "text"
+            ))
+    return out
 
 
 def test_quiet_round_with_incomplete_plan_gets_plan_progress(fake_tools):
@@ -103,9 +127,12 @@ def test_quiet_round_with_incomplete_plan_gets_plan_progress(fake_tools):
     # a fix round extends the budget: 4 model rounds happened although max_rounds=3
     assert len(model.seen) == 4
     assert text and "NATIVE TOOL RESULTS" in text
-    assert [r["tool"] for r in log] == ["playground_new", "run_command", "write_file", "run_command"]
+    assert [r["tool"] for r in log] == [
+        "playground_new", "run_command", "write_file", "run_command", "browser",
+    ]
     assert loop.log_row()["complete"] is True
     assert "Plan complete" in loop.summary_block()
+    assert loop.kernel_proof_ran is True
 
 
 def test_loop_stops_when_fix_budget_is_spent(fake_tools):
@@ -149,6 +176,9 @@ def test_slerp_nudge_names_the_missing_math3d_step(fake_tools):
     assert "☐ math: math3d REQUIRED" in block
     assert "NEXT: call math3d with op=quat_slerp" in block
     loop.observe("math3d", {"op": "quat_slerp"}, "── math3d quat_slerp OK ──", ok=True)
+    assert loop.verdict("Готово.").complete is False
+    assert any("visual proof" in b.lower() or "работещата игра" in b for b in loop.last_verdict.blockers)
+    loop.observe("browser", {"slug": "cam", "action": "kernel_proof"}, "── visual_proof OK ──", ok=True)
     assert loop.verdict("Готово.").complete is True
 
 
@@ -191,3 +221,75 @@ def test_agent_attaches_build_loop_to_the_native_pass():
     assert "_loop.summary_block()" in src
     sig = inspect.signature(native_tools.run_native_discovery_pass)
     assert "loop" in sig.parameters
+
+
+def test_failed_visual_proof_nudges_a_fix(fake_tools, monkeypatch):
+    from daedalus.visual_proof import ProofResult
+
+    async def _blank(slug, kind="static"):
+        return ProofResult(
+            ok=False, skipped=False, kind=kind, slug=slug, tool="browser",
+            summary="blank screen", blank_screen=True, frames=[],
+        )
+
+    monkeypatch.setattr("daedalus.visual_proof.run_visual_proof", _blank)
+    rt = route(SNAKE)
+    loop = BuildLoop(rt, SNAKE, fix_rounds=3)
+    model = ScriptedModel([
+        [_use("write_file", slug="snake-game", path="index.html", content="<canvas>")],
+        [_text("I wrote the game.")],
+    ])
+    _run("sys", SNAKE, model, loop=loop, max_rounds=3)
+    assert loop.kernel_proof_ran is True
+    assert loop.log_row()["complete"] is False
+    nudges = [t for t in _user_texts(model.seen[-1]) if "PLAN PROGRESS" in t or "VISUAL PROOF" in t]
+    blob = "\n".join(nudges)
+    assert "VISUAL PROOF" in blob
+    assert "write_file" in blob
+    assert loop.stop_reason != "complete"
+
+
+def test_missing_chromium_is_not_a_pass(fake_tools, monkeypatch):
+    from daedalus.visual_proof import ProofResult
+
+    async def _gap(slug, kind="static"):
+        return ProofResult(
+            ok=False, skipped=True, kind=kind, slug=slug, tool="browser",
+            summary="Chromium missing", honest_gap="chromium_missing",
+        )
+
+    monkeypatch.setattr("daedalus.visual_proof.run_visual_proof", _gap)
+    rt = route(SNAKE)
+    loop = BuildLoop(rt, SNAKE, fix_rounds=3)
+    model = ScriptedModel([
+        [_use("write_file", slug="snake-game", path="index.html", content="<canvas>")],
+        [_text("Готово.")],
+    ])
+    _run("sys", SNAKE, model, loop=loop, max_rounds=3)
+    assert loop.stop_reason == "visual proof unavailable"
+    assert loop.log_row()["complete"] is False
+    assert loop.proof_gap == "chromium_missing"
+    assert any("Chromium" in b for b in (loop.last_verdict.blockers if loop.last_verdict else []))
+
+
+def test_visual_proof_off_skips_kernel_open(monkeypatch):
+    monkeypatch.setenv("DAEDALUS_VISUAL_PROOF", "0")
+    rt = route(SNAKE)
+    loop = BuildLoop(rt, SNAKE, fix_rounds=3)
+    loop.observe("write_file", {"slug": "snake-game", "path": "index.html"}, "── write_file OK ──", ok=True)
+    assert loop.wants_kernel_proof() is False
+    assert loop.verdict("Готово.").complete is True
+
+
+def test_kernel_runs_visual_proof_after_writes(fake_tools):
+    rt = route(SNAKE)
+    loop = BuildLoop(rt, SNAKE, fix_rounds=3)
+    model = ScriptedModel([
+        [_use("write_file", slug="snake-game", path="game.js", content="let x=1;")],
+        [_text("done writing")],
+    ])
+    text, log = _run("sys", SNAKE, model, loop=loop, max_rounds=3)
+    assert loop.kernel_proof_ran is True
+    assert any(r.get("tool") == "browser" for r in log)
+    assert loop.stop_reason == "complete"
+    assert text and "VISUAL PROOF" in text

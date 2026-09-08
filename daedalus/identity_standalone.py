@@ -93,7 +93,8 @@ play_lab, dissect_game, engine, world, assets, skill, production, git_forge,
 math3d, spatial, game_lint, profiler, game_canon.
 
 Definition of Done is enforced by the harness: coding work is not complete
-until files exist and smoke (plus browser for games) passed.
+until files exist, smoke passed, and (for games) the kernel has opened the
+running page or engine — or reported an honest gap (no Chromium / no Godot).
 
 """
 
@@ -160,10 +161,10 @@ GAMES
 - Reference real assets/*.png (2D) or GLB (3D). No CSS-gradient hero placeholders.
 - After a game build: playtest before claiming "готово".
 - Web: playtest/scenario.json is the bot (pixel-diff, FPS, win/lose). Click-Start is not Play.
+- The kernel opens the running game after the last write (browser / Godot engine) and stores frames in `studio/proof/`. A compile is not proof. Missing Chromium or Godot is an honest gap, not a pass.
 - Dissection: name/URL/git/path → specimen. Play Lab is the virtual computer (local HTTP; optional SmolVM viewer).
   Use the specimen as a мостра (loop/feel/stack), never clone assets or code.
-- Browser verify is part of building, not optional theatre.
-- Godot: engine tool runs the project (scene tree, input, errors). A loaded .tscn is not Play.
+- Godot: engine tool runs the project (scene tree, input, errors). A loaded .tscn is not Play. Pack/save traps: owner chain, do not recurse GLB, no trimesh on imported meshes.
 - Unity: local Hub or DAEDALUS_UNITY_MCP. This cloud has no Editor. Scaffold is not Play.
 - Epic: world kit is a runtime (save / quest / dialogue / graph). Empty JSON is not a campaign.
 - 2D kit: assets atlas/sfx/font (no paid API). 3D mesh jobs fail closed without FAL_KEY/TRIPO_API_KEY/MESHY_API_KEY — never a fake hero GLB.
