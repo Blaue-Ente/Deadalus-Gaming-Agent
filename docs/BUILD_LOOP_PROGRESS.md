@@ -72,9 +72,26 @@ Native builds inject Chroma `daedalus_global` into the system prompt when `DAEDA
 
 Screenshots: `slerp-lookat-pass3-frame_000.png` (black HUD), `slerp-lookat-pass4-lab.png` (painted greybox).
 
-Total spend this branch ~**$2.83** (pass 1+2 $1.41 + pass 3 $0.91 + pass 4 $0.51).
+Total spend this branch ~**$2.89** (pass 1+2 $1.41 + pass 3 $0.91 + pass 4 $0.51 + dungeon2 ~$0.057).
 
-Pass 4 is a **3D greybox**, not a game. The next live eval on this MR is MiniMax dungeon2: three painted rooms, key, slime, win/lose, Chroma RAG on, SmolVM doctor reported honestly.
+Pass 4 is a **3D greybox**, not a game.
+
+## Live eval 2026-09-08 — MiniMax dungeon2 (a game)
+
+OpenRouter `minimax/minimax-m2.7`. Isolated `$DAEDALUS_DATA=/tmp/daedalus-live-eval-dungeon-c`. `DAEDALUS_RAG=1`. Chromadb **1.5.9** indexed 47 docs / 54 chunks. `rag_in_system=true`. First retrieve ranked Iyveris `.agents` skills (planning/mesh); native RAG now prefers `daedalus/skills` + `daedalus/knowledge`.
+
+| | |
+|---|---|
+| Playbook (this run) | `playground.math3d+playground.arcade` — prompt said «без WebGL» / «не прави SLERP»; `\bwebgl\b` still merged math3d so `complete=false` (missing math3d). Router now drops math3d on a 2D arcade ask unless slerp/quat remain after negation strip. |
+| Tools | `playground_new` → `write_file` → `browser` (kernel proof ran) |
+| Product | `dungeon-keys/index.html` — three rooms (brown / green / purple), gold key in room 1, slime+HP in room 2, locked exit, arrows + Space, win/lose |
+| Proof | `frame_shows_scene=true` on kernel frame, verify shot, Play Lab, keyboard play |
+| SmolVM | import 0.0.31, `smolvm doctor` OK, `/dev/kvm` present. Guest boot failed: *Docker is required to build images* — local HTTP still served the game |
+| Spend | ~$0.057 (14 rounds, 145k/14k tokens) |
+
+Screenshots: `dungeon-keys-dungeon2-lab.png` (ROOM 1, key + slime), `dungeon-keys-dungeon2-walk.png` (held ArrowRight → **ROOM 3**, HP 9/10 after the slime).
+
+This is a **playable loop**, not a campaign. A full campaign is epic / `world/` — not one MiniMax eval.
 
 ## S1 — Closed build loop (done)
 

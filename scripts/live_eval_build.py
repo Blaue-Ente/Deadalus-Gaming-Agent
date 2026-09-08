@@ -45,17 +45,16 @@ _RATES_USD_PER_1M = {
 
 DUNGEON = (
     "Направи нова Playground игра: top-down dungeon crawler на HTML canvas "
-    "(kind=static, slug dungeon-keys). Един файл index.html — canvas 2D, без CDN, "
-    "без Three.js, без WebGL. Това е ИГРА, не greybox demo. "
+    "(kind=static, slug dungeon-keys). Един файл index.html — canvas 2D, без CDN. "
+    "Това е ИГРА, не greybox demo. "
     "Три ВИЗУАЛНО РАЗЛИЧНИ стаи (различен цвят на пода: кафяв / зелен / лилав), "
     "свързани с врати. Играчът се вижда като цветно квадратче. "
     "В стая 1: златен ключ на пода. Последната врата е заключена докато няма ключ. "
     "Един slime с HP в стая 2 (не в стая 1). Стрелки = движение, Space = атака. "
     "HP лента, KEY, ROOM в HUD горе — но ЦЕНТЪРЪТ на screenshot трябва да е плочките "
     "на стаята, не само текст. Game over при 0 HP, победа при изхода след ключа. "
-    "JS само ASCII минус: -1, никога unicode − . "
-    "Playable loop: input → update → render → win/lose. Не прави змия, tetris, pong "
-    "или 3D SLERP."
+    "JS само ASCII минус: -1. "
+    "Playable loop: input → update → render → win/lose. Не прави змия, tetris или pong."
 )
 
 SLERP = (
@@ -469,16 +468,16 @@ async def _playtest_url(url: str, dest: Path) -> dict:
             )
             page = await browser.new_page(viewport={"width": 1280, "height": 800})
             await page.goto(url, wait_until="domcontentloaded", timeout=25000)
-            await page.wait_for_timeout(600)
-            await page.keyboard.press("ArrowRight")
-            for _ in range(10):
-                await page.keyboard.press("ArrowRight")
-                await page.wait_for_timeout(90)
+            await page.wait_for_timeout(400)
+            await page.mouse.click(640, 400)
+            await page.keyboard.down("ArrowRight")
+            await page.wait_for_timeout(1400)
+            await page.keyboard.up("ArrowRight")
             await page.keyboard.press("Space")
-            await page.wait_for_timeout(250)
-            for _ in range(8):
-                await page.keyboard.press("ArrowRight")
-                await page.wait_for_timeout(80)
+            await page.wait_for_timeout(200)
+            await page.keyboard.down("ArrowRight")
+            await page.wait_for_timeout(800)
+            await page.keyboard.up("ArrowRight")
             await page.keyboard.press("ArrowDown")
             await page.wait_for_timeout(200)
             await page.screenshot(path=str(tmp), full_page=False)

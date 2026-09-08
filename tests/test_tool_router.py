@@ -175,6 +175,18 @@ def test_dungeon_routes_to_arcade_without_canvas_keyword():
     assert "three visually distinct rooms" in arcade.lower() or "visually distinct" in arcade
 
 
+def test_canvas_dungeon_does_not_merge_math3d_on_no_webgl():
+    msg = (
+        "Направи нова Playground игра: top-down dungeon crawler на HTML canvas. "
+        "без CDN, без Three.js, без WebGL. Не прави змия, tetris, pong или 3D SLERP."
+    )
+    pb = match_playbook(msg)
+    assert pb.id == "playground.arcade"
+    assert "math3d" not in pb.id
+    rt = route(msg)
+    assert "math3d" not in rt.tool_names
+
+
 def test_rag_kill_switch_skips_chroma():
     from daedalus.tool_router import rag_enabled, retrieve_rag
 

@@ -114,11 +114,27 @@ _NEGATED = re.compile(
     r".{0,160}",
     re.I,
 )
+_BAIT_NEGATED = re.compile(
+    r"(?:без|without|no)\s+(?:cdn|three\.?js|webgl|webgpu|vite|slerp|quaternion)\b",
+    re.I,
+)
 
 
 def _strip_negations(blob: str) -> str:
-    """Drop 'don't read daedalus/agent.py' so it cannot pull harness.fix into a game."""
-    return _NEGATED.sub(" ", blob or "")
+    """Drop 'don't read daedalus/agent.py' / 'без WebGL' so they cannot pull math3d."""
+    text = _NEGATED.sub(" ", blob or "")
+    return _BAIT_NEGATED.sub(" ", text)
+
+
+def _drop_math3d_on_2d_arcade(hits: list[Playbook], blob: str) -> list[Playbook]:
+    """A canvas dungeon that says 'no WebGL / no SLERP' is not a math3d slice."""
+    ids = {pb.id for pb in hits}
+    if "playground.arcade" not in ids or "playground.math3d" not in ids:
+        return hits
+    low = _strip_negations(blob).lower()
+    if re.search(r"\b(slerp|quaternion|look[-_ ]?at|quat)\b", low, re.I):
+        return hits
+    return [pb for pb in hits if pb.id != "playground.math3d"]
 
 
 def _copy_step(step: Step, new_id: str) -> Step:
@@ -204,6 +220,7 @@ def match_playbook(
         and _kw_hit(pb, blob, k)
     ]
     if hits:
+        hits = _drop_math3d_on_2d_arcade(hits, blob)
         return _merge_playbooks(hits) if len(hits) > 1 else hits[0]
 
     if (
@@ -291,7 +308,17 @@ def retrieve_rag(query: str, *, top_k: int = 4) -> list[dict[str, Any]]:
 
         mem = DaedalusMemory()
         DaedalusKnowledge(memory=mem).load_all(force=False)
-        return mem.retrieve_knowledge(query, top_k=top_k)
+        raw = mem.retrieve_knowledge(query, top_k=max(top_k * 4, 12))
+        prefer: list[dict[str, Any]] = []
+        rest: list[dict[str, Any]] = []
+        for h in raw:
+            src = str((h.get("metadata") or {}).get("source") or "").replace("\\", "/")
+            cat = str((h.get("metadata") or {}).get("category") or "")
+            if cat == "game-eng" or "/daedalus/skills/" in src or "/daedalus/knowledge/" in src:
+                prefer.append(h)
+            else:
+                rest.append(h)
+        return (prefer or rest)[:top_k]
     except Exception as exc:
         log.warning("RAG skip: %s", exc)
         return []
