@@ -403,7 +403,7 @@ _ICON_SVG = """\
 
 _PREVIEW_HTML = """\
 <!DOCTYPE html>
-<html lang="bg">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -419,9 +419,9 @@ _PREVIEW_HTML = """\
   <h1>Godot 4 3D — __NAME__</h1>
   <p>__DESC__</p>
   <div class="card">
-    <p>M0: стая, играч, камера, една загадка (плоча → врата). Не hello-world.</p>
-    <p>Локално: Godot 4.3 → Import → тази папка. CLI:</p>
-    <p><code>godot --headless --path . --quit-after 180 -- --probe</code></p>
+    <p><strong>This page is not Play.</strong> Open the folder in Godot 4.3.</p>
+    <p>M0: room, player, camera, one puzzle (plate → door). Not a hello-world.</p>
+    <p>Main scene: <code>scenes/main.tscn</code>. CLI: <code>godot --headless --path . --quit-after 180 -- --probe</code></p>
   </div>
 </body>
 </html>
@@ -432,6 +432,11 @@ _README = """\
 
 M0: greybox room, CharacterBody3D, SpringArm camera, pressure plate opens the door.
 
+## Godot-first order
+preflight → contract → context → slice → runtime → visual → review → export → publish.
+
+Preview HTML is not Play. `engine({action: pipeline, slug})` walks the order.
+
 ## Open
 Godot 4.3 → Import this folder. Play `scenes/main.tscn`. WASD / arrows. Stand on the yellow plate.
 
@@ -439,7 +444,7 @@ Godot 4.3 → Import this folder. Play `scenes/main.tscn`. WASD / arrows. Stand 
 ```bash
 godot --headless --path . --quit-after 180 -- --probe
 ```
-Writes `studio/probe.json` when `--probe` is passed. Cloud Daedalus skips this if `godot` is missing.
+Writes `studio/probe.json` when `--probe` is passed. Missing Godot is FAIL, not skip.
 
 ## Do not
 Do not paste raw generative meshes. Blender job → contract → `res://assets/*.glb`.
@@ -449,7 +454,6 @@ _GITIGNORE = """\
 .godot/
 *.translation
 export.cfg
-export_presets.cfg
 """
 
 
@@ -507,6 +511,14 @@ def write_godot3d_scaffold(pdir: Path, name: str, slug: str, description: str = 
     if BRIDGE_REL not in written:
         written.append(BRIDGE_REL)
     ensure_import_sidecars(pdir)
+    try:
+        from .godot_first import ensure_contract
+        ensure_contract(pdir, slug=slug, name=name)
+        for rel in ("studio/godot_contract.json", "studio/release_manifest.json", "export_presets.cfg"):
+            if rel not in written and (pdir / rel).is_file():
+                written.append(rel)
+    except Exception:
+        log.debug("godot 3d contract skipped", extra={"slug": slug})
     if written:
         log.info("godot 3d scaffold: %s → %s", slug, written)
     return written

@@ -74,6 +74,8 @@ def test_route_crowd_and_godot():
     assert godot.playbook.id == "playground.godot"
     assert godot.kind == "godot"
     assert "engine" in godot.tool_names
+    assert "edit_file" in godot.tool_names
+    assert "preflight" in godot.playbook.notes
 
 
 def test_merged_slerp_and_octree_requires_both_tools():

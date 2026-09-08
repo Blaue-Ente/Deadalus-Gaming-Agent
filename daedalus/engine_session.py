@@ -85,11 +85,20 @@ def _ensure_session(slug: str) -> tuple[Any, dict[str, Any]]:
     return sess, started
 
 
+PIPELINE_ACTIONS = frozenset({
+    "preflight", "contract", "context", "slice", "dod",
+    "pipeline", "godot_first", "review", "export", "publish", "runtime_dod",
+})
+
+
 def godot_action(action: str, slug: str, **fields: Any) -> dict[str, Any]:
     """Synchronous Godot bridge dispatch (used by the runner and tests)."""
     act = (action or "").strip().lower()
     if not slug:
         return {"ok": False, "error": "slug required"}
+    if act in PIPELINE_ACTIONS:
+        from .godot_first import engine_pipeline_action
+        return engine_pipeline_action(act, slug, **fields)
     if not _is_godot_project(slug) and act not in {"quit"}:
         return {"ok": False, "error": f"not a Godot project: {slug}"}
 
@@ -211,6 +220,10 @@ async def mcp_action(action: str, slug: str, **fields: Any) -> dict[str, Any]:
 async def run_action(action: str, slug: str, **fields: Any) -> dict[str, Any]:
     from .unity_runtime import is_unity_slug, run_engine_action as unity_engine
 
+    act = (action or "").strip().lower()
+    if act in PIPELINE_ACTIONS:
+        from .godot_first import engine_pipeline_action
+        return await asyncio.to_thread(engine_pipeline_action, act, slug, **fields)
     if is_unity_slug(slug):
         return await unity_engine(action, slug, **fields)
     if mcp_server_name():

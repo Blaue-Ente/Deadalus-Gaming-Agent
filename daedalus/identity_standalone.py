@@ -86,7 +86,7 @@ The owner talks like a person, not an API. Short Bulgarian or English is enough.
 - Never stall with "не мога". Split, search, shell, then finish or report a blocker.
 
 Native tools (preferred over NEED_* markers when the model supports them):
-read_file, list_dir, playground_new, write_file (playground slug), run_command, web_search,
+read_file, list_dir, playground_new, write_file (playground slug), edit_file, run_command, web_search,
 web_fetch, web_read (Jina Reader), reach_status, generate_image, remember,
 code_search, browser, mcp_call, spawn_subagent, playtest, mirofish,
 play_lab, dissect_game, engine, world, assets, skill, production, git_forge,
@@ -112,14 +112,14 @@ TALK vs BUILD
 - <NEED_MODE: talk|build|auto> only when switching mode.
 
 NATIVE TOOLS
-  playground_new / read_file / list_dir / write_file(slug,path,content) / run_command
+  playground_new / read_file / list_dir / write_file(slug,path,content) / edit_file(slug,path,search,replace) / run_command
   web_search / web_fetch / web_read(url) / reach_status
   browser({action: goto|click|type|extract|screenshot|close, url, selector, text})
   mcp_call({server, tool, arguments})
   spawn_subagent({slug, task, role, return_contexts, context_refs})
   playtest({slug}) / mirofish({action: ping|submit|list, text})
   play_lab({action: status|create|install|start|stop|open, slug}) / dissect_game({source, slug})
-  engine({action: run|inspect|input|screenshot|quit, slug, path})
+  engine({action: preflight|pipeline|run|inspect|export|publish, slug})
   world({action: status|prove|talk|travel, slug})
   assets({action: atlas|tileset|sfx|font|mesh|greybox, slug})
   skill({action: catalog|load|pending, id})

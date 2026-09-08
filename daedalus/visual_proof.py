@@ -302,14 +302,71 @@ async def _prove_godot(slug: str, root: Path) -> ProofResult:
     ok = bool(info.get("ok"))
     skipped = bool(info.get("skipped"))
     blocking = (info.get("dod") or {}).get("blocking") or []
+    visual = {}
+    review = {}
+    try:
+        from .godot_first import (
+            ensure_contract, review_gate, slice_static, visual_quality, write_context,
+        )
+        pf = {
+            "stage": "preflight",
+            "ok": not skipped,
+            "skipped": skipped,
+            "blockers": ["godot_missing"] if skipped else [],
+        }
+        contract = ensure_contract(root, slug=slug)
+        ctx = write_context(root)
+        slice_row = slice_static(root)
+        runtime_row = {
+            "stage": "runtime",
+            "ok": bool(info.get("ok")) and not skipped,
+            "skipped": skipped,
+            "blockers": list(blocking),
+        }
+        visual = visual_quality(root, slug=slug)
+        review = review_gate(
+            {
+                "preflight": pf,
+                "contract": contract,
+                "context": ctx,
+                "slice": slice_row,
+                "runtime": runtime_row,
+                "visual": visual,
+            },
+            root=root,
+        )
+        pipe_path = root / "studio" / "godot_pipeline.json"
+        pipe_path.parent.mkdir(parents=True, exist_ok=True)
+        pipe_path.write_text(
+            json.dumps(
+                {
+                    "preflight": pf,
+                    "contract": contract,
+                    "context": ctx,
+                    "slice": slice_row,
+                    "runtime": runtime_row,
+                    "visual": visual,
+                    "review": review,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+    except Exception:
+        log.debug("godot-first pipeline during proof skipped", exc_info=True)
     summary = (
         f"Godot runtime {'ok' if ok else 'failed'}"
         + (f" blocking={blocking}" if blocking else "")
         + (f" skipped={info.get('skipped')}" if info.get("skipped") else "")
+        + (f" review={(review or {}).get('verdict')}" if review else "")
     )
     gap = "godot_missing" if skipped else ""
+    visual_ok = bool((visual or {}).get("ok", True))
+    review_ok = bool((review or {}).get("ok", True))
     return ProofResult(
-        ok=ok and not skipped,
+        ok=ok and not skipped and visual_ok and review_ok,
         skipped=skipped,
         kind="godot",
         slug=slug,
@@ -318,5 +375,10 @@ async def _prove_godot(slug: str, root: Path) -> ProofResult:
         frames=frames,
         error=(info.get("error") or info.get("bridge_error") or "")[:200],
         honest_gap=gap,
-        details={"dod": info.get("dod"), "bridge": info.get("bridge")},
+        details={
+            "dod": info.get("dod"),
+            "bridge": info.get("bridge"),
+            "visual": visual,
+            "review": review,
+        },
     )

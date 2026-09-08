@@ -19,9 +19,11 @@ from .paths import package_root
 # Keep in sync with ``tool_dumps`` and ``tool_protocol.MARKER_TO_NATIVE``.
 ALIASES: dict[str, str] = {
     "playground_write": "write_file",
+    "playground_edit": "edit_file",
     "playground_read": "read_file",
     "playground_run": "run_command",
     "need_playground_write": "write_file",
+    "need_playground_edit": "edit_file",
     "need_playground_new": "playground_new",
     "need_playground_run": "run_command",
     "need_playground_read": "read_file",
@@ -87,10 +89,18 @@ _NATIVE_META: dict[str, dict[str, Any]] = {
     "write_file": {
         "module": "daedalus.playground",
         "tags": ("playground", "build"),
-        "when": "Write a file in a Playground project. Creates a static slug if missing. Never a harness patch.",
+        "when": "Write a file in a Playground project. Creates a static slug if missing (Godot paths create kind=godot). Never a harness patch.",
         "aliases": ("NEED_PLAYGROUND_WRITE", "playground_write"),
         "need_marker": "NEED_PLAYGROUND_WRITE",
         "args_hint": "slug, path, content",
+    },
+    "edit_file": {
+        "module": "daedalus.playground",
+        "tags": ("playground", "build"),
+        "when": "Exact search/replace in a Playground file. Prefer this over rewriting a whole .gd/.tscn.",
+        "aliases": ("NEED_PLAYGROUND_EDIT", "playground_edit"),
+        "need_marker": "NEED_PLAYGROUND_EDIT",
+        "args_hint": "slug, path, search, replace",
     },
     "playground_new": {
         "module": "daedalus.playground",
@@ -233,9 +243,9 @@ _NATIVE_META: dict[str, dict[str, Any]] = {
     "engine": {
         "module": "daedalus.engine_session",
         "tags": ("games", "godot", "unity", "verify"),
-        "when": "Godot headless bridge or Unity MCP/batchmode. A loaded .tscn is not Play.",
+        "when": "Godot-first pipeline (preflight…publish) or headless bridge. A loaded .tscn is not Play.",
         "knowledge": ("skills/godot.md", "skills/godot_api.md", "skills/unity_runtime.md"),
-        "args_hint": "action=run|inspect|input|screenshot|quit, slug",
+        "args_hint": "action=preflight|pipeline|run|inspect|export|publish, slug",
     },
     "world": {
         "module": "daedalus.world_runtime",
@@ -348,14 +358,6 @@ _NEED_ONLY: tuple[ToolEntry, ...] = (
         when="Multi-file proposal bundle.",
         aliases=("NEED_BUNDLE_START", "NEED_STAGE", "NEED_BUNDLE_COMMIT"),
         need_marker="NEED_BUNDLE_START",
-    ),
-    ToolEntry(
-        name="NEED_PLAYGROUND_EDIT",
-        kind="need",
-        module="daedalus.playground",
-        tags=("playground",),
-        when="Exact search/replace in a Playground file. Prefer write_file for new files.",
-        need_marker="NEED_PLAYGROUND_EDIT",
     ),
     ToolEntry(
         name="NEED_TASK_STATE",

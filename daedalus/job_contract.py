@@ -19,7 +19,7 @@ _CONTRADICTION_PHRASES = (
     "не мога", "не можах", "could not complete", "cannot be automated",
     "requires manual", "needs human", "task_blocked", "blocked:",
 )
-_VISUAL_KINDS = frozenset({"static", "vite", "vite-react", "streamlit", "expo", "phaser"})
+_VISUAL_KINDS = frozenset({"static", "vite", "vite-react", "streamlit", "expo", "phaser", "godot"})
 
 
 @dataclass

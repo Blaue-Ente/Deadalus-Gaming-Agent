@@ -221,3 +221,23 @@ def test_spatial_and_game_lint_name_slug():
     ))
     assert "FAILED" in lint
     assert "NEXT: call write_file with slug=snake-game" in lint
+
+
+def test_write_gate_godot_rejects_phaser():
+    gate = check_write(
+        "scripts/player.gd",
+        "extends Node\nimport Phaser from 'phaser'\n",
+        kind="godot",
+    )
+    assert gate.ok is False
+    assert any(b["code"] == "godot-html-gameplay" for b in gate.blockers)
+
+
+def test_write_gate_godot_skips_arcade_canvas():
+    gate = check_write(
+        "scripts/player.gd",
+        "extends CharacterBody2D\nfunc _physics_process(d):\n\tmove_and_slide()\n",
+        kind="godot",
+    )
+    assert gate.ok is True
+    assert arcade_blockers("scripts/player.gd", "extends Node", "godot") == []
