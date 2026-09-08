@@ -76,6 +76,18 @@ Prompt named `kind=vite` + Phaser 3 and avoided arcade (`2d`/`canvas`/`snake`) a
 
 Fixes from this eval: decode `data:` image URLs; sibling `for (let i` is not a SyntaxError.
 
+## Mentor helm (2026-09-08)
+
+Toggle: Studio **Mentor ON|OFF** (default on). `DAEDALUS_MENTOR=0` forces off. KV `adn:daedalus_mentor`.
+
+Director: Studio model picker (Claude Fable 5.1, GPT-6 Astra, GPT-5.5 / 5.6, Opus 4.8, Kimi K3, GLM 5.3, Grok 4.6; Auto prefers Grok 4.6 on OpenRouter). Custom ⋯ for any provider+model. KV `adn:daedalus_mentor_choice`. Token ledger `adn:daedalus_mentor_spend` (default 40k/day). `DAEDALUS_MENTOR_LLM=0` is rules-only. The director does **not** ingest harness RAG — a compact inspect digest plus the model's own knowledge. Unambiguous Vite `#app` scaffold stays on the cheap `steer()` path.
+
+Always on even when Mentor is off: Phaser.Game counts as a loop; `playground.vite` playbook; kind sync; proof on exhaust; retry cap; `browser_ok` on chat DoD; no `NEED_PROPOSE` on game fast-path.
+
+When Mentor is on: PLAN PROGRESS NEXT comes from `daedalus/mentor.py` (inspect slug, RAG, forbid `generate_image` after two fails), overlayed by the director cache after quiet/exhaust. Extra recover rounds after native budget exhaust (once, +2). Persona wrap-up tells the model not to dump leftover JS.
+
+Mentor does **not** write `index.html` / `src/main.js`. Two writers stay forbidden.
+
 ## S1 — Closed build loop (done)
 
 The plan drives the model. Quiet + incomplete → PLAN PROGRESS inside the native

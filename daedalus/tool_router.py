@@ -16,6 +16,8 @@ from typing import Any
 from .task_playbooks import PLAYBOOKS, Playbook, Step, get as get_playbook
 from .tool_catalog import canonical, excerpt
 
+_KIND_EQ = re.compile(r"kind\s*=\s*([a-z0-9_-]+)", re.I)
+
 log = logging.getLogger(__name__)
 
 _N_BODIES = re.compile(
@@ -72,6 +74,16 @@ def infer_dim(text: str) -> int:
     if any(k in low for k in ("2d", "canvas", "змия", "snake", "tetris")) and "3d" not in low:
         return 2
     return 3
+
+
+def infer_kind(message: str, playbook_kind: str = "", kind: str = "") -> str:
+    """Prefer an explicit kind=vite in the ask over the playbook default (static)."""
+    if (kind or "").strip():
+        return kind.strip().lower()
+    m = _KIND_EQ.search(message or "")
+    if m:
+        return m.group(1).lower()
+    return ((playbook_kind or "static").strip() or "static")
 
 
 def _topo(steps: tuple[Step, ...]) -> list[Step]:
@@ -202,6 +214,13 @@ def match_playbook(
         if pb.id not in {"talk", "app.build", "playground.generic"}
         and _kw_hit(pb, blob, k)
     ]
+    # Explicit Vite briefs must not lose to canvas arcade on leftover keywords.
+    if (
+        hits
+        and re.search(r"kind\s*=\s*vite", blob, re.I)
+        and not re.search(r"\b(snake|tetris|pong|змия)\b", blob, re.I)
+    ):
+        hits = [pb for pb in hits if pb.id != "playground.arcade"] or hits
     if hits:
         return _merge_playbooks(hits) if len(hits) > 1 else hits[0]
 
@@ -233,7 +252,7 @@ def route(
     pb = match_playbook(message, session_id=session_id, kind=kind, intent=intent)
     n = infer_n(message)
     dim = infer_dim(message)
-    kind_out = (kind or pb.kind or "static").strip() or "static"
+    kind_out = infer_kind(message, pb.kind, kind)
     names = pb.tools
     return Route(
         playbook=pb,
@@ -304,6 +323,7 @@ def format_system(rt: Route, *, extra: str = "", user_message: str = "") -> str:
     if rt.playbook.id != "playground.arcade":
         sys = attach_to_sys(sys, text=user_message or pb.title, kind=rt.kind)
     return sys
+
 
 
 def used_tools(tool_calls: list[dict[str, Any]] | None) -> set[str]:
