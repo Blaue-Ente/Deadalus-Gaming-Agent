@@ -43,6 +43,13 @@ def test_js_duplicate_let_same_scope():
     assert "js-duplicate-binding" in codes
     nested = heuristic_javascript("function a(){ let x = 1; }\nfunction b(){ let x = 2; }\n")
     assert not any(i["code"] == "js-duplicate-binding" for i in nested)
+    sibling_fors = heuristic_javascript(
+        "function move(){\n"
+        "  for (let i = dust.length - 1; i >= 0; i--) {}\n"
+        "  for (let i = vortex.length - 1; i >= 0; i--) {}\n"
+        "}\n"
+    )
+    assert not any(i["code"] == "js-duplicate-binding" for i in sibling_fors)
 
 
 def test_game_lint_html_duplicate_let():

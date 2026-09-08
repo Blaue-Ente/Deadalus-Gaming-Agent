@@ -51,6 +51,31 @@ Total model spend ~**$1.41**. Screenshots: `slerp-lookat-pass1-hud.png`, `slerp-
 
 S4 now fails `uniformMatrix*fv(..., true)` so the next write can ship WebGL 1-legal matrices. The remaining gap is "page painted ≠ 3D greybox in view" — that is still model camera/matrix quality, not a skip-pass.
 
+## Live eval 2026-09-08 — Claude Sonnet 4.6 Vite/Phaser (Lumen Bloom)
+
+Full **`Daedalus.chat`** path (`scripts/live_eval_agent_chat.py --better --preset lumen`), not kernel-only. Isolated `$DAEDALUS_DATA` under `/tmp/daedalus-live-eval-chat`. Effort **craft**. ~464s wall.
+
+Prompt named `kind=vite` + Phaser 3 and avoided arcade (`2d`/`canvas`/`snake`) and mobile (`app store`) traps.
+
+| Probe | Result |
+|-------|--------|
+| Playbook | `playground.generic` (default kind **static**; model still passed `kind=vite` on `playground_new`) |
+| RAG | Chroma indexed 49 files → 63 chunks. Turn used **4** knowledge hits. `rank_bm25` missing → dense-only. |
+| Navigator | Fast-path `code_change` with `NEED_PROPOSE` / `NEED_READ_FILE` — ADN leftover, not Playground tools |
+| Skills disclosed | `arcade_craft`, `playtest`, `godot`, `senior_tools`, `spatial_simd`, `platform_acceptance_qa`, `game_canon` |
+| Native cap | 10 LLM rounds. Stop: **round budget exhausted**. Kernel visual proof **did not run**. |
+| `generate_image` | **8/8 FAILED**. Novita 403; OpenRouter returned `data:` URLs; `httpx.get` → `URL too long`. No PNG sprites. |
+| Workers / subagents | **None**. After writes the persona is told not to emit `NEED_*`; it started a **bundle** and dumped leftover JS into the chat reply. |
+| playtest / production / browser | **Not called**. `production` is not on the generic playbook subset. |
+| Review-gate (Haiku) | Ran. Flagged incomplete `main.js`, missing assets. Closest thing to a "Mentor" on the chat path. Visual critic (`playground_quality`) lives on **autopilot only**. |
+| DoD | `complete=false`. `browser` check stayed true because chat `evaluate()` does not pass `browser_ok`. |
+
+**As shipped:** `index.html` has `<canvas id="lumen-canvas">`; `src/main.js` is still the Vite scaffold (`#app` innerHTML). Chromium: **blank near-black page**. Scenes `Boot.js` / `Menu.js` / `Play.js` exist; `Play.js` write was FAILED by `js-duplicate-binding` on two legal `for (let i` loops. `UniformGrid.js` never written. `npm install` never ran.
+
+**Evaluator wiring (not Daedalus):** boot `main.js` + stub grid + `vite build` → menu and play **paint** with procedural canvas textures (Boot.js). That is a polished prototype, not App Store PNG art, and it is **not** what the agent left on disk.
+
+Fixes from this eval: decode `data:` image URLs; sibling `for (let i` is not a SyntaxError.
+
 ## S1 — Closed build loop (done)
 
 The plan drives the model. Quiet + incomplete → PLAN PROGRESS inside the native

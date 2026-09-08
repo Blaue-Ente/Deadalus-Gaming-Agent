@@ -181,6 +181,23 @@ def heuristic_gdscript(text: str) -> list[dict[str, Any]]:
     return issues
 
 
+def _for_header_binding(text: str, let_at: int) -> bool:
+    """True when ``let``/``const`` sits in ``for (let x`` / ``for (const x``.
+
+    Those bindings are per-loop, not function-scope. Two sibling ``for (let i``
+    loops are legal JS; the live Lumen Bloom Play scene was FAILED for that.
+    """
+    j = let_at - 1
+    while j >= 0 and text[j] in " \t\n\r":
+        j -= 1
+    if j < 0 or text[j] != "(":
+        return False
+    j -= 1
+    while j >= 0 and text[j] in " \t\n\r":
+        j -= 1
+    return j >= 2 and text[j - 2 : j + 1] == "for"
+
+
 def heuristic_javascript(text: str) -> list[dict[str, Any]]:
     """Duplicate ``let``/``const`` in the same brace scope, plus unbalanced delimiters.
 
@@ -282,6 +299,12 @@ def heuristic_javascript(text: str) -> list[dict[str, Any]]:
                 m2 = _IDENT.match(text, j)
                 if m2:
                     name = m2.group(0)
+                    # `for (let i` is block-scoped to that loop. Two sibling
+                    # for-lets with the same name are legal JS; treating them
+                    # as function-scope duplicates failed a live Phaser scene.
+                    if _for_header_binding(text, i):
+                        i = m2.end()
+                        continue
                     d = max(0, min(depth, len(binds) - 1))
                     if name in binds[d]:
                         issues.append(_issue(
