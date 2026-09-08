@@ -409,7 +409,8 @@ def stage_web_assets(root: Path, dist: Path | None = None) -> int:
 
     Vite hashes only *imported* files. Phaser ``this.load.image('x', 'assets/foo.png')``
     404s when proof serves ``dist/`` alone — five broken requests, dark frame.
-    Skip ``_*`` verify screenshots. Returns how many files were copied.
+    Recurse into ``sfx/`` and similar. Skip ``_*`` verify screenshots.
+    Returns how many files were copied.
     """
     src = root / "assets"
     dest = (dist or root / "dist") / "assets"
@@ -417,15 +418,18 @@ def stage_web_assets(root: Path, dist: Path | None = None) -> int:
         return 0
     dest.mkdir(parents=True, exist_ok=True)
     n = 0
-    for path in src.iterdir():
+    for path in src.rglob("*"):
         if not path.is_file():
             continue
-        if path.name.startswith("_"):
+        rel = path.relative_to(src)
+        if any(part.startswith("_") for part in rel.parts):
             continue
         if path.suffix.lower() not in _STAGE_ASSET_SUFFIX:
             continue
+        target = dest / rel
         try:
-            shutil.copy2(path, dest / path.name)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, target)
             n += 1
         except OSError:
             continue

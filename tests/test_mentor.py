@@ -22,6 +22,13 @@ PHASER_BOOT = (
     "import { Boot } from './scenes/Boot.js';\n"
     "new Phaser.Game({ type: Phaser.AUTO, parent: 'game', scene: [Boot] });\n"
 )
+BOOT_SCENE = "export class Boot extends Phaser.Scene { constructor() { super('Boot'); } }\n"
+
+
+def _with_boot_scene(root):
+    d = root / "src" / "scenes"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "Boot.js").write_text(BOOT_SCENE, encoding="utf-8")
 
 
 def test_mentor_env_off_skips_steer(monkeypatch):
@@ -127,6 +134,7 @@ def test_mentor_booted_entry_can_ship(tmp_path, monkeypatch):
     (root / "src").mkdir(parents=True)
     (root / "index.html").write_text('<div id="game"></div>', encoding="utf-8")
     (root / "src" / "main.js").write_text(PHASER_BOOT, encoding="utf-8")
+    _with_boot_scene(root)
     monkeypatch.setattr("daedalus.playground.project_dir", lambda s: root)
     rt = route(LUMEN)
     loop = BuildLoop(rt, LUMEN, fix_rounds=3)
@@ -243,6 +251,7 @@ def test_mentor_failed_proof_returns_to_writer_not_browser(tmp_path, monkeypatch
     (root / "node_modules" / "phaser").mkdir(parents=True)
     (root / "index.html").write_text('<div id="game"></div>', encoding="utf-8")
     (root / "src" / "main.js").write_text(PHASER_BOOT, encoding="utf-8")
+    _with_boot_scene(root)
     (root / "package.json").write_text('{"dependencies":{"phaser":"^3.80"}}', encoding="utf-8")
     monkeypatch.setattr("daedalus.playground.project_dir", lambda s: root)
     rt = route(LUMEN)
@@ -279,6 +288,7 @@ def test_mentor_compile_fail_proof_still_returns_to_writer(tmp_path, monkeypatch
     (root / "node_modules" / "phaser").mkdir(parents=True)
     (root / "index.html").write_text('<div id="game"></div>', encoding="utf-8")
     (root / "src" / "main.js").write_text(PHASER_BOOT, encoding="utf-8")
+    _with_boot_scene(root)
     (root / "package.json").write_text('{"dependencies":{"phaser":"^3.80"}}', encoding="utf-8")
     monkeypatch.setattr("daedalus.playground.project_dir", lambda s: root)
     rt = route(LUMEN)
@@ -296,3 +306,71 @@ def test_mentor_compile_fail_proof_still_returns_to_writer(tmp_path, monkeypatch
     assert decision.next_tool == "write_file"
     assert "RETURN TO WRITER" in (decision.reason or "")
     assert decision.next_tool != "browser"
+
+
+def test_mentor_missing_scenes_returns_to_writer(tmp_path, monkeypatch):
+    from daedalus import mentor
+
+    monkeypatch.setenv("DAEDALUS_MENTOR", "1")
+    monkeypatch.setattr("daedalus.mentor._rag_hits", lambda q: [])
+    slug = "glass-orchard"
+    root = tmp_path / slug
+    (root / "src").mkdir(parents=True)
+    (root / "node_modules" / "phaser").mkdir(parents=True)
+    (root / "index.html").write_text('<div id="game"></div>', encoding="utf-8")
+    (root / "src" / "main.js").write_text(PHASER_BOOT, encoding="utf-8")
+    (root / "package.json").write_text('{"dependencies":{"phaser":"^3.80"}}', encoding="utf-8")
+    monkeypatch.setattr("daedalus.playground.project_dir", lambda s: root)
+    rt = route(LUMEN)
+    loop = BuildLoop(rt, LUMEN, fix_rounds=3)
+    loop.slug = slug
+    loop.kind = "vite"
+    loop.observe("write_file", {"slug": slug, "path": "src/main.js"}, "── write_file OK ──", ok=True)
+    view = mentor.inspect_project(slug, kind="vite")
+    assert view.missing_scenes is True
+    assert view.scene_files == ()
+    decision = mentor.steer(loop)
+    assert decision is not None
+    assert decision.next_tool == "write_file"
+    assert decision.next_args.get("path") == "src/scenes/Boot.js"
+    assert "RETURN TO WRITER" in (decision.reason or "")
+    nxt = mentor.progress_next(loop)
+    assert "Boot.js" in nxt
+    assert "list_dir" in nxt or "playground_read" in nxt
+
+
+def test_mentor_missing_import_returns_to_writer(tmp_path, monkeypatch):
+    from daedalus import mentor
+
+    monkeypatch.setenv("DAEDALUS_MENTOR", "1")
+    monkeypatch.setattr("daedalus.mentor._rag_hits", lambda q: [])
+    slug = "glass-orchard"
+    root = tmp_path / slug
+    (root / "src" / "scenes").mkdir(parents=True)
+    (root / "node_modules" / "phaser").mkdir(parents=True)
+    (root / "index.html").write_text('<div id="game"></div>', encoding="utf-8")
+    (root / "src" / "main.js").write_text(
+        "import Phaser from 'phaser';\n"
+        "import BootScene from './scenes/BootScene.js';\n"
+        "import PlayScene from './scenes/PlayScene.js';\n"
+        "new Phaser.Game({ type: Phaser.AUTO, parent: 'game', scene: [BootScene, PlayScene] });\n",
+        encoding="utf-8",
+    )
+    (root / "src" / "scenes" / "BootScene.js").write_text(
+        "export default class BootScene extends Phaser.Scene { constructor(){ super('Boot'); } }\n",
+        encoding="utf-8",
+    )
+    (root / "package.json").write_text('{"dependencies":{"phaser":"^3.80"}}', encoding="utf-8")
+    monkeypatch.setattr("daedalus.playground.project_dir", lambda s: root)
+    rt = route(LUMEN)
+    loop = BuildLoop(rt, LUMEN, fix_rounds=3)
+    loop.slug = slug
+    loop.kind = "vite"
+    loop.observe("write_file", {"slug": slug, "path": "src/main.js"}, "── write_file OK ──", ok=True)
+    view = mentor.inspect_project(slug, kind="vite")
+    assert "PlayScene.js" in " ".join(view.missing_imports)
+    decision = mentor.steer(loop)
+    assert decision is not None
+    assert decision.next_tool == "write_file"
+    assert "PlayScene.js" in str(decision.next_args.get("path") or "")
+    assert "RETURN TO WRITER" in (decision.reason or "")

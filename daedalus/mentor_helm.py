@@ -525,6 +525,10 @@ def rules_unambiguous(inspect: dict[str, Any], steer: dict[str, Any]) -> bool:
         return True
     if flags.get("mount_mismatch") and nxt == "write_file":
         return True
+    if flags.get("missing_scenes") and nxt == "write_file":
+        return True
+    if flags.get("missing_imports") and nxt == "write_file":
+        return True
     return False
 
 

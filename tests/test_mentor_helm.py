@@ -239,6 +239,10 @@ def test_proof_failed_is_not_rules_unambiguous():
     assert rules_unambiguous(inspect, steer) is False
     inspect_npm = {"flags": {"needs_npm": True}}
     assert rules_unambiguous(inspect_npm, {"action": "continue", "next_tool": "run_command"}) is True
+    inspect_scenes = {"flags": {"missing_scenes": True}}
+    assert rules_unambiguous(inspect_scenes, {"action": "continue", "next_tool": "write_file"}) is True
+    inspect_imp = {"flags": {"missing_imports": True}}
+    assert rules_unambiguous(inspect_imp, {"action": "continue", "next_tool": "write_file"}) is True
 
 
 def test_http_choice_and_status_catalog(tmp_path, monkeypatch):

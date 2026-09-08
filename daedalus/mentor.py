@@ -52,6 +52,10 @@ _PHASER_PARENT_RE = re.compile(r"parent\s*:\s*['\"]([^'\"]+)['\"]", re.I)
 _HTML_ID_RE = re.compile(r"\bid\s*=\s*['\"]([^'\"]+)['\"]", re.I)
 _RAF_RE = re.compile(r"requestanimationframe|new\s+pixi\.application", re.I)
 _CANVAS_RE = re.compile(r"<canvas\b|id=[\"']game[\"']", re.I)
+_REL_IMPORT_RE = re.compile(
+    r"""(?:from|import)\s+['\"](\.[^'\"]+)['\"]""",
+    re.I,
+)
 _VITE_KINDS = frozenset({"vite", "vite-react", "phaser"})
 
 
@@ -153,6 +157,9 @@ class ProjectView:
     phaser_parent: str = ""
     html_ids: tuple[str, ...] = ()
     mount_mismatch: bool = False
+    scene_files: tuple[str, ...] = ()
+    missing_scenes: bool = False
+    missing_imports: tuple[str, ...] = ()
 
     @property
     def entry_boots(self) -> bool:
@@ -186,6 +193,58 @@ class Steer:
         if self.reason:
             line += f" — {self.reason}"
         return line
+
+
+def _missing_src_imports(root: Path, *, main_path: str, main_js: str) -> tuple[str, ...]:
+    """Relative ``from './x.js'`` in src/ that do not exist on disk."""
+    src = root / "src"
+    try:
+        root_res = root.resolve()
+        main_res = (root / main_path).resolve() if main_path else None
+    except OSError:
+        return ()
+    files: list[Path] = []
+    seen: set[Path] = set()
+    candidates: list[Path] = []
+    if main_path:
+        candidates.append(root / main_path)
+    if src.is_dir():
+        candidates.extend(
+            p for p in src.rglob("*")
+            if p.is_file() and p.suffix.lower() in {".js", ".ts"}
+        )
+    for path in candidates:
+        try:
+            key = path.resolve()
+        except OSError:
+            continue
+        if key in seen or not path.is_file():
+            continue
+        seen.add(key)
+        files.append(path)
+    missing: list[str] = []
+    miss_seen: set[str] = set()
+    for js in files:
+        text = main_js if main_res is not None and js.resolve() == main_res and main_js else _read(js)
+        for m in _REL_IMPORT_RE.finditer(text or ""):
+            spec = m.group(1).split("?")[0].split("#")[0]
+            target = (js.parent / spec).resolve()
+            if target.is_file():
+                continue
+            if not target.suffix:
+                if any(target.with_suffix(ext).is_file() for ext in (".js", ".ts")):
+                    continue
+            try:
+                rel = str(target.relative_to(root_res)).replace("\\", "/")
+            except ValueError:
+                rel = spec.lstrip("./")
+            if rel in miss_seen:
+                continue
+            miss_seen.add(rel)
+            missing.append(rel)
+            if len(missing) >= 6:
+                return tuple(missing)
+    return tuple(missing)
 
 
 def _read(path: Path, limit: int = 12000) -> str:
@@ -227,6 +286,27 @@ def inspect_project(slug: str, *, kind: str = "") -> ProjectView:
     view.phaser_parent = (parent_m.group(1).strip() if parent_m else "")
     view.html_ids = tuple(dict.fromkeys(_HTML_ID_RE.findall(view.index_html)))
     view.mount_mismatch = bool(view.phaser_parent) and view.phaser_parent not in view.html_ids
+    scenes_dir = root / "src" / "scenes"
+    if scenes_dir.is_dir():
+        view.scene_files = tuple(
+            sorted(
+                p.name
+                for p in scenes_dir.iterdir()
+                if p.is_file() and p.suffix.lower() in {".js", ".ts"}
+            )
+        )
+    view.missing_scenes = (
+        not view.scaffold_main
+        and bool(view.has_phaser_boot)
+        and not view.scene_files
+        and (
+            (kind or "").lower() in _VITE_KINDS
+            or "phaser" in (view.package_json or "").lower()
+        )
+    )
+    view.missing_imports = _missing_src_imports(
+        root, main_path=view.main_path, main_js=view.main_js,
+    )
     pkg = view.package_json.lower()
     has_dep = "phaser" in pkg or '"vite"' in pkg or "'vite'" in pkg
     mods = root / "node_modules"
@@ -449,6 +529,31 @@ def steer(loop: Any) -> Steer | None:
             blockers=blockers, rag=rag, forbid=forbid,
         )
 
+    if view.missing_scenes:
+        return _writer_fix(
+            slug, view,
+            path="src/scenes/Boot.js",
+            reason=(
+                "RETURN TO WRITER: Phaser.Game is in src/main.js but src/scenes/ is empty. "
+                "write_file src/scenes/Boot.js (then Menu / Grove / Dusk / Result). Mentor does not write."
+            ),
+            blockers=blockers or ["missing src/scenes"],
+            rag=rag, forbid=forbid,
+        )
+
+    if view.missing_imports:
+        gap = view.missing_imports[0]
+        return _writer_fix(
+            slug, view,
+            path=gap,
+            reason=(
+                f"RETURN TO WRITER: {gap} is imported but missing on disk. "
+                "write_file that path. Mentor does not write."
+            ),
+            blockers=blockers or [f"missing {gap}"],
+            rag=rag, forbid=forbid,
+        )
+
     if proof_blank or proof_failed:
         err = _proof_error_head(loop)
         why = "Last proof frame was blank." if proof_blank else "Visual proof failed."
@@ -552,6 +657,8 @@ def inspect_digest(loop: Any) -> dict[str, Any]:
         "has_phaser_boot": bool(view.has_phaser_boot),
         "needs_npm": bool(view.needs_npm),
         "mount_mismatch": bool(view.mount_mismatch),
+        "missing_scenes": bool(view.missing_scenes),
+        "missing_imports": bool(view.missing_imports),
         "proof_blank": bool(getattr(loop, "proof_blank", False)),
         "proof_failed": _proof_runtime_failed(loop),
         "kernel_proof_ran": bool(getattr(loop, "kernel_proof_ran", False)),

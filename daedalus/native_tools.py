@@ -174,13 +174,19 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
     },
     {
         "name": "generate_image",
-        "description": "Generate a game/app asset image and save it under playground assets or data/generated.",
+        "description": (
+            "Generate a game/app asset image and save it under the slug's assets/ folder. "
+            "filename is the name inside assets/ (keeper.png or sfx/icon.png) — do not prefix assets/."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "prompt": {"type": "string"},
                 "slug": {"type": "string"},
-                "filename": {"type": "string"},
+                "filename": {
+                    "type": "string",
+                    "description": "Name under assets/ (keeper.png). Do not prefix assets/.",
+                },
                 "size": {"type": "string", "description": "e.g. 512x512"},
             },
             "required": ["prompt"],
@@ -1696,9 +1702,12 @@ async def execute_native_tool(
             if not images:
                 return f"── generate_image FAILED: no images ({img}) ──"
             first = images[0]
+            from .playground_assets import filename_under_assets
             dest_dir = (playground_projects_dir() / slug / "assets") if slug else (data_root() / "generated")
             dest_dir.mkdir(parents=True, exist_ok=True)
-            dest = dest_dir / filename
+            rel = filename_under_assets(filename)
+            dest = dest_dir / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
             decoded = decode_image_bytes(first)
             if decoded:
                 dest.write_bytes(decoded)

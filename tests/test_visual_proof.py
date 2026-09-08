@@ -228,6 +228,34 @@ def test_stage_web_assets_skips_verify_shots(tmp_path):
     assert not (tmp_path / "dist" / "assets" / "_verify_screenshot.png").exists()
 
 
+def test_stage_web_assets_copies_sfx_subdir(tmp_path):
+    from daedalus.playground_runner import stage_web_assets
+
+    (tmp_path / "assets" / "sfx").mkdir(parents=True)
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "assets" / "keeper.png").write_bytes(b"png")
+    (tmp_path / "assets" / "sfx" / "pickup.wav").write_bytes(b"RIFF")
+    (tmp_path / "assets" / "_shots").mkdir()
+    (tmp_path / "assets" / "_shots" / "frame.png").write_bytes(b"shot")
+    n = stage_web_assets(tmp_path)
+    assert n == 2
+    assert (tmp_path / "dist" / "assets" / "keeper.png").is_file()
+    assert (tmp_path / "dist" / "assets" / "sfx" / "pickup.wav").is_file()
+    assert not (tmp_path / "dist" / "assets" / "_shots").exists()
+
+
+def test_filename_under_assets_strips_prefix():
+    from daedalus.playground_assets import filename_under_assets, normalize_asset_path
+
+    assert filename_under_assets("assets/emblem.png") == "emblem.png"
+    assert filename_under_assets("assets/assets/emblem.png") == "emblem.png"
+    assert filename_under_assets("sfx/pickup.wav") == "sfx/pickup.wav"
+    assert filename_under_assets("../secret.png") == "secret.png"
+    assert filename_under_assets("keeper") == "keeper.png"
+    assert normalize_asset_path("assets/keeper.png") == "assets/keeper.png"
+    assert normalize_asset_path("keeper.png") == "assets/keeper.png"
+
+
 def test_screenshot_looks_blank_tiny_png(tmp_path):
     from daedalus.playground_browser import CHROME_ARGS, screenshot_looks_blank
 
