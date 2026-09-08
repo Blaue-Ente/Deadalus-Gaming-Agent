@@ -374,29 +374,57 @@ def slice_static(root: Path) -> dict[str, Any]:
     }
 
 
-def gameplay_probe(root: Path) -> dict[str, Any]:
-    """Input / collision / win-lose. Missing Godot is skip=fail, not a file pass."""
+def gameplay_probe(root: Path, live: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Engine gameplay. Files on disk are not a pass; skip is fail."""
+    from .capability_registry import GODOT_GAMEPLAY_PROOFS
+
     root = Path(root)
     player = _read(root, "scripts/player.gd")
     tscn = _read(root, "scenes/main.tscn")
     game = _read(root, "scripts/autoload/game.gd")
     pf = preflight(root)
     skipped = bool(pf.get("skipped")) or not pf.get("ok")
+    live = live if isinstance(live, dict) else {}
+    move = live.get("move") if isinstance(live.get("move"), dict) else {}
+    game_live = live.get("game") if isinstance(live.get("game"), dict) else {}
+    proof_dir = root / "studio" / "proof"
+    shot = False
+    if proof_dir.is_dir():
+        shot = any(p.is_file() and p.stat().st_size > 800 for p in proof_dir.glob("*.png"))
+    proofs = {
+        "scene_loaded": bool(live.get("ok") or move.get("path") or live.get("tree")),
+        "player_moved": bool(move.get("moved") or move.get("delta") or move.get("velocity")),
+        "collision": bool(live.get("collision") or game_live.get("collision")),
+        "interaction": bool(live.get("interaction") or game_live.get("interacted")),
+        "mechanic": bool(game_live.get("mechanic") or game_live.get("score") is not None),
+        "outcome": bool(game_live.get("won") or game_live.get("failed") or game_live.get("over")),
+        "console_clean": not bool(live.get("errors") or live.get("error")),
+        "scene_screenshot": shot,
+    }
+    # File presence can hint, never satisfy the engine proofs by itself.
+    file_blockers: list[str] = []
+    if not re.search(r"move_and_slide|InputMap|ui_left|ui_right|Input\.get", player):
+        file_blockers.append("input")
+    if not re.search(r"Collision|Area2D|Area3D|CharacterBody", tscn + player):
+        file_blockers.append("collision")
+    if "func win" not in game and "func fail" not in game:
+        file_blockers.append("win_lose")
     blockers: list[str] = []
     if skipped:
         blockers.append("gameplay_skipped")
-    if not re.search(r"move_and_slide|InputMap|ui_left|ui_right|Input\.get", player):
-        blockers.append("input")
-    if not re.search(r"Collision|Area2D|Area3D|CharacterBody", tscn + player):
-        blockers.append("collision")
-    if "func win" not in game and "func fail" not in game:
-        blockers.append("win_lose")
+    missing_proofs = [k for k in GODOT_GAMEPLAY_PROOFS if not proofs.get(k)]
+    if missing_proofs and not skipped:
+        blockers.extend(f"proof:{k}" for k in missing_proofs)
+    blockers.extend(file_blockers)
+    ok = not skipped and not missing_proofs and not file_blockers
     return {
         "stage": "gameplay",
-        "ok": not blockers,
+        "ok": ok,
         "skipped": skipped,
         "blockers": blockers,
-        "error": pf.get("error") or ("" if not blockers else "gameplay probe failed"),
+        "proofs": proofs,
+        "checks": [{"id": k, "ok": bool(v)} for k, v in proofs.items()],
+        "error": pf.get("error") or ("" if ok else "gameplay proof is not engine-based"),
     }
 
 

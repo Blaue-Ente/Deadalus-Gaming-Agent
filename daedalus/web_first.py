@@ -13,9 +13,9 @@ from .capability import (
     cap,
     finalize_evidence,
     gates_green,
+    gated_publish,
     publish_ready,
     stage_row,
-    store_release,
 )
 
 WEB_KINDS = frozenset({"static", "vite", "vite-react", "phaser", "streamlit"})
@@ -280,17 +280,37 @@ def gameplay_verify(root: Path, *, slug: str, kind: str) -> dict[str, Any]:
             error=str(exc)[:300],
         )
     skipped = bool(raw.get("skipped"))
-    ok = bool(raw.get("ok")) and not skipped
     checks = list(raw.get("checks") or [])
+    bot = raw.get("bot") or {}
+    console_errors = []
+    for c in checks:
+        if isinstance(c, dict) and str(c.get("id") or "").endswith("error"):
+            if not c.get("ok"):
+                console_errors.append(c)
+    proofs = {
+        "started": bool(raw.get("ok") or bot.get("frames") or file_ok),
+        "input_accepted": bool(bot.get("saw_canvas_changed") or any(
+            isinstance(c, dict) and c.get("id") == "keyboard" and c.get("ok") for c in checks
+        ) or file_ok),
+        "state_changed": bool(bot.get("saw_canvas_changed")),
+        "mechanic": bool(bot.get("saw_canvas_changed") or bot.get("fps")),
+        "outcome": bool(bot.get("saw_win") or bot.get("saw_lose")),
+        "no_console_errors": not bool(raw.get("console_errors") or console_errors),
+    }
+    if not skipped:
+        checks = list(checks) + [{"id": k, "ok": bool(v)} for k, v in proofs.items()]
     blockers = [c.get("id") for c in checks if isinstance(c, dict) and not c.get("ok")]
     if skipped:
         blockers = ["gameplay_skipped", *blockers]
+    missing = [k for k, v in proofs.items() if not v]
+    ok = bool(raw.get("ok")) and not skipped and not missing
     return stage_row(
         "gameplay",
         ok=ok,
         skipped=skipped,
         blockers=blockers,
         checks=checks,
+        proofs=proofs,
         error="" if ok else str(raw.get("summary") or "gameplay failed"),
         runner="chromium",
     )
@@ -443,8 +463,13 @@ def run_pipeline(
     if stop_at >= 7:
         exp = rows.get("export") or {}
         if publish_ready(rows) and exp.get("ok") and exp.get("artifact"):
-            rows["publish"] = store_release(
-                root, slug=slug, artifact=Path(str(exp["artifact"])), target="web",
+            rows["publish"] = gated_publish(
+                root,
+                slug=slug,
+                artifact=Path(str(exp["artifact"])),
+                target="web",
+                stages=rows,
+                hashes={rel: file_hash(root, rel) for rel in tracked(root)},
             )
         else:
             rows["publish"] = stage_row(

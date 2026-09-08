@@ -12,10 +12,10 @@ from pathlib import Path
 from typing import Any
 
 from . import playground as pg
+from .capability_registry import BROWSER_VISUAL_KINDS
 
-# Kinds that produce a visual web page worth headless browser verification.
-# Unity is excluded — the Editor cannot run in ADN cloud; use scaffold + Git push.
-VISUAL_KINDS = ("static", "vite", "vite-react", "streamlit", "expo")
+# Chromium visual kinds. Godot uses the engine runner, not this tuple.
+VISUAL_KINDS = tuple(sorted(BROWSER_VISUAL_KINDS))
 
 # Kinds prepared locally (Unity Hub / Xcode) — never start a dev subprocess in cloud.
 LOCAL_ONLY_KINDS = ("unity", "godot")
