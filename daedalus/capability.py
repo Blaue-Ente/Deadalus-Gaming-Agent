@@ -2,11 +2,10 @@
 
 The kernel walks one order for every target:
 
-    plan → context → build → runtime → gameplay → visual → export → publish
+    Intent → Plan → Context → Build → Verify → Polish → Export → Publish
 
-It does not know HTML, Godot, or iOS. Adapters declare capabilities
-(create, write, run, input, render_proof, gameplay_proof, export, publish,
-rollback). A missing runner is FAIL, not a skip-pass, and never a crosswalk
+Adapters declare capabilities. The registry is the only source of truth.
+A missing runner is FAIL, not a skip-pass, and never a crosswalk
 (Godot ↛ HTML, Expo ↛ static preview, mobile ↛ screenshot-only).
 """
 from __future__ import annotations
@@ -20,6 +19,21 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from .capability_registry import (
+    CAPABILITIES,
+    PLATFORMS,
+    REGISTRY,
+    RUNNER_VERSION,
+    BuildArtifact,
+    UnsupportedPlatform,
+    WEB_PLAYGROUND_KINDS,
+    canonicalize_platform,
+    hash_missing,
+    is_workspace_path,
+    platform_for_kind,
+    records_from_stages,
+)
+
 STAGES = (
     "plan",
     "context",
@@ -31,19 +45,7 @@ STAGES = (
     "publish",
 )
 
-CAPABILITIES = (
-    "create",
-    "write",
-    "run",
-    "input",
-    "render_proof",
-    "gameplay_proof",
-    "export",
-    "publish",
-    "rollback",
-)
-
-WEB_KINDS = frozenset({"static", "vite", "vite-react", "phaser", "streamlit"})
+WEB_KINDS = WEB_PLAYGROUND_KINDS
 ENGINE_KINDS = frozenset({"godot"})
 MOBILE_KINDS = frozenset({"expo"})
 EVIDENCE_REL = "studio/capability_evidence.json"
@@ -78,30 +80,26 @@ def wants_mobile(text: str) -> bool:
 
 
 def resolve_target(kind: str, text: str = "", path: str = "") -> str:
-    """Pick web | engine | mobile | unity. kind=godot never becomes web."""
+    """Pick web | godot | expo | capacitor. kind=godot never becomes web."""
     from .godot_first import coerce_kind
 
+    p = platform_for_kind(kind, text=text, path=path)
+    if p:
+        return p
     k = coerce_kind(kind or "", description=text, path=path)
-    if k == "godot":
-        return "engine"
     if k == "unity":
         return "unity"
-    if k == "expo":
-        return "mobile"
-    if k in WEB_KINDS:
-        if wants_mobile(text):
-            return "mobile"
-        return "web"
-    if wants_mobile(text):
-        return "mobile"
+    aliased = canonicalize_platform(k)
+    if aliased in PLATFORMS:
+        return aliased
     return k or "web"
 
 
 def refuse_crosswalk(kind: str, target: str) -> dict[str, Any] | None:
     """Honest block instead of turning Godot into HTML or Expo into a preview."""
     k = (kind or "").strip().lower()
-    t = (target or "").strip().lower()
-    if k == "godot" and t in {"web", "mobile"}:
+    t = canonicalize_platform(target)
+    if k == "godot" and t in {"web", "expo", "capacitor", "mobile"}:
         return {
             "ok": False,
             "skipped": False,
@@ -121,7 +119,7 @@ def refuse_crosswalk(kind: str, target: str) -> dict[str, Any] | None:
                 "MobileAdapter only — never a static preview success."
             ),
         }
-    if k == "unity" and t in {"web", "engine", "mobile"}:
+    if k == "unity" and t in {"web", "godot", "engine", "expo", "capacitor", "mobile"}:
         return {
             "ok": False,
             "skipped": True,
@@ -272,7 +270,8 @@ def adn_publish_block(root: Path, kind: str = "") -> str:
             doc.get("error")
             or "capability pipeline is BLOCKED — ADN zip is not a release"
         )
-    if str(doc.get("target") or "") == "mobile":
+    target = canonicalize_platform(str(doc.get("target") or ""))
+    if target in {"expo", "capacitor", "mobile"}:
         return (
             "MobileAdapter publish is the store-direction artifact, "
             "not an Expo/Vite web preview zip."
@@ -294,6 +293,14 @@ def store_release(
     root = Path(root)
     slug = slug or root.name
     src = Path(artifact)
+    target = canonicalize_platform(target)
+    if is_workspace_path(root, src) or str(src.resolve()) == str(root.resolve()):
+        return stage_row(
+            "publish",
+            ok=False,
+            blockers=["workspace_is_not_artifact"],
+            error="Publish uses the last verified artifact, not the workspace folder.",
+        )
     if not src.is_file() and not src.is_dir():
         return stage_row(
             "publish",
@@ -302,6 +309,13 @@ def store_release(
             error="Publish requires a green export artifact. Preview HTML is not a release.",
         )
     digest = artifact_hash(src)
+    if hash_missing(digest):
+        return stage_row(
+            "publish",
+            ok=False,
+            blockers=["artifact hash is missing"],
+            error="artifact hash is missing",
+        )
     rel_dir = data_root() / "releases" / slug
     current = rel_dir / "current"
     previous = rel_dir / "previous"
@@ -337,6 +351,7 @@ def store_release(
         "target": target,
         "artifact": artifact_name,
         "sha256": digest,
+        "immutable": True,
         "previous": prev_hash,
         "published_at": datetime.now(timezone.utc).isoformat(),
         "url": f"/releases/{slug}/current/{artifact_name}",
@@ -355,6 +370,73 @@ def store_release(
         rollback=str(previous) if prev_hash else "",
         target=target,
     )
+
+
+def gated_publish(
+    root: Path,
+    *,
+    slug: str,
+    artifact: Path,
+    target: str,
+    stages: dict[str, dict[str, Any]],
+    hashes: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Publish only when the registry release gate is green for this revision."""
+    root = Path(root)
+    src = Path(artifact)
+    target = canonicalize_platform(target)
+    if is_workspace_path(root, src):
+        return stage_row(
+            "publish",
+            ok=False,
+            blockers=["workspace_is_not_artifact"],
+            error="Publish uses the last verified artifact, not the workspace folder.",
+        )
+    digest = artifact_hash(src)
+    if hash_missing(digest):
+        return stage_row(
+            "publish",
+            ok=False,
+            blockers=["artifact hash is missing"],
+            error="artifact hash is missing",
+        )
+    revision = revision_hash(root, list(hashes or []))
+    art = BuildArtifact(
+        project_id=slug,
+        revision=revision,
+        target=target,
+        artifact_hash=f"sha256:{digest}",
+        path=str(src),
+        immutable=True,
+    )
+    try:
+        REGISTRY.assert_supported(target, REGISTRY.profile(target))
+    except ValueError as exc:
+        return stage_row(
+            "publish",
+            ok=False,
+            blockers=[str(exc)],
+            error=str(exc),
+        )
+    records = records_from_stages(
+        platform=target,
+        project_id=slug,
+        revision=revision,
+        artifact_hash=art.artifact_hash,
+        stages=stages,
+        runner_version=RUNNER_VERSION,
+    )
+    decision = REGISTRY.release_decision(
+        art, REGISTRY.release_capabilities(target), records,
+    )
+    if not decision.approved:
+        return stage_row(
+            "publish",
+            ok=False,
+            blockers=list(decision.blockers),
+            error="; ".join(decision.blockers),
+        )
+    return store_release(root, slug=slug, artifact=src, target=target)
 
 
 def _next_version(root: Path) -> str:
@@ -380,11 +462,11 @@ def cap(available: bool, *, reason: str = "", tool_version: str = TOOL_VERSION) 
 
 def probe_capabilities(target: str, root: Path | None = None) -> dict[str, dict[str, Any]]:
     """What this machine can actually do for the target. Missing runner = unavailable."""
-    t = (target or "").strip().lower()
+    t = canonicalize_platform(target)
     if t == "web":
         from .web_first import probe as web_probe
         return web_probe(root)
-    if t == "engine":
+    if t == "godot":
         from .godot_first import preflight
         pf = preflight(root)
         run_ok = bool(pf.get("ok")) and not pf.get("skipped")
@@ -400,13 +482,13 @@ def probe_capabilities(target: str, root: Path | None = None) -> dict[str, dict[
             "publish": cap(True, reason=""),
             "rollback": cap(True),
         }
-    if t == "mobile":
+    if t in {"expo", "capacitor"}:
         from .mobile_first import probe as mobile_probe
         return mobile_probe(root)
-    if t == "unity":
+    if t == "unity" or (target or "").strip().lower() == "unity":
         gap = "unity_local"
         return {name: cap(name in {"create", "write", "rollback"}, reason=gap) for name in CAPABILITIES}
-    return {name: cap(False, reason="unknown_target") for name in CAPABILITIES}
+    return {name: cap(False, reason="unsupported platform") for name in CAPABILITIES}
 
 
 def normalize_role(role: str) -> str:
@@ -639,8 +721,35 @@ def finalize_evidence(
     doc["screenshots"] = _screenshots_of(root, stages)
     doc["runtime_logs"] = _runtime_logs(stages)
     doc["artifact_hash"] = art_hash
+    art_full = f"sha256:{art_hash}" if art_hash else ""
+    records = records_from_stages(
+        platform=canonicalize_platform(target),
+        project_id=slug,
+        revision=doc["revision_hash"],
+        artifact_hash=art_full,
+        stages=stages,
+        runner_version=RUNNER_VERSION,
+    )
+    doc["records"] = [r.as_dict() for r in records]
+    doc["artifact"] = {
+        "project_id": slug,
+        "revision": doc["revision_hash"],
+        "target": canonicalize_platform(target),
+        "artifact_hash": art_full,
+        "path": artifact,
+        "immutable": True,
+    }
     doc["stale"] = stale
     doc["verdict"] = verdict_of(stages, stale=stale)
+    if artifact and art_hash and not stale:
+        decision = REGISTRY.release_decision(
+            doc["artifact"],
+            REGISTRY.release_capabilities(target) if canonicalize_platform(target) in PLATFORMS else (),
+            records,
+        )
+        if not decision.approved:
+            doc["verdict"] = "BLOCKED"
+            doc.setdefault("release_blockers", list(decision.blockers))
     blockers = [
         b
         for r in stages.values()
@@ -684,7 +793,8 @@ def record_from_engine(slug: str, pipe: dict[str, Any]) -> dict[str, Any] | None
     if "runtime" in godot_stages:
         unified["runtime"] = godot_stages["runtime"]
         try:
-            unified["gameplay"] = gameplay_probe(root)
+            live = (godot_stages.get("runtime") or {}).get("live") or {}
+            unified["gameplay"] = gameplay_probe(root, live=live)
         except Exception:
             unified["gameplay"] = stage_row(
                 "gameplay",
@@ -698,13 +808,13 @@ def record_from_engine(slug: str, pipe: dict[str, Any]) -> dict[str, Any] | None
         unified["export"] = godot_stages["export"]
     if "publish" in godot_stages:
         unified["publish"] = godot_stages["publish"]
-    caps = probe_capabilities("engine", root)
+    caps = probe_capabilities("godot", root)
     art = str((godot_stages.get("export") or {}).get("artifact") or "")
     return finalize_evidence(
         root,
         slug=slug,
         kind="godot",
-        target="engine",
+        target="godot",
         adapter="EngineAdapter",
         caps=caps,
         hashes=hashes,
@@ -793,7 +903,7 @@ def run_pipeline(
         proj_kind = "static"
 
     resolved = resolve_target(proj_kind, text=text or plan)
-    want = (target or resolved).strip().lower()
+    want = canonicalize_platform(target or resolved)
     blocked = refuse_crosswalk(proj_kind, want)
     if blocked and want != resolved:
         return {
@@ -804,7 +914,7 @@ def run_pipeline(
             "resolved": resolved,
         }
     if proj_kind == "godot":
-        want = "engine"
+        want = "godot"
     if proj_kind == "expo" and want == "web":
         cross = refuse_crosswalk("expo", "web")
         return {**(cross or {}), "slug": slug, "kind": proj_kind, "target": want}
@@ -843,9 +953,24 @@ def run_pipeline(
             "ok_pipeline": False,
         }
 
-    if want == "engine":
+    try:
+        REGISTRY.adapter(want)
+    except (UnsupportedPlatform, ValueError):
+        return {
+            "ok": False,
+            "slug": slug,
+            "kind": proj_kind,
+            "target": want,
+            "resolved": resolved,
+            "skipped": False,
+            "blockers": ["unsupported_platform"],
+            "error": f"unsupported platform: {want}",
+            "verdict": "BLOCKED",
+        }
+
+    if want == "godot":
         return _run_engine(slug, root=root, through=stop, plan=plan or text)
-    if want == "mobile":
+    if want in {"expo", "capacitor", "mobile"}:
         from .mobile_first import run_pipeline as mobile_run
         return mobile_run(slug, root=root, kind=proj_kind, through=stop, plan=plan or text)
     from .web_first import run_pipeline as web_run
@@ -862,7 +987,6 @@ def _run_engine(slug: str, *, root: Path, through: str, plan: str = "") -> dict[
         file_hash as ghash,
         gameplay_probe,
         preflight,
-        publish_artifact,
         review_gate,
         run_pipeline as godot_run,
         runtime_verify,
@@ -881,7 +1005,7 @@ def _run_engine(slug: str, *, root: Path, through: str, plan: str = "") -> dict[
         "gameplay": "runtime",
         "visual": "visual",
         "export": "export",
-        "publish": "publish",
+        "publish": "export",
     }.get(want, "publish")
     pipe = godot_run(slug, through=g_through, plan=plan)
     godot_stages = pipe.get("stages") or {}
@@ -910,7 +1034,8 @@ def _run_engine(slug: str, *, root: Path, through: str, plan: str = "") -> dict[
     if stop_at >= 3:
         unified["runtime"] = godot_stages.get("runtime") or runtime_verify(root)
     if stop_at >= 4:
-        unified["gameplay"] = gameplay_probe(root)
+        live = (unified.get("runtime") or {}).get("live") or {}
+        unified["gameplay"] = gameplay_probe(root, live=live)
     if stop_at >= 5:
         unified["visual"] = godot_stages.get("visual") or visual_quality(root, slug=slug)
     if stop_at >= 6:
@@ -926,16 +1051,31 @@ def _run_engine(slug: str, *, root: Path, through: str, plan: str = "") -> dict[
         else:
             unified["export"] = godot_stages.get("export") or export_release(root, slug=slug)
     if stop_at >= 7:
-        unified["publish"] = godot_stages.get("publish") or publish_artifact(
-            root, slug=slug, export_row=unified.get("export"),
-        )
-    caps = probe_capabilities("engine", root)
+        exp = unified.get("export") or {}
+        art_path = Path(str(exp.get("artifact") or ""))
+        if exp.get("ok") and (art_path.is_file() or art_path.is_dir()):
+            unified["publish"] = gated_publish(
+                root,
+                slug=slug,
+                artifact=art_path,
+                target="godot",
+                stages=unified,
+                hashes=hashes,
+            )
+        else:
+            unified["publish"] = stage_row(
+                "publish",
+                ok=False,
+                blockers=["no_immutable_artifact"],
+                error="Publish requires a green Stage 7 export. Preview HTML is not a release.",
+            )
+    caps = probe_capabilities("godot", root)
     art = str((unified.get("export") or {}).get("artifact") or "")
     doc = finalize_evidence(
         root,
         slug=slug,
         kind="godot",
-        target="engine",
+        target="godot",
         adapter="EngineAdapter",
         caps=caps,
         hashes=hashes,
@@ -948,7 +1088,7 @@ def _run_engine(slug: str, *, root: Path, through: str, plan: str = "") -> dict[
         "ok": bool(ok) and doc.get("verdict") == "APPROVED",
         "slug": slug,
         "kind": "godot",
-        "target": "engine",
+        "target": "godot",
         "adapter": "EngineAdapter",
         "through": want,
         "stages": unified,

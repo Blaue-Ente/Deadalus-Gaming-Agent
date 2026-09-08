@@ -19,37 +19,8 @@ from .orchestrator import (
     _parse_files_json,
     _upsert_change,
 )
-from .standalone_runtime import VISUAL_KINDS
 
 log = logging.getLogger(__name__)
-
-_KIND_RULES: dict[str, str] = {
-    "static": (
-        "STATIC HTML/CSS/JS. Single or multi-file. No ES modules without bundler. "
-        "CDN libs OK. Entry: index.html."
-    ),
-    "vite": (
-        "VITE vanilla JS. Required: index.html, main.js, vite.config.js with base:'./'. "
-        "ES modules in main.js."
-    ),
-    "vite-react": (
-        "VITE+REACT 18. Required: index.html, src/main.jsx, src/App.jsx, vite.config.js "
-        "with @vitejs/plugin-react. React from npm only."
-    ),
-    "fastapi": (
-        "FASTAPI Python. main.py with `app = FastAPI()`, requirements.txt with fastapi+uvicorn."
-    ),
-    "streamlit": (
-        "STREAMLIT Python. streamlit_app.py with `import streamlit as st`, requirements.txt."
-    ),
-    "node": (
-        "NODE.JS. index.js + package.json. Optional GET /health for smoke."
-    ),
-    "expo": (
-        "EXPO React Native. App.jsx, app.json, package.json, babel.config.js. "
-        "Only RN components — no HTML."
-    ),
-}
 
 
 @runtime_checkable
@@ -202,7 +173,9 @@ async def run_full_autopilot(
 ) -> PipelineState:
     """Staged full pipeline for standalone (and portable) backends."""
     kind = await _get_kind(backend)
-    kind_rules = _KIND_RULES.get(kind, _KIND_RULES["static"])
+    from daedalus.capability_registry import kind_rules as registry_kind_rules, platform_for_kind
+
+    kind_rules = registry_kind_rules(kind)
     lessons = ""
     try:
         from daedalus.learned_skills import disclose
@@ -356,13 +329,17 @@ async def run_full_autopilot(
 
     state.set_agent_status(AgentRole.TESTER, "done" if state.test_ok else "blocked")
 
-    # ── BROWSER VERIFY (visual kinds) ────────────────────────────────────
+    # ── VERIFY (visual / engine / device — never a silent skip-pass) ─────
+    from daedalus.capability_registry import BROWSER_VISUAL_KINDS
     from daedalus.game_build_contract import skip_is_not_ok, verified
     from daedalus.quality_gate import critic_counts_as_pass, maybe_critic
 
+    platform = platform_for_kind(kind)
     browser_ok = True
     bresult: dict[str, Any] = {}
-    visual = kind in VISUAL_KINDS
+    visual = kind in BROWSER_VISUAL_KINDS and platform == "web"
+    engine_kind = platform == "godot"
+    mobile_kind = platform in {"expo", "capacitor"}
     if state.test_ok and visual:
         await backend.emit("phase", {"n": 4, "label": "Browser verify"})
         bresult = skip_is_not_ok(await _browser_verify(backend))
@@ -375,10 +352,31 @@ async def run_full_autopilot(
             state.errors.append(err)
         else:
             await backend.emit("log", {"line": "✓ Browser verify OK", "level": "info"})
+    elif state.test_ok and engine_kind:
+        await backend.emit("phase", {"n": 4, "label": "Engine verify"})
+        try:
+            from daedalus.engine_runners import run_godot
+            bresult = skip_is_not_ok(run_godot(state.slug))
+            browser_ok = verified(bresult)
+        except Exception as exc:
+            browser_ok = False
+            bresult = {"ok": False, "skipped": False, "summary": str(exc)[:300]}
+        if not browser_ok:
+            err = (bresult.get("summary") or bresult.get("error") or "engine verify failed")[:500]
+            await backend.emit("log", {"line": f"⚠ Engine: {err}", "level": "warn"})
+            state.errors.append(err)
+        else:
+            await backend.emit("log", {"line": "✓ Engine verify OK", "level": "info"})
+    elif state.test_ok and mobile_kind:
+        browser_ok = False
+        err = "web preview does not replace device_smoke"
+        await backend.emit("log", {"line": f"⚠ Device: {err}", "level": "warn"})
+        state.errors.append(err)
 
-    # ── PLAYWRIGHT GAMEPLAY (interaction, not screenshot-only) ───────────
+    # ── GAMEPLAY PROOF (adapter-specific; Chromium is not Godot/mobile) ──
     gameplay_ok = True
-    if state.test_ok and visual and browser_ok:
+    need_gameplay = visual or engine_kind or mobile_kind
+    if state.test_ok and need_gameplay and (browser_ok or engine_kind or mobile_kind):
         await backend.emit("phase", {"n": 4, "label": "Gameplay"})
         try:
             from daedalus.engine_runners import gameplay_for_kind

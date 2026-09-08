@@ -9,7 +9,8 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from .job_contract import JobContract, evaluate
+from .job_contract import evaluate
+from .capability_registry import platform_for_kind, proof_kinds
 
 
 def skip_is_not_ok(result: dict[str, Any] | None) -> dict[str, Any]:
@@ -48,7 +49,7 @@ def evaluate_build(
     browser_ok = None
     if browser_result is not None:
         browser_ok = verified(browser_result)
-    return evaluate(
+    contract = evaluate(
         user_message,
         reply,
         tool_calls=tool_calls,
@@ -57,3 +58,15 @@ def evaluate_build(
         kind=kind,
         intent=intent,
     )
+    platform = platform_for_kind(kind)
+    if (kind in proof_kinds() or platform in {"godot", "expo", "capacitor"}) and (
+        (reply or "").lower().find("готово") >= 0
+        or "done" in (reply or "").lower()
+    ):
+        if browser_result is None and platform in {"godot", "expo", "capacitor"}:
+            contract.complete = False
+            contract.blockers.append(
+                "missing required capability evidence for this platform"
+            )
+            contract.checks["capability_evidence"] = False
+    return contract

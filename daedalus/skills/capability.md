@@ -1,6 +1,6 @@
 ---
 name: capability
-description: One production pipeline with Web, Engine, and Mobile adapters — Godot-strong, not Godot-only.
+description: One production pipeline with Web, Godot, Expo, and Capacitor adapters. The capability registry is the only source of truth.
 ---
 
 # SKILL: Capability pipeline
@@ -9,25 +9,32 @@ description: One production pipeline with Web, Engine, and Mobile adapters — G
 
 **Order** (kernel walks this; do not skip):
 
-plan → context → build → runtime → gameplay → visual → export → publish
+Intent → Plan → Context → Build → Verify → Polish → Export → Publish
 
-Checks swap by target:
+The registry (`daedalus.capability_registry`) is the only source of truth. Adapters declare capabilities. A missing capability is a named blocker. There is no silent fallback (Godot ↛ HTML, Expo ↛ web preview).
 
-| Target | Adapter | Runner | Honest refuse |
+| Platform | Adapter | Runner | Honest refuse |
 |---|---|---|---|
 | web | `web_first` | Chromium | missing Chromium |
-| engine | `godot_first` | Godot 4.3 | missing Godot / templates; never HTML |
-| mobile | `mobile_first` | Expo device or Capacitor + emulator | Expo web export; preview HTML |
+| godot | `godot_first` | Godot 4.3 | missing Godot / templates; never HTML |
+| expo | `mobile_first` | emulator or device | Expo web export; preview HTML |
+| capacitor | `mobile_first` | native WebView + device | config file without Gradle/Xcode |
+
+**Capabilities**: create, write, run, input, render_proof, gameplay_proof, export, device_smoke, publish, rollback.
+
+Web and Godot require everything except `device_smoke`. Expo and Capacitor require `device_smoke` as well. Only `status=pass` satisfies a capability. skipped / blocked / fail never count.
 
 **How**:
-1. Kernel (`capability.py`) does not know HTML vs Godot vs iOS. It uses capability contracts (`create, write, run, input, render_proof, gameplay_proof, export, publish, rollback`) and versioned evidence in `studio/capability_evidence.json`.
-2. `production({action: pipeline, slug})` is the cross-platform entry. `engine({action: pipeline, slug})` stays Godot.
-3. Keep the kind. Capacitor wraps Vite/HTML canvas. Do not rewrite Godot to Phaser or a canvas game to Expo.
-4. Publish accepts only an artifact that passed runtime, gameplay, visual, and export. A change of tracked files stale-invalidates old evidence.
-5. Roles: planner describes the contract; builder patches with version hashes; specialist writes adapter files; verifier does not write game files; polish only after a recorded visual failure. No two writers on the same file.
+1. `CapabilityRegistry.adapter(platform)` fails closed on unknown platforms (`unity` is not Vite).
+2. Evidence is per capability: `{capability, status, project_id, revision, artifact_hash, details, runner_version}`.
+3. An artifact needs `project_id`, `revision`, `target`, `artifact_hash`, `path`, `immutable=true`.
+4. `release_decision` allows a release only when required capabilities are supported, every required evidence record is pass for the same project/revision/hash, and the artifact is hashed and immutable.
+5. `production({action: pipeline, slug})` is the cross-platform entry. `engine({action: pipeline, slug})` stays Godot.
+6. Roles: planner describes the contract; builder patches with version hashes; specialist writes adapter files; verifier does not write game files; polish only after a recorded visual failure. No two writers on the same file.
 
 **Anti-patterns**:
 - Treating a missing runner as a skip-pass.
 - Publishing ADN zip / Expo web `dist/` as an iOS/Android release.
-- Parallel `spawn_subagent` coders rewriting the same path.
-- Calling Godot “done” because preview HTML loaded.
+- Reusing evidence from another revision or another artifact hash.
+- Calling Godot “done” because `.tscn` files exist or preview HTML loaded.
+- Calling a web game “done” because a canvas tag exists.

@@ -11,7 +11,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
-VISUAL_KINDS = ("static", "vite", "vite-react", "streamlit", "expo")
+from .capability_registry import BROWSER_VISUAL_KINDS
+
+# Chromium visual kinds. Godot/Expo native are not this tuple.
+VISUAL_KINDS = tuple(sorted(BROWSER_VISUAL_KINDS))
 
 _ENV_ALLOW = {
     "PATH", "HOME", "LANG", "LC_ALL", "TERM", "TZ", "TMPDIR", "USER",
