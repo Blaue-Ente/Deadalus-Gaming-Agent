@@ -81,12 +81,15 @@ def allow_world_kit(kind: str, description: str = "", effort: str = "auto") -> b
 
 def playbook_notes() -> str:
     return (
+        "Engine adapter of the shared capability pipeline "
+        "(plan → context → build → runtime → gameplay → visual → export → publish). "
         "Godot-first order: preflight → contract → context → slice → runtime → "
         "visual → review → export → publish. "
         "kind=godot. Scaffold already has project.godot. "
         "Patch with edit_file; do not rewrite whole .gd/.tscn each turn. "
         "engine({action: pipeline, slug}) walks the order. "
         "Preview HTML is not Play. Missing Godot/export is FAIL, not skip. "
+        "Vite/HTML are a different adapter — never a Godot fallback. "
         "No world/ campaign until this slice is green (unless epic)."
     )
 
@@ -368,6 +371,32 @@ def slice_static(root: Path) -> dict[str, Any]:
         "blockers": blocking,
         "checks": checks,
         "is_3d": dod.get("is_3d"),
+    }
+
+
+def gameplay_probe(root: Path) -> dict[str, Any]:
+    """Input / collision / win-lose. Missing Godot is skip=fail, not a file pass."""
+    root = Path(root)
+    player = _read(root, "scripts/player.gd")
+    tscn = _read(root, "scenes/main.tscn")
+    game = _read(root, "scripts/autoload/game.gd")
+    pf = preflight(root)
+    skipped = bool(pf.get("skipped")) or not pf.get("ok")
+    blockers: list[str] = []
+    if skipped:
+        blockers.append("gameplay_skipped")
+    if not re.search(r"move_and_slide|InputMap|ui_left|ui_right|Input\.get", player):
+        blockers.append("input")
+    if not re.search(r"Collision|Area2D|Area3D|CharacterBody", tscn + player):
+        blockers.append("collision")
+    if "func win" not in game and "func fail" not in game:
+        blockers.append("win_lose")
+    return {
+        "stage": "gameplay",
+        "ok": not blockers,
+        "skipped": skipped,
+        "blockers": blockers,
+        "error": pf.get("error") or ("" if not blockers else "gameplay probe failed"),
     }
 
 
@@ -769,7 +798,13 @@ def engine_pipeline_action(action: str, slug: str, **_fields: Any) -> dict[str, 
     if act in {"slice", "dod"}:
         return slice_static(root)
     if act in {"pipeline", "godot_first"}:
-        return run_pipeline(slug)
+        pipe = run_pipeline(slug)
+        try:
+            from .capability import record_from_engine
+            record_from_engine(slug, pipe)
+        except Exception:
+            pass
+        return pipe
     if act == "review":
         pipe = run_pipeline(slug, through="review")
         return pipe.get("stages", {}).get("review") or pipe
