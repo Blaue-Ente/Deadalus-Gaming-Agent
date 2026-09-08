@@ -56,6 +56,7 @@ _REL_IMPORT_RE = re.compile(
     r"""(?:from|import)\s+['\"](\.[^'\"]+)['\"]""",
     re.I,
 )
+_PHASER_FROM_RE = re.compile(r"""from\s+['\"]phaser['\"]""", re.I)
 _VITE_KINDS = frozenset({"vite", "vite-react", "phaser"})
 
 
@@ -160,6 +161,7 @@ class ProjectView:
     scene_files: tuple[str, ...] = ()
     missing_scenes: bool = False
     missing_imports: tuple[str, ...] = ()
+    phaser_no_import: tuple[str, ...] = ()
 
     @property
     def entry_boots(self) -> bool:
@@ -256,6 +258,34 @@ def _read(path: Path, limit: int = 12000) -> str:
     return ""
 
 
+def _phaser_files_missing_import(root: Path) -> tuple[str, ...]:
+    """``extends Phaser.Scene`` (etc.) without ``import Phaser from 'phaser'``."""
+    src = root / "src"
+    if not src.is_dir():
+        return ()
+    missing: list[str] = []
+    try:
+        root_res = root.resolve()
+    except OSError:
+        return ()
+    for path in src.rglob("*"):
+        if not path.is_file() or path.suffix.lower() not in {".js", ".ts"}:
+            continue
+        text = _read(path)
+        if not text or not re.search(r"\bPhaser\b", text):
+            continue
+        if _PHASER_FROM_RE.search(text):
+            continue
+        try:
+            rel = str(path.resolve().relative_to(root_res)).replace("\\", "/")
+        except ValueError:
+            continue
+        missing.append(rel)
+        if len(missing) >= 6:
+            break
+    return tuple(missing)
+
+
 def inspect_project(slug: str, *, kind: str = "") -> ProjectView:
     view = ProjectView(slug=slug or "", kind=kind or "")
     if not slug:
@@ -307,6 +337,7 @@ def inspect_project(slug: str, *, kind: str = "") -> ProjectView:
     view.missing_imports = _missing_src_imports(
         root, main_path=view.main_path, main_js=view.main_js,
     )
+    view.phaser_no_import = _phaser_files_missing_import(root)
     pkg = view.package_json.lower()
     has_dep = "phaser" in pkg or '"vite"' in pkg or "'vite'" in pkg
     mods = root / "node_modules"
@@ -554,6 +585,19 @@ def steer(loop: Any) -> Steer | None:
             rag=rag, forbid=forbid,
         )
 
+    if view.phaser_no_import:
+        gap = view.phaser_no_import[0]
+        return _writer_fix(
+            slug, view,
+            path=gap,
+            reason=(
+                f"RETURN TO WRITER: {gap} uses Phaser without "
+                "import Phaser from 'phaser'. Add the import. Mentor does not write."
+            ),
+            blockers=blockers or [f"Phaser global in {gap}"],
+            rag=rag, forbid=forbid,
+        )
+
     if proof_blank or proof_failed:
         err = _proof_error_head(loop)
         why = "Last proof frame was blank." if proof_blank else "Visual proof failed."
@@ -659,6 +703,7 @@ def inspect_digest(loop: Any) -> dict[str, Any]:
         "mount_mismatch": bool(view.mount_mismatch),
         "missing_scenes": bool(view.missing_scenes),
         "missing_imports": bool(view.missing_imports),
+        "phaser_no_import": bool(view.phaser_no_import),
         "proof_blank": bool(getattr(loop, "proof_blank", False)),
         "proof_failed": _proof_runtime_failed(loop),
         "kernel_proof_ran": bool(getattr(loop, "kernel_proof_ran", False)),

@@ -243,6 +243,8 @@ def test_proof_failed_is_not_rules_unambiguous():
     assert rules_unambiguous(inspect_scenes, {"action": "continue", "next_tool": "write_file"}) is True
     inspect_imp = {"flags": {"missing_imports": True}}
     assert rules_unambiguous(inspect_imp, {"action": "continue", "next_tool": "write_file"}) is True
+    inspect_ph = {"flags": {"phaser_no_import": True}}
+    assert rules_unambiguous(inspect_ph, {"action": "continue", "next_tool": "write_file"}) is True
 
 
 def test_http_choice_and_status_catalog(tmp_path, monkeypatch):

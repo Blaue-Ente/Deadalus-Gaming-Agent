@@ -282,7 +282,11 @@ def test_proof_result_tool_text_and_nudge():
     r = ProofResult(
         ok=False, skipped=False, kind="static", slug="s", tool="browser",
         summary="blank", blank_screen=True, frames=["studio/proof/frame_000.png"],
+        details={"page_errors": ["Phaser is not defined"]},
     )
-    assert "FAILED" in r.as_tool_text()
+    text = r.as_tool_text()
+    assert "FAILED" in text
+    assert "Phaser is not defined" in text
+    assert r.as_dict()["page_errors"] == ["Phaser is not defined"]
     assert "VISUAL PROOF" in r.nudge_block()
     assert "blank" in r.nudge_block().lower() or "nothing" in r.nudge_block().lower()
