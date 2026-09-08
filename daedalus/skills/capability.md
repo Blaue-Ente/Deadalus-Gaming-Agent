@@ -35,6 +35,7 @@ Web and Godot require everything except `device_smoke`. Expo and Capacitor requi
 **Anti-patterns**:
 - Treating a missing runner as a skip-pass.
 - Publishing ADN zip / Expo web `dist/` as an iOS/Android release.
+- Parallel `spawn_subagent` coders rewriting the same path.
 - Reusing evidence from another revision or another artifact hash.
 - Calling Godot “done” because `.tscn` files exist or preview HTML loaded.
 - Calling a web game “done” because a canvas tag exists.
