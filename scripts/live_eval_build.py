@@ -240,6 +240,7 @@ async def main_async(args: argparse.Namespace) -> int:
         "proof_frames": build.get("proof_frames"),
         "tools": [r["tool"] for r in build.get("tool_log") or []],
         "files": [f["path"] for f in snap.get("files") or []],
+        "proof_on_disk": snap.get("proof_dir") or [],
         "report": str(dest),
     }, ensure_ascii=False, indent=2))
     return 0 if build.get("kernel_proof_ran") or build.get("complete") else 1
