@@ -11,10 +11,12 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import concurrent.futures
 import json
 import logging
 import os
 import shutil
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -43,12 +45,17 @@ _RATES_USD_PER_1M = {
 
 DUNGEON = (
     "Направи нова Playground игра: top-down dungeon crawler на HTML canvas "
-    "(kind=static, slug dungeon-keys). Три стаи свързани с врати. В първата "
-    "стая има златен ключ. Последната врата е заключена докато играчът няма "
-    "ключа. Един slime враг с HP, играчът се движи със стрелки, атака с "
-    "Space, HP лента, game over при 0 HP, победа при изхода. Една завършена "
-    "playable среза: input → update → render → win/lose. Не прави змия, "
-    "tetris или pong."
+    "(kind=static, slug dungeon-keys). Един файл index.html — canvas 2D, без CDN, "
+    "без Three.js, без WebGL. Това е ИГРА, не greybox demo. "
+    "Три ВИЗУАЛНО РАЗЛИЧНИ стаи (различен цвят на пода: кафяв / зелен / лилав), "
+    "свързани с врати. Играчът се вижда като цветно квадратче. "
+    "В стая 1: златен ключ на пода. Последната врата е заключена докато няма ключ. "
+    "Един slime с HP в стая 2 (не в стая 1). Стрелки = движение, Space = атака. "
+    "HP лента, KEY, ROOM в HUD горе — но ЦЕНТЪРЪТ на screenshot трябва да е плочките "
+    "на стаята, не само текст. Game over при 0 HP, победа при изхода след ключа. "
+    "JS само ASCII минус: -1, никога unicode − . "
+    "Playable loop: input → update → render → win/lose. Не прави змия, tetris, pong "
+    "или 3D SLERP."
 )
 
 SLERP = (
@@ -89,6 +96,7 @@ def _pin_openrouter(model: str) -> None:
     os.environ.setdefault("DAEDALUS_WRITE_GATE", "1")
     os.environ["DAEDALUS_WRITE_REVIEW"] = "1"
     os.environ["DAEDALUS_WORKERS"] = "1"
+    os.environ["DAEDALUS_RAG"] = "1"
     os.environ.setdefault("DAEDALUS_LAB_BACKEND", "local")
 
 
@@ -152,7 +160,7 @@ async def probe_tools(model: str) -> dict:
 
 
 def _pin_cheap_workers(data_dir: Path) -> dict:
-    """Master stays on Claude. Workers are MiniMax — not Sonnet reviewer."""
+    """Master is --model. Workers stay MiniMax — not a second Sonnet bill."""
     cfg = {
         slot: {
             "model": CHEAP_WORKER,
@@ -180,13 +188,27 @@ def _trim_workers(rows: list | None) -> list[dict]:
     return out
 
 
-def _knowledge_report(rt, extra: str) -> dict:
+def _knowledge_report(rt, extra: str, prompt: str = "") -> dict:
     chroma: dict
     try:
         import chromadb  # noqa: F401
-        chroma = {"import": True, "error": ""}
+        chroma = {"import": True, "version": getattr(chromadb, "__version__", ""), "error": ""}
     except Exception as exc:
-        chroma = {"import": False, "error": str(exc)[:200]}
+        chroma = {"import": False, "version": "", "error": str(exc)[:200]}
+    hits: list[dict] = []
+    try:
+        from daedalus.tool_router import retrieve_rag
+
+        for h in retrieve_rag(prompt or "HTML canvas dungeon crawler"):
+            meta = h.get("metadata") or {}
+            hits.append({
+                "id": h.get("id"),
+                "title": meta.get("title"),
+                "category": meta.get("category"),
+                "distance": h.get("distance"),
+            })
+    except Exception as exc:
+        chroma["error"] = (chroma.get("error") or "") or str(exc)[:200]
     docs: list[str] = []
     auto: list[str] = []
     for s in rt.ordered_steps:
@@ -195,23 +217,157 @@ def _knowledge_report(rt, extra: str) -> dict:
             auto.append(s.tool)
     return {
         "chroma": chroma,
+        "hits": hits,
         "consult_auto": auto,
         "plan_docs": list(dict.fromkeys(docs)),
         "extra_has_glm": "glm" in (extra or "").lower(),
         "extra_head": (extra or "")[:1400],
         "note": (
-            "Live eval uses llm_client.call_with_tools (no agent.py / Chroma). "
-            "PLAN DOCS + AUTO consult are harness knowledge, not semantic RAG."
+            "Semantic RAG (Chroma daedalus_global) is injected into the native "
+            "system prompt when DAEDALUS_RAG!=0 and chromadb is installed. "
+            "PLAN DOCS + AUTO consult still run."
         ),
     }
+
+
+def _ensure_local_bin_on_path() -> str:
+    local_bin = str(Path.home() / ".local" / "bin")
+    path = os.environ.get("PATH") or ""
+    if local_bin not in path.split(":"):
+        os.environ["PATH"] = f"{local_bin}:{path}" if path else local_bin
+    return os.environ["PATH"]
+
+
+def _smolvm_doctor() -> dict:
+    exe = shutil.which("smolvm") or ""
+    if not exe:
+        fallback = Path.home() / ".local" / "bin" / "smolvm"
+        exe = str(fallback) if fallback.is_file() else ""
+    if not exe:
+        return {"ok": False, "error": "smolvm_bin_not_on_path"}
+    try:
+        proc = subprocess.run(
+            [exe, "doctor"],
+            capture_output=True,
+            text=True,
+            timeout=25,
+        )
+        text = ((proc.stdout or "") + "\n" + (proc.stderr or "")).strip()
+        return {
+            "ok": proc.returncode == 0,
+            "bin": exe,
+            "exit": proc.returncode,
+            "head": text[-1500:],
+        }
+    except Exception as exc:
+        return {"ok": False, "bin": exe, "error": str(exc)[:200]}
+
+
+def _try_smolvm_guest(slug: str, timeout_s: float = 45.0) -> dict:
+    """Best-effort guest boot. Must not fail the game if the image download hangs."""
+    try:
+        from daedalus.computer_smolvm import probe as smol_probe, start_lab_browser
+        from daedalus import playground as pg
+    except Exception as exc:
+        return {"tried": False, "ok": False, "error": str(exc)[:200]}
+    probe = smol_probe()
+    if not probe.get("ok"):
+        return {"tried": False, "ok": False, "probe": probe, "error": "smolvm_not_ready"}
+    root = pg.project_dir(slug)
+    if not root.is_dir():
+        return {"tried": False, "ok": False, "error": "project_missing"}
+
+    def _boot() -> dict:
+        return start_lab_browser(
+            f"eval-{slug}",
+            serve_url="",
+            mount=root,
+            playable="index.html",
+            live=False,
+        )
+
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            fut = pool.submit(_boot)
+            row = fut.result(timeout=timeout_s)
+        return {
+            "tried": True,
+            "ok": bool(row.get("ok")),
+            "viewer_url": row.get("viewer_url") or "",
+            "cdp_url": row.get("cdp_url") or "",
+            "guest_url": row.get("guest_url") or "",
+            "warning": row.get("warning") or "",
+        }
+    except concurrent.futures.TimeoutError:
+        return {"tried": True, "ok": False, "error": f"timeout_{int(timeout_s)}s"}
+    except Exception as exc:
+        return {"tried": True, "ok": False, "error": str(exc)[:400]}
+
+
+def _warm_chroma(query: str) -> dict:
+    from daedalus.memory import DaedalusMemory
+
+    DaedalusMemory._instance = None
+    try:
+        import chromadb
+        version = str(getattr(chromadb, "__version__", "") or "")
+    except Exception as exc:
+        return {"ok": False, "import": False, "error": str(exc)[:300]}
+    try:
+        from daedalus.knowledge import DaedalusKnowledge
+
+        mem = DaedalusMemory()
+        index = DaedalusKnowledge(memory=mem).load_all(force=False)
+        hits = mem.retrieve_knowledge(query, top_k=4)
+        return {
+            "ok": True,
+            "import": True,
+            "version": version,
+            "chunks": mem.global_col.count(),
+            "index": {
+                "loaded": index.get("loaded"),
+                "skipped": index.get("skipped"),
+                "errors": index.get("errors"),
+            } if isinstance(index, dict) else index,
+            "hits": [
+                {
+                    "id": h.get("id"),
+                    "title": (h.get("metadata") or {}).get("title"),
+                    "category": (h.get("metadata") or {}).get("category"),
+                    "distance": h.get("distance"),
+                }
+                for h in hits
+            ],
+        }
+    except Exception as exc:
+        return {"ok": False, "import": True, "version": version, "error": str(exc)[:400]}
 
 
 def _host_report() -> dict:
     try:
         from daedalus.computer import probe
-        return probe()
+        row = probe()
     except Exception as exc:
-        return {"error": str(exc)[:200]}
+        row = {"error": str(exc)[:200]}
+    row["doctor"] = _smolvm_doctor()
+    row["path_has_local_bin"] = str(Path.home() / ".local" / "bin") in (os.environ.get("PATH") or "")
+    try:
+        import chromadb
+        row["chromadb"] = {
+            "import": True,
+            "version": getattr(chromadb, "__version__", ""),
+        }
+    except Exception as exc:
+        row["chromadb"] = {"import": False, "error": str(exc)[:200]}
+    try:
+        import smolvm
+        row["smolvm_pkg"] = {
+            "import": True,
+            "version": getattr(smolvm, "__version__", ""),
+        }
+    except Exception as exc:
+        row["smolvm_pkg"] = {"import": False, "error": str(exc)[:200]}
+    return row
 
 
 async def probe_worker() -> dict:
@@ -274,8 +430,65 @@ async def _shot_url(url: str, dest: Path) -> dict:
             await page.wait_for_timeout(2800)
             await page.screenshot(path=str(tmp), full_page=False)
             await browser.close()
-        shutil.copy2(tmp, dest)
-        return {"ok": dest.is_file(), "path": str(dest), "bytes": dest.stat().st_size if dest.is_file() else 0}
+        try:
+            shutil.copy2(tmp, dest)
+            out = dest
+        except OSError:
+            out = tmp
+        return {"ok": out.is_file(), "path": str(out), "bytes": out.stat().st_size if out.is_file() else 0}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)[:300]}
+
+
+async def _playtest_url(url: str, dest: Path) -> dict:
+    """Arrow keys + Space — prove the loop is more than a still HUD."""
+    from daedalus.playground_browser import _find_chrome
+
+    chrome = _find_chrome()
+    if not chrome:
+        return {"ok": False, "error": "chromium_not_found"}
+    try:
+        from playwright.async_api import async_playwright
+    except Exception as exc:
+        return {"ok": False, "error": f"playwright: {exc}"[:200]}
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = Path("/tmp") / f"daedalus-play-{dest.name}"
+    try:
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(
+                headless=True, executable_path=chrome,
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--ignore-gpu-blocklist",
+                    "--enable-webgl",
+                    "--enable-unsafe-swiftshader",
+                    "--use-gl=angle",
+                    "--use-angle=swiftshader",
+                ],
+            )
+            page = await browser.new_page(viewport={"width": 1280, "height": 800})
+            await page.goto(url, wait_until="domcontentloaded", timeout=25000)
+            await page.wait_for_timeout(600)
+            await page.keyboard.press("ArrowRight")
+            for _ in range(10):
+                await page.keyboard.press("ArrowRight")
+                await page.wait_for_timeout(90)
+            await page.keyboard.press("Space")
+            await page.wait_for_timeout(250)
+            for _ in range(8):
+                await page.keyboard.press("ArrowRight")
+                await page.wait_for_timeout(80)
+            await page.keyboard.press("ArrowDown")
+            await page.wait_for_timeout(200)
+            await page.screenshot(path=str(tmp), full_page=False)
+            await browser.close()
+        try:
+            shutil.copy2(tmp, dest)
+            out = dest
+        except OSError:
+            out = tmp
+        return {"ok": out.is_file(), "path": str(out), "bytes": out.stat().st_size if out.is_file() else 0}
     except Exception as exc:
         return {"ok": False, "error": str(exc)[:300]}
 
@@ -352,7 +565,10 @@ async def run_build(prompt: str, max_rounds: int) -> dict:
         "nudges": loop.nudges,
         "workers": row.get("workers") or [],
         "worker_log": _trim_workers(loop.worker_log),
-        "knowledge": _knowledge_report(rt, extra),
+        "knowledge": {
+            **_knowledge_report(rt, extra, prompt),
+            "rag_in_system": "Chroma daedalus_global" in (system or ""),
+        },
         "usage": {**usage_acc, "estimated_usd": est},
         "tool_log": [
             {"tool": r.get("tool"), "ok": r.get("ok"), "blocked": r.get("blocked")}
@@ -449,6 +665,13 @@ async def main_async(args: argparse.Namespace) -> int:
     playground_projects_dir().mkdir(parents=True, exist_ok=True)
     worker_cfg = _pin_cheap_workers(data_root())
     print(f"workers pinned → {CHEAP_WORKER} slots={list(worker_cfg)}", flush=True)
+    print("chroma warmup…", flush=True)
+    chroma_warm = _warm_chroma(args.prompt)
+    print(
+        f"chroma ok={chroma_warm.get('ok')} chunks={chroma_warm.get('chunks')} "
+        f"hits={[h.get('title') for h in (chroma_warm.get('hits') or [])]}",
+        flush=True,
+    )
     worker_probe = await probe_worker()
     print(
         f"worker probe ok={worker_probe.get('ok')} model={worker_probe.get('model')} "
@@ -456,9 +679,16 @@ async def main_async(args: argparse.Namespace) -> int:
         flush=True,
     )
     host = _host_report()
+    print(
+        f"host chromadb={host.get('chromadb')} smolvm={(host.get('smolvm') or {}).get('ok')} "
+        f"doctor={(host.get('doctor') or {}).get('ok')}",
+        flush=True,
+    )
 
     print(f"build model={chosen} playbook-probe…", flush=True)
     build = await run_build(args.prompt, args.max_rounds)
+    if isinstance(build.get("knowledge"), dict):
+        build["knowledge"]["warmup"] = chroma_warm
     snap = _project_snapshot(str(build.get("slug") or ""))
     shots_dir = Path(args.screenshots) if args.screenshots else ARTIFACT_SHOTS
     tag = (args.shot_tag or "").strip()
@@ -470,6 +700,8 @@ async def main_async(args: argparse.Namespace) -> int:
 
     lab = {}
     lab_shot = {}
+    lab_play = {}
+    smol_guest = {}
     slug = str(build.get("slug") or "")
     if slug:
         lab = _open_lab(slug)
@@ -478,7 +710,18 @@ async def main_async(args: argparse.Namespace) -> int:
             lab_png = shots_dir / f"{slug}-{tag + '-' if tag else ''}lab.png"
             lab_shot = await _shot_url(url, lab_png)
             if lab_shot.get("ok"):
-                shots.append(str(lab_png))
+                shots.append(str(lab_shot.get("path") or lab_png))
+            if "dungeon" in slug.lower() or "dungeon" in (args.prompt or "").lower():
+                play_png = shots_dir / f"{slug}-{tag + '-' if tag else ''}play.png"
+                lab_play = await _playtest_url(url, play_png)
+                if lab_play.get("ok"):
+                    shots.append(str(lab_play.get("path") or play_png))
+        smol_guest = _try_smolvm_guest(slug)
+        print(
+            f"smolvm guest tried={smol_guest.get('tried')} ok={smol_guest.get('ok')} "
+            f"err={smol_guest.get('error')}",
+            flush=True,
+        )
 
     from daedalus.frame_geometry import frame_shows_scene
     geometry = []
@@ -502,6 +745,8 @@ async def main_async(args: argparse.Namespace) -> int:
             "backend": (lab.get("computer") or lab).get("backend") if isinstance(lab.get("computer"), dict) else lab.get("backend"),
             "error": lab.get("error"),
             "shot": lab_shot,
+            "play": lab_play,
+            "smolvm_guest": smol_guest,
         },
         "build": build,
         "project": snap,
@@ -525,7 +770,13 @@ async def main_async(args: argparse.Namespace) -> int:
         "workers": build.get("workers"),
         "worker_probe": worker_probe,
         "lab": report["lab"],
-        "knowledge": (build.get("knowledge") or {}).get("chroma"),
+        "knowledge": {
+            "chroma": (build.get("knowledge") or {}).get("chroma"),
+            "hits": (build.get("knowledge") or {}).get("hits"),
+            "rag_in_system": (build.get("knowledge") or {}).get("rag_in_system"),
+        },
+        "host_smolvm": (host.get("smolvm") or {}),
+        "smolvm_doctor": host.get("doctor"),
         "tools": [r["tool"] for r in build.get("tool_log") or []],
         "files": [f["path"] for f in snap.get("files") or []],
         "proof_on_disk": snap.get("proof_dir") or [],
@@ -546,8 +797,9 @@ def main() -> None:
     parser.add_argument("--max-rounds", type=int, default=12)
     parser.add_argument("--better", action="store_true", help="Probe Claude / GLM / Kimi instead of MiniMax")
     parser.add_argument("--screenshots", default=str(ARTIFACT_SHOTS), help="Directory for copied proof PNGs")
-    parser.add_argument("--shot-tag", default="pass3", help="Filename prefix so we do not overwrite pass1/pass2")
+    parser.add_argument("--shot-tag", default="dungeon2", help="Filename prefix so we do not overwrite earlier proofs")
     args = parser.parse_args()
+    _ensure_local_bin_on_path()
     if args.preset and not args.prompt:
         args.prompt = PROMPTS[args.preset]
     if not args.prompt:

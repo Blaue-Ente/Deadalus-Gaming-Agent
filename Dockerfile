@@ -13,6 +13,7 @@ COPY ui ./ui
 COPY .agents ./.agents
 
 RUN pip install --no-cache-dir -e .
+# chromadb is a required dep. SmolVM is optional (pip install -e ".[computer]") and needs KVM.
 
 ENV DAEDALUS_STANDALONE=1 \
     DAEDALUS_DATA=/var/lib/daedalus \

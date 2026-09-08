@@ -41,6 +41,7 @@ def _owner_token_env(monkeypatch):
     monkeypatch.setenv("DAEDALUS_BIND_HOST", "127.0.0.1")
     monkeypatch.setenv("DAEDALUS_WRITE_REVIEW", "0")
     monkeypatch.setenv("DAEDALUS_WORKERS", "0")
+    monkeypatch.setenv("DAEDALUS_RAG", "0")
 
 
 @pytest.fixture

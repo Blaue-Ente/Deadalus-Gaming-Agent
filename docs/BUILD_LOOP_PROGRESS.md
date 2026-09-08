@@ -55,11 +55,13 @@ The remaining gap is "page painted ≠ 3D greybox in view" — that is still mod
 
 HUD text on a navy clear-color is no longer a visual-proof pass. `frame_shows_scene` looks at the **center** of the PNG. WebGL `INVALID_VALUE` is a console fail. Headless Chromium launches with ANGLE/SwiftShader (`--disable-gpu` was painting a black WebGL canvas).
 
-The native loop now runs `<NEED_WORKER>` and a cheap **fast** reviewer after the first HTML/JS write. Live eval pins worker slots to MiniMax, not Claude Sonnet. Play Lab (`computer.open_project_computer`) is opened after the build — local HTTP on this machine. SmolVM is optional and not installed here.
+The native loop now runs `<NEED_WORKER>` and a cheap **fast** reviewer after the first HTML/JS write. Live eval pins worker slots to MiniMax, not Claude Sonnet. Play Lab (`computer.open_project_computer`) is opened after the build — local HTTP on this machine. SmolVM is an **optional extra** (`pip install -e ".[computer]"`), not a required dep and not vendored in Docker.
 
 S4 also rejects U+2212 (unicode minus) in JS — Claude's pass 3 used `−1` in vertex arrays; that is a SyntaxError, so WebGL never ran.
 
-Pytest sets `DAEDALUS_WRITE_REVIEW=0` / `DAEDALUS_WORKERS=0` so unit tests never spend tokens.
+Pytest sets `DAEDALUS_WRITE_REVIEW=0` / `DAEDALUS_WORKERS=0` / `DAEDALUS_RAG=0` so unit tests never spend tokens or boot Chroma/ONNX.
+
+Native builds inject Chroma `daedalus_global` into the system prompt when `DAEDALUS_RAG!=0` (default on). Missing chromadb fail-opens. `chromadb>=1.0.0` is already a required dep in `pyproject.toml` — a Cloud VM that skipped `pip install -e .` will look like "chroma is missing" even though Docker installs it.
 
 ## Live eval 2026-09-08 — pass 3 / pass 4 (same day)
 
@@ -71,6 +73,8 @@ Pytest sets `DAEDALUS_WRITE_REVIEW=0` / `DAEDALUS_WORKERS=0` so unit tests never
 Screenshots: `slerp-lookat-pass3-frame_000.png` (black HUD), `slerp-lookat-pass4-lab.png` (painted greybox).
 
 Total spend this branch ~**$2.83** (pass 1+2 $1.41 + pass 3 $0.91 + pass 4 $0.51).
+
+Pass 4 is a **3D greybox**, not a game. The next live eval on this MR is MiniMax dungeon2: three painted rooms, key, slime, win/lose, Chroma RAG on, SmolVM doctor reported honestly.
 
 ## S1 — Closed build loop (done)
 

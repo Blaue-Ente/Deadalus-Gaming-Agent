@@ -68,6 +68,7 @@ Studio → Connectors **Brain** (or Studio → Brain wardrobe) switches models w
 | `DAEDALUS_WRITE_GATE` | `0` turns off the `write_file` syntax/arcade gate (default on). Duplicate `let` and missing canvas/loop become FAILED writes. |
 | `DAEDALUS_WRITE_REVIEW` | `0` skips the cheap fast-slot review after the first HTML/JS write (pytest sets this). Default on. |
 | `DAEDALUS_WORKERS` | `0` ignores `<NEED_WORKER>` markers in the native build loop (pytest sets this). Default on. |
+| `DAEDALUS_RAG` | `0` skips Chroma `daedalus_global` injection into the native build system prompt (pytest sets this). Default on. Missing chromadb fail-opens — the build still runs. |
 | `DAEDALUS_QUALITY` | `0` turns the visual critic off (default on). Unparsed critic / skipped browser is not a pass. |
 | `DAEDALUS_EVOLUTION` | `1` turns the gardener on at boot; `0` is a kill switch |
 | `GODOT_BIN` | Path to Godot 4.3. Missing binary fails Godot kinds. When set, the TCP runtime bridge (player must move) is required — static files are not a playtest. |

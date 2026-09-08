@@ -162,6 +162,25 @@ def test_native_build_system_contains_plan():
     assert "playground.arcade" in arcade
     assert "REQUIRED" in arcade
     assert "NEED_WORKER" in arcade
+    assert "Chroma daedalus_global" not in sys
+    assert "Chroma daedalus_global" not in arcade
+
+
+def test_dungeon_routes_to_arcade_without_canvas_keyword():
+    pb = match_playbook("Направи dungeon crawler със slime и ключ. Три стаи.")
+    assert pb.id == "playground.arcade"
+    assert "harness" not in pb.id
+    arcade = native_build_system("Направи dungeon crawler със slime и ключ")
+    assert "playground.arcade" in arcade
+    assert "three visually distinct rooms" in arcade.lower() or "visually distinct" in arcade
+
+
+def test_rag_kill_switch_skips_chroma():
+    from daedalus.tool_router import rag_enabled, retrieve_rag
+
+    assert rag_enabled() is False
+    assert retrieve_rag("HTML canvas dungeon crawler") == []
+
 
 
 def test_tools_http():

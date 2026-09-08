@@ -328,14 +328,18 @@ PLAYBOOKS: tuple[Playbook, ...] = (
         keywords=(
             "snake", "змия", "tetris", "pong", "arkanoid",
             "canvas", "аркад", "ябълка",
+            "dungeon", "crawler", "slime", "ключ", "ключа",
         ),
-        regex=r"\b(snake|tetris|pong|canvas|змия|аркад|2d|2-d)\b",
+        regex=r"\b(snake|tetris|pong|canvas|змия|аркад|2d|2-d|dungeon|crawler|slime|ключ)\b",
         tools=_CORE + (
             "assets", "generate_image", "playtest", "browser", "game_canon",
         ),
         expected_files=("index.html",),
         notes=(
             "Playable loop: input → update → render → win/lose. "
+            "Dungeon: three visually distinct painted rooms, key in room 1, "
+            "locked last door, slime+HP, win and game over. "
+            "ASCII hyphen-minus in JS only: -1. Screenshot CENTER = room tiles, not HUD-only. "
             "No math3d unless the ask names quaternions. Static preview — no RUN."
         ),
         steps=(

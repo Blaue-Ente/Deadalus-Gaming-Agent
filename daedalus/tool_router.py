@@ -9,6 +9,7 @@ functions for the build turn.
 from __future__ import annotations
 
 import logging
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -275,6 +276,41 @@ def _docs_block(steps: list[Step]) -> str:
     return "\n\n".join(parts)
 
 
+def rag_enabled() -> bool:
+    raw = (os.environ.get("DAEDALUS_RAG") or "1").strip().lower()
+    return raw not in {"0", "false", "no", "off"}
+
+
+def retrieve_rag(query: str, *, top_k: int = 4) -> list[dict[str, Any]]:
+    """Semantic search over ``daedalus_global`` (skills + knowledge). Fail open."""
+    if not rag_enabled() or not (query or "").strip():
+        return []
+    try:
+        from .knowledge import DaedalusKnowledge
+        from .memory import DaedalusMemory
+
+        mem = DaedalusMemory()
+        DaedalusKnowledge(memory=mem).load_all(force=False)
+        return mem.retrieve_knowledge(query, top_k=top_k)
+    except Exception as exc:
+        log.warning("RAG skip: %s", exc)
+        return []
+
+
+def _rag_block(query: str) -> str:
+    hits = retrieve_rag(query)
+    if not hits:
+        return ""
+    parts = ["━━━ RAG (Chroma daedalus_global) ━━━"]
+    for h in hits:
+        meta = h.get("metadata") or {}
+        title = meta.get("title") or h.get("id") or "?"
+        cat = meta.get("category") or ""
+        body = (h.get("content") or "").strip()[:800]
+        parts.append(f"── {cat}:{title} ──\n{body}")
+    return "\n\n".join(parts)
+
+
 def format_system(rt: Route, *, extra: str = "", user_message: str = "") -> str:
     from .game_engineer import attach_to_sys
 
@@ -301,6 +337,14 @@ def format_system(rt: Route, *, extra: str = "", user_message: str = "") -> str:
             "or WebGL1 traps. Do not use NEED_WORKER to write files — that is write_file. "
             "The kernel also runs a cheap reviewer after the first game write."
         )
+    if pb.id == "playground.arcade":
+        lines.append(
+            "2D product: one index.html, canvas 2D, no CDN. "
+            "Screenshot CENTER must be painted room tiles (floor, walls, player), not HUD-only. "
+            "A dungeon is three visually distinct rooms, a gold key in room 1, a locked last door, "
+            "one slime with HP, win at the exit and game over at 0 HP. "
+            "ASCII hyphen-minus in JS only: -1. Unicode − is a SyntaxError."
+        )
     if pb.id == "playground.math3d":
         lines.append(
             "3D product: at t=0 the screenshot CENTER must show coloured boxes "
@@ -313,8 +357,12 @@ def format_system(rt: Route, *, extra: str = "", user_message: str = "") -> str:
     docs = _docs_block(rt.ordered_steps)
     if docs:
         sys = f"{sys}\n\n━━━ PLAN DOCS (harness, not RAG guesswork) ━━━\n{docs}"
+    extra = (extra or "").strip()
     if extra:
         sys = f"{sys}\n\n{extra}"
+    rag = _rag_block(user_message or pb.title)
+    if rag:
+        sys = f"{sys}\n\n{rag}"
     if rt.playbook.id != "playground.arcade":
         sys = attach_to_sys(sys, text=user_message or pb.title, kind=rt.kind)
     return sys
