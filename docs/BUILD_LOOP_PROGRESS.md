@@ -38,6 +38,19 @@ OpenRouter `minimax/minimax-m2.7` (~$0.24/$0.96 per 1M). DeepSeek V3.2 was the c
 
 S2's proof is "the page painted", not a playtest bot. MiniMax put the slime in room 1 with the key (the ask wanted three rooms). That is model layout, not a skip-pass.
 
+## Live eval 2026-09-08 — Claude Sonnet 4.6 3D SLERP (not Snake)
+
+OpenRouter `anthropic/claude-sonnet-4.6` (~$3/$15 per 1M). Budget cap $2–3. Runner: `scripts/live_eval_build.py --better --preset slerp`. Playbook `playground.math3d`. Isolated `$DAEDALUS_DATA` under `/tmp`.
+
+| Pass | What happened |
+|------|---------------|
+| 1 (~$1.02, 14 rounds, ~296s) | `math3d` quat_slerp + look_at (first claim mismatched rounding, then pass). Wrote `slerp-lookat/index.html` (~18KB, raw WebGL). Chromium proof painted the HUD (Bulgarian targets, verified quat `[0, 0.38268, 0, 0.92388]`). **WebGL 1 `uniformMatrix4fv(..., true)` is INVALID_VALUE** — canvas cleared, no geometry. `complete=false` because leftover `run_command` failures. `kernel_proof_ran=false` because the model called `browser` itself (mapped to `visual_proof`). |
+| 2 (~$0.39, 7 rounds, ~177s, after S4 `webgl-transpose`) | Claude wrote column-major mats with `transpose=false`. **complete=true**. HUD painted again (keys 1/2/3, SLERP LOOK-AT). Headless Chromium still shows a dark viewport (no greybox in the frame) — kernel proof is HUD text, not a geometry bot. No `run_command` this time. |
+
+Total model spend ~**$1.41**. Screenshots: `slerp-lookat-pass1-hud.png`, `slerp-lookat-pass2.png`.
+
+S4 now fails `uniformMatrix*fv(..., true)` so the next write can ship WebGL 1-legal matrices. The remaining gap is "page painted ≠ 3D greybox in view" — that is still model camera/matrix quality, not a skip-pass.
+
 ## S1 — Closed build loop (done)
 
 The plan drives the model. Quiet + incomplete → PLAN PROGRESS inside the native
