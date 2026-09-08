@@ -28,6 +28,7 @@ DEFAULT_FIX_ROUNDS = 3
 ROUNDS_PER_FIX = 2
 _HEAD_CHARS = 240
 _SLUG_RE = re.compile(r"\bslug=([A-Za-z0-9_.-]+)")
+_KIND_RE = re.compile(r"\bkind=([A-Za-z0-9_.-]+)")
 _SLUG_TOOLS = frozenset({
     "write_file", "read_file", "playtest", "browser", "run_command", "game_lint",
     "assets", "engine", "world", "production", "playground_run",
@@ -123,8 +124,11 @@ class BuildLoop:
         self.proof_vision: list[dict[str, Any]] = []
         self.proof_gap = ""
         self.kernel_proof_ran = False
+        self.proof_blank = False
+        self.mentor_grants = 0
         for row in self.seed_log:
             self._capture_slug(row.get("input") or {}, "")
+            self._capture_kind("playground_new", row.get("input") or {}, "")
 
     # ── observation ───────────────────────────────────────────────────────
 
@@ -147,6 +151,7 @@ class BuildLoop:
             ToolObservation(tool=tool, ok=bool(ok), blocked=bool(blocked), args=args, head=_head(result_text))
         )
         self._capture_slug(args, result_text)
+        self._capture_kind(tool, args, result_text)
 
     def _capture_slug(self, args: dict[str, Any], result_text: str) -> None:
         if self.slug:
@@ -157,6 +162,16 @@ class BuildLoop:
             cand = m.group(1) if m else ""
         if cand:
             self.slug = cand
+
+    def _capture_kind(self, tool: str, args: dict[str, Any], result_text: str) -> None:
+        name = canonical(tool).lower() if tool else ""
+        k = str(args.get("kind") or args.get("type") or "").strip().lower()
+        if not k:
+            m = _KIND_RE.search(result_text or "")
+            k = (m.group(1) if m else "").strip().lower()
+        if k and (name == "playground_new" or not self.kind or self.kind == "static"):
+            if name == "playground_new" or k in {"vite", "vite-react", "phaser", "godot", "unity"}:
+                self.kind = k
 
     def tool_calls(self) -> list[dict[str, Any]]:
         return [*self.seed_log, *(o.as_call() for o in self.observations)]
@@ -215,14 +230,48 @@ class BuildLoop:
             return True
         return self._writes_after_last_proof()
 
+    def wants_exhaust_proof(self) -> bool:
+        """Budget ran out while the model was still calling tools — still open the game."""
+        if not visual_proof_enabled():
+            return False
+        if not is_visual_kind(self.kind):
+            return False
+        if not self.slug or not self._has_writes():
+            return False
+        if self.proof_gap:
+            return False
+        if self._has_successful_proof() and not self._writes_after_last_proof():
+            return False
+        return not self.kernel_proof_ran or self._writes_after_last_proof()
+
     def note_kernel_proof(self, result: Any) -> None:
         self.kernel_proof_ran = True
         self.proof_gap = str(getattr(result, "honest_gap", "") or "")
         self.proof_frames = list(getattr(result, "frames", None) or [])
+        self.proof_blank = bool(getattr(result, "blank_screen", False))
         try:
             self.proof_vision = list(result.vision_blocks())
         except Exception:
             self.proof_vision = []
+
+    def browser_ok_for_dod(self) -> bool | None:
+        if not visual_proof_enabled() or not is_visual_kind(self.kind):
+            return None
+        if not self._has_writes():
+            return None
+        if self.proof_gap or self.proof_blank:
+            return False
+        if self._has_successful_proof():
+            return True
+        return False
+
+    def retry_capped(self, tool: str, *, n: int = 2) -> bool:
+        key = canonical(tool).lower()
+        fails = [
+            o for o in self.observations
+            if canonical(o.tool).lower() == key and not o.ok
+        ]
+        return len(fails) >= n
 
     # ── plan bookkeeping ──────────────────────────────────────────────────
 
@@ -262,6 +311,7 @@ class BuildLoop:
             tool_calls=self.tool_calls(),
             kind=self.kind,
             strict=True,
+            browser_ok=self.browser_ok_for_dod(),
         )
         rows = self.progress()
         missing = [f"{r.step.id} ({r.step.tool or r.step.id})" for r in rows if r.step.required and r.status != "done"]
@@ -373,32 +423,62 @@ class BuildLoop:
         if v.blockers:
             head.append("Not done yet:")
             head.extend(f"  • {b}" for b in v.blockers)
-        if v.next_step is not None and v.next_step.tool:
-            hint = self._step_args_hint(v.next_step)
-            head.append(
-                f"NEXT: call {v.next_step.tool}" + (f" with {hint}" if hint else "")
-                + (f" — {v.next_step.why}" if v.next_step.why else "")
-            )
-        elif v.failed_calls:
-            o = v.failed_calls[-1]
-            if canonical(o.tool).lower() in PROOF_TOOLS:
-                head.append(
-                    "NEXT: fix the files with write_file"
-                    + (f" slug={self.slug}" if self.slug else "")
-                    + " so the running game is not blank/broken. "
-                    "The kernel will open it again after you stop."
-                )
-            else:
-                head.append(
-                    f"NEXT: repeat {o.tool} with corrected arguments"
-                    + (f" (slug={self.slug})" if self.slug and o.tool in _SLUG_TOOLS else "")
-                    + ", then finish the plan."
-                )
+        next_line = self._next_line(v)
+        if next_line:
+            head.append(next_line)
         head.append(
             "Call the tool now; do not describe it. Do not explore the harness "
             "(no list_dir / find outside the slug). No NEED_* markers, no SQL."
         )
         return "\n".join(head)
+
+    def _fallback_after_cap(self, o: ToolObservation) -> str:
+        tool = canonical(o.tool).lower()
+        slug = f" slug={self.slug}" if self.slug else ""
+        if tool == "generate_image":
+            return (
+                f"NEXT: call write_file{slug} path=src/main.js "
+                "(or src/scenes/Boot.js canvas textures). "
+                "Do not retry generate_image — same error twice."
+            )
+        if tool in PROOF_TOOLS:
+            return (
+                "NEXT: fix the files with write_file"
+                + slug
+                + " so the running game is not blank/broken. "
+                "The kernel will open it again after you stop."
+            )
+        path = "src/main.js" if self.kind in {"vite", "vite-react", "phaser"} else "index.html"
+        return (
+            f"NEXT: call write_file{slug} path={path} — "
+            f"{o.tool} failed twice with the same class of error; change approach."
+        )
+
+    def _next_line(self, v: BuildVerdict) -> str:
+        try:
+            from . import mentor as _mentor
+            if _mentor.enabled():
+                steered = _mentor.progress_next(self)
+                if steered:
+                    return steered
+        except Exception:
+            log.debug("mentor NEXT skipped", exc_info=True)
+        if v.next_step is not None and v.next_step.tool:
+            hint = self._step_args_hint(v.next_step)
+            return (
+                f"NEXT: call {v.next_step.tool}" + (f" with {hint}" if hint else "")
+                + (f" — {v.next_step.why}" if v.next_step.why else "")
+            )
+        if v.failed_calls:
+            o = v.failed_calls[-1]
+            if canonical(o.tool).lower() in PROOF_TOOLS or self.retry_capped(o.tool):
+                return self._fallback_after_cap(o)
+            return (
+                f"NEXT: repeat {o.tool} with corrected arguments"
+                + (f" (slug={self.slug})" if self.slug and o.tool in _SLUG_TOOLS else "")
+                + ", then finish the plan."
+            )
+        return ""
 
     def summary_block(self) -> str:
         """Kernel verdict for the persona turn / final reply — honest, compact."""

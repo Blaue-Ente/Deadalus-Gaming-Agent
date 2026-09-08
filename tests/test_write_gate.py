@@ -83,6 +83,28 @@ def test_write_gate_clean_canvas_ok():
     assert arcade_blockers("index.html", CLEAN_CANVAS, "static") == []
 
 
+PHASER_MAIN = (
+    "import Phaser from 'phaser';\n"
+    "new Phaser.Game({ type: Phaser.AUTO, parent: 'game', scene: [] });\n"
+)
+VITE_SCAFFOLD = (
+    "document.querySelector('#app').innerHTML = `<h1>Hello Vite</h1>`;\n"
+)
+
+
+def test_write_gate_phaser_main_js_counts_as_loop():
+    gate = check_write("src/main.js", PHASER_MAIN, kind="vite")
+    assert gate.ok is True
+    assert arcade_blockers("src/main.js", PHASER_MAIN, "vite") == []
+
+
+def test_write_gate_vite_scaffold_still_missing_loop():
+    gate = check_write("src/main.js", VITE_SCAFFOLD, kind="vite")
+    assert gate.ok is False
+    codes = {b["code"] for b in gate.blockers}
+    assert "arcade-missing-loop" in codes
+
+
 def test_write_gate_missing_canvas_and_loop():
     gate = check_write("index.html", "<p>hello</p>", kind="static")
     assert gate.ok is False

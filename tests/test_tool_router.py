@@ -18,6 +18,10 @@ CROWD = (
     "Направи Playground crowd physics: 80 bodies in 3D, octree, no nested collision loops."
 )
 GODOT = "Направи Godot 4 игра: CharacterBody2D, scenes/main.tscn, GDScript."
+LUMEN = (
+    "Направи нова Playground игра Lumen Bloom, kind=vite, Phaser 3. "
+    "Boot Menu Play scenes, particles, one playable slice."
+)
 
 
 def test_catalog_covers_every_native_tool():
@@ -37,6 +41,7 @@ def test_playbooks_are_a_graph():
     assert "playground.math3d" in ids
     assert "playground.godot" in ids
     assert "playground.arcade" in ids
+    assert "playground.vite" in ids
     assert "playground.mobile" in ids
     math_pb = next(pb for pb in PLAYBOOKS if pb.id == "playground.math3d")
     assert any(s.tool == "math3d" and s.required for s in math_pb.steps)
@@ -65,6 +70,18 @@ def test_route_snake_does_not_require_math3d():
     specs = {t["name"] for t in playground_build_specs(SNAKE)}
     assert "math3d" not in specs
     assert "write_file" in specs
+
+
+def test_route_vite_phaser_not_arcade():
+    rt = route(LUMEN)
+    assert rt.playbook.id == "playground.vite"
+    assert rt.kind == "vite"
+    assert "production" in rt.tool_names
+    assert "math3d" not in rt.tool_names
+    assert "playground_new" in rt.tool_names
+    sys = native_build_system(LUMEN)
+    assert "playground.vite" in sys
+    assert "Phaser.Game" in sys or "src/main.js" in sys
 
 
 def test_route_crowd_and_godot():

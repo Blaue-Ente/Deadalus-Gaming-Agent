@@ -1,0 +1,164 @@
+"""Mentor helm — toggle, inspect, steer. No live LLM."""
+from __future__ import annotations
+
+from daedalus.build_loop import BuildLoop
+from daedalus.tool_router import route
+
+LUMEN = (
+    "Направи нова Playground игра Lumen Bloom, kind=vite, Phaser 3. "
+    "Boot Menu Play scenes, particles, one playable slice."
+)
+SCAFFOLD = (
+    "import './style.css'\n"
+    "document.querySelector('#app').innerHTML = `\n"
+    "  <div>\n"
+    "    <img src=\"/vite.svg\" class=\"logo\" alt=\"Vite logo\" />\n"
+    "    <h1>Hello Vite!</h1>\n"
+    "  </div>\n"
+    "`\n"
+)
+PHASER_BOOT = (
+    "import Phaser from 'phaser';\n"
+    "import { Boot } from './scenes/Boot.js';\n"
+    "new Phaser.Game({ type: Phaser.AUTO, parent: 'game', scene: [Boot] });\n"
+)
+
+
+def test_mentor_env_off_skips_steer(monkeypatch):
+    from daedalus import mentor
+
+    monkeypatch.setenv("DAEDALUS_MENTOR", "0")
+    assert mentor.enabled() is False
+    rt = route(LUMEN)
+    loop = BuildLoop(rt, LUMEN)
+    assert mentor.steer(loop) is None
+    assert mentor.extra_round_budget(loop) == 0
+
+
+def test_mentor_env_on_beats_kv(tmp_path, monkeypatch):
+    from daedalus import mentor
+    from daedalus.paths import data_root
+
+    monkeypatch.setenv("DAEDALUS_DATA", str(tmp_path))
+    monkeypatch.setenv("DAEDALUS_MENTOR", "1")
+    data_root.cache_clear()
+    mentor.set_enabled(False)
+    assert mentor.enabled() is True
+    st = mentor.status()
+    assert st["env_locked"] is True
+    assert st["enabled"] is True
+
+
+def test_mentor_default_on_when_unset(tmp_path, monkeypatch):
+    from daedalus import mentor
+    from daedalus.paths import data_root
+
+    monkeypatch.setenv("DAEDALUS_DATA", str(tmp_path))
+    monkeypatch.delenv("DAEDALUS_MENTOR", raising=False)
+    data_root.cache_clear()
+    assert mentor.enabled() is True
+    mentor.set_enabled(False)
+    assert mentor.enabled() is False
+
+
+def test_mentor_scaffold_steers_write_main(tmp_path, monkeypatch):
+    from daedalus import mentor
+
+    monkeypatch.setenv("DAEDALUS_MENTOR", "1")
+    monkeypatch.setattr("daedalus.mentor._rag_hits", lambda q: ["phaser.Game in src/main.js"])
+    slug = "lumen-bloom"
+    root = tmp_path / slug
+    (root / "src").mkdir(parents=True)
+    (root / "index.html").write_text(
+        '<!doctype html><canvas id="lumen-canvas"></canvas><script type="module" src="/src/main.js"></script>',
+        encoding="utf-8",
+    )
+    (root / "src" / "main.js").write_text(SCAFFOLD, encoding="utf-8")
+    monkeypatch.setattr("daedalus.playground.project_dir", lambda s: root)
+    rt = route(LUMEN)
+    loop = BuildLoop(rt, LUMEN)
+    loop.slug = slug
+    loop.kind = "vite"
+    view = mentor.inspect_project(slug, kind="vite")
+    assert view.scaffold_main is True
+    assert view.has_canvas is True
+    assert view.entry_boots is False
+    decision = mentor.steer(loop)
+    assert decision is not None
+    assert decision.action == "continue"
+    assert decision.next_tool == "write_file"
+    assert "main.js" in str(decision.next_args.get("path") or "")
+    nxt = mentor.progress_next(loop)
+    assert "write_file" in nxt
+    assert "repeat generate_image" not in nxt
+
+
+def test_mentor_image_fail_twice_forbids(tmp_path, monkeypatch):
+    from daedalus import mentor
+
+    monkeypatch.setenv("DAEDALUS_MENTOR", "1")
+    monkeypatch.setattr("daedalus.mentor._rag_hits", lambda q: [])
+    slug = "lumen-bloom"
+    root = tmp_path / slug
+    (root / "src").mkdir(parents=True)
+    (root / "index.html").write_text('<canvas id="g"></canvas>', encoding="utf-8")
+    (root / "src" / "main.js").write_text(SCAFFOLD, encoding="utf-8")
+    monkeypatch.setattr("daedalus.playground.project_dir", lambda s: root)
+    rt = route(LUMEN)
+    loop = BuildLoop(rt, LUMEN)
+    loop.slug = slug
+    loop.kind = "vite"
+    loop.observe("generate_image", {"prompt": "sprite"}, "── generate_image FAILED 403 ──", ok=False)
+    loop.observe("generate_image", {"prompt": "sprite"}, "── generate_image FAILED 403 ──", ok=False)
+    decision = mentor.steer(loop)
+    assert decision is not None
+    assert "generate_image" in decision.forbid_tools
+    assert "generate_image" not in decision.next_tool
+
+
+def test_mentor_booted_entry_can_ship(tmp_path, monkeypatch):
+    from daedalus import mentor
+    from daedalus.visual_proof import ProofResult
+
+    monkeypatch.setenv("DAEDALUS_MENTOR", "1")
+    monkeypatch.setattr("daedalus.mentor._rag_hits", lambda q: [])
+    slug = "lumen-bloom"
+    root = tmp_path / slug
+    (root / "src").mkdir(parents=True)
+    (root / "index.html").write_text('<div id="game"></div>', encoding="utf-8")
+    (root / "src" / "main.js").write_text(PHASER_BOOT, encoding="utf-8")
+    monkeypatch.setattr("daedalus.playground.project_dir", lambda s: root)
+    rt = route(LUMEN)
+    loop = BuildLoop(rt, LUMEN, fix_rounds=3)
+    loop.slug = slug
+    loop.kind = "vite"
+    loop.observe("playground_new", {"name": slug, "kind": "vite"}, f"── playground_new OK slug={slug} kind=vite ──", ok=True)
+    loop.observe("write_file", {"slug": slug, "path": "src/main.js"}, "── write_file OK ──", ok=True)
+    loop.observe("browser", {"slug": slug}, "── visual_proof OK ──", ok=True)
+    loop.note_kernel_proof(ProofResult(
+        ok=True, skipped=False, kind="vite", slug=slug, tool="browser",
+        summary="painted", frames=["studio/proof/frame_000.png"],
+    ))
+    decision = mentor.steer(loop)
+    assert decision is not None
+    assert decision.action == "ship"
+
+
+def test_mentor_http_toggle(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+    from app.main import app
+    from daedalus.paths import data_root
+
+    monkeypatch.setenv("DAEDALUS_DATA", str(tmp_path))
+    monkeypatch.delenv("DAEDALUS_MENTOR", raising=False)
+    data_root.cache_clear()
+    client = TestClient(app)
+    got = client.get("/api/v1/daedalus/mentor")
+    assert got.status_code == 200
+    assert got.json()["enabled"] is True
+    off = client.post("/api/v1/daedalus/mentor", json={"enabled": False})
+    assert off.status_code == 200
+    assert off.json()["enabled"] is False
+    assert off.json()["ok"] is True
+    on = client.post("/api/v1/daedalus/mentor", json={"enabled": True})
+    assert on.json()["enabled"] is True

@@ -403,7 +403,7 @@ PLAYBOOKS: tuple[Playbook, ...] = (
             "snake", "змия", "tetris", "pong", "arkanoid",
             "canvas", "аркад", "ябълка",
         ),
-        regex=r"\b(snake|tetris|pong|canvas|змия|аркад|2d|2-d)\b",
+        regex=r"\b(snake|tetris|pong|canvas|змия|аркад)\b",
         tools=_CORE + (
             "assets", "generate_image", "playtest", "browser", "game_canon", "production",
         ),
@@ -445,6 +445,66 @@ PLAYBOOKS: tuple[Playbook, ...] = (
                 depends_on=("write",),
                 accept_any=("browser", "engine"),
                 why="Kernel opens the canvas. Files on disk are not Play.",
+            ),
+        ),
+    ),
+    Playbook(
+        id="playground.vite",
+        title="Vite + Phaser (or Pixi) browser game",
+        priority=65,
+        kind="vite",
+        kinds=("vite", "vite-react", "phaser"),
+        keywords=(
+            "kind=vite", "kind = vite", "vite-react", "vite + phaser",
+            "phaser 3", "phaser3",
+        ),
+        regex=(
+            r"kind\s*=\s*vite|vite-react|"
+            r"(?:\bvite\b.{0,96}\bphaser\b)|(?:\bphaser\b.{0,96}\bvite\b)"
+        ),
+        tools=_CORE + (
+            "assets", "generate_image", "playtest", "browser",
+            "game_canon", "production", "game_lint",
+        ),
+        expected_files=("index.html", "src/main.js", "package.json"),
+        notes=(
+            "kind=vite. src/main.js must call new Phaser.Game (or a Pixi ticker). "
+            "Never leave the Vite #app scaffold if index.html has a canvas or #game. "
+            "generate_image is optional — after two failures, Boot canvas textures. "
+            "production({action: pipeline, slug}) walks web QA. Chromium proof after writes."
+        ),
+        steps=(
+            Step(
+                id="skill_qa",
+                tool="skill",
+                auto=True,
+                args={"action": "load", "id": "platform_acceptance_qa"},
+                docs=("skills/phaser_vite.md", "skills/platform_acceptance_qa.md"),
+                why="Entry contract + fail-closed Chromium QA. Scaffold main.js is a blank screen.",
+            ),
+            Step(
+                id="create",
+                tool="playground_new",
+                args={"kind": "vite"},
+                accept_any=("playground_new", "write_file"),
+                why="kind=vite (Phaser npm), not static canvas.",
+            ),
+            Step(
+                id="write",
+                tool="write_file",
+                required=True,
+                depends_on=("create",),
+                why=(
+                    "Overwrite src/main.js with Phaser.Game + scenes. "
+                    "index.html mount + package.json phaser. Not the Vite Hello counter."
+                ),
+            ),
+            Step(
+                id="prove",
+                tool="browser",
+                depends_on=("write",),
+                accept_any=("browser", "engine"),
+                why="Kernel opens dist/ or the Vite root. Files on disk are not Play.",
             ),
         ),
     ),

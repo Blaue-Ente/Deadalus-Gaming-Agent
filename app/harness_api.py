@@ -484,6 +484,10 @@ class EffortBody(BaseModel):
     effort: str = Field(default="auto", max_length=16)
 
 
+class MentorBody(BaseModel):
+    enabled: bool = True
+
+
 @router.get("/api/v1/daedalus/effort")
 async def effort_preview(q: str = "", effort: str = "auto") -> dict[str, Any]:
     from daedalus.task_effort import classify
@@ -494,6 +498,19 @@ async def effort_preview(q: str = "", effort: str = "auto") -> dict[str, Any]:
 async def effort_classify(body: EffortBody) -> dict[str, Any]:
     from daedalus.task_effort import classify
     return classify(body.text, requested=body.effort)
+
+
+@router.get("/api/v1/daedalus/mentor")
+async def mentor_status() -> dict[str, Any]:
+    from daedalus.mentor import status
+    return status()
+
+
+@router.post("/api/v1/daedalus/mentor")
+async def mentor_set(body: MentorBody) -> dict[str, Any]:
+    from daedalus.mentor import set_enabled, status
+    set_enabled(body.enabled)
+    return {"ok": True, **status()}
 
 
 @router.get("/api/v1/llm/wardrobe")

@@ -1874,7 +1874,39 @@ async def run_native_discovery_pass(
 
     budget = max_rounds
     _round = -1
-    while _round + 1 < budget:
+    while True:
+        if _round + 1 >= budget:
+            if loop is not None and not getattr(loop, "stop_reason", ""):
+                if getattr(loop, "wants_exhaust_proof", lambda: False)():
+                    try:
+                        proof_block = await _kernel_visual_proof(loop)
+                        if proof_block:
+                            all_results.append(proof_block)
+                        if loop.observations:
+                            tool_log.append(loop.observations[-1].as_call())
+                    except Exception as exc:
+                        log.warning("kernel visual proof on exhaust failed: %s", exc)
+                extra = 0
+                try:
+                    from . import mentor as _mentor
+                    extra = int(_mentor.extra_round_budget(loop) or 0)
+                except Exception:
+                    extra = 0
+                if extra > 0:
+                    loop.mentor_grants = int(getattr(loop, "mentor_grants", 0) or 0) + 1
+                    budget += extra
+                    try:
+                        from . import mentor as _mentor
+                        _mentor.maybe_capture_lesson(loop, memory)
+                    except Exception:
+                        pass
+                    nudge = loop.progress_block()
+                    vision = list(getattr(loop, "proof_vision", None) or [])
+                    messages.append(_user_turn(nudge, vision or None))
+                    continue
+                loop.stop_reason = "round budget exhausted"
+                loop.verdict("")
+            break
         _round += 1
         resp = await call_with_tools_fn(system, messages, specs)
         content_blocks = resp.get("content", [])
@@ -1974,9 +2006,6 @@ async def run_native_discovery_pass(
 
         messages.append({"role": "user", "content": tool_result_blocks})
 
-    if loop is not None and not loop.stop_reason:
-        loop.stop_reason = "round budget exhausted"
-        loop.verdict("")
     if all_results:
         return "━━━ NATIVE TOOL RESULTS ━━━\n" + "\n\n".join(all_results), tool_log
     return None, []

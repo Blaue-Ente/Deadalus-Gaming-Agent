@@ -259,6 +259,27 @@ async def daedalus_set_mode(request: Request):
         return JSONResponse({"error": str(exc)}, status_code=400)
 
 
+@router.get("/daedalus/mentor")
+async def daedalus_get_mentor():
+    from daedalus.mentor import status
+    return JSONResponse(status())
+
+
+@router.post("/daedalus/mentor")
+async def daedalus_set_mentor(request: Request):
+    from daedalus.mentor import set_enabled, status
+    body = await _body(request)
+    raw = body.get("enabled", body.get("on", body.get("mentor")))
+    if raw is None:
+        return JSONResponse({"error": "enabled bool required"}, status_code=400)
+    if isinstance(raw, str):
+        flag = raw.strip().lower() not in {"0", "false", "off", "no"}
+    else:
+        flag = bool(raw)
+    set_enabled(flag)
+    return JSONResponse({"ok": True, **status()})
+
+
 @router.get("/daedalus/sessions")
 async def daedalus_list_sessions(limit: int = 60):
     try:

@@ -128,6 +128,42 @@
     previewEffort();
   }
 
+  function paintMentor(data) {
+    const on = !!(data && data.enabled);
+    const locked = !!(data && data.env_locked);
+    document.querySelectorAll(".mentor button").forEach((btn) => {
+      const wantOn = btn.dataset.mentor === "on";
+      btn.setAttribute("aria-pressed", (wantOn ? on : !on) ? "true" : "false");
+      btn.disabled = locked;
+    });
+    const group = document.querySelector(".mentor");
+    if (group) {
+      group.title = locked ? t("studio.mentorLocked") : t("studio.mentorHint");
+    }
+  }
+
+  async function loadMentor() {
+    try {
+      const data = await api("/api/v1/daedalus/mentor", { timeoutMs: 8000 });
+      paintMentor(data);
+    } catch {
+      paintMentor({ enabled: true, env_locked: false });
+    }
+  }
+
+  async function setMentor(on) {
+    try {
+      const data = await api("/api/v1/daedalus/mentor", {
+        method: "POST",
+        body: JSON.stringify({ enabled: !!on }),
+        timeoutMs: 8000,
+      });
+      paintMentor(data);
+    } catch (e) {
+      add("bot", t("studio.mentorAria") + ": " + errText(e));
+    }
+  }
+
   function selectedProject() {
     return state.projects.find((p) => p.slug === state.slug) || null;
   }
@@ -189,6 +225,9 @@
   });
   document.querySelectorAll(".effort button").forEach((btn) => {
     btn.onclick = () => setEffort(btn.dataset.effort);
+  });
+  document.querySelectorAll(".mentor button").forEach((btn) => {
+    btn.onclick = () => setMentor(btn.dataset.mentor === "on");
   });
 
   async function refreshHealth() {
@@ -1538,6 +1577,7 @@
   };
 
   setEffort(state.effort);
+  loadMentor();
   function showGreeting() {
     const existing = msgs.querySelector(".msg.bot[data-greeting]");
     if (existing) { text(existing, t("studio.greeting")); return; }
@@ -1559,6 +1599,7 @@
     refreshWorld();
     refreshComputer();
     previewEffort();
+    loadMentor();
     const shout = $("shout");
     if (shout && !state.lastCwd && (shout.textContent === "Ready." || shout.textContent === "Готов." || shout.textContent === t("studio.ready"))) {
       text(shout, t("studio.ready"));

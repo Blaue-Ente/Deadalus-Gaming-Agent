@@ -153,6 +153,30 @@ button.chip {
   color: var(--gold-2);
 }
 
+.mentor {
+  display: inline-flex;
+  flex-shrink: 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.mentor button {
+  border: 0;
+  border-radius: 0;
+  padding: 0.32rem 0.7rem;
+  font-size: 0.75rem;
+  background: transparent;
+  color: var(--muted);
+}
+.mentor button[aria-pressed="true"] {
+  background: rgba(201, 162, 39, 0.16);
+  color: var(--gold-2);
+}
+.mentor button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .dx-lang {
   display: inline-flex;
   flex-shrink: 0;

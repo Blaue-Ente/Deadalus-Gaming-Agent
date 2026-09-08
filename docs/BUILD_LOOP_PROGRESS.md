@@ -76,6 +76,16 @@ Prompt named `kind=vite` + Phaser 3 and avoided arcade (`2d`/`canvas`/`snake`) a
 
 Fixes from this eval: decode `data:` image URLs; sibling `for (let i` is not a SyntaxError.
 
+## Mentor helm (2026-09-08)
+
+Toggle: Studio **Mentor ON|OFF** (default on). `DAEDALUS_MENTOR=0` forces off. KV `adn:daedalus_mentor`.
+
+Always on even when Mentor is off: Phaser.Game counts as a loop; `playground.vite` playbook; kind sync; proof on exhaust; retry cap; `browser_ok` on chat DoD; no `NEED_PROPOSE` on game fast-path.
+
+When Mentor is on: PLAN PROGRESS NEXT comes from `daedalus/mentor.py` (inspect slug, RAG, forbid `generate_image` after two fails). Extra recover rounds after native budget exhaust (once, +2). Persona wrap-up tells the model not to dump leftover JS.
+
+Mentor does **not** write `index.html` / `src/main.js`. Two writers stay forbidden.
+
 ## S1 — Closed build loop (done)
 
 The plan drives the model. Quiet + incomplete → PLAN PROGRESS inside the native

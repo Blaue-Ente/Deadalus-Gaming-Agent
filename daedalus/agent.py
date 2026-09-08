@@ -1670,6 +1670,12 @@ class Daedalus:
                     )
                     _loop = BuildLoop(_route, user_message, seed_log=_consult_log)
                     max_native = 10
+                    try:
+                        from . import mentor as _mentor
+                        if _mentor.enabled():
+                            max_native = 16
+                    except Exception:
+                        pass
                 else:
                     _nt_sys = (
                         "You are Daedalus tool-discovery. Use tools to gather context. "
@@ -1712,6 +1718,13 @@ class Daedalus:
                             "Reply with a short summary of the slice. "
                             "Do NOT emit NEED_* markers, JSON {\"tool\":...} dumps, or SQL.\n"
                         )
+                        try:
+                            from . import mentor as _mentor
+                            wrap = _mentor.persona_wrapup(_loop)
+                            if wrap:
+                                user_content += "\n" + wrap + "\n"
+                        except Exception:
+                            pass
                     log.info(
                         "daedalus native-tools: %d tool calls — enriched context",
                         len(_native_log),
@@ -4420,6 +4433,8 @@ class Daedalus:
             "tool_iterations": _tool_iter + 1 if tool_calls_used else 0,
             "mem0": self.mem0.stats(),
             "navigator": briefing_dict,
+            "build_kind": str(getattr(_loop, "kind", "") or "") if _loop is not None else "",
+            "browser_ok": _loop.browser_ok_for_dod() if _loop is not None else None,
         }
         return raw, summary
 
@@ -4704,6 +4719,8 @@ class Daedalus:
                 message, raw or "",
                 tool_calls=summary.get("tool_calls") or [],
                 open_slices=_open_slices,
+                kind=str(summary.get("build_kind") or ""),
+                browser_ok=summary.get("browser_ok"),
             )
             if not dod.complete and dod.coding_task:
                 raw = (raw or "") + finish_nudge(dod)
