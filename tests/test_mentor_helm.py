@@ -23,27 +23,30 @@ def _data(tmp_path, monkeypatch):
 def test_catalog_has_recommended_and_rules():
     from daedalus import mentor_helm
     ids = {row["id"] for row in mentor_helm.CATALOG}
-    assert "or-claude-sonnet" in ids
-    assert "or-gpt-4o" in ids
-    assert "novita-qwen-coder" in ids
-    assert "rules" in ids
-    assert "brain" in ids
-    assert "auto" in ids
+    for needed in (
+        "or-fable-51", "or-astra", "or-gpt-55", "or-gpt-56-sol", "or-gpt-56-terra",
+        "or-opus-48", "or-kimi-k3", "or-glm-53", "or-grok-46",
+        "or-claude-sonnet", "rules", "brain", "auto",
+    ):
+        assert needed in ids, needed
     rec = [r for r in mentor_helm.CATALOG if r.get("recommended")]
-    assert rec[0]["id"] == "or-claude-sonnet"
+    assert any(r["id"] == "or-fable-51" for r in rec)
+    assert any(r["id"] == "or-astra" for r in rec)
 
 
-def test_recommend_sonnet_when_openrouter(tmp_path, monkeypatch):
+def test_recommend_grok_when_openrouter(tmp_path, monkeypatch):
     _data(tmp_path, monkeypatch)
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
     monkeypatch.delenv("NOVITA_API_KEY", raising=False)
+    monkeypatch.delenv("ALLTOKEN_API_KEY", raising=False)
     from daedalus import mentor_helm
     rec = mentor_helm.recommend()
     assert rec is not None
-    assert rec["id"] == "or-claude-sonnet"
+    assert rec["id"] == "or-grok-46"
     choice = mentor_helm.get_choice()
-    assert choice["id"] == "or-claude-sonnet"
+    assert choice["id"] == "or-grok-46"
     assert choice["source"] == "auto"
+    assert choice["model"] == "x-ai/grok-4.6"
 
 
 def test_set_choice_custom_and_unknown(tmp_path, monkeypatch):
@@ -108,6 +111,9 @@ def test_thinking_warn():
     from daedalus import mentor_helm
     assert mentor_helm.thinking_warn("anthropic/claude-sonnet-4-5") is None
     assert mentor_helm.thinking_warn("moonshotai/kimi-k2-thinking") is not None
+    assert mentor_helm.thinking_warn("z-ai/glm-5.3") is not None
+    assert mentor_helm.thinking_warn("z-ai/glm-5.3-flash") is None
+    assert mentor_helm.thinking_warn("x-ai/grok-4.6") is None
 
 
 def test_scaffold_consult_does_not_call_llm(tmp_path, monkeypatch):
@@ -237,6 +243,21 @@ def test_http_choice_and_status_catalog(tmp_path, monkeypatch):
     assert "llm" in body
     assert isinstance(body["llm"]["catalog"], list)
     assert body["llm"]["spend"]["cap"] == 40000
+    ids = {r["id"] for r in body["llm"]["catalog"]}
+    assert "or-fable-51" in ids
+    assert "or-astra" in ids
+    assert "or-grok-46" in ids
+    assert isinstance(body["llm"].get("presets"), list)
+    fable = client.post("/api/v1/daedalus/mentor", json={"choice_id": "or-fable-51"})
+    assert fable.status_code == 200
+    assert fable.json()["llm"]["choice"]["model"] == "anthropic/claude-fable-5.1"
+    custom = client.post(
+        "/api/v1/daedalus/mentor",
+        json={"provider": "openrouter", "model": "openai/gpt-6-astra"},
+    )
+    assert custom.status_code == 200
+    assert custom.json()["llm"]["choice"]["id"] == "custom"
+    assert custom.json()["llm"]["choice"]["model"] == "openai/gpt-6-astra"
     posted = client.post("/api/v1/daedalus/mentor", json={"choice_id": "rules"})
     assert posted.status_code == 200
     assert posted.json()["llm"]["choice"]["id"] == "rules"

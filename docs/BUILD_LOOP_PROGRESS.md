@@ -80,7 +80,7 @@ Fixes from this eval: decode `data:` image URLs; sibling `for (let i` is not a S
 
 Toggle: Studio **Mentor ON|OFF** (default on). `DAEDALUS_MENTOR=0` forces off. KV `adn:daedalus_mentor`.
 
-Director: Studio model picker (recommended Claude Sonnet 4.5 / GPT-4o / Qwen3 Coder; also Opus, Studio Brain, rules-only). KV `adn:daedalus_mentor_choice`. Token ledger `adn:daedalus_mentor_spend` (default 40k/day). `DAEDALUS_MENTOR_LLM=0` is rules-only. The director does **not** ingest harness RAG — a compact inspect digest plus the model's own knowledge. Unambiguous Vite `#app` scaffold stays on the cheap `steer()` path.
+Director: Studio model picker (Claude Fable 5.1, GPT-6 Astra, GPT-5.5 / 5.6, Opus 4.8, Kimi K3, GLM 5.3, Grok 4.6; Auto prefers Grok 4.6 on OpenRouter). Custom ⋯ for any provider+model. KV `adn:daedalus_mentor_choice`. Token ledger `adn:daedalus_mentor_spend` (default 40k/day). `DAEDALUS_MENTOR_LLM=0` is rules-only. The director does **not** ingest harness RAG — a compact inspect digest plus the model's own knowledge. Unambiguous Vite `#app` scaffold stays on the cheap `steer()` path.
 
 Always on even when Mentor is off: Phaser.Game counts as a loop; `playground.vite` playbook; kind sync; proof on exhaust; retry cap; `browser_ok` on chat DoD; no `NEED_PROPOSE` on game fast-path.
 

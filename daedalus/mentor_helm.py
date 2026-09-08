@@ -50,119 +50,131 @@ SYSTEM_PROMPT = (
 
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
 _THINKING_MARKERS = ("thinking", "r1", "qwq", "reasoner", "o1-", "o3-", "o4-")
+_COST_ORDER = {"none": 0, "low": 1, "mid": 2, "high": 3, "varies": 2}
+_EXTRA_PROVIDERS = frozenset({
+    "openrouter", "alltoken", "novita", "openai", "nvidia", "anthropic",
+})
 
-# Owner-facing catalog. `recommended` is the default auto pick when a key exists.
+
+def _row(
+    cid: str,
+    label: str,
+    *,
+    group: str,
+    provider: str = "",
+    model: str = "",
+    why: str = "",
+    cost: str = "mid",
+    recommended: bool = False,
+    auto: bool = False,
+    rank: int = 100,
+    needs_key: bool = True,
+) -> dict[str, Any]:
+    return {
+        "id": cid,
+        "label": label,
+        "group": group,
+        "provider": provider,
+        "model": model,
+        "why": why,
+        "cost": cost,
+        "recommended": recommended,
+        "auto": auto,
+        "rank": rank,
+        "needs_key": needs_key,
+    }
+
+
+# Pinned director list. `recommended` = shows in the Recommended optgroup.
+# `auto` = eligible for Auto (cheaper frontier first; flagships stay a manual pick).
 CATALOG: list[dict[str, Any]] = [
-    {
-        "id": "auto",
-        "label": "Auto (best available)",
-        "group": "choice",
-        "recommended": False,
-        "provider": "",
-        "model": "",
-        "why": "Picks the first recommended model whose API key is set.",
-        "cost": "varies",
-        "needs_key": False,
-    },
-    {
-        "id": "or-claude-sonnet",
-        "label": "Claude Sonnet 4.5",
-        "group": "recommended",
-        "recommended": True,
-        "provider": "openrouter",
-        "model": "anthropic/claude-sonnet-4-5",
-        "why": "Strong director, good quality/price. Default auto pick.",
-        "cost": "mid",
-        "needs_key": True,
-    },
-    {
-        "id": "or-gpt-4o",
-        "label": "GPT-4o",
-        "group": "recommended",
-        "recommended": True,
-        "provider": "openrouter",
-        "model": "openai/gpt-4o",
-        "why": "Broad game/product knowledge via OpenRouter.",
-        "cost": "mid",
-        "needs_key": True,
-    },
-    {
-        "id": "or-claude-opus",
-        "label": "Claude Opus 4",
-        "group": "also",
-        "recommended": False,
-        "provider": "openrouter",
-        "model": "anthropic/claude-opus-4",
-        "why": "Strongest Claude. Expensive — use when stuck.",
-        "cost": "high",
-        "needs_key": True,
-    },
-    {
-        "id": "novita-qwen-coder",
-        "label": "Qwen3 Coder 480B",
-        "group": "recommended",
-        "recommended": True,
-        "provider": "novita",
-        "model": "qwen/qwen3-coder-480b-a35b-instruct",
-        "why": "Huge coding model on Novita. Good when OpenRouter is unset.",
-        "cost": "mid",
-        "needs_key": True,
-    },
-    {
-        "id": "novita-qwen-235",
-        "label": "Qwen3 235B",
-        "group": "also",
-        "recommended": False,
-        "provider": "novita",
-        "model": "qwen/qwen3-235b-a22b-instruct-2507",
-        "why": "Large general model on Novita.",
-        "cost": "mid",
-        "needs_key": True,
-    },
-    {
-        "id": "openai-gpt-4o",
-        "label": "GPT-4o (OpenAI)",
-        "group": "also",
-        "recommended": False,
-        "provider": "openai",
-        "model": "gpt-4o",
-        "why": "Direct OpenAI key, not OpenRouter.",
-        "cost": "mid",
-        "needs_key": True,
-    },
-    {
-        "id": "nvidia-mistral-large",
-        "label": "Mistral Large (NVIDIA)",
-        "group": "also",
-        "recommended": False,
-        "provider": "nvidia",
-        "model": "mistralai/mistral-large-3-675b-instruct-2512",
-        "why": "If you already have NVIDIA_API_KEY.",
-        "cost": "mid",
-        "needs_key": True,
-    },
-    {
-        "id": "brain",
-        "label": "Studio Brain",
-        "group": "choice",
-        "recommended": False,
-        "provider": "",
-        "model": "",
-        "why": "Use whatever model is selected in Studio → Brain. May be cheap.",
-        "cost": "varies",
-        "needs_key": False,
-    },
-    {
-        "id": "rules",
-        "label": "Rules only (no LLM)",
-        "group": "choice",
-        "recommended": False,
-        "provider": "",
-        "model": "",
-        "why": "Deterministic inspect helm. Zero LLM spend.",
-        "cost": "none",
-        "needs_key": False,
-    },
+    _row("auto", "Auto (best available)", group="choice",
+         why="Picks a strong mid-cost director whose API key is set.", cost="varies", needs_key=False),
+    _row("or-fable-51", "Claude Fable 5.1", group="recommended", recommended=True,
+         provider="openrouter", model="anthropic/claude-fable-5.1",
+         why="Best coding-agent director. Tiny Mentor JSON keeps the bill small.",
+         cost="high", rank=5),
+    _row("or-astra", "GPT-6 Astra", group="recommended", recommended=True,
+         provider="openrouter", model="openai/gpt-6-astra",
+         why="Newest OpenAI flagship. Expensive — Mentor still caps tokens.",
+         cost="high", rank=6),
+    _row("or-gpt-56-sol", "GPT-5.6 Sol", group="recommended", recommended=True,
+         provider="openrouter", model="openai/gpt-5.6-sol",
+         why="Strong GPT-5.6. Prefer Terra if you want the cheaper 5.6.",
+         cost="high", rank=8),
+    _row("or-opus-48", "Claude Opus 4.8", group="recommended", recommended=True,
+         provider="openrouter", model="anthropic/claude-opus-4.8",
+         why="Opus 4.8 — previous Claude flagship, still excellent at helm.",
+         cost="high", rank=9),
+    _row("or-gpt-55", "GPT-5.5", group="recommended", recommended=True,
+         provider="openrouter", model="openai/gpt-5.5",
+         why="GPT-5.5 via OpenRouter.", cost="high", rank=10),
+    _row("or-kimi-k3", "Kimi K3", group="recommended", recommended=True, auto=True,
+         provider="openrouter", model="moonshotai/kimi-k3",
+         why="Open-weight agent model. Strong director, mid price.",
+         cost="mid", rank=20),
+    _row("or-glm-53", "GLM 5.3", group="recommended", recommended=True,
+         provider="openrouter", model="z-ai/glm-5.3",
+         why="Z.ai coding/agent flagship. Hidden reasoning stays on — Flash is cheaper.",
+         cost="mid", rank=22),
+    _row("or-grok-46", "Grok 4.6", group="recommended", recommended=True, auto=True,
+         provider="openrouter", model="x-ai/grok-4.6",
+         why="Frontier quality at mid price. Default Auto pick on OpenRouter.",
+         cost="mid", rank=12),
+    _row("or-gpt-56-terra", "GPT-5.6 Terra", group="recommended", recommended=True, auto=True,
+         provider="openrouter", model="openai/gpt-5.6-terra",
+         why="Cheaper GPT-5.6. Good Auto alternative to Grok.",
+         cost="mid", rank=18),
+    _row("or-glm-53-flash", "GLM 5.3 Flash", group="also", auto=True,
+         provider="openrouter", model="z-ai/glm-5.3-flash",
+         why="Same family, much cheaper. Prefer this if GLM reasoning burns the cap.",
+         cost="mid", rank=15),
+    _row("or-qwen38-max", "Qwen 3.8 Max", group="also", auto=True,
+         provider="openrouter", model="qwen/qwen3.8-max-0902",
+         why="Alibaba coding flagship on OpenRouter.", cost="mid", rank=28),
+    _row("or-sonnet-46", "Claude Sonnet 4.6", group="also", auto=True,
+         provider="openrouter", model="anthropic/claude-sonnet-4.6",
+         why="Solid director, lower than Fable/Opus.", cost="mid", rank=30),
+    _row("or-claude-sonnet", "Claude Sonnet 4.5", group="also",
+         provider="openrouter", model="anthropic/claude-sonnet-4-5",
+         why="Previous default. Still fine.", cost="mid", rank=40),
+    _row("or-opus-5", "Claude Opus 5", group="also",
+         provider="openrouter", model="anthropic/claude-opus-5",
+         why="Opus 5 on OpenRouter.", cost="high", rank=11),
+    _row("or-gpt-4o", "GPT-4o", group="also",
+         provider="openrouter", model="openai/gpt-4o",
+         why="Older GPT. Kept for keys that only have this id.", cost="mid", rank=60),
+    _row("or-claude-opus", "Claude Opus 4", group="also",
+         provider="openrouter", model="anthropic/claude-opus-4",
+         why="Legacy Opus 4 slug.", cost="high", rank=70),
+    _row("at-gpt-55", "GPT-5.5 (AllToken)", group="also", auto=True,
+         provider="alltoken", model="gpt-5.5",
+         why="Flagship GPT on AllToken.", cost="high", rank=25),
+    _row("at-opus-48", "Claude Opus 4.8 (AllToken)", group="also", auto=True,
+         provider="alltoken", model="claude-opus-4-8",
+         why="Opus 4.8 on AllToken.", cost="high", rank=26),
+    _row("at-kimi-k26", "Kimi K2.6 (AllToken)", group="also", auto=True,
+         provider="alltoken", model="kimi-k2.6",
+         why="If AllToken has no K3 slug yet.", cost="mid", rank=35),
+    _row("novita-qwen-coder", "Qwen3 Coder 480B", group="also", auto=True,
+         provider="novita", model="qwen/qwen3-coder-480b-a35b-instruct",
+         why="Huge coding model when only NOVITA_API_KEY is set.", cost="mid", rank=50),
+    _row("novita-qwen-235", "Qwen3 235B", group="also",
+         provider="novita", model="qwen/qwen3-235b-a22b-instruct-2507",
+         why="Large general model on Novita.", cost="mid", rank=55),
+    _row("novita-kimi-k2", "Kimi K2 (Novita)", group="also", auto=True,
+         provider="novita", model="moonshotai/kimi-k2-instruct",
+         why="Agent/coding Kimi on Novita.", cost="mid", rank=45),
+    _row("openai-gpt-4o", "GPT-4o (OpenAI)", group="also",
+         provider="openai", model="gpt-4o",
+         why="Direct OpenAI key, not OpenRouter.", cost="mid", rank=65),
+    _row("nvidia-mistral-large", "Mistral Large (NVIDIA)", group="also", auto=True,
+         provider="nvidia", model="mistralai/mistral-large-3-675b-instruct-2512",
+         why="If you already have NVIDIA_API_KEY.", cost="mid", rank=80),
+    _row("brain", "Studio Brain", group="choice",
+         why="Use whatever model is selected in Studio → Brain.", cost="varies", needs_key=False),
+    _row("rules", "Rules only (no LLM)", group="choice",
+         why="Deterministic inspect helm. Zero LLM spend.", cost="none", needs_key=False),
 ]
 
 
@@ -287,28 +299,93 @@ def _entry_available(row: dict[str, Any]) -> bool:
     return _provider_ready(str(row.get("provider") or ""))
 
 
-def catalog_public() -> list[dict[str, Any]]:
-    out = []
+def _publish(row: dict[str, Any]) -> dict[str, Any]:
+    item = dict(row)
+    item["available"] = _entry_available(row)
+    warn = thinking_warn(str(row.get("model") or ""))
+    if warn:
+        item["warn"] = warn
+    return item
+
+
+def preset_extras() -> list[dict[str, Any]]:
+    """Brain preset list minus ids already pinned — for the custom picker."""
+    seen: set[tuple[str, str]] = set()
     for row in CATALOG:
-        item = dict(row)
-        item["available"] = _entry_available(row)
-        warn = thinking_warn(str(row.get("model") or ""))
-        if warn:
-            item["warn"] = warn
-        out.append(item)
+        if row.get("provider") and row.get("model"):
+            seen.add((str(row["provider"]), str(row["model"])))
+    out: list[dict[str, Any]] = []
+    try:
+        presets = llm_config.list_preset_models()
+    except Exception:
+        return []
+    for m in presets:
+        provider = str(m.get("provider") or "").strip()
+        model = str(m.get("id") or "").strip()
+        if not provider or not model:
+            continue
+        if (provider, model) in seen:
+            continue
+        if m.get("tier") == "cheap":
+            continue
+        if provider not in _EXTRA_PROVIDERS:
+            continue
+        if ":batch" in model or model.startswith("~"):
+            continue
+        row = _row(
+            f"p:{provider}:{model}",
+            str(m.get("label") or model),
+            group="catalog",
+            provider=provider,
+            model=model,
+            why="From the Studio Brain model list.",
+            cost="high" if m.get("tier") == "power" else "mid",
+            rank=800,
+        )
+        out.append(row)
+        seen.add((provider, model))
     return out
 
 
-def recommend() -> dict[str, Any] | None:
-    """First recommended catalog row whose key is present."""
-    for row in CATALOG:
-        if row.get("recommended") and _entry_available(row):
+def all_choice_rows() -> list[dict[str, Any]]:
+    return list(CATALOG) + preset_extras()
+
+
+def find_row(cid: str) -> dict[str, Any] | None:
+    if not cid:
+        return None
+    for row in all_choice_rows():
+        if row["id"] == cid:
             return row
+    if cid.startswith("p:") and cid.count(":") >= 2:
+        provider, model = cid[2:].split(":", 1)
+        if provider and model:
+            return _row(cid, f"{provider}/{model}", group="catalog",
+                        provider=provider, model=model, why="Custom from Brain list.")
     return None
+
+
+def catalog_public() -> list[dict[str, Any]]:
+    rows = sorted(
+        CATALOG,
+        key=lambda r: (0 if r.get("group") == "recommended" else 1, r.get("rank", 100), r["id"]),
+    )
+    return [_publish(r) for r in rows]
+
+
+def recommend() -> dict[str, Any] | None:
+    """Strong mid-cost director whose key is set. Flagships stay a manual pick."""
+    cands = [r for r in CATALOG if r.get("auto") and _entry_available(r)]
+    if not cands:
+        cands = [r for r in CATALOG if r.get("recommended") and r.get("needs_key") and _entry_available(r)]
+    cands.sort(key=lambda r: (_COST_ORDER.get(str(r.get("cost") or "mid"), 2), int(r.get("rank") or 100)))
+    return cands[0] if cands else None
 
 
 def thinking_warn(model: str) -> str | None:
     ml = (model or "").lower()
+    if "glm-5.3" in ml and "flash" not in ml:
+        return "GLM-5.3 keeps hidden reasoning on; Flash is cheaper for Mentor JSON."
     if any(m in ml for m in _THINKING_MARKERS):
         return "Hidden-thinking models burn tokens; Mentor already forces tiny JSON."
     return None
@@ -400,7 +477,7 @@ def set_choice(body: dict[str, Any] | None) -> dict[str, Any]:
     elif cid == "rules":
         payload = {"id": "rules", "label": "Rules only (no LLM)", "provider": "", "model": ""}
     elif cid:
-        row = next((r for r in CATALOG if r["id"] == cid), None)
+        row = find_row(cid)
         if not row:
             raise ValueError(f"unknown mentor choice_id: {cid}")
         payload = {
@@ -700,6 +777,7 @@ def status_llm() -> dict[str, Any]:
             if rec else None
         ),
         "catalog": catalog_public(),
+        "presets": [_publish(r) for r in preset_extras()],
         "spend": {**spend, "cap": day_token_cap()},
         "max_out": max_out_tokens(),
         "max_in": max_in_tokens(),
