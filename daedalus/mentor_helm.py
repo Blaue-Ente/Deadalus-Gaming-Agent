@@ -531,6 +531,8 @@ def rules_unambiguous(inspect: dict[str, Any], steer: dict[str, Any]) -> bool:
         return True
     if flags.get("phaser_no_import") and nxt == "write_file":
         return True
+    if flags.get("phaser_auto_canvas") and nxt == "write_file":
+        return True
     return False
 
 

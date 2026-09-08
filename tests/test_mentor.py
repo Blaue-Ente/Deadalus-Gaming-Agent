@@ -410,3 +410,44 @@ def test_mentor_phaser_without_import_returns_to_writer(tmp_path, monkeypatch):
     assert decision.next_tool == "write_file"
     assert "Menu.js" in str(decision.next_args.get("path") or "")
     assert "import Phaser" in (decision.reason or "")
+
+
+def test_mentor_phaser_auto_with_canvas_returns_to_writer(tmp_path, monkeypatch):
+    from daedalus import mentor
+
+    monkeypatch.setenv("DAEDALUS_MENTOR", "1")
+    monkeypatch.setattr("daedalus.mentor._rag_hits", lambda q: [])
+    slug = "glass-orchard"
+    root = tmp_path / slug
+    (root / "src" / "scenes").mkdir(parents=True)
+    (root / "node_modules" / "phaser").mkdir(parents=True)
+    (root / "index.html").write_text(
+        '<div id="game"><canvas id="game-canvas"></canvas></div>',
+        encoding="utf-8",
+    )
+    (root / "src" / "main.js").write_text(
+        "import Phaser from 'phaser';\n"
+        "import { Boot } from './scenes/Boot.js';\n"
+        "new Phaser.Game({\n"
+        "  type: Phaser.AUTO,\n"
+        "  parent: 'game',\n"
+        "  canvas: document.getElementById('game-canvas'),\n"
+        "  scene: [Boot],\n"
+        "});\n",
+        encoding="utf-8",
+    )
+    _with_boot_scene(root)
+    (root / "package.json").write_text('{"dependencies":{"phaser":"^3.80"}}', encoding="utf-8")
+    monkeypatch.setattr("daedalus.playground.project_dir", lambda s: root)
+    rt = route(LUMEN)
+    loop = BuildLoop(rt, LUMEN, fix_rounds=3)
+    loop.slug = slug
+    loop.kind = "vite"
+    loop.observe("write_file", {"slug": slug, "path": "src/main.js"}, "── write_file OK ──", ok=True)
+    view = mentor.inspect_project(slug, kind="vite")
+    assert view.phaser_auto_canvas is True
+    decision = mentor.steer(loop)
+    assert decision is not None
+    assert decision.next_tool == "write_file"
+    assert "main.js" in str(decision.next_args.get("path") or "")
+    assert "WEBGL" in (decision.reason or "")

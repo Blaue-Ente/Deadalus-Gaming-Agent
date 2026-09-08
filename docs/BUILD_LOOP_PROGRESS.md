@@ -86,9 +86,26 @@ Always on even when Mentor is off: Phaser.Game counts as a loop; `playground.vit
 
 When Mentor is on: PLAN PROGRESS NEXT comes from `daedalus/mentor.py` (inspect slug, RAG, forbid `generate_image` after two fails), overlayed by the director cache after quiet/exhaust. Extra recover rounds after native budget exhaust (twice, +2 each). Persona wrap-up tells the model not to dump leftover JS.
 
-A **failed check returns to the writer**. Missing `node_modules` → `npm install`. Phaser `parent` id missing in `index.html` → `write_file` the mount. Chromium uncaught / blank / broken requests → `write_file` the entry, **not** another `browser`. The kernel proof already ran; repeating it without a file change is a skip-loop. Mentor still does **not** write `index.html` / `src/main.js`.
+A **failed check returns to the writer**. Missing `node_modules` → `npm install`. Phaser `parent` id missing in HTML → `write_file` the mount. Missing `from './scenes/X.js'` → that path. `Phaser.Scene` without `import Phaser` → that file. `Phaser.AUTO` + `config.canvas` → `type: Phaser.WEBGL` (Vite ESM custom environment). Chromium uncaught / blank → `write_file`, **not** another `browser`. Mentor still does **not** write game files.
 
 **Hole closed 2026-09-08 (cheap MiniMax M3 Glass Orchard):** Mentor *did* say RETURN TO WRITER → `npm install`. The writer called `npm install … 2>&1 | tail`. Isolation refused the pipe, so `node_modules` never appeared and proof stayed "renders, 1 uncaught". Vite proof also used to serve the **source** tree when `dist/` was missing (stub `<canvas>` counted as painted). Now: (1) `run_command` peels npm/pnpm/npx pipes/`&&` and runs the argv prefix; (2) Vite proof runs `npm install` + `vite build` before Chromium — compile fail is a failed check, not a skip. Cheap eval pool: DeepSeek V4 Flash, GLM 5.2, MiniMax M3, Poolside — not Claude.
+
+## Live eval 2026-09-08 — Glass Orchard, Qwen 3.8 Max writer + Fable mentor
+
+Full `Daedalus.chat` (`scripts/live_eval_agent_chat.py --craft-writer --preset glass --mentor-choice or-fable-51`). Effort craft. Isolated `$DAEDALUS_DATA`. Writer: `qwen/qwen3.8-max-0902`. Mentor: `anthropic/claude-fable-5.1` (1 call, 376 tokens, 9.1s, NEXT=`run_command`).
+
+| | Result |
+|--|--|
+| Wall | ~2132s |
+| Playbook | `playground.vite` |
+| Disk | `Phaser.Game` + Boot/Menu/Play/End, PNG art, sfx, `node_modules`, `dist/` |
+| `generate_image` | Novita 403 → OpenRouter; two writes died on `assets/assets/*.png` (filename already had `assets/`) |
+| Compile | **ok** after PlayScene.js landed — Chromium loaded hashed `index-*.js` |
+| Proof | 1 uncaught. First it was missing scenes; then `Must set explicit renderType in custom environment` (`Phaser.AUTO` + `canvas: getElementById('game-canvas')`). Frame stayed CSS chrome around an empty canvas. |
+| Mentor | First skip `rules_unambiguous`; then Fable said rebuild, not `write_file` the import/`WEBGL` defect |
+| DoD | `complete=false` (fix budget exhausted). Review-gate: persona dumped chain-of-thought, not an owner summary |
+
+Evaluator (not the agent): the same tree with `import Phaser from 'phaser'` in each scene and `type: Phaser.WEBGL` **paints the Glass Orchard menu** (emblem, title, CLICK or PRESS ENTER, 0 uncaught, PNG+sfx 200). Kernel now steers those two writes. `generate_image` strips a leading `assets/` prefix. Staging copies `sfx/`.
 
 ## Live eval 2026-09-08 — Glass Orchard, cheap writer DeepSeek V4 Flash
 
