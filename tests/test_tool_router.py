@@ -90,7 +90,16 @@ def test_merged_slerp_and_octree_requires_both_tools():
     assert ok.complete is True
 
 
-def test_short_napravi_zmiya_is_arcade_not_talk():
+def test_game_ask_does_not_merge_harness_fix():
+    msg = (
+        "Направи нова Playground игра: top-down dungeon crawler на HTML canvas. "
+        "Не прави змия, tetris или pong. Не чети daedalus/agent.py."
+    )
+    pb = match_playbook(msg)
+    assert pb.id == "playground.arcade"
+    assert "harness" not in pb.id
+    harness = match_playbook("поправи daedalus/agent.py — native tools loop")
+    assert harness.id == "harness.fix"
     pb = match_playbook("направи змия")
     assert pb.id == "playground.arcade"
     hello = match_playbook("здравей")

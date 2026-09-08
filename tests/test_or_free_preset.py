@@ -129,3 +129,23 @@ def test_or_free_in_preset_library():
     assert "or_free" in ids
     row = next(r for r in library() if r["id"] == "or_free")
     assert row["scores"]["economy"] >= 90
+
+
+def test_call_with_tools_lives_outside_agent():
+    """Kernel tool rounds must not require Chroma just to talk to OpenRouter."""
+    from pathlib import Path
+
+    import daedalus.llm_client as client
+    assert callable(client.call_with_tools)
+    src = Path("daedalus/agent.py").read_text(encoding="utf-8")
+    assert "from .llm_client import call_with_tools" in src
+
+
+def test_openrouter_tool_rounds_require_parameters():
+    from daedalus.llm_config import openai_compat_extra_body
+
+    assert openai_compat_extra_body("openrouter", with_tools=True) == {
+        "provider": {"require_parameters": True},
+    }
+    assert openai_compat_extra_body("openrouter", with_tools=False) == {}
+    assert openai_compat_extra_body("novita", with_tools=True) == {}

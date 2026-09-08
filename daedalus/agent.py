@@ -199,7 +199,13 @@ async def _call_claude_primary(system: str, messages: list[dict[str, Any]],
                     "(set DAEDALUS_API_KEY env var or configure in Admin › LLM, "
                     "or DAEDALUS_PROVIDER=ollama for a local model)"
                 )
-        oa_client = AsyncOpenAI(api_key=api_key, base_url=base_url or None)
+        from .llm_config import openai_compat_headers
+        oa_client = AsyncOpenAI(
+            api_key=api_key,
+            base_url=base_url or None,
+            max_retries=1,
+            default_headers=(openai_compat_headers(provider) or None),
+        )
         oa_messages = [{"role": "system", "content": system}] + list(messages)
         resp = await oa_client.chat.completions.create(
             model=model,
@@ -234,92 +240,9 @@ async def _call_claude_with_tools(
     messages: list[dict[str, Any]],
     tools: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """Native tool round for Anthropic *and* OpenAI-compatible providers (incl. Ollama)."""
-    from .local_llm import dummy_api_key, is_local_provider
-    from .native_tools import openai_tool_specs, to_anthropic_messages, to_openai_messages
-
-    cfg = get_config()
-    api_key = cfg.get("api_key", "")
-    base_url = cfg.get("base_url", "")
-    model = cfg.get("model", _MODEL)
-    sdk = cfg.get("sdk") or "openai"
-    provider = cfg.get("provider") or ""
-    if not api_key:
-        if is_local_provider(provider) or cfg.get("local"):
-            api_key = dummy_api_key(provider)
-        else:
-            return {"stop_reason": "end_turn", "content": []}
-
-    if sdk == "anthropic":
-        try:
-            from anthropic import AsyncAnthropic
-        except ImportError:
-            return {"stop_reason": "end_turn", "content": []}
-        kwargs: dict = dict(api_key=api_key, max_retries=0)
-        if base_url:
-            kwargs["base_url"] = base_url
-        client = AsyncAnthropic(**kwargs)
-        anthropic_tools = [
-            {
-                "name": t["name"],
-                "description": t["description"],
-                "input_schema": t["input_schema"],
-            }
-            for t in tools
-        ]
-        resp = await client.messages.create(
-            model=model,
-            max_tokens=_MAX_TOKENS,
-            system=system,
-            messages=to_anthropic_messages(messages),
-            tools=anthropic_tools,
-        )
-        content = []
-        for block in resp.content:
-            if block.type == "text":
-                content.append({"type": "text", "text": block.text})
-            elif block.type == "tool_use":
-                content.append({
-                    "type": "tool_use",
-                    "id": block.id,
-                    "name": block.name,
-                    "input": block.input,
-                })
-        return {"stop_reason": resp.stop_reason, "content": content}
-
-    try:
-        from openai import AsyncOpenAI
-    except ImportError:
-        return {"stop_reason": "end_turn", "content": []}
-    client = AsyncOpenAI(api_key=api_key, base_url=base_url or None, max_retries=0)
-    oa_messages = to_openai_messages(system, messages)
-    resp = await client.chat.completions.create(
-        model=model,
-        max_tokens=_MAX_TOKENS,
-        messages=oa_messages,
-        tools=openai_tool_specs(tools),
-        tool_choice="auto",
-    )
-    choice = resp.choices[0] if resp.choices else None
-    msg = choice.message if choice else None
-    content = []
-    if msg and msg.content:
-        content.append({"type": "text", "text": msg.content})
-    for tc in (getattr(msg, "tool_calls", None) or []):
-        args: Any = {}
-        raw_args = getattr(getattr(tc, "function", None), "arguments", "") or "{}"
-        try:
-            args = json.loads(raw_args)
-        except json.JSONDecodeError:
-            args = {"raw": raw_args}
-        content.append({
-            "type": "tool_use",
-            "id": tc.id,
-            "name": tc.function.name,
-            "input": args,
-        })
-    stop = "tool_use" if any(b.get("type") == "tool_use" for b in content) else "end_turn"
-    return {"stop_reason": stop, "content": content}
+    """Native tool round. Implementation lives in ``llm_client`` (no chroma)."""
+    from .llm_client import call_with_tools
+    return await call_with_tools(system, messages, tools, max_tokens=_MAX_TOKENS)
 
 
 # ---------------------------------------------------------------------------
