@@ -401,6 +401,37 @@ async def _vite_build_check(root: Path) -> tuple[bool, str]:
         return False, str(exc)
 
 
+_STAGE_ASSET_SUFFIX = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".ogg", ".mp3", ".wav", ".json"}
+
+
+def stage_web_assets(root: Path, dist: Path | None = None) -> int:
+    """Copy playground ``assets/`` into ``dist/assets/`` so Chromium proof can load them.
+
+    Vite hashes only *imported* files. Phaser ``this.load.image('x', 'assets/foo.png')``
+    404s when proof serves ``dist/`` alone — five broken requests, dark frame.
+    Skip ``_*`` verify screenshots. Returns how many files were copied.
+    """
+    src = root / "assets"
+    dest = (dist or root / "dist") / "assets"
+    if not src.is_dir() or not (dest.parent).is_dir():
+        return 0
+    dest.mkdir(parents=True, exist_ok=True)
+    n = 0
+    for path in src.iterdir():
+        if not path.is_file():
+            continue
+        if path.name.startswith("_"):
+            continue
+        if path.suffix.lower() not in _STAGE_ASSET_SUFFIX:
+            continue
+        try:
+            shutil.copy2(path, dest / path.name)
+            n += 1
+        except OSError:
+            continue
+    return n
+
+
 async def vite_compile_gate(root: Path, *, slug: str = "", kind: str = "vite") -> dict[str, Any]:
     """npm install + vite build from a project directory (no Playground DB).
 
@@ -424,6 +455,10 @@ async def vite_compile_gate(root: Path, *, slug: str = "", kind: str = "vite") -
         }
     build_ok, build_out = await _vite_build_check(root)
     log_lines += [f"[build] {l}" for l in build_out.splitlines()[-80:]]
+    if build_ok:
+        copied = stage_web_assets(root)
+        if copied:
+            log_lines.append(f"[assets] staged {copied} files into dist/assets/")
     return {
         "ok": build_ok,
         "skipped": False,

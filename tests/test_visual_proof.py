@@ -214,6 +214,20 @@ def test_vite_verify_compile_fail_does_not_open_chromium(monkeypatch, tmp_path):
     assert any("Boot.js" in str(e) for e in (result.get("page_errors") or []))
 
 
+def test_stage_web_assets_skips_verify_shots(tmp_path):
+    from daedalus.playground_runner import stage_web_assets
+
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "assets" / "player.png").write_bytes(b"png")
+    (tmp_path / "assets" / "_verify_screenshot.png").write_bytes(b"shot")
+    (tmp_path / "assets" / "notes.txt").write_text("no")
+    n = stage_web_assets(tmp_path)
+    assert n == 1
+    assert (tmp_path / "dist" / "assets" / "player.png").is_file()
+    assert not (tmp_path / "dist" / "assets" / "_verify_screenshot.png").exists()
+
+
 def test_vite_compile_gate_skips_without_package_json(tmp_path):
     from daedalus.playground_runner import vite_compile_gate
 

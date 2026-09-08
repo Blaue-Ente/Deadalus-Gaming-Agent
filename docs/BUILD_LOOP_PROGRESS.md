@@ -90,6 +90,24 @@ A **failed check returns to the writer**. Missing `node_modules` → `npm instal
 
 **Hole closed 2026-09-08 (cheap MiniMax M3 Glass Orchard):** Mentor *did* say RETURN TO WRITER → `npm install`. The writer called `npm install … 2>&1 | tail`. Isolation refused the pipe, so `node_modules` never appeared and proof stayed "renders, 1 uncaught". Vite proof also used to serve the **source** tree when `dist/` was missing (stub `<canvas>` counted as painted). Now: (1) `run_command` peels npm/pnpm/npx pipes/`&&` and runs the argv prefix; (2) Vite proof runs `npm install` + `vite build` before Chromium — compile fail is a failed check, not a skip. Cheap eval pool: DeepSeek V4 Flash, GLM 5.2, MiniMax M3, Poolside — not Claude.
 
+## Live eval 2026-09-08 — Glass Orchard, cheap writer DeepSeek V4 Flash
+
+Full `Daedalus.chat` (`scripts/live_eval_agent_chat.py --cheap --model deepseek/deepseek-v4-flash --preset glass --mentor-choice or-glm-53-flash`). Effort craft. Isolated `$DAEDALUS_DATA`. **No Claude.** Mentor: GLM 5.3 Flash (rules skipped the director — inspect already knew NEXT).
+
+| | Result |
+|--|--|
+| Wall | ~497s |
+| Writer | `deepseek/deepseek-v4-flash` (tool-call probe ok) |
+| Playbook | `playground.vite` |
+| Disk | `Phaser.Game` + arcade physics, Boot/Menu/Game/Win scenes, `node_modules`, `dist/`, 5 PNG assets |
+| Compile gate | **ran** — Chromium loaded `dist/assets/index-*.js` |
+| Vision | OpenRouter 404 `Filter by Image Support` → kernel **retried without PNG**, turn continued |
+| Proof | 5 broken requests (`this.load.image(..., 'assets/*.png')` not in `dist/`). Dark frame. |
+| Mentor | **RETURN TO WRITER** `write_file` (`rules_unambiguous`). Not another `browser`. |
+| DoD | `complete=false` (budget exhausted). Writer then hunted with `playground_read` instead of fixing paths. |
+
+Kernel staging now copies `assets/*.png` into `dist/assets/` after `vite build`. Re-opening that same `dist/` with the five PNGs staged: Chromium **ok**, 0 uncaught, 0 failed requests, canvas present. Favicon 404 is ignored. The remaining dark pixels are the slice's `#0a0a12` canvas, not a skipped check.
+
 ## Live eval 2026-09-08 — Glass Orchard, Mentor GLM 5.3 vs GPT-6 Astra
 
 Full `Daedalus.chat` (`scripts/live_eval_agent_chat.py --better --preset glass --mentor-choice …`). Builder: Claude Sonnet 4.6. Effort craft. Isolated `$DAEDALUS_DATA`. Long GDD (kind=vite + Phaser 3, lantern harvest, Grove/Dusk). Playbook **playground.vite**.
