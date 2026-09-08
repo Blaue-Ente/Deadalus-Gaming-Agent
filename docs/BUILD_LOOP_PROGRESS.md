@@ -18,7 +18,7 @@ stay pending.
 | S2 | Kernel-run visual proof (browser / Godot) | **This MR** |
 | S3 | Tool results as navigation (paths, slug, NEXT) | Partial — write_file / run_command / playground_new now name the slug path |
 | S4 | Write-time quality gate (syntax) + arcade lint | Pending |
-| S6 | Router: negations, explicit merge only | Pending |
+| S6 | Router: negations, explicit merge only | Partial — do not merge `harness.fix` into a Playground game; strip «не чети / don't read» windows. math3d+crowd+arcade on leftover keywords still pending |
 | S5 | One build layer, model roles, wrap-up sanitizing | Pending |
 
 ## Evidence the plan is built on (live eval, 2026-09-05, Nemotron 3.5 Lightning)
@@ -28,6 +28,17 @@ stay pending.
 | Snake | Files written in 3 rounds, then 8 rounds of `run_command`/`list_dir`/`find /workspace` hunting for them (jail BLOCKED). `game.js` had a duplicate `let gameLoopId`. Never opened in a browser. Reply ended with a DoD sticker the model never saw. |
 | SLERP (mixed prompt) | Router merged `math3d+crowd+arcade` on negated keywords. 5× `list_dir`, zero `write_file` with content, zero `math3d`. |
 | SLERP (clean prompt) | Router chose `playground.math3d` correctly. Model emitted `<need_list_dir>` XML, one `list_dir`, then quit. No files. |
+
+## Live eval 2026-09-08 — MiniMax M2.7 dungeon (not Snake)
+
+OpenRouter `minimax/minimax-m2.7` (~$0.24/$0.96 per 1M). DeepSeek V3.2 was the cheaper fallback; MiniMax returned a real `playground_new` tool call in ~3s so we kept it. Runner: `scripts/live_eval_build.py`.
+
+| Pass | What happened |
+|------|---------------|
+| 1 | MiniMax wrote `dungeon-keys/index.html` (~23KB). Prompt said «Не чети daedalus/agent.py» → router merged `playground.arcade+harness.fix`. NEXT became `read_file`. Native `browser` guessed `file://` / localhost. Kernel proof never ran. Budget exhausted. |
+| 2 (after router + browser→visual_proof) | Playbook `playground.arcade` only. `playground_new` → `write_file` → `browser` mapped to kernel `visual_proof`. **complete=true** in ~126s. Frame `studio/proof/frame_000.png`: painted room, HP/KEY/ROOM HUD, player, slime, gold key. Not a blank screen. |
+
+S2's proof is "the page painted", not a playtest bot. MiniMax put the slime in room 1 with the key (the ask wanted three rooms). That is model layout, not a skip-pass.
 
 ## S1 — Closed build loop (done)
 
