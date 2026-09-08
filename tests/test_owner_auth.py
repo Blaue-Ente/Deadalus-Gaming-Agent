@@ -246,6 +246,7 @@ def test_peel_package_command_drops_pipes():
     assert peel_package_command("npx vite build | cat") == "npx vite build"
     assert peel_package_command("echo hello | wc -l") is None
     assert peel_package_command("npm install") is None
+    assert peel_package_command("npm run dev -- --host 0.0.0.0 --port 5173 &") is None
 
 
 def test_shell_peels_npm_pipe_and_runs_argv(auth_tmp, monkeypatch):

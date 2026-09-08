@@ -135,6 +135,11 @@ def peel_package_command(command: str) -> str | None:
     head = _REDIRECT_TOKEN.sub("", head).strip()
     if not head or _META.search(head) or not _PKG_HEAD.match(head):
         return None
+    # Do not turn `npm run dev &` into a 120s foreground hang.
+    if re.match(r"^(npm|pnpm)\s+run\s+(dev|start)\b", head, re.I):
+        return None
+    if re.match(r"^npx\s+(?:--yes\s+)?vite\b", head, re.I) and not re.search(r"\bbuild\b", head, re.I):
+        return None
     return head
 
 
