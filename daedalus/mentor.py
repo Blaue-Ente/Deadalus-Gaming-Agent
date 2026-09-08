@@ -109,7 +109,8 @@ def status() -> dict[str, Any]:
         from . import mentor_helm
         out["llm"] = mentor_helm.status_llm()
     except Exception:
-        out["llm"] = {"enabled": False}
+        log.exception("mentor director status unavailable")
+        out["llm"] = {"enabled": False, "catalog": [], "spend": {}}
     return out
 
 
