@@ -520,4 +520,25 @@ class BuildLoop:
             "slug": self.slug,
             "proof_frames": list(self.proof_frames),
             "proof_gap": self.proof_gap,
+            "mentor_source": (
+                (self.mentor_steer or {}).get("source")
+                if isinstance(self.mentor_steer, dict) else None
+            ),
+            "mentor_llm_calls": int(getattr(self, "mentor_llm_calls", 0) or 0),
+            "mentor_next": (
+                (self.mentor_steer or {}).get("next_tool")
+                if isinstance(self.mentor_steer, dict) else None
+            ),
+            "mentor_skip": (
+                (self.mentor_steer or {}).get("llm_skip")
+                if isinstance(self.mentor_steer, dict) else None
+            ),
+            "mentor_model": (
+                (self.mentor_steer or {}).get("llm_model")
+                if isinstance(self.mentor_steer, dict) else None
+            ),
+            "mentor_reason": (
+                str((self.mentor_steer or {}).get("reason") or "")[:140]
+                if isinstance(self.mentor_steer, dict) else ""
+            ),
         }

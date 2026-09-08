@@ -15,6 +15,7 @@ def _data(tmp_path, monkeypatch):
     monkeypatch.delenv("DAEDALUS_MENTOR_MODEL", raising=False)
     monkeypatch.delenv("DAEDALUS_MENTOR_PROVIDER", raising=False)
     monkeypatch.delenv("DAEDALUS_MENTOR_DAY_CAP", raising=False)
+    monkeypatch.delenv("DAEDALUS_MENTOR_TIMEOUT", raising=False)
     monkeypatch.setenv("DAEDALUS_MENTOR_LLM", "1")
     from daedalus.paths import data_root
     data_root.cache_clear()
@@ -266,3 +267,18 @@ def test_http_choice_and_status_catalog(tmp_path, monkeypatch):
     cap = client.post("/api/v1/daedalus/mentor", json={"day_token_cap": 5000})
     assert cap.status_code == 200
     assert cap.json()["llm"]["spend"]["cap"] == 5000
+
+
+def test_llm_timeout_env(monkeypatch):
+    from daedalus import mentor_helm
+
+    monkeypatch.delenv("DAEDALUS_MENTOR_TIMEOUT", raising=False)
+    assert mentor_helm.llm_timeout_s() == 10.0
+    monkeypatch.setenv("DAEDALUS_MENTOR_TIMEOUT", "30")
+    assert mentor_helm.llm_timeout_s() == 30.0
+    monkeypatch.setenv("DAEDALUS_MENTOR_TIMEOUT", "2")
+    assert mentor_helm.llm_timeout_s() == 3.0
+    monkeypatch.setenv("DAEDALUS_MENTOR_TIMEOUT", "999")
+    assert mentor_helm.llm_timeout_s() == 60.0
+    monkeypatch.setenv("DAEDALUS_MENTOR_TIMEOUT", "nope")
+    assert mentor_helm.llm_timeout_s() == 10.0

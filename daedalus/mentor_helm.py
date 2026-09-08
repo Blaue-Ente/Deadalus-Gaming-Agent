@@ -9,7 +9,7 @@ Token control (defaults, owner-overridable):
 - max ~320 output tokens, truncated digest (~1.8k input tokens)
 - daily ledger (in+out estimate)
 - at most two LLM calls per native turn, cached on loop.mentor_steer
-- 10s timeout; JSON only; no chain-of-thought
+- 10s timeout (``DAEDALUS_MENTOR_TIMEOUT``, 3–60s); JSON only; no chain-of-thought
 """
 
 from __future__ import annotations
@@ -36,6 +36,8 @@ DEFAULT_MAX_IN = 1800
 DEFAULT_DAY_CAP = 40_000
 TURN_LLM_CAP = 2
 LLM_TIMEOUT_S = 10.0
+MENTOR_TIMEOUT_MIN_S = 3.0
+MENTOR_TIMEOUT_MAX_S = 60.0
 
 SYSTEM_PROMPT = (
     "You are Daedalus Mentor: a terse professional game director. "
@@ -195,6 +197,16 @@ def max_in_tokens() -> int:
         return max(400, min(4000, int(os.environ.get("DAEDALUS_MENTOR_MAX_IN") or DEFAULT_MAX_IN)))
     except ValueError:
         return DEFAULT_MAX_IN
+
+
+def llm_timeout_s() -> float:
+    raw = (os.environ.get("DAEDALUS_MENTOR_TIMEOUT") or "").strip()
+    if raw:
+        try:
+            return max(MENTOR_TIMEOUT_MIN_S, min(MENTOR_TIMEOUT_MAX_S, float(raw)))
+        except ValueError:
+            pass
+    return LLM_TIMEOUT_S
 
 
 def _kv_json(key: str, default: Any = None) -> Any:
@@ -648,7 +660,7 @@ async def _complete_director(provider: str, model: str, user: str) -> str:
         raise RuntimeError(f"no API key for {provider}")
     base_url = str(pd.get("base_url") or "")
     sdk = str(pd.get("sdk") or "openai")
-    timeout = LLM_TIMEOUT_S
+    timeout = llm_timeout_s()
 
     if sdk == "anthropic":
         from anthropic import AsyncAnthropic
@@ -714,6 +726,7 @@ async def consult(
     """Ask the director. Always returns a steer dict; `source` is llm|rules."""
     why = skip_reason(inspect, rules_steer, turn_calls=turn_calls)
     if why:
+        log.info("mentor helm skip: %s", why)
         return _rules_fallback(rules_steer, why)
     endpoint = _resolve_endpoint()
     if endpoint is None:
@@ -725,7 +738,7 @@ async def consult(
     try:
         text = await asyncio.wait_for(
             _complete_director(provider, model, user),
-            timeout=LLM_TIMEOUT_S + 1.0,
+            timeout=llm_timeout_s() + 1.0,
         )
     except Exception as exc:
         log.info("mentor helm LLM failed: %s", exc)
@@ -735,6 +748,7 @@ async def consult(
     record_spend(in_tok + out_tok)
     elapsed_ms = int((time.monotonic() - t0) * 1000)
     if not parsed:
+        log.info("mentor helm LLM bad_json model=%s ms=%s", model, elapsed_ms)
         return _rules_fallback(rules_steer, "bad_json", llm_ms=elapsed_ms)
     merged_forbid = list(dict.fromkeys(
         list(parsed.get("forbid_tools") or []) + list(rules_steer.get("forbid_tools") or [])
@@ -755,6 +769,14 @@ async def consult(
         parsed["next_tool"] = rules_steer.get("next_tool")
         parsed["next_args"] = rules_steer.get("next_args") or {}
         parsed["reason"] = (parsed.get("reason") or "") or (rules_steer.get("reason") or "")
+    log.info(
+        "mentor helm LLM ok model=%s action=%s next=%s ms=%s tokens=%s",
+        model,
+        parsed.get("action"),
+        parsed.get("next_tool"),
+        elapsed_ms,
+        parsed.get("llm_tokens"),
+    )
     return parsed
 
 
@@ -782,5 +804,5 @@ def status_llm() -> dict[str, Any]:
         "max_out": max_out_tokens(),
         "max_in": max_in_tokens(),
         "turn_calls_cap": TURN_LLM_CAP,
-        "timeout_s": LLM_TIMEOUT_S,
+        "timeout_s": llm_timeout_s(),
     }

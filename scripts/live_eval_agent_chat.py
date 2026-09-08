@@ -56,7 +56,58 @@ LUMEN = (
     "Не прави Godot. Не прави Expo."
 )
 
-PROMPTS = {"lumen": LUMEN}
+# Long GDD for Mentor director evals. Keep "kind=vite" + Phaser 3 + Vite
+# close together so the kernel matches playground.vite (not generic/static).
+GLASS = (
+    "Направи нова Playground игра: kind=vite, slug=glass-orchard, име Glass Orchard. "
+    "Движок Phaser 3 през npm (phaser ^3.80) заедно с Vite vanilla (не React, не Vue). "
+    "Първо playground_new({kind:\"vite\", slug:\"glass-orchard\", name:\"Glass Orchard\"}). "
+    "После overwrite на src/main.js — Vite Hello/#app броячът е празен екран, забранен е. "
+    "new Phaser.Game в src/main.js със scale.FIT, pixelArt true, фон #0b1020, "
+    "сцени Boot, Menu, Grove, Dusk, Result. index.html държи #game mount, не #app. "
+    "package.json има зависимости vite и phaser. "
+    "\n\n"
+    "Светът: терасирана стъклена градина над мъгла. Играчът е пазител на фенер — "
+    "малка фигура с топъл конус светлина. Целта на среза е една вечерна беритба, "
+    "не отворен свят. Събираш узрели стъклени плода (cyan / amber / violet), "
+    "отрязваш blight motes преди да заразят клон, и прибираш реколтата преди "
+    "луната да залезе. Тон: тих, скъп boutique title от 2026 — меко светене, "
+    "без мем-UI, без placeholder геометрични петна вместо герой. "
+    "\n\n"
+    "Управление: стрелки или WASD за ходене по терасите; пойнтер / тъч влачи "
+    "фенерния конус; Space или клик бере плод в обхват; Shift подрязва blight. "
+    "Esc пауза с Resume / Restart. Menu: заглавие Glass Orchard, подзаглавие "
+    "„One harvest before moonset“, бутон Begin harvest (клавиш Enter). "
+    "HUD винаги: Harvest (0–12), Lantern heat (бар, който пада на студ и се "
+    "пълни край brazier), Moon timer (90s), малък компас към следващия зрял плод. "
+    "Grove е учебната тераса (3 плода, 1 blight, без таймер-fail). Dusk е "
+    "истинската среза: 12 плода на три тераси, 4 blight motes, brazier в средата. "
+    "Победа: 12/12 преди timer=0 → Result „Orchard held“. "
+    "Загуба: timer=0 или heat=0 → Result „Frost took the grove“ с Restart. "
+    "Частици при беритба, screen shake при blight hit, Web Audio: мек дрон, "
+    "chime при плод, нисък thud при hit. "
+    "\n\n"
+    "Арт: PNG през generate_image, записани в assets/ и load.image в Boot — "
+    "keeper (32x48, side view), lantern cone glow, glass fruit x3 hues, "
+    "blight mote, terrace background, UI panel. Не цветни правоъгълници, "
+    "не CSS градиент вместо спрайт. Ако generate_image падне два пъти с еднаква "
+    "грешка, спри да я викаш и направи процедурни Phaser текстури в Boot "
+    "(fill + glow), после продължи към сцените. "
+    "\n\n"
+    "Файлове (задължителни): src/main.js, src/scenes/Boot.js, Menu.js, Grove.js, "
+    "Dusk.js, Result.js, src/systems/Lantern.js, Harvest.js, src/ui/Hud.js, "
+    "assets/*.png. Всяка сцена е отделен файл. Не слагай цялата игра в main.js. "
+    "\n\n"
+    "Ред: playground_new kind=vite → generate_image за ключовите спрайтове → "
+    "пиши Boot така че да стартира Phaser.Game (не Vite scaffold) → Menu/Grove/"
+    "Dusk/Result → npm install && npm run build → playtest → browser. "
+    "production({action:\"pipeline\", slug:\"glass-orchard\"}) ако е в tool subset. "
+    "Ако можеш, NEED_WORKER reviewer за визуален преглед на proof кадъра. "
+    "Не прави Godot. Не прави Expo."
+)
+
+PROMPTS = {"lumen": LUMEN, "glass": GLASS}
+MENTOR_CHOICES = ("or-glm-53", "or-astra", "or-fable-51", "or-grok-46", "or-kimi-k3", "rules")
 
 _RECT_RE = re.compile(
     r"fillRect|fillStyle\s*=|background:\s*linear-gradient|ctx\.fillRect|"
@@ -93,6 +144,60 @@ def _reset_path_caches() -> None:
     from daedalus import playground as pg
     pg.PROJECTS_DIR = playground_projects_dir()
     playground_projects_dir().mkdir(parents=True, exist_ok=True)
+
+
+def _pin_mentor(choice_id: str) -> dict:
+    """Lock Mentor on and pin the director. Isolated $DAEDALUS_DATA must be set."""
+    os.environ["DAEDALUS_MENTOR"] = "1"
+    os.environ["DAEDALUS_MENTOR_LLM"] = "0" if choice_id == "rules" else "1"
+    os.environ.setdefault("DAEDALUS_MENTOR_TIMEOUT", "30")
+    os.environ.setdefault("DAEDALUS_MENTOR_DAY_CAP", "80000")
+    from daedalus import mentor, mentor_helm
+
+    if choice_id == "rules":
+        os.environ.pop("DAEDALUS_MENTOR_MODEL", None)
+        os.environ.pop("DAEDALUS_MENTOR_PROVIDER", None)
+        mentor_helm.set_choice({"choice_id": "rules"})
+    else:
+        row = mentor_helm.find_row(choice_id)
+        if not row or not row.get("model"):
+            raise SystemExit(f"unknown mentor choice_id: {choice_id}")
+        os.environ["DAEDALUS_MENTOR_PROVIDER"] = str(row["provider"])
+        os.environ["DAEDALUS_MENTOR_MODEL"] = str(row["model"])
+    status = mentor.status()
+    llm = status.get("llm") or {}
+    choice = llm.get("choice") or {}
+    print(
+        f"mentor on={status.get('enabled')} choice={choice.get('id')} "
+        f"model={choice.get('model')} timeout={llm.get('timeout_s')}s "
+        f"warn={choice.get('warn') or ''}",
+        flush=True,
+    )
+    return {
+        "enabled": status.get("enabled"),
+        "choice": choice,
+        "spend": llm.get("spend"),
+        "timeout_s": llm.get("timeout_s"),
+        "warn": choice.get("warn"),
+    }
+
+
+def _mentor_snapshot() -> dict:
+    from daedalus import mentor
+
+    status = mentor.status()
+    llm = status.get("llm") or {}
+    choice = llm.get("choice") or {}
+    return {
+        "enabled": status.get("enabled"),
+        "choice_id": choice.get("id"),
+        "model": choice.get("model"),
+        "provider": choice.get("provider"),
+        "source": choice.get("source"),
+        "warn": choice.get("warn"),
+        "spend": llm.get("spend"),
+        "timeout_s": llm.get("timeout_s"),
+    }
 
 
 def _preflight_route(prompt: str) -> dict:
@@ -217,6 +322,11 @@ def main() -> None:
     parser.add_argument("--effort", default="craft")
     parser.add_argument("--screenshots", default=str(ARTIFACT_SHOTS))
     parser.add_argument("--data", default="/tmp/daedalus-live-eval-chat")
+    parser.add_argument(
+        "--mentor-choice",
+        default="",
+        help="Pin Mentor director: " + ", ".join(MENTOR_CHOICES),
+    )
     args = parser.parse_args()
     prompt = args.prompt or PROMPTS[args.preset]
 
@@ -259,6 +369,9 @@ def main() -> None:
         _pin_openrouter(chosen)
         _isolate_env(data)
         _reset_path_caches()
+        mentor_pin = None
+        if args.mentor_choice.strip():
+            mentor_pin = _pin_mentor(args.mentor_choice.strip())
 
         playbook = _preflight_route(prompt)
         print(f"playbook={playbook.get('playbook')} kind={playbook.get('kind')} tools={playbook.get('tools')}", flush=True)
@@ -273,7 +386,7 @@ def main() -> None:
                     for k in (
                         "review-gate", "skills disclosed", "need_worker",
                         "navigator", "native-tools", "build loop", "worker",
-                        "knowledge",
+                        "knowledge", "mentor", "helm", "director",
                     )
                 ):
                     capture.append(f"{record.name}: {msg[:400]}")
@@ -301,6 +414,8 @@ def main() -> None:
                 slug = dirs[0]
             elif "lumen-bloom" in dirs:
                 slug = "lumen-bloom"
+            elif "glass-orchard" in dirs:
+                slug = "glass-orchard"
 
         snap = _project_snapshot(slug)
         quality = _inspect_quality(slug)
@@ -311,11 +426,14 @@ def main() -> None:
             shots = []
             log.warning("screenshot export failed: %s", exc)
 
+        mentor_after = _mentor_snapshot()
         report = {
             "kind": "agent_chat",
             "probes": probes,
             "chosen": chosen,
             "prompt": prompt,
+            "mentor_pin": mentor_pin,
+            "mentor": mentor_after,
             "playbook_preflight": playbook,
             "chat": chat,
             "slug": slug,
@@ -351,6 +469,16 @@ def main() -> None:
                 "png_count": quality.get("png_count"),
                 "boutique_heuristic": quality.get("boutique_heuristic"),
                 "rectangles_only": quality.get("rectangles_only"),
+            },
+            "mentor": mentor_after,
+            "build_loop": {
+                k: (chat.get("build_loop") or {}).get(k)
+                for k in (
+                    "complete", "stop_reason", "playbook", "nudges",
+                    "missing", "proof_frames", "proof_gap",
+                    "mentor_source", "mentor_llm_calls", "mentor_next",
+                    "mentor_skip", "mentor_model", "mentor_reason",
+                )
             },
             "screenshots": shots,
             "report": str(dest),

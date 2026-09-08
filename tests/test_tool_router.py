@@ -84,6 +84,21 @@ def test_route_vite_phaser_not_arcade():
     assert "Phaser.Game" in sys or "src/main.js" in sys
 
 
+def test_route_glass_orchard_vite():
+    ask = (
+        "Направи нова Playground игра: kind=vite, slug=glass-orchard, име Glass Orchard. "
+        "Движок Phaser 3 през npm заедно с Vite vanilla. "
+        "src/main.js overwrite with Phaser.Game, Boot Menu Grove Dusk Result. "
+        "Не прави Godot. Не прави Expo."
+    )
+    rt = route(ask)
+    assert rt.playbook.id == "playground.vite"
+    assert rt.kind == "vite"
+    assert "generate_image" in rt.tool_names
+    assert "production" in rt.tool_names
+    assert "math3d" not in rt.tool_names
+
+
 def test_route_crowd_and_godot():
     crowd = route(CROWD)
     assert crowd.playbook.id == "playground.crowd"
