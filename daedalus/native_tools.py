@@ -564,9 +564,10 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
         "name": "production",
         "description": (
             "Production layer vs the prototype wall, plus the capability pipeline. "
-            "action: status | prove | seed | runtime | map | promote | pipeline. "
+            "action: status | prove | seed | runtime | map | promote | pipeline | qa. "
             "pipeline walks plan → context → build → runtime → gameplay → visual → "
             "export → publish on the adapter for the kind (Web / Engine / Mobile). "
+            "qa returns a fail-closed release verdict bound to revision + artifact hash. "
             "Empty systems map is not a production layer. "
             "store-ready / готово за стора on a prototype fails. "
             "seed writes design/systems.json only — do not inject into the Vite racer M0. "
@@ -577,7 +578,7 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
             "properties": {
                 "action": {
                     "type": "string",
-                    "description": "status | prove | seed | runtime | map | promote | pipeline",
+                    "description": "status | prove | seed | runtime | map | promote | pipeline | qa",
                 },
                 "slug": {"type": "string"},
                 "claim": {

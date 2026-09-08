@@ -278,8 +278,12 @@ _NATIVE_META: dict[str, dict[str, Any]] = {
             "Prototype vs store-ready systems map, or the capability pipeline "
             "(Web / Engine / Mobile). Empty JSON is not a production layer."
         ),
-        "knowledge": ("skills/production_layer.md", "skills/capability.md"),
-        "args_hint": "action=status|prove|seed|pipeline, slug, through, target",
+        "knowledge": (
+            "skills/production_layer.md",
+            "skills/capability.md",
+            "skills/platform_acceptance_qa.md",
+        ),
+        "args_hint": "action=status|prove|seed|pipeline|qa, slug, through, target",
     },
     "math3d": {
         "module": "daedalus.math3d",

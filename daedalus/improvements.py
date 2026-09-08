@@ -693,6 +693,12 @@ def select_skills(user_message: str, intent: str, hint: str = "") -> list[str]:
         "godot_api": ["kinematicbody", "characterbody2d", "godot 4.3", ".import", "daedalus-bridge"],
         "blender_jobs": ["blender", "bpy", "gltf", "glb export", "armature"],
         "playtest": ["playtest", "тествай играта", "готови ли сме"],
+        "platform_acceptance_qa": [
+            "platform acceptance", "acceptance qa", "приемни тестове",
+            "render_proof", "gameplay_proof", "device_smoke",
+            "artifact hash", "release gate", "fail-closed", "fail closed",
+            "ship gate", "platform matrix", "платформена qa",
+        ],
         "gameplay_bot": ["scenario.json", "gameplay bot", "pixel-diff", "fps budget",
                          "play-check", "balance.json"],
         "asset_pipeline": ["sprite atlas", "tileset", "sfx kit", "bitmap font", "tripo",

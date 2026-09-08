@@ -265,6 +265,23 @@ _EXTRA_DOCS: list[dict] = [
     },
     # ── Game Development Skills (from miloyip/game-programmer, MonoGame, GameFramework) ──
     {
+        "id": "skill:gamedev:platform-acceptance-qa",
+        "title": "Platform Acceptance QA — fail-closed matrix (Web / Godot / Mobile)",
+        "category": "gamedev",
+        "text": (
+            "Reusable QA skill for every Playground build, repair, export, or publish. "
+            "A candidate is project_id + target + revision + artifact_hash. "
+            "Statuses: pass|fail|skipped|blocked. Only pass is success. "
+            "Web: Chromium gameplay (not a canvas tag). "
+            "Godot: live scene + input via DaedalusBridge (not .tscn on disk). "
+            "Expo/Capacitor: emulator/device smoke (web preview is not a pass). "
+            "production({action: pipeline}) collects evidence; "
+            "production({action: qa}) returns the machine verdict. "
+            "Never say ready/done/shipped/publishable while a required check is skipped, "
+            "blocked, stale, or failed. See daedalus/skills/platform_acceptance_qa.md."
+        ),
+    },
+    {
         "id": "skill:gamedev:platform-picker",
         "title": "Game Platform Picker — Vite / Expo / React / Static",
         "category": "gamedev",

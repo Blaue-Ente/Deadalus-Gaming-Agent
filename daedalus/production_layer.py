@@ -313,6 +313,14 @@ def run_action(action: str, slug: str, **fields: Any) -> dict[str, Any]:
             text=str(fields.get("text") or fields.get("claim") or ""),
             plan=str(fields.get("plan") or ""),
         )
+    if action == "qa":
+        from .platform_acceptance import run_qa
+        return run_qa(
+            slug,
+            kind=str(fields.get("kind") or ""),
+            target=str(fields.get("target") or ""),
+            text=str(fields.get("text") or fields.get("claim") or ""),
+        )
     return {"ok": False, "error": f"unknown action {action}"}
 
 

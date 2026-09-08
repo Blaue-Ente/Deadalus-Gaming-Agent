@@ -29,8 +29,10 @@ Web and Godot require everything except `device_smoke`. Expo and Capacitor requi
 2. Evidence is per capability: `{capability, status, project_id, revision, artifact_hash, details, runner_version}`.
 3. An artifact needs `project_id`, `revision`, `target`, `artifact_hash`, `path`, `immutable=true`.
 4. `release_decision` allows a release only when required capabilities are supported, every required evidence record is pass for the same project/revision/hash, and the artifact is hashed and immutable.
-5. `production({action: pipeline, slug})` is the cross-platform entry. `engine({action: pipeline, slug})` stays Godot.
+5. `production({action: pipeline, slug})` is the cross-platform entry. `engine({action: pipeline, slug})` stays Godot. `production({action: qa, slug})` returns the fail-closed Platform Acceptance QA verdict.
 6. Roles: planner describes the contract; builder patches with version hashes; specialist writes adapter files; verifier does not write game files; polish only after a recorded visual failure. No two writers on the same file.
+
+Load skill `platform-acceptance-qa` for the Web / Godot / Mobile check matrix and example prompts.
 
 **Anti-patterns**:
 - Treating a missing runner as a skip-pass.
