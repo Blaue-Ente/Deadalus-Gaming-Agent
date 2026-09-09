@@ -125,6 +125,9 @@ class BuildLoop:
         self.proof_gap = ""
         self.kernel_proof_ran = False
         self.proof_blank = False
+        self.proof_ok = False
+        self.proof_errors: list[str] = []
+        self.proof_summary = ""
         self.mentor_grants = 0
         self.mentor_steer = None
         self.mentor_fp = ""
@@ -252,6 +255,16 @@ class BuildLoop:
         self.proof_gap = str(getattr(result, "honest_gap", "") or "")
         self.proof_frames = list(getattr(result, "frames", None) or [])
         self.proof_blank = bool(getattr(result, "blank_screen", False))
+        self.proof_ok = bool(getattr(result, "ok", False)) and not bool(getattr(result, "skipped", False))
+        self.proof_summary = str(getattr(result, "summary", "") or "")
+        details = getattr(result, "details", None) or {}
+        errs: list[str] = []
+        for key in ("page_errors", "console_errors", "failed_requests"):
+            for item in (details.get(key) or [])[:4]:
+                text = str(item or "").strip()
+                if text:
+                    errs.append(text[:160])
+        self.proof_errors = errs[:6]
         try:
             self.proof_vision = list(result.vision_blocks())
         except Exception:
@@ -262,7 +275,7 @@ class BuildLoop:
             return None
         if not self._has_writes():
             return None
-        if self.proof_gap or self.proof_blank:
+        if self.proof_gap or self.proof_blank or (self.kernel_proof_ran and not self.proof_ok):
             return False
         if self._has_successful_proof():
             return True
@@ -520,4 +533,25 @@ class BuildLoop:
             "slug": self.slug,
             "proof_frames": list(self.proof_frames),
             "proof_gap": self.proof_gap,
+            "mentor_source": (
+                (self.mentor_steer or {}).get("source")
+                if isinstance(self.mentor_steer, dict) else None
+            ),
+            "mentor_llm_calls": int(getattr(self, "mentor_llm_calls", 0) or 0),
+            "mentor_next": (
+                (self.mentor_steer or {}).get("next_tool")
+                if isinstance(self.mentor_steer, dict) else None
+            ),
+            "mentor_skip": (
+                (self.mentor_steer or {}).get("llm_skip")
+                if isinstance(self.mentor_steer, dict) else None
+            ),
+            "mentor_model": (
+                (self.mentor_steer or {}).get("llm_model")
+                if isinstance(self.mentor_steer, dict) else None
+            ),
+            "mentor_reason": (
+                str((self.mentor_steer or {}).get("reason") or "")[:140]
+                if isinstance(self.mentor_steer, dict) else ""
+            ),
         }

@@ -379,7 +379,8 @@ _EXTRA_DOCS: list[dict] = [
         "text": (
             "⚠️ WEB (vite or vite-react) ONLY.\n"
             "package.json: phaser ^3.80. npm install. src/main.js boots new Phaser.Game({"
-            "type: Phaser.AUTO, parent:'game', scene:[Boot,Menu,Game]}). "
+            "type: Phaser.WEBGL, parent:'game', scene:[Boot,Menu,Game]}). "
+            "Every scene file: import Phaser from 'phaser'. Do not pass config.canvas with Phaser.AUTO. "
             "Scenes: preload/create/update. Physics: arcade. Mobile: touch via pointer events."
         ),
     },

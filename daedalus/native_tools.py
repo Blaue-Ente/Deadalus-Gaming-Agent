@@ -135,8 +135,10 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
     {
         "name": "run_command",
         "description": (
-            "Run a shell command in the product/playground jail. "
-            "Use for pytest, npm, python, ls, git status. Secrets are stripped from env."
+            "Run a command in the playground jail as argv (not a shell). "
+            "pytest, npm install, npm run build, ls, git status. "
+            "No pipes, &&, or 2>&1 — call npm install with slug= as one command, "
+            "then npm run build as another. Secrets are stripped from env."
         ),
         "input_schema": {
             "type": "object",
@@ -172,13 +174,19 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
     },
     {
         "name": "generate_image",
-        "description": "Generate a game/app asset image and save it under playground assets or data/generated.",
+        "description": (
+            "Generate a game/app asset image and save it under the slug's assets/ folder. "
+            "filename is the name inside assets/ (keeper.png or sfx/icon.png) — do not prefix assets/."
+        ),
         "input_schema": {
             "type": "object",
             "properties": {
                 "prompt": {"type": "string"},
                 "slug": {"type": "string"},
-                "filename": {"type": "string"},
+                "filename": {
+                    "type": "string",
+                    "description": "Name under assets/ (keeper.png). Do not prefix assets/.",
+                },
                 "size": {"type": "string", "description": "e.g. 512x512"},
             },
             "required": ["prompt"],
@@ -1246,18 +1254,34 @@ async def execute_native_tool(
             body = (r.get("stdout") or "") + (("\n" + r["stderr"]) if r.get("stderr") else "")
             status = "OK" if r.get("ok") else "FAILED"
             hint = ""
+            slug_h = str(args.get("slug") or "").strip()
+            ran = str(r.get("ran") or "")
+            if ran and ran.strip() != cmd.strip():
+                hint += f"\nKernel dropped pipes/&& and ran: {ran}"
             if status == "FAILED":
-                slug_h = str(args.get("slug") or "").strip()
-                low = body.lower()
-                if "no such file" in low or "not found" in low:
-                    hint = (
+                err = str(r.get("error") or "")
+                low = (body + " " + err).lower()
+                if "metacharacters" in low:
+                    hint += (
+                        "\nNEXT: retry run_command without | && or 2>&1. "
+                        f'command="npm install" slug={slug_h or "<project>"}'
+                    )
+                elif "no such file" in low or "not found" in low:
+                    hint += (
                         "\nHint: Playground files live in the project slug, not /workspace. "
                         "Pass slug=" + (slug_h or "<project>") + " (cwd = that folder). "
                         "Do not find / or list_dir the harness."
                     )
+            nxt = ""
+            if status == "FAILED" and slug_h:
+                nxt = (
+                    f"NEXT: fix the command (plain argv, slug={slug_h}), "
+                    "or write_file the defect. Do not open browser yet."
+                )
             return (
                 f"── run_command {status} exit={r.get('exit_code')} cwd={r.get('cwd')} ──\n"
                 f"{body[:8000]}{hint}"
+                + (_nav_hint(slug=slug_h, next_line=nxt) if slug_h or nxt else "")
             )
 
         if name == "web_search":
@@ -1678,9 +1702,12 @@ async def execute_native_tool(
             if not images:
                 return f"── generate_image FAILED: no images ({img}) ──"
             first = images[0]
+            from .playground_assets import filename_under_assets
             dest_dir = (playground_projects_dir() / slug / "assets") if slug else (data_root() / "generated")
             dest_dir.mkdir(parents=True, exist_ok=True)
-            dest = dest_dir / filename
+            rel = filename_under_assets(filename)
+            dest = dest_dir / rel
+            dest.parent.mkdir(parents=True, exist_ok=True)
             decoded = decode_image_bytes(first)
             if decoded:
                 dest.write_bytes(decoded)
@@ -2006,6 +2033,18 @@ async def run_native_discovery_pass(
                     tname, tinput if isinstance(tinput, dict) else {}, result_text,
                     ok=ok, blocked=blocked,
                 )
+                from .tool_catalog import canonical as _can
+                tcan = _can(tname).lower()
+                if tcan in {"browser", "engine", "visual_proof", "run_command"} and not ok:
+                    try:
+                        from . import mentor as _mentor
+                        if _mentor.enabled():
+                            ret = _mentor.progress_next(loop)
+                            if ret:
+                                result_text = result_text + "\n" + ret
+                                all_results[-1] = result_text
+                    except Exception:
+                        pass
             tool_result_blocks.append({
                 "type": "tool_result",
                 "tool_use_id": tid,

@@ -24,6 +24,23 @@ CANDIDATES = (
     "deepseek/deepseek-v3.2",
 )
 
+# Owner-cheap pool — no Claude. Probe DeepSeek V4 / GLM 5.2 first (MiniMax M3
+# already ran the Glass Orchard writer-return eval).
+CHEAP_CANDIDATES = (
+    "deepseek/deepseek-v4-flash",
+    "z-ai/glm-5.2",
+    "minimax/minimax-m3",
+    "poolside/laguna-s-2.1:free",
+    "minimax/minimax-m2.7",
+)
+
+# Owner pick: latest Qwen, then Kimi K3, then Poolside. Not Claude as writer.
+CRAFT_CANDIDATES = (
+    "qwen/qwen3.8-max-0902",
+    "moonshotai/kimi-k3",
+    "poolside/laguna-s-2.1:free",
+)
+
 # Stronger than MiniMax M2.7, still inside a $2–3 Playground budget.
 BETTER_CANDIDATES = (
     "anthropic/claude-sonnet-4.6",

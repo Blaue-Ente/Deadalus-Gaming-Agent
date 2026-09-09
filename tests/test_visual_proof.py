@@ -188,11 +188,105 @@ def test_new_project_gets_status_readme(tmp_path, monkeypatch):
     reset_sqlite_pool()
 
 
+def test_vite_verify_compile_fail_does_not_open_chromium(monkeypatch, tmp_path):
+    from daedalus.playground_browser import verify_app
+
+    called = {"browser": False}
+
+    async def fake_gate(root, *, slug="", kind="vite"):
+        return {
+            "ok": False, "skipped": False, "install_ok": True,
+            "error": "Could not resolve ./scenes/Boot.js", "logs": ["[build] fail"],
+        }
+
+    async def fake_browser(*a, **k):
+        called["browser"] = True
+        return {"ok": True, "summary": "should not run"}
+
+    monkeypatch.setattr("daedalus.playground_runner.vite_compile_gate", fake_gate)
+    monkeypatch.setattr("daedalus.playground_browser.browser_verify", fake_browser)
+    monkeypatch.setattr("daedalus.playground.project_dir", lambda slug: tmp_path)
+    (tmp_path / "package.json").write_text('{"dependencies":{"phaser":"^3.80"}}', encoding="utf-8")
+    result = asyncio.run(verify_app("glass-orchard", "vite"))
+    assert result["ok"] is False
+    assert called["browser"] is False
+    assert "compile" in (result.get("summary") or "").lower() or "Vite" in (result.get("summary") or "")
+    assert any("Boot.js" in str(e) for e in (result.get("page_errors") or []))
+
+
+def test_stage_web_assets_skips_verify_shots(tmp_path):
+    from daedalus.playground_runner import stage_web_assets
+
+    (tmp_path / "assets").mkdir()
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "assets" / "player.png").write_bytes(b"png")
+    (tmp_path / "assets" / "_verify_screenshot.png").write_bytes(b"shot")
+    (tmp_path / "assets" / "notes.txt").write_text("no")
+    n = stage_web_assets(tmp_path)
+    assert n == 1
+    assert (tmp_path / "dist" / "assets" / "player.png").is_file()
+    assert not (tmp_path / "dist" / "assets" / "_verify_screenshot.png").exists()
+
+
+def test_stage_web_assets_copies_sfx_subdir(tmp_path):
+    from daedalus.playground_runner import stage_web_assets
+
+    (tmp_path / "assets" / "sfx").mkdir(parents=True)
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "assets" / "keeper.png").write_bytes(b"png")
+    (tmp_path / "assets" / "sfx" / "pickup.wav").write_bytes(b"RIFF")
+    (tmp_path / "assets" / "_shots").mkdir()
+    (tmp_path / "assets" / "_shots" / "frame.png").write_bytes(b"shot")
+    n = stage_web_assets(tmp_path)
+    assert n == 2
+    assert (tmp_path / "dist" / "assets" / "keeper.png").is_file()
+    assert (tmp_path / "dist" / "assets" / "sfx" / "pickup.wav").is_file()
+    assert not (tmp_path / "dist" / "assets" / "_shots").exists()
+
+
+def test_filename_under_assets_strips_prefix():
+    from daedalus.playground_assets import filename_under_assets, normalize_asset_path
+
+    assert filename_under_assets("assets/emblem.png") == "emblem.png"
+    assert filename_under_assets("assets/assets/emblem.png") == "emblem.png"
+    assert filename_under_assets("sfx/pickup.wav") == "sfx/pickup.wav"
+    assert filename_under_assets("../secret.png") == "secret.png"
+    assert filename_under_assets("keeper") == "keeper.png"
+    assert normalize_asset_path("assets/keeper.png") == "assets/keeper.png"
+    assert normalize_asset_path("keeper.png") == "assets/keeper.png"
+
+
+def test_screenshot_looks_blank_tiny_png(tmp_path):
+    from daedalus.playground_browser import CHROME_ARGS, screenshot_looks_blank
+
+    assert "--disable-gpu" not in CHROME_ARGS
+    assert "--use-angle=swiftshader" in CHROME_ARGS
+    tiny = tmp_path / "frame.png"
+    tiny.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 200)
+    assert screenshot_looks_blank(tiny) is True
+    fat = tmp_path / "painted.png"
+    fat.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\xff" * 20_000)
+    assert screenshot_looks_blank(fat) is False
+    assert screenshot_looks_blank(None) is False
+
+
+def test_vite_compile_gate_skips_without_package_json(tmp_path):
+    from daedalus.playground_runner import vite_compile_gate
+
+    result = asyncio.run(vite_compile_gate(tmp_path, slug="x", kind="vite"))
+    assert result["ok"] is True
+    assert result["skipped"] is True
+
+
 def test_proof_result_tool_text_and_nudge():
     r = ProofResult(
         ok=False, skipped=False, kind="static", slug="s", tool="browser",
         summary="blank", blank_screen=True, frames=["studio/proof/frame_000.png"],
+        details={"page_errors": ["Phaser is not defined"]},
     )
-    assert "FAILED" in r.as_tool_text()
+    text = r.as_tool_text()
+    assert "FAILED" in text
+    assert "Phaser is not defined" in text
+    assert r.as_dict()["page_errors"] == ["Phaser is not defined"]
     assert "VISUAL PROOF" in r.nudge_block()
     assert "blank" in r.nudge_block().lower() or "nothing" in r.nudge_block().lower()

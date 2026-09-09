@@ -109,16 +109,34 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def filename_under_assets(filename: str) -> str:
+    """Path *inside* ``assets/`` for ``generate_image`` writes.
+
+    Dest dir is already ``<slug>/assets``. Writers often pass
+    ``assets/keeper.png``, which used to write ``assets/assets/keeper.png``
+    and raise ENOENT because the nested folder was never created.
+    """
+    raw = str(filename or "asset.png").replace("\\", "/").strip().lstrip("/")
+    while raw.startswith("./"):
+        raw = raw[2:]
+    while raw.lower().startswith("assets/"):
+        raw = raw[len("assets/") :]
+    parts = [p for p in raw.split("/") if p and p not in (".", "..")]
+    if not parts:
+        parts = ["asset.png"]
+    if len(parts) > 2:
+        parts = parts[-2:]
+    if "." not in parts[-1]:
+        parts[-1] = parts[-1] + ".png"
+    return "/".join(parts)
+
+
 def normalize_asset_path(path: str) -> str:
     """Normalize to ``assets/foo.png`` under the project workspace."""
-    apath = (path or "").strip().lstrip("/")
-    if not apath:
-        raise ValueError("empty asset path")
-    if not apath.startswith("assets/"):
-        apath = f"assets/{apath}"
+    apath = filename_under_assets(path or "")
     if not apath.lower().endswith(".png"):
         apath = apath.rsplit(".", 1)[0] + ".png"
-    return apath
+    return f"assets/{apath}"
 
 
 def assets_dir(slug: str) -> Path:

@@ -117,7 +117,8 @@ TALK vs BUILD
 - <NEED_MODE: talk|build|auto> only when switching mode.
 
 NATIVE TOOLS
-  playground_new / read_file / list_dir / write_file(slug,path,content) / edit_file(slug,path,search,replace) / run_command
+  playground_new / read_file / list_dir / write_file(slug,path,content) / edit_file(slug,path,search,replace)
+  run_command(command, slug) — argv only. npm install then npm run build as two calls. No | && 2>&1.
   web_search / web_fetch / web_read(url) / reach_status
   browser({action: goto|click|type|extract|screenshot|close, url, selector, text})
   mcp_call({server, tool, arguments})
@@ -166,7 +167,7 @@ GAMES
 - Reference real assets/*.png (2D) or GLB (3D). No CSS-gradient hero placeholders.
 - After a game build: playtest before claiming "готово".
 - Web: playtest/scenario.json is the bot (pixel-diff, FPS, win/lose). Click-Start is not Play.
-- The kernel opens the running game after the last write (browser / Godot engine) and stores frames in `studio/proof/`. A compile is not proof. Missing Chromium or Godot is an honest gap, not a pass.
+- The kernel opens the running game after the last write (browser / Godot engine) and stores frames in `studio/proof/`. A compile is not proof. Missing Chromium or Godot is an honest gap, not a pass. Vite/Phaser: the kernel runs npm install + vite build before Chromium; a failed gate returns to the writer, it does not serve a stub canvas.
 - Dissection: name/URL/git/path → specimen. Play Lab is the virtual computer (local HTTP; optional SmolVM viewer).
   Use the specimen as a мостра (loop/feel/stack), never clone assets or code.
 - Godot: engine tool runs the project (scene tree, input, errors). A loaded .tscn is not Play. Pack/save traps: owner chain, do not recurse GLB, no trimesh on imported meshes.
