@@ -244,6 +244,67 @@ def draft_from_failure(
     return pending_dir() / f"{rec['id']}.json"
 
 
+def queue_correction(
+    *,
+    kind: str,
+    playbook: str = "",
+    errors: list[str],
+    next_tool: str = "",
+    next_args: dict[str, Any] | None = None,
+    hint: str = "",
+    context: str = "",
+) -> Path | None:
+    """Pending owner-facing fix after a failed check. Not live until Approve.
+
+    This is the Mentor/kernel proposal, not a silent harness edit. The writer
+    (or the owner) applies it; ``self_improve.propose_patch`` stays separate.
+    """
+    errs = [e.strip() for e in (errors or []) if e and str(e).strip()]
+    nxt = (next_tool or "write_file").strip()
+    pb = (playbook or kind or "build").strip()
+    name = f"fix-{_slug(pb)}-{_slug(nxt)[:20]}"
+    lines = [
+        f"## When\nPlaybook `{pb}` (`{kind or 'game'}`) failed a check.\n",
+        "## What failed\n" + ("\n".join(f"- {e[:240]}" for e in errs[:8]) or "- (unnamed)"),
+        f"\n## Do this next\n- Writer NEXT: `{nxt}`"
+        + (f" `{next_args}`" if next_args else "")
+        + "\n- Mentor does not write game files.\n"
+        "- Re-run visual proof after the write. Do not reopen `browser` on the same error.\n"
+        "- Harness patches wait for Approve — never silent-edit `daedalus/`.\n",
+    ]
+    if hint:
+        lines.append(f"## Kernel hint\n{hint[:800]}\n")
+    if context:
+        lines.append(f"## Context\n{context[:800]}\n")
+    rec = queue_draft(
+        name=name,
+        description=(hint or f"NEXT {nxt} after {pb} failure")[:240],
+        body="\n".join(lines),
+        origin="mentor_correction",
+        kind=kind or pb,
+        extra={
+            "kind": "correction",
+            "playbook": pb,
+            "next_tool": nxt,
+            "next_args": dict(next_args or {}),
+            "kernel_hint": (hint or "")[:400],
+            "errors": errs[:8],
+        },
+    )
+    return pending_dir() / f"{rec['id']}.json"
+
+
+def pending_corrections() -> list[dict[str, Any]]:
+    """Pending drafts that propose a next fix (Mentor or failure lesson)."""
+    rows: list[dict[str, Any]] = []
+    for rec in list_pending():
+        origin = str(rec.get("origin") or "")
+        extra = rec.get("extra") if isinstance(rec.get("extra"), dict) else {}
+        if origin in {"mentor_correction", "failure"} or extra.get("kind") == "correction":
+            rows.append(rec)
+    return rows
+
+
 def draft_from_success(*, kind: str, summary: str) -> Path | None:
     if not (summary or "").strip() or not kind:
         return None

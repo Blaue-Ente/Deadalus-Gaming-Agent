@@ -43,6 +43,40 @@ CHROME_ARGS = (
 # compresses to ~4–8 KB — that is a blank screen, not a boutique title.
 _BLANK_SHOT_BYTES = 12_000
 
+
+def paint_summary(
+    *,
+    reachable: bool,
+    dark_frame: bool,
+    blank_screen: bool,
+    has_fatal: bool,
+    has_canvas: bool,
+    page_errors: list[str],
+    console_errors: list[str],
+    failed_requests: list[str],
+    dom_text_len: int,
+) -> str:
+    """Owner-facing proof line. Canvas HUD lives in the frame, not DOM text."""
+    if not reachable:
+        return "❌ App did not load in the browser"
+    if dark_frame:
+        return "❌ Dark frame — canvas/WebGL did not paint a scene (not a boutique title)"
+    if blank_screen:
+        return "❌ Blank screen — nothing rendered (empty DOM)"
+    if has_fatal:
+        bits = []
+        if page_errors:
+            bits.append(f"{len(page_errors)} uncaught")
+        if console_errors:
+            bits.append(f"{len(console_errors)} console errors")
+        if failed_requests:
+            bits.append(f"{len(failed_requests)} broken requests")
+        return "❌ Renders, but runtime problems: " + ", ".join(bits)
+    if has_canvas:
+        return "✅ Canvas/WebGL painted (HUD is in the screenshot, not DOM text)"
+    return f"✅ Renders cleanly ({dom_text_len} visible DOM characters)"
+
+
 # Console warnings that are noise, not real failures — never fail a build on these.
 _BENIGN_CONSOLE = (
     "Download the React DevTools",
@@ -300,23 +334,17 @@ async def browser_verify(
     has_fatal = bool(page_errors) or bool(failed_requests) or bool(console_errors)
     ok = reachable and (not blank_screen) and (not has_fatal)
 
-    if not reachable:
-        summary = "❌ Приложението не се зареди в браузъра"
-    elif dark_frame:
-        summary = "❌ Тъмен кадър — canvas/WebGL не е нарисувал сцена (не е boutique title)"
-    elif blank_screen:
-        summary = "❌ Бял екран — нищо не се рендерира (DOM празен)"
-    elif has_fatal:
-        bits = []
-        if page_errors:
-            bits.append(f"{len(page_errors)} uncaught грешки")
-        if console_errors:
-            bits.append(f"{len(console_errors)} console грешки")
-        if failed_requests:
-            bits.append(f"{len(failed_requests)} счупени заявки")
-        summary = "❌ Рендерира се, но има runtime проблеми: " + ", ".join(bits)
-    else:
-        summary = f"✅ Рендерира се чисто ({dom_text_len} символа видим текст)"
+    summary = paint_summary(
+        reachable=reachable,
+        dark_frame=dark_frame,
+        blank_screen=blank_screen,
+        has_fatal=has_fatal,
+        has_canvas=has_canvas,
+        page_errors=page_errors,
+        console_errors=console_errors,
+        failed_requests=failed_requests,
+        dom_text_len=dom_text_len,
+    )
 
     return {
         "ok": ok, "reachable": reachable, "blank_screen": blank_screen,

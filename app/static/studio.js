@@ -215,9 +215,19 @@
       };
       spendEl.textContent = cap ? t("studio.mentorSpend", { used: fmt(used), cap: fmt(cap) }) : "";
       spendEl.classList.toggle("warn", cap > 0 && used >= cap * 0.8);
+      const nFix = Number(data.pending_corrections) || 0;
+      if (nFix) {
+        spendEl.textContent = (spendEl.textContent ? spendEl.textContent + " · " : "")
+          + t("studio.mentorFixes", { n: nFix });
+        spendEl.classList.add("warn");
+      }
       const bits = [];
       if (llm.choice && llm.choice.warn) bits.push(llm.choice.warn);
       if (llm.recommended && llm.recommended.why) bits.push(llm.recommended.why);
+      const firstFix = Array.isArray(data.corrections) ? data.corrections[0] : null;
+      if (firstFix && (firstFix.hint || firstFix.description)) {
+        bits.push(firstFix.hint || firstFix.description);
+      }
       spendEl.title = bits.join(" ");
     }
   }
@@ -527,7 +537,9 @@
         const b = document.createElement("b");
         text(b, it.name || it.id || t("studio.lesson"));
         const s = document.createElement("small");
-        text(s, it.description || it.origin || "pending");
+        const extra = it.extra || {};
+        const nextBit = extra.next_tool ? ("NEXT " + extra.next_tool) : "";
+        text(s, [nextBit, it.description || it.origin || "pending"].filter(Boolean).join(" · "));
         const row = document.createElement("div");
         row.className = "row tight";
         const okBtn = document.createElement("button");
