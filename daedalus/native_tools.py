@@ -1129,12 +1129,19 @@ async def execute_native_tool(
                 name_, kind=kind, source="built", description=desc, slug=slug_in,
             )
             slug = (proj or {}).get("slug") or ""
+            seed_hint = ""
+            try:
+                from .writer_assist import seed_note
+                seed_hint = seed_note(slug)
+            except Exception:
+                seed_hint = ""
             return (
                 f"── playground_new OK slug={slug} kind={(proj or {}).get('kind')} ──\n"
                 f"Write files with write_file slug={slug}. Patch with edit_file. "
                 f"Paths are inside the Playground project `{slug}` "
                 f"(playground/projects/{slug}/), not /workspace. "
                 "README.md holds Status (built / left / proof) and an Assets size table."
+                f"{seed_hint}"
             )
 
         if name == "write_file":
@@ -1904,6 +1911,11 @@ async def run_native_discovery_pass(
     """
     from .tool_dumps import extract_tool_dumps
 
+    try:
+        from . import writer_assist as _writer_assist
+        _writer_assist.set_ask(user_content)
+    except Exception:
+        pass
     specs = tools or NATIVE_TOOL_SPECS
     messages: list[dict[str, Any]] = [{"role": "user", "content": user_content}]
     tool_log: list[dict[str, Any]] = []

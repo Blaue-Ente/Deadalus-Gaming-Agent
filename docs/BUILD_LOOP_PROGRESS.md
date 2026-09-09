@@ -237,3 +237,46 @@ FAILED so the loop's NEXT is a corrected `write_file`, not eight hunting rounds.
 
 Internal study `docs/GODOGEN_STUDY.md`. Steal: pixels of the running game.
 Keep: playbooks, scaffolds, build loop. Do not delete the kernel.
+
+## S5 slice — Writer assist (Off / Auto / Kernel)
+
+Kernel Phaser skeleton so a weak writer still *boots*. Mentor does not write
+`index.html` / `src/main.js`. Default **Off** (Vite Hello). Studio segmented
+control: Auto | Off | Kernel. `DAEDALUS_WRITER_ASSIST` locks the process.
+
+- **Off** — today's Vite `#app` Hello (racer still wins on F-Zero briefs).
+- **Auto** — Phaser seed when `kind=vite` and the brief names Phaser.
+- **Kernel** — Phaser seed for every new Vite project that is not a racer.
+  Files: `#game`, `Phaser.WEBGL`, `import Phaser from 'phaser'`, Boot/Menu/Play.
+
+Do **not** reuse `playground_game_scaffold.startGame(parent='app')` / `Phaser.AUTO`.
+
+A/B runner: `scripts/sim_writer_assist.py --pair` (Ember Walk, Mentor off).
+
+### Live A/B 2026-09-09 — Ember Walk, `cohere/north-mini-code:free`
+
+Same writer, Mentor **off**, craft, isolated `$DAEDALUS_DATA`. Probe ok in ~4s.
+Bit Flows’ free-coder list is stale (`qwen/qwen3-coder:free` and
+`poolside/laguna-m.1:free` are gone). Do not use `openrouter/free`.
+
+| Cell | Wall | Proof | What landed |
+|------|------|-------|-------------|
+| **Off** | 264s | **black frame** | Model wrote Phaser.WEBGL in one `src/main.js`, npm install + build. `index.html` used `<canvas id="game">` as parent — Chromium WEBGL stays black. No `src/scenes/`. DoD complete=false (round budget). |
+| **Kernel** | 173s | **Menu painted** | Seed `#game` div + WEBGL + Boot/Menu/Play. Proof shows title Ember Walk, “One playable slice.”, “Enter — begin”. Writer filled `Play.js` with cursor keys + orbs. Overwrote `main.js` (dropped `scale.FIT`; Play uses arcade physics). DoD complete=false (round budget / review-gate). |
+
+**Where to help more (not done in this MR):** stop the writer swapping `#game` for `<canvas>`; keep arcade physics + `scale.FIT` if they rewrite `main.js`. Mentor already steers Vite Hello; it does not yet lock the mount node.
+
+**Owner pick:** Studio stays **Off** until you flip it. **Auto** is the conservative default (Phaser briefs only). **Kernel** if every new Vite project should boot as Phaser.
+
+OpenRouter pick for the first sim (tool-call probe 2026-09-09):
+
+| Role | Model | Probe |
+|------|--------|-------|
+| Free writer | `cohere/north-mini-code:free` | ok, ~1.7s |
+| Free writer alt | `nex-agi/nex-n2.5-mini:free` | ok, ~1.5s |
+| Free writer alt | `poolside/laguna-xs-2.1:free` | ok, ~10s |
+| Paid fallback | `qwen/qwen3-coder-30b-a3b-instruct` | ok, ~2.4s |
+| Skip as writer | `nvidia/nemotron-3-ultra-550b-a55b:free` | too slow |
+| Skip | `openrouter/free` | inconsistent routing |
+
+Live A/B results land in this section after `sim_writer_assist.py --pair`.

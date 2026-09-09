@@ -492,6 +492,11 @@ class MentorBody(BaseModel):
     day_token_cap: int | None = Field(default=None, ge=0, le=2_000_000)
 
 
+class WriterAssistBody(BaseModel):
+    mode: str = Field(default="", max_length=40)
+    enabled: bool | None = None
+
+
 @router.get("/api/v1/daedalus/effort")
 async def effort_preview(q: str = "", effort: str = "auto") -> dict[str, Any]:
     from daedalus.task_effort import classify
@@ -517,6 +522,19 @@ async def mentor_set(body: MentorBody) -> dict[str, Any]:
         st = apply_update(body.model_dump())
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, **st}
+
+
+@router.get("/api/v1/daedalus/writer-assist")
+async def writer_assist_status() -> dict[str, Any]:
+    from daedalus.writer_assist import status
+    return status()
+
+
+@router.post("/api/v1/daedalus/writer-assist")
+async def writer_assist_set(body: WriterAssistBody) -> dict[str, Any]:
+    from daedalus.writer_assist import apply_update
+    st = apply_update(body.model_dump())
     return {"ok": True, **st}
 
 
