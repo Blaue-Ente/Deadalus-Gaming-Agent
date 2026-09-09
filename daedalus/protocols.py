@@ -26,6 +26,20 @@ class Protocol(NamedTuple):
 # First matching flag wins. Keep hints ≤140 for Mentor JSON.
 REGISTRY: tuple[Protocol, ...] = (
     Protocol(
+        id="canvas-game-webgl-black",
+        flag="canvas_game_trap",
+        next_tool="write_file",
+        forbid=("browser", "engine", "visual_proof"),
+        path="index.html",
+        return_to="writer",
+        hint="Replace <canvas id=game> with <div id=game> — Phaser parent must be a div (AUTO/WEBGL both paint black)",
+        do=(
+            "REWRITE index.html: body holds <div id=\"game\"></div>, never "
+            "<canvas id=\"game\">. Then set type: Phaser.WEBGL in src/main.js. "
+            "Do not reopen Chromium until those two files change."
+        ),
+    ),
+    Protocol(
         id="chromium-failed",
         flag="proof_failed",
         next_tool="write_file",
@@ -36,19 +50,6 @@ REGISTRY: tuple[Protocol, ...] = (
         do=(
             "RETURN TO WRITER. Read the proof error. Fix that file "
             "(WEBGL type, import Phaser, mount id). Do not call browser again."
-        ),
-    ),
-    Protocol(
-        id="canvas-game-webgl-black",
-        flag="canvas_game_trap",
-        next_tool="write_file",
-        forbid=("browser",),
-        path="index.html",
-        return_to="writer",
-        hint="Replace <canvas id=game> with <div id=game> — WEBGL paints black on a canvas parent",
-        do=(
-            "REWRITE index.html: body holds <div id=\"game\"></div>, never "
-            "<canvas id=\"game\">. Phaser.WEBGL creates its own canvas. Then fill Play.js."
         ),
     ),
     Protocol(

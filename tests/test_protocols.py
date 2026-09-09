@@ -13,7 +13,11 @@ def test_canvas_trap_rewrites_index_html():
     assert row.next_tool == "write_file"
 
 
-def test_stub_does_not_ship():
+def test_canvas_trap_beats_generic_proof_fail():
+    row = match({"canvas_game_trap": True, "proof_failed": True})
+    assert row is not None
+    assert row.id == "canvas-game-webgl-black"
+    assert row.path == "index.html"
     row = match({"play_stub": True, "kernel_proof_ran": True})
     assert row is not None
     assert row.id == "play-js-stub"

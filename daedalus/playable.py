@@ -2,8 +2,8 @@
 
 A Phaser/Vite slice is ready when:
 
-1. Source is not a known trap (Vite Hello, ``<canvas id="game">`` + WEBGL,
-   Play.js stub / no input).
+1. Source is not a known trap (Vite Hello, ``<canvas id="game">`` as Phaser
+   parent, Play.js stub / no input).
 2. Kernel Chromium **plays** ``playtest/scenario.json`` (Enter then WASD,
    canvas pixel-diff). Painted Menu alone is not enough.
 
@@ -27,11 +27,9 @@ _INPUT_RE = re.compile(
     re.I,
 )
 _CANVAS_GAME_RE = re.compile(
-    r"<canvas\b[^>]*\bid\s*=\s*['\"]game['\"]|"
-    r"<canvas\b[^>]*\bid\s*=\s*['\"]game-canvas['\"]",
+    r"<canvas\b[^>]*\bid\s*=\s*['\"]game['\"]",
     re.I,
 )
-_WEBGL_RE = re.compile(r"Phaser\.WEBGL")
 _PHASER_BOOT_RE = re.compile(r"new\s+Phaser\.Game\b")
 _SCENARIO_REL = "playtest/scenario.json"
 
@@ -80,7 +78,7 @@ def inspect_tree(root: Path | str, *, kind: str = "") -> dict[str, Any]:
     game = looks_like_game(
         base, kind=kind, package_json=pkg, main_js=main, has_phaser_boot=has_boot,
     )
-    canvas_trap = bool(_CANVAS_GAME_RE.search(html) and _WEBGL_RE.search(main))
+    canvas_trap = bool(_CANVAS_GAME_RE.search(html) and has_boot)
     play_exists = (base / "src" / "scenes" / "Play.js").is_file() or (
         base / "src" / "scenes" / "Play.ts"
     ).is_file()

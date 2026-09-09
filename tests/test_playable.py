@@ -21,7 +21,21 @@ def test_canvas_game_webgl_is_a_trap(tmp_path):
     assert flags["source_playable"] is False
 
 
-def test_stub_play_is_not_playable(tmp_path):
+def test_canvas_parent_traps_auto_too(tmp_path):
+    (tmp_path / "index.html").write_text(
+        '<canvas id="game"></canvas><script type="module" src="/src/main.js"></script>',
+        encoding="utf-8",
+    )
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "main.js").write_text(
+        "import Phaser from 'phaser';\n"
+        "new Phaser.Game({ type: Phaser.AUTO, parent: 'game' });\n",
+        encoding="utf-8",
+    )
+    flags = inspect_tree(tmp_path, kind="vite")
+    assert flags["canvas_game_trap"] is True
+    assert flags["source_playable"] is False
     (tmp_path / "index.html").write_text('<div id="game"></div>', encoding="utf-8")
     scenes = tmp_path / "src" / "scenes"
     scenes.mkdir(parents=True)
