@@ -65,21 +65,44 @@ def strip_images_from_messages(messages: list[dict[str, Any]]) -> list[dict[str,
     return out
 
 
-def _usage_dict(usage: Any) -> dict[str, int]:
-    if usage is None:
-        return {}
-    prompt = getattr(usage, "prompt_tokens", None)
-    completion = getattr(usage, "completion_tokens", None)
-    if prompt is None:
-        prompt = getattr(usage, "input_tokens", None)
-    if completion is None:
-        completion = getattr(usage, "output_tokens", None)
-    out: dict[str, int] = {}
-    if prompt is not None:
-        out["prompt_tokens"] = int(prompt)
-    if completion is not None:
-        out["completion_tokens"] = int(completion)
+def _usage_dict(usage: Any) -> dict[str, Any]:
+    from .llm_cost import parse_usage
+    parsed = parse_usage(usage)
+    out: dict[str, Any] = {
+        "prompt_tokens": int(parsed.get("prompt_tokens") or 0),
+        "completion_tokens": int(parsed.get("completion_tokens") or 0),
+    }
+    if parsed.get("cost_known"):
+        out["cost_usd"] = parsed.get("cost_usd")
     return out
+
+
+def _meter(resp: Any, *, model: str, role: str) -> dict[str, Any]:
+    from .llm_cost import parse_usage
+    from . import run_budget
+    parsed = parse_usage(getattr(resp, "usage", None), resp)
+    run_budget.note_usage(parsed, model=model, role=role)
+    return parsed
+
+
+def _budget_stop_complete(*, provider: str, model: str) -> dict[str, Any]:
+    from . import run_budget
+    text = run_budget.stop_text()
+    out = _as_openai_response(text, provider=provider, model=model)
+    out["ok"] = False
+    out["budget_stopped"] = True
+    return out
+
+
+def _budget_stop_tools() -> dict[str, Any]:
+    from . import run_budget
+    text = run_budget.stop_text()
+    return {
+        "stop_reason": "end_turn",
+        "content": [{"type": "text", "text": text}],
+        "budget_stopped": True,
+        "usage": {},
+    }
 
 
 def _as_openai_response(text: str, *, provider: str, model: str) -> dict[str, Any]:
@@ -107,7 +130,7 @@ async def complete(
     json_mode: bool = False,
 ) -> dict[str, Any]:
     """Call the configured OpenAI-compatible (or Anthropic) provider directly."""
-    from .llm_config import get_config, openai_compat_headers
+    from .llm_config import get_config, openai_compat_extra_body, openai_compat_headers
 
     cfg = get_config()
     provider = cfg.get("provider") or "openai"
@@ -125,6 +148,10 @@ async def complete(
                 "NOVITA_API_KEY или DAEDALUS_API_KEY, или пусни локален LLM "
                 "(DAEDALUS_PROVIDER=ollama)."
             )
+
+    from . import run_budget
+    if run_budget.would_block(provider):
+        return _budget_stop_complete(provider=provider, model=used_model)
 
     messages: list[dict[str, str]] = []
     if system:
@@ -147,10 +174,12 @@ async def complete(
             kwargs["temperature"] = temperature
         resp = await client.messages.create(**kwargs)
         text = "".join(getattr(b, "text", "") or "" for b in (resp.content or []))
+        billed = _meter(resp, model=used_model, role="writer")
     else:
         from openai import AsyncOpenAI
 
         extra = openai_compat_headers(provider)
+        extra_body = openai_compat_extra_body(provider, with_tools=False)
         client = AsyncOpenAI(
             api_key=api_key,
             base_url=base_url or None,
@@ -166,15 +195,27 @@ async def complete(
             body["temperature"] = temperature
         if json_mode:
             body["response_format"] = {"type": "json_object"}
+        if extra_body:
+            body["extra_body"] = extra_body
         resp = await client.chat.completions.create(**body)
         text = (resp.choices[0].message.content if resp.choices else "") or ""
         used_model = getattr(resp, "model", None) or used_model
+        billed = _meter(resp, model=used_model, role="writer")
 
     log.info(
-        "standalone LLM %s/%s intent=%s client=%s chars=%d",
+        "standalone LLM %s/%s intent=%s client=%s chars=%d cost=%s",
         provider, used_model, intent, client_id, len(text),
+        billed.get("cost_usd"),
     )
-    return _as_openai_response(text, provider=provider, model=used_model)
+    out = _as_openai_response(text, provider=provider, model=used_model)
+    if billed.get("cost_known"):
+        out["cost_usd"] = billed.get("cost_usd") or 0.0
+    out["usage"] = {
+        "prompt_tokens": int(billed.get("prompt_tokens") or 0),
+        "completion_tokens": int(billed.get("completion_tokens") or 0),
+        "cost_usd": billed.get("cost_usd"),
+    }
+    return out
 
 
 async def call_with_tools(
@@ -204,6 +245,10 @@ async def call_with_tools(
             api_key = dummy_api_key(provider)
         else:
             return {"stop_reason": "end_turn", "content": []}
+
+    from . import run_budget
+    if run_budget.would_block(provider):
+        return _budget_stop_tools()
 
     if sdk == "anthropic":
         try:
@@ -240,10 +285,12 @@ async def call_with_tools(
                     "name": block.name,
                     "input": block.input,
                 })
+        billed = _meter(resp, model=model, role="writer")
         return {
             "stop_reason": resp.stop_reason,
             "content": content,
             "usage": _usage_dict(getattr(resp, "usage", None)),
+            "cost_usd": billed.get("cost_usd"),
         }
 
     try:
@@ -314,20 +361,21 @@ async def call_with_tools(
             "input": args,
         })
     stop = "tool_use" if any(b.get("type") == "tool_use" for b in content) else "end_turn"
-    usage = getattr(resp, "usage", None)
+    billed = _meter(resp, model=model, role="writer")
     try:
-        if usage:
-            log.info(
-                "tool LLM %s/%s stop=%s tools=%d prompt=%s completion=%s",
-                provider, model, stop,
-                sum(1 for b in content if b.get("type") == "tool_use"),
-                getattr(usage, "prompt_tokens", None),
-                getattr(usage, "completion_tokens", None),
-            )
+        log.info(
+            "tool LLM %s/%s stop=%s tools=%d prompt=%s completion=%s cost=%s",
+            provider, model, stop,
+            sum(1 for b in content if b.get("type") == "tool_use"),
+            billed.get("prompt_tokens"),
+            billed.get("completion_tokens"),
+            billed.get("cost_usd"),
+        )
     except Exception:
         pass
     return {
         "stop_reason": stop,
         "content": content,
-        "usage": _usage_dict(usage),
+        "usage": _usage_dict(getattr(resp, "usage", None)),
+        "cost_usd": billed.get("cost_usd"),
     }

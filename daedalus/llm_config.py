@@ -81,12 +81,16 @@ def openai_compat_extra_body(provider: str, *, with_tools: bool = False) -> dict
 
     OpenRouter otherwise may pick a host that ignores ``tools`` and just
     writes prose — MiniMax/DeepSeek then look like they cannot call tools.
+
+    ``usage.include`` asks OpenRouter to put billed ``usage.cost`` on the
+    response so the run-budget ledger is an invoice, not a catalog guess.
     """
     if (provider or "").strip().lower() != "openrouter":
         return {}
+    body: dict = {"usage": {"include": True}}
     if with_tools:
-        return {"provider": {"require_parameters": True}}
-    return {}
+        body["provider"] = {"require_parameters": True}
+    return body
 
 
 PROVIDER_DEFAULTS: dict[str, dict] = {
