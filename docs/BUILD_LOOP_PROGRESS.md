@@ -88,6 +88,8 @@ When Mentor is on: PLAN PROGRESS NEXT comes from `daedalus/mentor.py` (inspect s
 
 A **failed check returns to the writer**. Missing `node_modules` → `npm install`. Phaser `parent` id missing in HTML → `write_file` the mount. Missing `from './scenes/X.js'` → that path. `Phaser.Scene` without `import Phaser` → that file. `Phaser.AUTO` + `config.canvas` → `type: Phaser.WEBGL` (Vite ESM custom environment). Chromium uncaught / blank → `write_file`, **not** another `browser`. Mentor still does **not** write game files.
 
+The director inspect digest includes a compact **tool graph** for the matched playbook (tools, NEXT edges, standards, recovery). After the native turn ends on a failure, `record_outcome` queues a pending correction in Studio **Lessons** (`origin=mentor_correction`) with that NEXT. Owner Approve makes it a live skill; the agent cannot approve itself. Harness code patches still go through `self_improve` / Proposals.
+
 **Hole closed 2026-09-08 (cheap MiniMax M3 Glass Orchard):** Mentor *did* say RETURN TO WRITER → `npm install`. The writer called `npm install … 2>&1 | tail`. Isolation refused the pipe, so `node_modules` never appeared and proof stayed "renders, 1 uncaught". Vite proof also used to serve the **source** tree when `dist/` was missing (stub `<canvas>` counted as painted). Now: (1) `run_command` peels npm/pnpm/npx pipes/`&&` and runs the argv prefix; (2) Vite proof runs `npm install` + `vite build` before Chromium — compile fail is a failed check, not a skip. Cheap eval pool: DeepSeek V4 Flash, GLM 5.2, MiniMax M3, Poolside — not Claude.
 
 ## Live eval 2026-09-08 — Glass Orchard, Qwen 3.8 Max writer + Fable mentor
@@ -106,6 +108,22 @@ Full `Daedalus.chat` (`scripts/live_eval_agent_chat.py --craft-writer --preset g
 | DoD | `complete=false` (fix budget exhausted). Review-gate: persona dumped chain-of-thought, not an owner summary |
 
 Evaluator (not the agent): the same tree with `import Phaser from 'phaser'` in each scene and `type: Phaser.WEBGL` **paints the Glass Orchard menu** (emblem, title, CLICK or PRESS ENTER, 0 uncaught, PNG+sfx 200). Kernel now steers those two writes. `generate_image` strips a leading `assets/` prefix. Staging copies `sfx/`.
+
+## Live eval 2026-09-09 — Glass Orchard, Kimi K3 writer + Fable mentor
+
+Full `Daedalus.chat` (`scripts/live_eval_agent_chat.py --model moonshotai/kimi-k3 --preset glass --mentor-choice or-fable-51`). Effort craft. Isolated `$DAEDALUS_DATA`. Writer: `moonshotai/kimi-k3`. Mentor: `anthropic/claude-fable-5.1` (2 LLM calls, 482 tokens, NEXT=`run_command` both times).
+
+| | Result |
+|--|--|
+| Wall | ~731s |
+| Playbook | `playground.vite` only (Phaser.WEBGL no longer merges `math3d`) |
+| Disk | `Phaser.WEBGL` + `canvas: getElementById('orchard-canvas')`, Boot/Menu/Play/GameOver, every scene `import Phaser from 'phaser'`, PNG + sfx, `npm`, `dist/` |
+| Proof | **ok=true**, 0 uncaught, frame painted (dark navy menu, “GLASS ORCHARD”, WASD, PRESS ENTER). Sprite is a cheap green square, not boutique art. |
+| DoD | **`complete=true`**, `browser=true`, no blockers |
+| Honest GDD gaps | Scenes are Menu/Play/GameOver, not Grove/Dusk/Result. No `Lantern.js` / moon timer / 12-fruit Dusk. Review-gate flagged that. Kernel DoD still complete because the page painted. |
+| Proof wording | Summary used to say “0 visible DOM characters” — Phaser HUD is on the canvas. Kernel now says canvas/WebGL painted. |
+
+Mentor still does not write game files. After this eval the director digest carries the playbook **tool graph**, and a failed check queues a pending correction (Studio Lessons, Approve).
 
 ## Live eval 2026-09-08 — Glass Orchard, cheap writer DeepSeek V4 Flash
 

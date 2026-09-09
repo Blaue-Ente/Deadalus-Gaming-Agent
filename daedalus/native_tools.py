@@ -1871,6 +1871,16 @@ async def execute_native_tool(
         return f"── {name} ERROR: {exc} ──"
 
 
+def _mentor_record_outcome(loop: Any) -> None:
+    if loop is None:
+        return
+    try:
+        from . import mentor as _mentor
+        _mentor.record_outcome(loop)
+    except Exception:
+        log.debug("mentor record_outcome skipped", exc_info=True)
+
+
 async def run_native_discovery_pass(
     system: str,
     user_content: str,
@@ -1992,6 +2002,7 @@ async def run_native_discovery_pass(
                 continue
             if proof_block:
                 all_results.append(proof_block)
+            _mentor_record_outcome(loop)
             if all_results:
                 combined = (
                     "━━━ NATIVE TOOL RESULTS ━━━\n"
@@ -2053,6 +2064,7 @@ async def run_native_discovery_pass(
 
         messages.append({"role": "user", "content": tool_result_blocks})
 
+    _mentor_record_outcome(loop)
     if all_results:
         return "━━━ NATIVE TOOL RESULTS ━━━\n" + "\n\n".join(all_results), tool_log
     return None, []
