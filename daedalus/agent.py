@@ -4822,6 +4822,12 @@ class Daedalus:
                 "proposal_id": pid_match.group(1),
                 "file_path": fp_match.group(1) if fp_match else "",
             }
+        budget_status = None
+        try:
+            from .run_budget import status as budget_status_fn
+            budget_status = budget_status_fn()
+        except Exception:
+            budget_status = budget_plan
         return {
             "agent": "Daedalus",
             "session_id": session_id,
@@ -4840,6 +4846,7 @@ class Daedalus:
             "timestamp": started.isoformat(),
             "complete": None if dod is None else dod.complete,
             "dod": None if dod is None else dod.as_dict(),
+            "run_budget": budget_status,
         }
 
     async def generate(

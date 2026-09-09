@@ -1,7 +1,8 @@
-"""Per-run USD envelope — pick writer + mentor so the slice fits $5 / $20 / $50.
+"""Per-run USD envelope — pick writer + mentor, then meter OpenRouter spend.
 
-Not a magic last-model wand. Relative catalog (OpenRouter-ish, 2026-09), not
-a live bill. Off leaves Studio Brain and the Mentor picker alone.
+The $5 / $20 / $50 catalog is still a relative pick (which models). The
+stop is billed ``usage.cost`` from OpenRouter, not the catalog guess. Off
+leaves Studio Brain and the Mentor picker alone and does not accumulate.
 
 Env ``DAEDALUS_RUN_BUDGET=5|20|50|off`` locks the envelope (tests / sims).
 ``DAEDALUS_MODEL`` still wins for the writer (live eval pins). Local wardrobe
@@ -18,6 +19,7 @@ from typing import Any, Iterator
 log = logging.getLogger(__name__)
 
 _DB_KEY = "adn:daedalus_run_budget"
+_SPEND_KEY = "adn:daedalus_run_spend"
 TIERS = (0, 5, 20, 50)
 _bound: contextvars.ContextVar[dict[str, Any] | None] = contextvars.ContextVar(
     "daedalus_run_budget", default=None
@@ -150,7 +152,166 @@ def set_usd(raw: Any) -> int:
     nxt = normalize_usd(raw)
     kv.set(_DB_KEY, str(nxt))
     log.info("Daedalus run budget set → $%s", nxt)
+    if nxt <= 0:
+        clear_spend()
+    else:
+        _touch_ledger_cap(nxt)
     return usd()
+
+
+def _empty_ledger(cap: int = 0) -> dict[str, Any]:
+    remaining = max(0.0, float(cap))
+    return {
+        "cap_usd": int(cap),
+        "spent_usd": 0.0,
+        "remaining_usd": remaining,
+        "calls": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "unknown_cost_calls": 0,
+        "exhausted": False,
+        "last_model": "",
+        "last_role": "",
+        "last_source": "",
+    }
+
+
+def _spend_raw() -> dict[str, Any]:
+    try:
+        from . import kv
+        raw = kv.get(_SPEND_KEY)
+    except Exception:
+        raw = None
+    return dict(raw) if isinstance(raw, dict) else {}
+
+
+def _write_spend(row: dict[str, Any]) -> None:
+    from . import kv
+    kv.set(_SPEND_KEY, row)
+
+
+def clear_spend() -> dict[str, Any]:
+    row = _empty_ledger(0)
+    try:
+        _write_spend(row)
+    except Exception:
+        log.debug("run budget spend clear skipped", exc_info=True)
+    return row
+
+
+def _touch_ledger_cap(cap: int) -> dict[str, Any]:
+    row = dict(_spend_raw())
+    if not row:
+        row = _empty_ledger(cap)
+    row["cap_usd"] = int(cap)
+    spent = max(0.0, float(row.get("spent_usd") or 0.0))
+    row["spent_usd"] = round(spent, 6)
+    row["remaining_usd"] = round(max(0.0, float(cap) - spent), 6)
+    row["exhausted"] = bool(cap > 0 and spent >= float(cap) - 1e-12)
+    try:
+        _write_spend(row)
+    except Exception:
+        log.debug("run budget spend cap touch skipped", exc_info=True)
+    return row
+
+
+def ledger() -> dict[str, Any]:
+    cap = usd()
+    if cap <= 0:
+        return _empty_ledger(0)
+    row = dict(_spend_raw())
+    if not row:
+        return _empty_ledger(cap)
+    spent = max(0.0, float(row.get("spent_usd") or 0.0))
+    out = _empty_ledger(cap)
+    out.update({
+        "spent_usd": round(spent, 6),
+        "remaining_usd": round(max(0.0, float(cap) - spent), 6),
+        "calls": int(row.get("calls") or 0),
+        "prompt_tokens": int(row.get("prompt_tokens") or 0),
+        "completion_tokens": int(row.get("completion_tokens") or 0),
+        "unknown_cost_calls": int(row.get("unknown_cost_calls") or 0),
+        "exhausted": spent >= float(cap) - 1e-12,
+        "last_model": str(row.get("last_model") or ""),
+        "last_role": str(row.get("last_role") or ""),
+        "last_source": str(row.get("last_source") or ""),
+    })
+    return out
+
+
+def exhausted() -> bool:
+    return bool(ledger().get("exhausted"))
+
+
+def would_block(provider: str | None = None) -> bool:
+    """True when the next cloud LLM call must not run."""
+    if not exhausted():
+        return False
+    p = (provider or "").strip().lower()
+    if not p:
+        return True
+    if p in {"ollama", "lmstudio", "llamacpp", "vllm"}:
+        return False
+    return True
+
+
+def stop_text() -> str:
+    row = ledger()
+    return (
+        f"OpenRouter spend ${row['spent_usd']:.4f} reached the "
+        f"${row['cap_usd']} envelope. The next model call is blocked. "
+        "Raise the run budget or set it Off."
+    )
+
+
+def note_usage(
+    parsed: dict[str, Any] | None,
+    *,
+    model: str = "",
+    role: str = "writer",
+) -> dict[str, Any]:
+    """Add one billed call to the envelope. No-op when the envelope is Off."""
+    cap = usd()
+    if cap <= 0:
+        return ledger()
+    parsed = parsed or {}
+    cost = parsed.get("cost_usd")
+    known = bool(parsed.get("cost_known")) and cost is not None
+    row = dict(_spend_raw()) or _empty_ledger(cap)
+    spent = max(0.0, float(row.get("spent_usd") or 0.0))
+    if known:
+        spent += max(0.0, float(cost))
+    row["cap_usd"] = int(cap)
+    row["spent_usd"] = round(spent, 6)
+    row["remaining_usd"] = round(max(0.0, float(cap) - spent), 6)
+    row["calls"] = int(row.get("calls") or 0) + 1
+    row["prompt_tokens"] = int(row.get("prompt_tokens") or 0) + int(
+        parsed.get("prompt_tokens") or 0
+    )
+    row["completion_tokens"] = int(row.get("completion_tokens") or 0) + int(
+        parsed.get("completion_tokens") or 0
+    )
+    if not known:
+        row["unknown_cost_calls"] = int(row.get("unknown_cost_calls") or 0) + 1
+    row["exhausted"] = spent >= float(cap) - 1e-12
+    row["last_model"] = str(model or row.get("last_model") or "")
+    row["last_role"] = str(role or "")
+    row["last_source"] = str(parsed.get("source") or "")
+    try:
+        _write_spend(row)
+    except Exception:
+        log.debug("run budget spend write skipped", exc_info=True)
+    if known:
+        log.info(
+            "run budget +$%.6f → $%.6f / $%s role=%s model=%s",
+            float(cost), spent, cap, role, model,
+        )
+    elif parsed.get("prompt_tokens") or parsed.get("completion_tokens"):
+        log.info(
+            "run budget call had tokens but no billed cost role=%s model=%s source=%s",
+            role, model, parsed.get("source"),
+        )
+    return ledger()
 
 
 def _plan_pair(cap: int) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -209,9 +370,9 @@ def plan(cap_usd: int | None = None) -> dict[str, Any]:
             "note": mentor["note"],
         },
         "note": (
-            f"${cap} envelope. Writer {writer['model']} (~${writer['usd']}) + "
-            f"Mentor {mentor['id']} (~${mentor['usd']}) ≈ ${estimate}. "
-            "Estimates, not a live invoice."
+            f"${cap} envelope. Writer {writer['model']} + Mentor {mentor['id']} "
+            f"(catalog ~${estimate}). Live stop is OpenRouter usage.cost, "
+            "not this catalog guess."
         ),
     }
 
@@ -281,8 +442,10 @@ def bind(decision: dict[str, Any] | None) -> Iterator[dict[str, Any] | None]:
 def briefing(decision: dict[str, Any] | None) -> str:
     if not decision or not decision.get("active"):
         return ""
+    led = ledger()
+    billed = f"billed ${led['spent_usd']:.4f} / ${led['cap_usd']}"
     return (
-        f"[RUN BUDGET ${decision.get('usd')} — estimate ${decision.get('estimate_usd')}. "
+        f"[RUN BUDGET ${decision.get('usd')} — {billed}. "
         f"{decision.get('note')}]"
     )
 
@@ -291,6 +454,7 @@ def status() -> dict[str, Any]:
     ov = env_override()
     stored = persisted_usd()
     cap = usd()
+    spend = ledger()
     return {
         "usd": cap,
         "active": cap > 0,
@@ -300,6 +464,7 @@ def status() -> dict[str, Any]:
         "default": 0,
         "tiers": [0, 5, 20, 50],
         "plan": plan(cap),
+        "spend": spend,
         "writers": [
             {"id": w["id"], "model": w["model"], "usd": w["usd"]} for w in WRITERS
         ],
@@ -318,4 +483,9 @@ def apply_update(body: dict[str, Any] | None) -> dict[str, Any]:
         raw = 0
     if raw is not None and str(raw).strip() != "":
         set_usd(raw)
+    if body.get("reset_spend"):
+        cap_now = usd()
+        clear_spend()
+        if cap_now > 0:
+            _touch_ledger_cap(cap_now)
     return status()
