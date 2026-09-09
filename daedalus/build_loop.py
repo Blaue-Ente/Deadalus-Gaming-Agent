@@ -538,6 +538,15 @@ class BuildLoop:
 
     def log_row(self) -> dict[str, Any]:
         v = self.last_verdict or self.verdict()
+        spent = None
+        exhausted = False
+        try:
+            from .run_budget import ledger
+            led = ledger()
+            spent = led.get("spent_usd")
+            exhausted = bool(led.get("exhausted"))
+        except Exception:
+            pass
         return {
             "tool": "build_loop",
             "ok": True,
@@ -573,4 +582,6 @@ class BuildLoop:
             "play_bot_ran": bool(getattr(self, "play_bot_ran", False)),
             "play_bot_ok": bool(getattr(self, "play_bot_ok", False)),
             "play_bot_summary": str(getattr(self, "play_bot_summary", "") or "")[:240],
+            "run_budget_spent_usd": spent,
+            "run_budget_exhausted": exhausted,
         }

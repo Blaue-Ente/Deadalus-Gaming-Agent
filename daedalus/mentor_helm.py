@@ -700,6 +700,12 @@ def skip_reason(inspect: dict[str, Any], rules_steer: dict[str, Any], *, turn_ca
         return "rules_only"
     if over_day_cap():
         return "day_cap"
+    try:
+        from .run_budget import would_block
+        if would_block():
+            return "run_budget"
+    except Exception:
+        pass
     if turn_calls >= TURN_LLM_CAP:
         return "turn_cap"
     if rules_unambiguous(inspect, rules_steer):
@@ -711,7 +717,12 @@ def skip_reason(inspect: dict[str, Any], rules_steer: dict[str, Any], *, turn_ca
 
 async def _complete_director(provider: str, model: str, user: str) -> str:
     """One-shot JSON call on the chosen provider — does not mutate Studio Brain."""
-    from .llm_config import PROVIDER_DEFAULTS, openai_compat_headers, resolve_provider_api_key
+    from .llm_config import (
+        PROVIDER_DEFAULTS,
+        openai_compat_extra_body,
+        openai_compat_headers,
+        resolve_provider_api_key,
+    )
     from .local_llm import dummy_api_key, is_local_provider
 
     pd = PROVIDER_DEFAULTS.get(provider) or PROVIDER_DEFAULTS["openai"]
@@ -740,11 +751,23 @@ async def _complete_director(provider: str, model: str, user: str) -> str:
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": user}],
         )
-        return "".join(getattr(b, "text", "") or "" for b in (resp.content or []))
+        text = "".join(getattr(b, "text", "") or "" for b in (resp.content or []))
+        try:
+            from .llm_cost import parse_usage
+            from . import run_budget
+            run_budget.note_usage(
+                parse_usage(getattr(resp, "usage", None), resp),
+                model=model,
+                role="mentor",
+            )
+        except Exception:
+            log.debug("mentor helm spend meter skipped", exc_info=True)
+        return text
 
     from openai import AsyncOpenAI
 
     extra = openai_compat_headers(provider)
+    extra_body = openai_compat_extra_body(provider, with_tools=False)
     client = AsyncOpenAI(
         api_key=api_key,
         base_url=base_url or None,
@@ -761,12 +784,24 @@ async def _complete_director(provider: str, model: str, user: str) -> str:
         "max_tokens": max_out_tokens(),
         "temperature": 0.1,
     }
+    if extra_body:
+        body["extra_body"] = extra_body
     try:
         body["response_format"] = {"type": "json_object"}
         resp = await client.chat.completions.create(**body)
     except Exception:
         body.pop("response_format", None)
         resp = await client.chat.completions.create(**body)
+    try:
+        from .llm_cost import parse_usage
+        from . import run_budget
+        run_budget.note_usage(
+            parse_usage(getattr(resp, "usage", None), resp),
+            model=model,
+            role="mentor",
+        )
+    except Exception:
+        log.debug("mentor helm spend meter skipped", exc_info=True)
     return (resp.choices[0].message.content if resp.choices else "") or ""
 
 

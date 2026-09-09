@@ -85,6 +85,26 @@ def test_day_cap_skips_llm(tmp_path, monkeypatch):
     assert mentor_helm.skip_reason(inspect, rules, turn_calls=0) == "day_cap"
 
 
+def test_run_budget_exhaust_skips_director(tmp_path, monkeypatch):
+    _data(tmp_path, monkeypatch)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
+    from daedalus import mentor_helm, run_budget
+    mentor_helm.set_choice({"choice_id": "or-claude-sonnet"})
+    run_budget.set_usd(5)
+    run_budget.note_usage({"cost_usd": 5.0, "cost_known": True})
+    inspect = {"flags": {}, "kind": "vite", "last_fails": []}
+    rules = {
+        "ok": True,
+        "action": "call_tool",
+        "next_tool": "browser",
+        "next_args": {},
+        "reason": "open",
+        "forbid_tools": [],
+        "blockers": [],
+    }
+    assert mentor_helm.skip_reason(inspect, rules, turn_calls=0) == "run_budget"
+
+
 def test_llm_disabled_env(tmp_path, monkeypatch):
     _data(tmp_path, monkeypatch)
     monkeypatch.setenv("DAEDALUS_MENTOR_LLM", "0")

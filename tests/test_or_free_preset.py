@@ -145,7 +145,10 @@ def test_openrouter_tool_rounds_require_parameters():
     from daedalus.llm_config import openai_compat_extra_body
 
     assert openai_compat_extra_body("openrouter", with_tools=True) == {
+        "usage": {"include": True},
         "provider": {"require_parameters": True},
     }
-    assert openai_compat_extra_body("openrouter", with_tools=False) == {}
+    assert openai_compat_extra_body("openrouter", with_tools=False) == {
+        "usage": {"include": True},
+    }
     assert openai_compat_extra_body("novita", with_tools=True) == {}

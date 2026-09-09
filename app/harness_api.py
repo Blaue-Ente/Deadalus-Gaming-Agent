@@ -501,6 +501,7 @@ class RunBudgetBody(BaseModel):
     usd: int | None = Field(default=None, ge=0, le=50)
     budget: str = Field(default="", max_length=16)
     enabled: bool | None = None
+    reset_spend: bool | None = None
 
 
 @router.get("/api/v1/daedalus/effort")

@@ -276,6 +276,13 @@
     }
   }
 
+  function fmtUsd(n) {
+    const x = Number(n);
+    if (!Number.isFinite(x) || x <= 0) return "$0";
+    if (x < 0.01) return "$" + x.toFixed(4);
+    return "$" + x.toFixed(2);
+  }
+
   function paintBudget(data) {
     const usd = String((data && data.usd != null) ? data.usd : 0);
     const locked = !!(data && data.env_locked);
@@ -284,11 +291,21 @@
       btn.disabled = locked;
     });
     const group = document.querySelector(".budget");
+    const spend = (data && data.spend) || {};
+    const spent = Number(spend.spent_usd) || 0;
+    const cap = Number((data && data.usd) || spend.cap_usd) || 0;
+    const el = $("budget-spend");
+    if (el) {
+      el.textContent = cap ? t("studio.budgetSpend", { spent: fmtUsd(spent), cap: fmtUsd(cap) }) : "";
+      el.classList.toggle("warn", cap > 0 && (spend.exhausted || spent >= cap * 0.8));
+      const bits = [];
+      if (spend.unknown_cost_calls) bits.push("some calls had no OpenRouter cost");
+      if (spend.last_model) bits.push(spend.last_model);
+      el.title = bits.join(" · ");
+    }
     if (group) {
       const plan = (data && data.plan) || {};
-      group.title = locked
-        ? t("studio.budgetLocked")
-        : (plan.note || t("studio.budgetHint"));
+      group.title = locked ? t("studio.budgetLocked") : (plan.note || t("studio.budgetHint"));
     }
   }
 
@@ -1207,7 +1224,12 @@
     if (body.complete === true) bits.push(t("studio.done"));
     if (body.model) bits.push(body.model);
     if (body.elapsed_seconds != null) bits.push(body.elapsed_seconds + "s");
+    const billed = body.run_budget && body.run_budget.spend;
+    if (billed && Number(body.run_budget.usd) > 0) {
+      bits.push(fmtUsd(billed.spent_usd) + " / " + fmtUsd(body.run_budget.usd));
+    }
     if (bits.length) setLiveLabel(last, bits.join(" · "));
+    if (body.run_budget) paintBudget(body.run_budget);
   }
 
   async function sendChat() {
@@ -1266,6 +1288,7 @@
         refreshPrefs();
         refreshLessons();
         previewEffort();
+        loadBudget();
       };
       src.addEventListener("live", (ev) => {
         try {

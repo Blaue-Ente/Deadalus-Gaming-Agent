@@ -2004,6 +2004,17 @@ async def run_native_discovery_pass(
             break
         _round += 1
         resp = await call_with_tools_fn(system, messages, specs)
+        if resp.get("budget_stopped"):
+            final = ""
+            for block in resp.get("content") or []:
+                if block.get("type") == "text":
+                    final = str(block.get("text") or "")
+                    break
+            if loop is not None:
+                loop.stop_reason = "run budget exhausted"
+                loop.verdict(final)
+            _mentor_record_outcome(loop)
+            return (final or None), tool_log
         content_blocks = resp.get("content", [])
 
         assistant_content: list[dict[str, Any]] = []
