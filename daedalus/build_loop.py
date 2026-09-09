@@ -132,6 +132,10 @@ class BuildLoop:
         self.mentor_steer = None
         self.mentor_fp = ""
         self.mentor_llm_calls = 0
+        self.play_bot_ran = False
+        self.play_bot_ok = False
+        self.play_bot_gap = ""
+        self.play_bot_summary = ""
         for row in self.seed_log:
             self._capture_slug(row.get("input") or {}, "")
             self._capture_kind("playground_new", row.get("input") or {}, "")
@@ -269,6 +273,18 @@ class BuildLoop:
             self.proof_vision = list(result.vision_blocks())
         except Exception:
             self.proof_vision = []
+
+    def note_play_bot(self, result: dict[str, Any] | None) -> None:
+        row = result or {}
+        self.play_bot_ran = True
+        skipped = bool(row.get("skipped"))
+        self.play_bot_ok = bool(row.get("ok")) and not skipped
+        self.play_bot_gap = str(row.get("summary") or row.get("error") or "") if skipped else ""
+        self.play_bot_summary = str(row.get("summary") or "")[:240]
+
+    def wants_play_bot(self) -> bool:
+        from .playable import loop_wants_computer_play
+        return loop_wants_computer_play(self)
 
     def browser_ok_for_dod(self) -> bool | None:
         if not visual_proof_enabled() or not is_visual_kind(self.kind):
@@ -554,4 +570,7 @@ class BuildLoop:
                 str((self.mentor_steer or {}).get("reason") or "")[:140]
                 if isinstance(self.mentor_steer, dict) else ""
             ),
+            "play_bot_ran": bool(getattr(self, "play_bot_ran", False)),
+            "play_bot_ok": bool(getattr(self, "play_bot_ok", False)),
+            "play_bot_summary": str(getattr(self, "play_bot_summary", "") or "")[:240],
         }

@@ -8,7 +8,7 @@ def _read(root, rel: str) -> str:
     return (root / rel).read_text(encoding="utf-8")
 
 
-def test_default_off_is_vite_hello(tmp_path, monkeypatch):
+def test_default_auto_todo_is_vite_hello(tmp_path, monkeypatch):
     from daedalus import writer_assist as wa
 
     monkeypatch.delenv("DAEDALUS_WRITER_ASSIST", raising=False)
@@ -17,7 +17,7 @@ def test_default_off_is_vite_hello(tmp_path, monkeypatch):
     main = _read(dest, "src/main.js")
     assert "Vanilla JS работи" in main
     assert "Phaser.WEBGL" not in main
-    assert wa.mode() == "off"
+    assert wa.mode() == "auto"
 
 
 def test_kernel_scaffold_writes_webgl_game_mount(tmp_path, monkeypatch):
@@ -30,6 +30,7 @@ def test_kernel_scaffold_writes_webgl_game_mount(tmp_path, monkeypatch):
     play = _read(dest, "src/scenes/Play.js")
     boot = _read(dest, "src/scenes/Boot.js")
     pkg = _read(dest, "package.json")
+    scenario = _read(dest, "playtest/scenario.json")
     assert 'id="game"' in html
     assert 'id="app"' not in html
     assert "Phaser.WEBGL" in main
@@ -40,6 +41,10 @@ def test_kernel_scaffold_writes_webgl_game_mount(tmp_path, monkeypatch):
     assert "from 'phaser'" in boot
     assert "from 'phaser'" in menu
     assert "from 'phaser'" in play
+    assert "addKeys" in play or "WASD" in play
+    assert "fill this scene" not in play
+    assert "Enter" in scenario
+    assert "canvas_changed" in scenario
     assert "Ember Walk" in menu
     assert "querySelector('#app')" not in main
     assert '"phaser"' in pkg
@@ -119,7 +124,7 @@ def test_writer_assist_http_toggle(tmp_path, monkeypatch):
     client = TestClient(app)
     got = client.get("/api/v1/daedalus/writer-assist")
     assert got.status_code == 200
-    assert got.json()["mode"] == "off"
+    assert got.json()["mode"] == "auto"
     kernel = client.post("/api/v1/daedalus/writer-assist", json={"mode": "kernel-scaffold"})
     assert kernel.status_code == 200
     assert kernel.json()["mode"] == "kernel-scaffold"

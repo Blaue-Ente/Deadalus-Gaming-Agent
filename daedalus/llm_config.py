@@ -398,6 +398,16 @@ def get_config() -> dict:
     if extra and isinstance(cfg, dict):
         from .model_router import overlay_effort
         cfg = overlay_effort(cfg, extra)
+    try:
+        from .run_budget import applied_writer
+        budget = applied_writer()
+    except Exception:
+        budget = None
+    if budget and isinstance(cfg, dict):
+        from .model_router import overlay_effort
+        cfg = overlay_effort(cfg, budget)
+        cfg["run_budget_source"] = str(budget.get("model_source") or "run-budget")
+        cfg["run_budget_tier"] = str(budget.get("tier") or "")
     return cfg
 
 

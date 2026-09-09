@@ -131,10 +131,10 @@ def test_guard_clamps_browser_after_proof_fail():
     assert "browser" in out["forbid_tools"]
 
 
-def test_guard_ships_when_proof_painted():
+def test_guard_ships_when_computer_played():
     from daedalus.mentor_graph import for_inspect, guard_steer
 
-    flags = {"kernel_proof_ran": True, "entry_boots": True}
+    flags = {"kernel_proof_ran": True, "entry_boots": True, "is_game": True, "play_bot_ok": True}
     inspect = {
         "kind": "vite",
         "loop_ok": True,
@@ -152,6 +152,40 @@ def test_guard_ships_when_proof_painted():
     out = guard_steer(parsed, inspect, rules)
     assert out["action"] == "ship"
     assert out["next_tool"] is None
+
+
+def test_guard_does_not_ship_stub_menu():
+    from daedalus.mentor_graph import for_inspect, guard_steer
+
+    flags = {
+        "kernel_proof_ran": True,
+        "entry_boots": True,
+        "is_game": True,
+        "play_stub": True,
+    }
+    inspect = {
+        "kind": "vite",
+        "loop_ok": True,
+        "flags": flags,
+        "graph": for_inspect("playground.vite", flags=flags),
+    }
+    rules = {
+        "action": "call_tool",
+        "next_tool": "write_file",
+        "next_args": {"path": "src/scenes/Play.js"},
+        "reason": "fill Play.js",
+        "forbid_tools": ["browser"],
+    }
+    parsed = {
+        "action": "ship",
+        "next_tool": None,
+        "next_args": {},
+        "reason": "Menu painted",
+        "forbid_tools": [],
+    }
+    out = guard_steer(parsed, inspect, rules)
+    assert out["action"] != "ship"
+    assert out["next_tool"] == "write_file"
 
 
 def test_consult_clamps_browser_after_proof_fail(tmp_path, monkeypatch):

@@ -126,7 +126,19 @@ def test_mentor_image_fail_twice_forbids(tmp_path, monkeypatch):
     assert "generate_image" not in decision.next_tool
 
 
-def test_mentor_booted_entry_can_ship(tmp_path, monkeypatch):
+PLAY_WASD = (
+    "import Phaser from 'phaser';\n"
+    "export class Play extends Phaser.Scene {\n"
+    "  constructor() { super('Play'); }\n"
+    "  create() {\n"
+    "    this.player = this.physics.add.sprite(40, 40, 'walker');\n"
+    "    this.cursors = this.input.keyboard.addKeys('W,A,S,D');\n"
+    "  }\n"
+    "}\n"
+)
+
+
+def test_mentor_booted_stub_does_not_ship(tmp_path, monkeypatch):
     from daedalus import mentor
     from daedalus.visual_proof import ProofResult
 
@@ -145,6 +157,50 @@ def test_mentor_booted_entry_can_ship(tmp_path, monkeypatch):
     loop.kind = "vite"
     loop.observe("playground_new", {"name": slug, "kind": "vite"}, f"── playground_new OK slug={slug} kind=vite ──", ok=True)
     loop.observe("write_file", {"slug": slug, "path": "src/main.js"}, "── write_file OK ──", ok=True)
+    loop.observe("browser", {"slug": slug}, "── visual_proof OK ──", ok=True)
+    loop.note_kernel_proof(ProofResult(
+        ok=True, skipped=False, kind="vite", slug=slug, tool="browser",
+        summary="painted", frames=["studio/proof/frame_000.png"],
+    ))
+    decision = mentor.steer(loop)
+    assert decision is not None
+    assert decision.action != "ship"
+    assert decision.next_tool == "write_file"
+
+
+def test_mentor_playable_bot_can_ship(tmp_path, monkeypatch):
+    from daedalus import mentor
+    from daedalus.visual_proof import ProofResult
+
+    monkeypatch.setenv("DAEDALUS_MENTOR", "1")
+    monkeypatch.setattr("daedalus.mentor._rag_hits", lambda q: [])
+    slug = "lumen-bloom"
+    root = tmp_path / slug
+    scenes = root / "src" / "scenes"
+    scenes.mkdir(parents=True)
+    (root / "index.html").write_text('<div id="game"></div>', encoding="utf-8")
+    (root / "src" / "main.js").write_text(
+        PHASER_BOOT.replace("scene: [Boot]", "scene: [Boot, Play]").replace(
+            "import { Boot } from './scenes/Boot.js';",
+            "import { Boot } from './scenes/Boot.js';\nimport { Play } from './scenes/Play.js';",
+        ),
+        encoding="utf-8",
+    )
+    _with_boot_scene(root)
+    (scenes / "Play.js").write_text(PLAY_WASD, encoding="utf-8")
+    (root / "playtest").mkdir()
+    (root / "playtest" / "scenario.json").write_text(
+        '{"version":1,"steps":[{"op":"wait","ms":100}]}', encoding="utf-8",
+    )
+    monkeypatch.setattr("daedalus.playground.project_dir", lambda s: root)
+    rt = route(LUMEN)
+    loop = BuildLoop(rt, LUMEN, fix_rounds=3)
+    loop.slug = slug
+    loop.kind = "vite"
+    loop.play_bot_ran = True
+    loop.play_bot_ok = True
+    loop.observe("playground_new", {"name": slug, "kind": "vite"}, f"── playground_new OK slug={slug} kind=vite ──", ok=True)
+    loop.observe("write_file", {"slug": slug, "path": "src/scenes/Play.js"}, "── write_file OK ──", ok=True)
     loop.observe("browser", {"slug": slug}, "── visual_proof OK ──", ok=True)
     loop.note_kernel_proof(ProofResult(
         ok=True, skipped=False, kind="vite", slug=slug, tool="browser",
@@ -183,7 +239,19 @@ def test_mentor_missing_npm_returns_to_writer_install(tmp_path, monkeypatch):
     root = tmp_path / slug
     (root / "src").mkdir(parents=True)
     (root / "index.html").write_text('<div id="game"></div>', encoding="utf-8")
-    (root / "src" / "main.js").write_text(PHASER_BOOT, encoding="utf-8")
+    (root / "src" / "main.js").write_text(
+        PHASER_BOOT.replace("scene: [Boot]", "scene: [Boot, Play]").replace(
+            "import { Boot } from './scenes/Boot.js';",
+            "import { Boot } from './scenes/Boot.js';\nimport { Play } from './scenes/Play.js';",
+        ),
+        encoding="utf-8",
+    )
+    _with_boot_scene(root)
+    (root / "src" / "scenes" / "Play.js").write_text(PLAY_WASD, encoding="utf-8")
+    (root / "playtest").mkdir()
+    (root / "playtest" / "scenario.json").write_text(
+        '{"version":1,"steps":[{"op":"wait","ms":100}]}', encoding="utf-8",
+    )
     (root / "package.json").write_text(
         '{"dependencies":{"phaser":"^3.80.1"},"devDependencies":{"vite":"^5.2.0"}}',
         encoding="utf-8",
