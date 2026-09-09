@@ -268,6 +268,22 @@ Bit Flows’ free-coder list is stale (`qwen/qwen3-coder:free` and
 
 **Owner pick:** Studio stays **Off** until you flip it. **Auto** is the conservative default (Phaser briefs only). **Kernel** if every new Vite project should boot as Phaser.
 
+### Crew protocol (design — not shipped)
+
+Weak/cheap writers need a **program on disk**, not more chat. Mentor already
+says NEXT + RETURN TO WRITER; it does not write files and does not spawn a
+company. `NEED_WORKER` is text-only (no tools). `spawn_subagent` can write,
+but after the native build the persona is told **not** to emit NEED_*.
+
+Wrong: N weak models invent an org chart and talk to each other (they drop
+the thread). Right: kernel owns `studio/crew.json` tickets; one current item;
+exclusive `files[]`; verify is Chromium/compile, not another LLM opinion.
+
+Same Studio family as Writer assist (`off | auto | crew`), not a second
+product. Game vs app is the **playbook** (`playground.vite` vs fastapi/static),
+not a Mentor debate. First live probe of “Mentor already steers”: Ember Walk
+Kernel + Mentor on (`--mentor-choice or-glm-53-flash`).
+
 OpenRouter pick for the first sim (tool-call probe 2026-09-09):
 
 | Role | Model | Probe |

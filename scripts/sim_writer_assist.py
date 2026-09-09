@@ -63,10 +63,10 @@ _WASD_RE = re.compile(r"\bWASD\b|cursors|keyboard\.addKeys|createCursorKeys", re
 _ORB_RE = re.compile(r"\borb|collect|harvest|score\b", re.I)
 
 
-def _isolate(data: Path, assist: str) -> None:
+def _isolate(data: Path, assist: str, *, mentor: str = "") -> None:
     _chat._isolate_env(data)
-    os.environ["DAEDALUS_MENTOR"] = "0"
     os.environ["DAEDALUS_WRITER_ASSIST"] = assist
+    os.environ["DAEDALUS_MENTOR"] = "1" if mentor.strip() else "0"
     os.environ.setdefault("DAEDALUS_NATIVE_TOOLS", "1")
     os.environ.setdefault("DAEDALUS_VISUAL_PROOF", "1")
     os.environ.setdefault("DAEDALUS_WRITE_GATE", "1")
@@ -131,17 +131,28 @@ async def _pick_model(chosen: str) -> tuple[str, list[dict]]:
     return picked, probes
 
 
-async def run_cell(*, assist: str, model: str, data: Path, effort: str, shots: Path) -> dict:
-    _isolate(data, assist)
+async def run_cell(
+    *,
+    assist: str,
+    model: str,
+    data: Path,
+    effort: str,
+    shots: Path,
+    mentor: str = "",
+) -> dict:
+    _isolate(data, assist, mentor=mentor)
     _chat._reset_path_caches()
     _leb._pin_openrouter(model)
-    _isolate(data, assist)
+    _isolate(data, assist, mentor=mentor)
     _chat._reset_path_caches()
+    mentor_pin = None
+    if mentor.strip():
+        mentor_pin = _chat._pin_mentor(mentor.strip())
 
     playbook = _chat._preflight_route(EMBER)
     print(
-        f"cell assist={assist} model={model} playbook={playbook.get('playbook')} "
-        f"kind={playbook.get('kind')}",
+        f"cell assist={assist} model={model} mentor={mentor or 'off'} "
+        f"playbook={playbook.get('playbook')} kind={playbook.get('kind')}",
         flush=True,
     )
     t0 = time.time()
@@ -176,6 +187,7 @@ async def run_cell(*, assist: str, model: str, data: Path, effort: str, shots: P
     return {
         "assist": assist,
         "model": model,
+        "mentor": mentor_pin or {"enabled": False},
         "elapsed_s": elapsed,
         "playbook_preflight": playbook,
         "slug": slug,
@@ -192,6 +204,8 @@ async def run_cell(*, assist: str, model: str, data: Path, effort: str, shots: P
             for k in (
                 "complete", "stop_reason", "playbook", "nudges", "missing",
                 "proof_frames", "proof_gap", "kind",
+                "mentor_source", "mentor_llm_calls", "mentor_next",
+                "mentor_skip", "mentor_model", "mentor_reason",
             )
         },
         "project": snap,
@@ -211,6 +225,8 @@ def _summary(cell: dict) -> dict:
         "elapsed_s": cell.get("elapsed_s"),
         "complete": cell.get("complete") or loop.get("complete"),
         "stop_reason": loop.get("stop_reason"),
+        "mentor_next": loop.get("mentor_next"),
+        "mentor_source": loop.get("mentor_source"),
         "kernel_seeded": aq.get("kernel_seeded"),
         "vite_hello": aq.get("vite_hello"),
         "phaser_webgl": aq.get("phaser_webgl"),
@@ -250,6 +266,7 @@ async def main_async(args: argparse.Namespace) -> int:
             data=data,
             effort=args.effort,
             shots=shots / assist if args.pair else shots,
+            mentor=args.mentor_choice,
         )
         cells.append(cell)
         print(json.dumps(_summary(cell), ensure_ascii=False, indent=2), flush=True)
@@ -291,6 +308,11 @@ def main() -> None:
     parser.add_argument("--data", default="/tmp/daedalus-writer-assist-sim")
     parser.add_argument("--screenshots", default=str(_leb.ARTIFACT_SHOTS / "writer-assist"))
     parser.add_argument("--fresh", action="store_true", help="Wipe --data before each cell.")
+    parser.add_argument(
+        "--mentor-choice",
+        default="",
+        help="Pin Mentor director (or-glm-53-flash, or-fable-51, rules). Empty = Mentor off.",
+    )
     args = parser.parse_args()
     raise SystemExit(asyncio.run(main_async(args)))
 
