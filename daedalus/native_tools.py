@@ -989,6 +989,42 @@ async def _kernel_visual_proof(loop: Any) -> str:
     return result.nudge_block()
 
 
+async def _kernel_play_bot(loop: Any) -> str:
+    """Virtual computer: drive playtest/scenario.json after a painted proof."""
+    slug = str(getattr(loop, "slug", "") or "")
+    kind = str(getattr(loop, "kind", "") or "static")
+    if not slug:
+        return ""
+    try:
+        from .playground_gameplay_verify import gameplay_verify_app
+        raw = await gameplay_verify_app(slug, kind)
+    except Exception as exc:
+        log.warning("kernel play bot failed: %s", exc)
+        raw = {
+            "ok": False,
+            "skipped": False,
+            "summary": str(exc)[:200],
+            "error": str(exc)[:200],
+        }
+    if hasattr(loop, "note_play_bot"):
+        loop.note_play_bot(raw)
+    ok = bool(raw.get("ok")) and not raw.get("skipped")
+    loop.observe(
+        "playtest",
+        {"slug": slug, "kind": kind, "mode": "bot"},
+        str(raw.get("summary") or raw.get("error") or "play bot")[:500],
+        ok=ok,
+        blocked=False,
+    )
+    status = "OK" if ok else "FAILED"
+    summary = str(raw.get("summary") or "")[:240]
+    return (
+        "━━━ PLAYABLE (kernel computer) ━━━\n"
+        f"{status}: {summary or 'scenario bot'}\n"
+        "Painted Menu is not this check. Do not ship unless this is OK."
+    )
+
+
 def before_tool_call(tool_name: str, *, marker_name: str | None = None) -> tuple[bool, str]:
     perm = PERM_MAP.get(tool_name)
     if perm is None:
@@ -1935,6 +1971,15 @@ async def run_native_discovery_pass(
                             tool_log.append(loop.observations[-1].as_call())
                     except Exception as exc:
                         log.warning("kernel visual proof on exhaust failed: %s", exc)
+                if loop is not None and getattr(loop, "wants_play_bot", lambda: False)():
+                    try:
+                        play_block = await _kernel_play_bot(loop)
+                        if play_block:
+                            all_results.append(play_block)
+                        if loop.observations:
+                            tool_log.append(loop.observations[-1].as_call())
+                    except Exception as exc:
+                        log.warning("kernel play bot on exhaust failed: %s", exc)
                 extra = 0
                 try:
                     from . import mentor as _mentor
@@ -1994,6 +2039,15 @@ async def run_native_discovery_pass(
                 except Exception as exc:
                     log.warning("kernel visual proof failed: %s", exc)
                     proof_block = f"━━━ VISUAL PROOF (kernel) ━━━\nProof crashed: {exc}\n"
+            play_block = ""
+            if loop is not None and getattr(loop, "wants_play_bot", lambda: False)():
+                try:
+                    play_block = await _kernel_play_bot(loop)
+                    if loop.observations:
+                        tool_log.append(loop.observations[-1].as_call())
+                except Exception as exc:
+                    log.warning("kernel play bot failed: %s", exc)
+                    play_block = f"━━━ PLAYABLE (kernel computer) ━━━\nFAILED: {exc}\n"
             nudge = None
             if loop is not None:
                 try:
@@ -2003,7 +2057,7 @@ async def run_native_discovery_pass(
                     pass
                 nudge = loop.on_quiet(final)
             if nudge:
-                extra = "\n\n".join(p for p in (proof_block, nudge) if p)
+                extra = "\n\n".join(p for p in (proof_block, play_block, nudge) if p)
                 messages.append({
                     "role": "assistant",
                     "content": assistant_content or [{"type": "text", "text": final or "(no reply)"}],
@@ -2012,8 +2066,9 @@ async def run_native_discovery_pass(
                 messages.append(_user_turn(extra, vision or None))
                 budget += loop.rounds_per_fix
                 continue
-            if proof_block:
-                all_results.append(proof_block)
+            for block in (proof_block, play_block):
+                if block:
+                    all_results.append(block)
             _mentor_record_outcome(loop)
             if all_results:
                 combined = (

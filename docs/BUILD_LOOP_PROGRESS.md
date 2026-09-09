@@ -266,7 +266,38 @@ Bit Flows’ free-coder list is stale (`qwen/qwen3-coder:free` and
 
 **Where to help more (not done in this MR):** stop the writer swapping `#game` for `<canvas>`; keep arcade physics + `scale.FIT` if they rewrite `main.js`. Mentor already steers Vite Hello; it does not yet lock the mount node.
 
-**Owner pick:** Studio stays **Off** until you flip it. **Auto** is the conservative default (Phaser briefs only). **Kernel** if every new Vite project should boot as Phaser.
+**Owner pick (after playable-gate follow-up):** Studio default is **Auto** — Phaser briefs get a playable WEBGL seed (WASD Play.js + `playtest/scenario.json`); other Vite apps stay Hello. **Off** is Vite Hello. **Kernel** if every new Vite project should boot as Phaser. Optional **$5 / $20 / $50** run budget overlays writer + mentor; budget Off keeps Brain and Mentor pickers.
+
+### Crew protocol (design — not shipped)
+
+Weak/cheap writers need a **program on disk**, not more chat. Mentor already
+says NEXT + RETURN TO WRITER; it does not write files and does not spawn a
+company. `NEED_WORKER` is text-only (no tools). `spawn_subagent` can write,
+but after the native build the persona is told **not** to emit NEED_*.
+
+Wrong: N weak models invent an org chart and talk to each other (they drop
+the thread). Right: kernel owns `studio/crew.json` tickets; one current item;
+exclusive `files[]`; verify is Chromium/compile, not another LLM opinion.
+
+Same Studio family as Writer assist (`off | auto | crew`), not a second
+product. Game vs app is the **playbook** (`playground.vite` vs fastapi/static),
+not a Mentor debate.
+
+### Live 2026-09-09 — Kernel + Mentor GLM 5.3 Flash, same cheap writer
+
+`scripts/sim_writer_assist.py --assist kernel-scaffold --mentor-choice or-glm-53-flash`
+
+| | Kernel alone (prior cell) | Kernel + Mentor |
+|--|---------------------------|-----------------|
+| Wall | 173s | 276s |
+| Proof | Menu painted | Menu painted (same seed) |
+| Play.js | writer filled orbs + cursors | **still the stub** “fill this scene” |
+| Mentor | off | LLM `action=ship` — `kernel_proof_ran, no proof_failed, loop_ok → ship` |
+
+Mentor told the writer to **stop** because Chromium painted the seed Menu.
+Painted ≠ playable. This is why a ticket file must exist: Play.js not stub,
+WASD, 3 orbs, then ship. Without that program, a director on a weak writer
+can hurt.
 
 OpenRouter pick for the first sim (tool-call probe 2026-09-09):
 

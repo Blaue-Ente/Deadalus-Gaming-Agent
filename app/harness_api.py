@@ -497,6 +497,12 @@ class WriterAssistBody(BaseModel):
     enabled: bool | None = None
 
 
+class RunBudgetBody(BaseModel):
+    usd: int | None = Field(default=None, ge=0, le=50)
+    budget: str = Field(default="", max_length=16)
+    enabled: bool | None = None
+
+
 @router.get("/api/v1/daedalus/effort")
 async def effort_preview(q: str = "", effort: str = "auto") -> dict[str, Any]:
     from daedalus.task_effort import classify
@@ -534,6 +540,19 @@ async def writer_assist_status() -> dict[str, Any]:
 @router.post("/api/v1/daedalus/writer-assist")
 async def writer_assist_set(body: WriterAssistBody) -> dict[str, Any]:
     from daedalus.writer_assist import apply_update
+    st = apply_update(body.model_dump())
+    return {"ok": True, **st}
+
+
+@router.get("/api/v1/daedalus/run-budget")
+async def run_budget_status() -> dict[str, Any]:
+    from daedalus.run_budget import status
+    return status()
+
+
+@router.post("/api/v1/daedalus/run-budget")
+async def run_budget_set(body: RunBudgetBody) -> dict[str, Any]:
+    from daedalus.run_budget import apply_update
     st = apply_update(body.model_dump())
     return {"ok": True, **st}
 

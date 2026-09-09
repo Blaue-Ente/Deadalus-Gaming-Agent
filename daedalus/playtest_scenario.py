@@ -90,8 +90,8 @@ def fingerprints_differ(before: str | bytes | None, after: str | bytes | None) -
     return before != after
 
 
-def default_scenario(kind: str = "static", *, racer: bool = False) -> dict[str, Any]:
-    """Default bot script. Racers must prove a fail; generic canvas must move."""
+def default_scenario(kind: str = "static", *, racer: bool = False, phaser: bool = False) -> dict[str, Any]:
+    """Default bot script. Racers must prove a fail; Phaser: Enter then WASD; else arrows."""
     if racer:
         return {
             "version": 1,
@@ -112,6 +112,24 @@ def default_scenario(kind: str = "static", *, racer: bool = False) -> dict[str, 
                     "keys": ["ArrowUp", "ArrowRight"],
                     "ms": 5000,
                     "expect": {"lose": True},
+                },
+            ],
+        }
+    if phaser:
+        return {
+            "version": 1,
+            "fps_budget": BUDGET_2D["fps_budget"],
+            "memory_budget_mb": BUDGET_2D["memory_budget_mb"],
+            "require_win": False,
+            "require_lose": False,
+            "steps": [
+                {"op": "wait", "ms": 500},
+                {"op": "hold_keys", "keys": ["Enter"], "ms": 200},
+                {
+                    "op": "hold_keys",
+                    "keys": ["w", "d"],
+                    "ms": 700,
+                    "expect": {"canvas_changed": True},
                 },
             ],
         }
@@ -181,13 +199,20 @@ def write_default_if_missing(
     kind: str = "static",
     *,
     racer: bool = False,
+    phaser: bool = False,
 ) -> Path:
     root = Path(pdir)
     path = root / SCENARIO_REL
     if path.is_file():
         return path
+    if not phaser and not racer:
+        pkg = root / "package.json"
+        try:
+            phaser = "phaser" in pkg.read_text(encoding="utf-8", errors="replace").lower()
+        except OSError:
+            phaser = False
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(dumps_scenario(default_scenario(kind, racer=racer)), encoding="utf-8")
+    path.write_text(dumps_scenario(default_scenario(kind, racer=racer, phaser=phaser)), encoding="utf-8")
     return path
 
 

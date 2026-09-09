@@ -29,6 +29,7 @@ _STANDARDS: dict[str, tuple[str, ...]] = {
         "generate_image filename has no assets/ prefix",
         "npm install then npm run build before browser",
         "HUD lives on the canvas; DOM text is not proof",
+        "painted Menu is not playable — Play.js must move, then the computer plays it",
     ),
     "playground.math3d": (
         "Call math3d with claimed numbers before writing shaders",
@@ -56,7 +57,7 @@ _STANDARDS: dict[str, tuple[str, ...]] = {
 _FLOW: dict[str, str] = {
     "playground.vite": (
         "playground_new → generate_image? → write_file → "
-        "run_command(npm/build) → browser → ship"
+        "run_command(npm/build) → browser → computer playtest → ship"
     ),
     "playground.math3d": "math3d → playground_new → write_file → browser → ship",
     "playground.arcade": "playground_new → write_file → browser → ship",
@@ -71,7 +72,8 @@ _EDGES: dict[str, tuple[str, ...]] = {
         "write_file → run_command (npm/build)",
         "run_command → browser",
         "browser fail → write_file (never browser again)",
-        "browser ok → ship",
+        "browser ok → computer playtest (scenario.json) → ship",
+        "Menu paint / Play.js stub → write_file Play.js, never ship",
         "generate_image ×2 fail → write_file + forbid generate_image",
     ),
     "playground.math3d": (
@@ -139,6 +141,10 @@ _RECOVERY: tuple[tuple[str, str, tuple[str, ...], str], ...] = (
 
 def pick_recovery(flags: dict[str, Any] | None) -> dict[str, Any] | None:
     """Return the first recovery whose inspect flag is true."""
+    from .protocols import as_recovery
+    rec = as_recovery(flags)
+    if rec:
+        return rec
     flags = flags or {}
     for flag, nxt, forbid, hint in _RECOVERY:
         if flags.get(flag):
@@ -180,6 +186,7 @@ def for_inspect(playbook_id: str, *, flags: dict[str, Any] | None = None) -> dic
             "failed check → writer (write_file / npm), never another browser",
             "Mentor does not write game files",
             "harness patches wait for Approve",
+            "Mentor evaluates playable yes/no — does not assign workers",
         ],
     }
     rec = pick_recovery(flags)
@@ -231,17 +238,43 @@ def guard_steer(
         take_rules()
         return parsed
 
+    is_game = flags.get("is_game")
+    if is_game is None:
+        kind = str(inspect.get("kind") or "")
+        is_game = kind in {"vite", "vite-react", "phaser", "godot", "unity"}
+
+    if action == "ship" and (
+        flags.get("play_stub")
+        or flags.get("play_incomplete")
+        or flags.get("canvas_game_trap")
+        or flags.get("play_bot_failed")
+        or (is_game and not flags.get("play_bot_ok"))
+    ):
+        if rec.get("next"):
+            apply_recovery()
+        else:
+            parsed["action"] = "call_tool"
+            parsed["next_tool"] = rules_steer.get("next_tool") or "write_file"
+            parsed["next_args"] = dict(
+                rules_steer.get("next_args") or parsed.get("next_args") or {}
+            )
+            parsed["reason"] = (
+                "Not playable yet — Menu paint is not the computer playing it."
+            )
+        return parsed
+
     painted = (
         bool(flags.get("kernel_proof_ran"))
         and not bool(flags.get("proof_failed"))
         and bool(inspect.get("loop_ok"))
         and not rec
     )
-    if painted and action in {"call_tool", "continue"}:
+    playable = bool(flags.get("play_bot_ok")) or not is_game
+    if painted and playable and action in {"call_tool", "continue"}:
         parsed["action"] = "ship"
         parsed["next_tool"] = None
         parsed["next_args"] = {}
-        parsed["reason"] = "Proof painted and the entry boots — ship the slice."
+        parsed["reason"] = "The computer played the slice — ship it."
         return parsed
 
     return parsed

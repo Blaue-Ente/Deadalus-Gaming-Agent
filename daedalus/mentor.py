@@ -183,6 +183,12 @@ class ProjectView:
     missing_imports: tuple[str, ...] = ()
     phaser_no_import: tuple[str, ...] = ()
     phaser_auto_canvas: bool = False
+    play_stub: bool = False
+    play_incomplete: bool = False
+    canvas_game_trap: bool = False
+    scenario_missing: bool = False
+    source_playable: bool = True
+    is_game: bool = False
 
     @property
     def entry_boots(self) -> bool:
@@ -369,6 +375,17 @@ def inspect_project(slug: str, *, kind: str = "") -> ProjectView:
     view.needs_npm = bool(view.package_json) and (
         has_dep or (kind or "").lower() in _VITE_KINDS
     ) and not (mods / "phaser").is_dir() and not (mods / "vite").is_dir()
+    try:
+        from .playable import inspect_tree
+        play = inspect_tree(root, kind=kind)
+        view.is_game = bool(play.get("is_game"))
+        view.play_stub = bool(play.get("play_stub"))
+        view.play_incomplete = bool(play.get("play_incomplete"))
+        view.canvas_game_trap = bool(play.get("canvas_game_trap"))
+        view.scenario_missing = bool(play.get("scenario_missing"))
+        view.source_playable = bool(play.get("source_playable"))
+    except Exception:
+        log.debug("playable inspect skipped", exc_info=True)
     return view
 
 
@@ -502,6 +519,15 @@ def steer(loop: Any) -> Steer | None:
             f"Phaser parent '{view.phaser_parent}' is not an id in index.html "
             f"(have: {', '.join(view.html_ids) or 'none'})."
         )
+    if view.canvas_game_trap:
+        blockers.append(
+            "index.html uses <canvas id=\"game\"> with Phaser.WEBGL — Chromium paints black. "
+            "Use a #game div."
+        )
+    if view.play_stub:
+        blockers.append("Play.js is still a stub — a painted Menu is not a playable game.")
+    elif view.play_incomplete:
+        blockers.append("Play scene has no input/body — the computer cannot play it yet.")
 
     rag: list[str] = []
     if view.scaffold_main or kind in _VITE_KINDS:
@@ -533,18 +559,74 @@ def steer(loop: Any) -> Steer | None:
         if getattr(o, "tool", "").lower() not in set(forbid)
     ]
 
+    from .playable import may_ship as _may_ship
+    from .protocols import match as _match_protocol
+
+    play_flags = {
+        "proof_failed": proof_failed,
+        "canvas_game_trap": view.canvas_game_trap,
+        "play_stub": view.play_stub,
+        "play_incomplete": view.play_incomplete,
+        "scaffold_vite_app_div": view.scaffold_main,
+        "phaser_auto_canvas": view.phaser_auto_canvas,
+        "phaser_no_import": bool(view.phaser_no_import),
+        "missing_imports": bool(view.missing_imports),
+        "missing_scenes": view.missing_scenes,
+        "mount_mismatch": view.mount_mismatch,
+        "needs_npm": view.needs_npm,
+        "scenario_missing": view.scenario_missing,
+        "play_bot_failed": bool(getattr(loop, "play_bot_ran", False))
+        and not bool(getattr(loop, "play_bot_ok", False))
+        and not bool(getattr(loop, "play_bot_gap", "")),
+        "proof_blank": proof_blank,
+        "image_retry_capped": bool("generate_image" in forbid),
+    }
+    proto = _match_protocol(play_flags)
+
     if (
         view.entry_boots
         and proof_ok
         and not blockers
         and not unrecovered
         and not (getattr(v, "missing_steps", None) or [])
+        and _may_ship(
+            source_playable=view.source_playable,
+            is_game=view.is_game,
+            loop=loop,
+            proof_ok=proof_ok,
+        )
+        and proto is None
     ):
         return Steer(
             action="ship",
-            reason="Entry boots and visual proof painted. Summarize honestly (prototype vs store).",
+            reason="The computer played the slice (scenario bot). Summarize honestly (prototype vs store).",
             rag_refs=rag,
             forbid_tools=forbid,
+        )
+
+    if proto is not None:
+        forbid_all = list(dict.fromkeys(list(forbid) + list(proto.forbid)))
+        if proto.next_tool == "run_command":
+            return Steer(
+                action="continue",
+                next_tool="run_command",
+                next_args={"slug": slug, "command": "npm install", "timeout": 120},
+                reason=f"RETURN TO WRITER: {proto.hint}",
+                blockers=blockers or [proto.hint],
+                rag_refs=rag,
+                forbid_tools=forbid_all,
+            )
+        path = proto.path or view.main_path or "src/main.js"
+        if proto.flag == "missing_imports" and view.missing_imports:
+            path = view.missing_imports[0]
+        elif proto.flag == "phaser_no_import" and view.phaser_no_import:
+            path = view.phaser_no_import[0]
+        return _writer_fix(
+            slug, view,
+            path=path,
+            reason=f"RETURN TO WRITER: {proto.hint}",
+            blockers=blockers or [proto.hint],
+            rag=rag, forbid=forbid_all,
         )
 
     if view.scaffold_main or (view.has_canvas and not view.entry_boots):
@@ -713,6 +795,25 @@ def steer(loop: Any) -> Steer | None:
             forbid_tools=forbid,
         )
 
+    if (
+        view.is_game
+        and view.source_playable
+        and proof_ok
+        and not getattr(loop, "play_bot_ok", False)
+    ):
+        return Steer(
+            action="continue",
+            next_tool="browser",
+            next_args={"slug": slug, "action": "goto"},
+            reason=(
+                "Menu paint is not enough. Kernel computer will run "
+                "playtest/scenario.json — do not ship yet."
+            ),
+            blockers=blockers,
+            rag_refs=rag,
+            forbid_tools=forbid,
+        )
+
     return _writer_fix(
         slug, view,
         path=view.main_path or "index.html",
@@ -746,7 +847,15 @@ def inspect_digest(loop: Any) -> dict[str, Any]:
         "proof_failed": _proof_runtime_failed(loop),
         "kernel_proof_ran": bool(getattr(loop, "kernel_proof_ran", False)),
         "image_retry_capped": bool(getattr(loop, "retry_capped", lambda _t: False)("generate_image")),
+        "is_game": bool(view.is_game),
+        "play_stub": bool(view.play_stub),
+        "play_incomplete": bool(view.play_incomplete),
+        "canvas_game_trap": bool(view.canvas_game_trap),
+        "scenario_missing": bool(view.scenario_missing),
+        "source_playable": bool(view.source_playable),
     }
+    from .playable import attach_loop_flags
+    flags = attach_loop_flags(flags, loop)
     errs = [str(x)[:80] for x in (getattr(loop, "proof_errors", None) or []) if x][:3]
     if errs:
         last_fails = list(last_fails) + [f"proof:{e}" for e in errs]
@@ -885,7 +994,7 @@ def persona_wrapup(loop: Any) -> str:
     if decision.action == "ship":
         lines.append(
             "Steer: ship. Short summary of the slice. "
-            "Do not claim store/App Store quality unless the entry boots and proof painted."
+            "Do not claim store/App Store quality unless the computer played it."
         )
     elif decision.action == "stop":
         lines.append(f"Steer: stop — {decision.reason}")
@@ -937,6 +1046,7 @@ def record_outcome(loop: Any) -> dict[str, Any] | None:
     decision = _decision_for(loop) if enabled() else None
     proof_fail = bool(flags.get("proof_failed"))
     proof_ok = bool(flags.get("kernel_proof_ran")) and not proof_fail
+    playable_ok = (not flags.get("is_game")) or bool(flags.get("play_bot_ok"))
     errors = [str(x) for x in (inspect.get("last_fails") or []) if x]
     stop = str(getattr(loop, "stop_reason", "") or "")
     if stop:
@@ -946,7 +1056,7 @@ def record_outcome(loop: Any) -> dict[str, Any] | None:
     slug = str(getattr(loop, "slug", "") or "")
     try:
         from .learned_skills import draft_from_success, queue_correction
-        if proof_ok and (decision is None or decision.action == "ship"):
+        if proof_ok and playable_ok and (decision is None or decision.action == "ship"):
             path = draft_from_success(
                 kind=kind,
                 summary=(
