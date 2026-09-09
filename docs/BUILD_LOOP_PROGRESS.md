@@ -253,8 +253,22 @@ Do **not** reuse `playground_game_scaffold.startGame(parent='app')` / `Phaser.AU
 
 A/B runner: `scripts/sim_writer_assist.py --pair` (Ember Walk, Mentor off).
 
-OpenRouter pick for the first sim (tool-call probe 2026-09-09; Bit Flows blog
-is stale — `qwen/qwen3-coder:free` and `poolside/laguna-m.1:free` are gone):
+### Live A/B 2026-09-09 — Ember Walk, `cohere/north-mini-code:free`
+
+Same writer, Mentor **off**, craft, isolated `$DAEDALUS_DATA`. Probe ok in ~4s.
+Bit Flows’ free-coder list is stale (`qwen/qwen3-coder:free` and
+`poolside/laguna-m.1:free` are gone). Do not use `openrouter/free`.
+
+| Cell | Wall | Proof | What landed |
+|------|------|-------|-------------|
+| **Off** | 264s | **black frame** | Model wrote Phaser.WEBGL in one `src/main.js`, npm install + build. `index.html` used `<canvas id="game">` as parent — Chromium WEBGL stays black. No `src/scenes/`. DoD complete=false (round budget). |
+| **Kernel** | 173s | **Menu painted** | Seed `#game` div + WEBGL + Boot/Menu/Play. Proof shows title Ember Walk, “One playable slice.”, “Enter — begin”. Writer filled `Play.js` with cursor keys + orbs. Overwrote `main.js` (dropped `scale.FIT`; Play uses arcade physics). DoD complete=false (round budget / review-gate). |
+
+**Where to help more (not done in this MR):** stop the writer swapping `#game` for `<canvas>`; keep arcade physics + `scale.FIT` if they rewrite `main.js`. Mentor already steers Vite Hello; it does not yet lock the mount node.
+
+**Owner pick:** Studio stays **Off** until you flip it. **Auto** is the conservative default (Phaser briefs only). **Kernel** if every new Vite project should boot as Phaser.
+
+OpenRouter pick for the first sim (tool-call probe 2026-09-09):
 
 | Role | Model | Probe |
 |------|--------|-------|

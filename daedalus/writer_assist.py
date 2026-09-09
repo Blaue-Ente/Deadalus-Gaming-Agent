@@ -201,11 +201,12 @@ def seed_note(slug: str) -> str:
     if not project_seeded(root):
         return ""
     return (
-        "\nKernel Phaser skeleton is already on disk: index.html #game, "
-        "src/main.js Phaser.WEBGL, src/scenes/Boot.js Menu.js Play.js, "
+        "\nKernel Phaser skeleton is already on disk: index.html #game (a div, not a "
+        "<canvas>), src/main.js Phaser.WEBGL, src/scenes/Boot.js Menu.js Play.js, "
         "package.json has vite + phaser. Fill src/scenes/Play.js (WASD, "
         "orbs, HUD). Do not revert src/main.js to the Vite Hello / #app "
-        "counter. Then npm install (no pipes) and npm run build."
+        "counter. Do not replace #game with a <canvas> — Phaser.WEBGL then "
+        "paints black in Chromium. Then npm install (no pipes) and npm run build."
     )
 
 
@@ -347,6 +348,10 @@ const game = new Phaser.Game({
   parent: 'game',
   backgroundColor: '#0b1020',
   pixelArt: true,
+  physics: {
+    default: 'arcade',
+    arcade: { gravity: { y: 0 }, debug: false },
+  },
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,

@@ -35,6 +35,7 @@ def test_kernel_scaffold_writes_webgl_game_mount(tmp_path, monkeypatch):
     assert "Phaser.WEBGL" in main
     assert "Phaser.AUTO" not in main
     assert "parent: 'game'" in main
+    assert "physics" in main
     assert "from 'phaser'" in main
     assert "from 'phaser'" in boot
     assert "from 'phaser'" in menu
