@@ -288,6 +288,29 @@ async def daedalus_set_mentor(request: Request):
     return JSONResponse({"ok": True, **st})
 
 
+@router.get("/daedalus/writer-assist")
+async def daedalus_get_writer_assist():
+    from daedalus.writer_assist import status
+    return JSONResponse(status())
+
+
+@router.post("/daedalus/writer-assist")
+async def daedalus_set_writer_assist(request: Request):
+    from daedalus.writer_assist import apply_update
+    body = await _body(request)
+    payload: dict = {}
+    if "mode" in body:
+        payload["mode"] = body.get("mode")
+    if "writer_assist" in body:
+        payload["writer_assist"] = body.get("writer_assist")
+    if "enabled" in body:
+        payload["enabled"] = body.get("enabled")
+    if not payload:
+        return JSONResponse({"error": "mode or enabled required"}, status_code=400)
+    st = apply_update(payload)
+    return JSONResponse({"ok": True, **st})
+
+
 @router.get("/daedalus/sessions")
 async def daedalus_list_sessions(limit: int = 60):
     try:

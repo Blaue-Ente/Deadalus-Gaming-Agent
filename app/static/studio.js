@@ -241,6 +241,41 @@
     }
   }
 
+  function paintAssist(data) {
+    const mode = String((data && data.mode) || "off");
+    const locked = !!(data && data.env_locked);
+    document.querySelectorAll(".assist button").forEach((btn) => {
+      btn.setAttribute("aria-pressed", btn.dataset.assist === mode ? "true" : "false");
+      btn.disabled = locked;
+    });
+    const group = document.querySelector(".assist");
+    if (group) {
+      group.title = locked ? t("studio.assistLocked") : t("studio.assistHint");
+    }
+  }
+
+  async function loadAssist() {
+    try {
+      const data = await api("/api/v1/daedalus/writer-assist", { timeoutMs: 8000 });
+      paintAssist(data);
+    } catch {
+      paintAssist({ mode: "off", env_locked: false });
+    }
+  }
+
+  async function setAssist(mode) {
+    try {
+      const data = await api("/api/v1/daedalus/writer-assist", {
+        method: "POST",
+        body: JSON.stringify({ mode: mode || "off" }),
+        timeoutMs: 8000,
+      });
+      paintAssist(data);
+    } catch (e) {
+      add("bot", t("studio.assistAria") + ": " + errText(e));
+    }
+  }
+
   async function setMentor(on) {
     try {
       const data = await api("/api/v1/daedalus/mentor", {
@@ -344,6 +379,9 @@
   });
   document.querySelectorAll(".mentor button").forEach((btn) => {
     btn.onclick = () => setMentor(btn.dataset.mentor === "on");
+  });
+  document.querySelectorAll(".assist button").forEach((btn) => {
+    btn.onclick = () => setAssist(btn.dataset.assist);
   });
   const mentorChoice = $("mentor-choice");
   if (mentorChoice) {
@@ -1731,6 +1769,7 @@
 
   setEffort(state.effort);
   loadMentor();
+  loadAssist();
   function showGreeting() {
     const existing = msgs.querySelector(".msg.bot[data-greeting]");
     if (existing) { text(existing, t("studio.greeting")); return; }
@@ -1753,6 +1792,7 @@
     refreshComputer();
     previewEffort();
     loadMentor();
+    loadAssist();
     const shout = $("shout");
     if (shout && !state.lastCwd && (shout.textContent === "Ready." || shout.textContent === "Готов." || shout.textContent === t("studio.ready"))) {
       text(shout, t("studio.ready"));
