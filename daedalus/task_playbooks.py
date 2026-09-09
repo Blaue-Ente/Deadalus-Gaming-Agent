@@ -87,7 +87,7 @@ PLAYBOOKS: tuple[Playbook, ...] = (
             "ray-triangle", "raycast", "ray-cast", "perspective",
             "камера", "camera", "projection", "матриц",
         ),
-        regex=r"\b(slerp|quaternion|look[-_ ]?at|ray[-_ ]?(cast|triangle)|webgl|3d demo)\b",
+        regex=r"\b(slerp|quaternion|look[-_ ]?at|ray[-_ ]?(cast|triangle)|3d demo)\b|(?<!phaser\.)webgl",
         tools=_CORE + (
             "math3d", "game_canon", "spatial", "browser", "playtest", "assets",
         ),

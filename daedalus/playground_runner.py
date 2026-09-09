@@ -401,6 +401,77 @@ async def _vite_build_check(root: Path) -> tuple[bool, str]:
         return False, str(exc)
 
 
+_STAGE_ASSET_SUFFIX = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".ogg", ".mp3", ".wav", ".json"}
+
+
+def stage_web_assets(root: Path, dist: Path | None = None) -> int:
+    """Copy playground ``assets/`` into ``dist/assets/`` so Chromium proof can load them.
+
+    Vite hashes only *imported* files. Phaser ``this.load.image('x', 'assets/foo.png')``
+    404s when proof serves ``dist/`` alone — five broken requests, dark frame.
+    Recurse into ``sfx/`` and similar. Skip ``_*`` verify screenshots.
+    Returns how many files were copied.
+    """
+    src = root / "assets"
+    dest = (dist or root / "dist") / "assets"
+    if not src.is_dir() or not (dest.parent).is_dir():
+        return 0
+    dest.mkdir(parents=True, exist_ok=True)
+    n = 0
+    for path in src.rglob("*"):
+        if not path.is_file():
+            continue
+        rel = path.relative_to(src)
+        if any(part.startswith("_") for part in rel.parts):
+            continue
+        if path.suffix.lower() not in _STAGE_ASSET_SUFFIX:
+            continue
+        target = dest / rel
+        try:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path, target)
+            n += 1
+        except OSError:
+            continue
+    return n
+
+
+async def vite_compile_gate(root: Path, *, slug: str = "", kind: str = "vite") -> dict[str, Any]:
+    """npm install + vite build from a project directory (no Playground DB).
+
+    Visual proof used to serve the source tree when ``dist/`` was missing.
+    That skips the compile check: Phaser ``import`` fails in Chromium and
+    the page still "renders" because a stub ``<canvas>`` is in index.html.
+    """
+    if not (root / "package.json").exists():
+        return {"ok": True, "skipped": True, "install_ok": True, "logs": [], "error": ""}
+    kind = (kind or "vite").strip().lower() or "vite"
+    proj = {"kind": kind, "slug": slug or root.name}
+    log_lines: list[str] = []
+    install = await _install_deps(proj, root)
+    if install.get("output"):
+        log_lines += [f"[install] {l}" for l in str(install["output"]).splitlines()[-50:]]
+    if not bool(install.get("ok", True)):
+        err = _extract_error_from_logs(log_lines) or "npm install failed"
+        return {
+            "ok": False, "skipped": False, "install_ok": False,
+            "logs": log_lines, "error": err,
+        }
+    build_ok, build_out = await _vite_build_check(root)
+    log_lines += [f"[build] {l}" for l in build_out.splitlines()[-80:]]
+    if build_ok:
+        copied = stage_web_assets(root)
+        if copied:
+            log_lines.append(f"[assets] staged {copied} files into dist/assets/")
+    return {
+        "ok": build_ok,
+        "skipped": False,
+        "install_ok": True,
+        "logs": log_lines,
+        "error": "" if build_ok else (_extract_error_from_logs(log_lines) or "vite build failed"),
+    }
+
+
 async def smoke_test(slug: str, *, settle: float = 3.5) -> dict[str, Any]:
     """Actually verify the app builds/starts — the real signal the autopilot
     build loop was missing.

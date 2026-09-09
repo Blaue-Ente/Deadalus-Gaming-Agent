@@ -84,9 +84,64 @@ Director: Studio model picker (Claude Fable 5.1, GPT-6 Astra, GPT-5.5 / 5.6, Opu
 
 Always on even when Mentor is off: Phaser.Game counts as a loop; `playground.vite` playbook; kind sync; proof on exhaust; retry cap; `browser_ok` on chat DoD; no `NEED_PROPOSE` on game fast-path.
 
-When Mentor is on: PLAN PROGRESS NEXT comes from `daedalus/mentor.py` (inspect slug, RAG, forbid `generate_image` after two fails), overlayed by the director cache after quiet/exhaust. Extra recover rounds after native budget exhaust (once, +2). Persona wrap-up tells the model not to dump leftover JS.
+When Mentor is on: PLAN PROGRESS NEXT comes from `daedalus/mentor.py` (inspect slug, RAG, forbid `generate_image` after two fails), overlayed by the director cache after quiet/exhaust. Extra recover rounds after native budget exhaust (twice, +2 each). Persona wrap-up tells the model not to dump leftover JS.
 
-Mentor does **not** write `index.html` / `src/main.js`. Two writers stay forbidden.
+A **failed check returns to the writer**. Missing `node_modules` → `npm install`. Phaser `parent` id missing in HTML → `write_file` the mount. Missing `from './scenes/X.js'` → that path. `Phaser.Scene` without `import Phaser` → that file. `Phaser.AUTO` + `config.canvas` → `type: Phaser.WEBGL` (Vite ESM custom environment). Chromium uncaught / blank → `write_file`, **not** another `browser`. Mentor still does **not** write game files.
+
+**Hole closed 2026-09-08 (cheap MiniMax M3 Glass Orchard):** Mentor *did* say RETURN TO WRITER → `npm install`. The writer called `npm install … 2>&1 | tail`. Isolation refused the pipe, so `node_modules` never appeared and proof stayed "renders, 1 uncaught". Vite proof also used to serve the **source** tree when `dist/` was missing (stub `<canvas>` counted as painted). Now: (1) `run_command` peels npm/pnpm/npx pipes/`&&` and runs the argv prefix; (2) Vite proof runs `npm install` + `vite build` before Chromium — compile fail is a failed check, not a skip. Cheap eval pool: DeepSeek V4 Flash, GLM 5.2, MiniMax M3, Poolside — not Claude.
+
+## Live eval 2026-09-08 — Glass Orchard, Qwen 3.8 Max writer + Fable mentor
+
+Full `Daedalus.chat` (`scripts/live_eval_agent_chat.py --craft-writer --preset glass --mentor-choice or-fable-51`). Effort craft. Isolated `$DAEDALUS_DATA`. Writer: `qwen/qwen3.8-max-0902`. Mentor: `anthropic/claude-fable-5.1` (1 call, 376 tokens, 9.1s, NEXT=`run_command`).
+
+| | Result |
+|--|--|
+| Wall | ~2132s |
+| Playbook | `playground.vite` |
+| Disk | `Phaser.Game` + Boot/Menu/Play/End, PNG art, sfx, `node_modules`, `dist/` |
+| `generate_image` | Novita 403 → OpenRouter; two writes died on `assets/assets/*.png` (filename already had `assets/`) |
+| Compile | **ok** after PlayScene.js landed — Chromium loaded hashed `index-*.js` |
+| Proof | 1 uncaught. First it was missing scenes; then `Must set explicit renderType in custom environment` (`Phaser.AUTO` + `canvas: getElementById('game-canvas')`). Frame stayed CSS chrome around an empty canvas. |
+| Mentor | First skip `rules_unambiguous`; then Fable said rebuild, not `write_file` the import/`WEBGL` defect |
+| DoD | `complete=false` (fix budget exhausted). Review-gate: persona dumped chain-of-thought, not an owner summary |
+
+Evaluator (not the agent): the same tree with `import Phaser from 'phaser'` in each scene and `type: Phaser.WEBGL` **paints the Glass Orchard menu** (emblem, title, CLICK or PRESS ENTER, 0 uncaught, PNG+sfx 200). Kernel now steers those two writes. `generate_image` strips a leading `assets/` prefix. Staging copies `sfx/`.
+
+## Live eval 2026-09-08 — Glass Orchard, cheap writer DeepSeek V4 Flash
+
+Full `Daedalus.chat` (`scripts/live_eval_agent_chat.py --cheap --model deepseek/deepseek-v4-flash --preset glass --mentor-choice or-glm-53-flash`). Effort craft. Isolated `$DAEDALUS_DATA`. **No Claude.** Mentor: GLM 5.3 Flash (rules skipped the director — inspect already knew NEXT).
+
+| | Result |
+|--|--|
+| Wall | ~497s |
+| Writer | `deepseek/deepseek-v4-flash` (tool-call probe ok) |
+| Playbook | `playground.vite` |
+| Disk | `Phaser.Game` + arcade physics, Boot/Menu/Game/Win scenes, `node_modules`, `dist/`, 5 PNG assets |
+| Compile gate | **ran** — Chromium loaded `dist/assets/index-*.js` |
+| Vision | OpenRouter 404 `Filter by Image Support` → kernel **retried without PNG**, turn continued |
+| Proof | 5 broken requests (`this.load.image(..., 'assets/*.png')` not in `dist/`). Dark frame. |
+| Mentor | **RETURN TO WRITER** `write_file` (`rules_unambiguous`). Not another `browser`. |
+| DoD | `complete=false` (budget exhausted). Writer then hunted with `playground_read` instead of fixing paths. |
+
+Kernel staging now copies `assets/*.png` into `dist/assets/` after `vite build`. Re-opening that same `dist/` with the five PNGs staged: Chromium **ok**, 0 uncaught, 0 failed requests, canvas present. Favicon 404 is ignored. The remaining dark pixels are the slice's `#0a0a12` canvas, not a skipped check.
+
+## Live eval 2026-09-08 — Glass Orchard, Mentor GLM 5.3 vs GPT-6 Astra
+
+Full `Daedalus.chat` (`scripts/live_eval_agent_chat.py --better --preset glass --mentor-choice …`). Builder: Claude Sonnet 4.6. Effort craft. Isolated `$DAEDALUS_DATA`. Long GDD (kind=vite + Phaser 3, lantern harvest, Grove/Dusk). Playbook **playground.vite**.
+
+| | GLM 5.3 director | GPT-6 Astra director |
+|--|--|--|
+| Wall | ~494s | ~946s |
+| Mentor LLM | **timeout** (30s, 0 tokens, `llm_error` → rules fallback NEXT=`browser`) | **ok** 4.4s, 335 tokens, NEXT=`run_command` (npm/build) |
+| `src/main.js` | `Phaser.Game` parent `#game` | `Phaser.Game` parent `#app` (HTML has `#game-canvas`, no `#app`) |
+| Scenes on disk | Boot / Menu / Play / Over (catch-and-sort, not the lantern GDD) | Boot / Menu / Grove / Dusk + GameScene / Lantern / Harvest / Hud |
+| `npm install` | never | yes (`node_modules` present) |
+| PNG | 7 via `generate_image` (Novita 403 → OpenRouter `data:` decode **works**) | 4 orbs + bg generated; Boot then **ignored** them (procedural canvas textures) |
+| Proof | dark frame, 1 uncaught (no Phaser npm) | dark frame, 1 uncaught (missing `#app` mount) |
+| DoD | `complete=false`, browser fail | `complete=false`, browser fail |
+| Persona | leftover `NEED_` XML for Grove.js that was never written | claimed the game runs |
+
+Kernel visual proof ran on exhaust both times. Mentor still does not write files. GLM-5.3 hidden reasoning did not return JSON inside 30s — rules helm then sent the model to `browser` instead of `npm install`. Astra's steer (`run_command`) is the right next move; the blank frame is a mount mismatch the director digest does not currently see.
 
 ## S1 — Closed build loop (done)
 

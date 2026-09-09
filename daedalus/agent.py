@@ -119,11 +119,30 @@ async def _call_claude(system: str, messages: list[dict[str, Any]],
 
     Tries primary provider first; on 429 / overload falls back to
     replit_openai gpt-5.4 → replit_gemini gemini-2.5-flash automatically.
+    Cheap writers (DeepSeek / MiniMax / GLM) often have no image input —
+    a proof PNG then 404s. Retry the same turn without vision; the text
+    proof summary is enough for RETURN TO WRITER.
     """
-    return await call_with_fallback(
-        _call_claude_primary, system, messages,
-        use_cache_override=use_cache_override,
+    from .llm_client import (
+        is_no_image_support,
+        messages_have_images,
+        strip_images_from_messages,
     )
+
+    try:
+        return await call_with_fallback(
+            _call_claude_primary, system, messages,
+            use_cache_override=use_cache_override,
+        )
+    except Exception as exc:
+        if is_no_image_support(exc) and messages_have_images(messages):
+            log.warning("persona LLM has no vision; retrying without proof frames")
+            stripped = strip_images_from_messages(messages)
+            return await call_with_fallback(
+                _call_claude_primary, system, stripped,
+                use_cache_override=use_cache_override,
+            )
+        raise
 
 
 async def _call_claude_primary(system: str, messages: list[dict[str, Any]],

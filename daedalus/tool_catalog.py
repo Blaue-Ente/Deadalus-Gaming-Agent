@@ -113,7 +113,7 @@ _NATIVE_META: dict[str, dict[str, Any]] = {
     "run_command": {
         "module": "daedalus.shell_center",
         "tags": ("shell", "verify"),
-        "when": "Jailed shell: pytest, npm, ls, git status. Static HTML preview does not need a dev server.",
+        "when": "Jailed argv: pytest, npm install, ls. No pipes or &&. Vite proof runs npm+build itself.",
         "aliases": ("NEED_PLAYGROUND_RUN", "shell"),
         "need_marker": "NEED_PLAYGROUND_RUN",
         "args_hint": "command, optional cwd/slug/timeout",

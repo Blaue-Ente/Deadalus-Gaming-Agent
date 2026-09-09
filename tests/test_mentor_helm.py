@@ -15,6 +15,7 @@ def _data(tmp_path, monkeypatch):
     monkeypatch.delenv("DAEDALUS_MENTOR_MODEL", raising=False)
     monkeypatch.delenv("DAEDALUS_MENTOR_PROVIDER", raising=False)
     monkeypatch.delenv("DAEDALUS_MENTOR_DAY_CAP", raising=False)
+    monkeypatch.delenv("DAEDALUS_MENTOR_TIMEOUT", raising=False)
     monkeypatch.setenv("DAEDALUS_MENTOR_LLM", "1")
     from daedalus.paths import data_root
     data_root.cache_clear()
@@ -230,6 +231,24 @@ def test_refresh_helm_caches_fingerprint(tmp_path, monkeypatch):
     assert loop.mentor_steer["next_tool"] == "run_command"
 
 
+def test_proof_failed_is_not_rules_unambiguous():
+    from daedalus.mentor_helm import rules_unambiguous
+
+    inspect = {"flags": {"proof_failed": True, "kernel_proof_ran": True}}
+    steer = {"action": "continue", "next_tool": "write_file"}
+    assert rules_unambiguous(inspect, steer) is False
+    inspect_npm = {"flags": {"needs_npm": True}}
+    assert rules_unambiguous(inspect_npm, {"action": "continue", "next_tool": "run_command"}) is True
+    inspect_scenes = {"flags": {"missing_scenes": True}}
+    assert rules_unambiguous(inspect_scenes, {"action": "continue", "next_tool": "write_file"}) is True
+    inspect_imp = {"flags": {"missing_imports": True}}
+    assert rules_unambiguous(inspect_imp, {"action": "continue", "next_tool": "write_file"}) is True
+    inspect_ph = {"flags": {"phaser_no_import": True}}
+    assert rules_unambiguous(inspect_ph, {"action": "continue", "next_tool": "write_file"}) is True
+    inspect_auto = {"flags": {"phaser_auto_canvas": True}}
+    assert rules_unambiguous(inspect_auto, {"action": "continue", "next_tool": "write_file"}) is True
+
+
 def test_http_choice_and_status_catalog(tmp_path, monkeypatch):
     _data(tmp_path, monkeypatch)
     monkeypatch.delenv("DAEDALUS_MENTOR", raising=False)
@@ -266,3 +285,18 @@ def test_http_choice_and_status_catalog(tmp_path, monkeypatch):
     cap = client.post("/api/v1/daedalus/mentor", json={"day_token_cap": 5000})
     assert cap.status_code == 200
     assert cap.json()["llm"]["spend"]["cap"] == 5000
+
+
+def test_llm_timeout_env(monkeypatch):
+    from daedalus import mentor_helm
+
+    monkeypatch.delenv("DAEDALUS_MENTOR_TIMEOUT", raising=False)
+    assert mentor_helm.llm_timeout_s() == 10.0
+    monkeypatch.setenv("DAEDALUS_MENTOR_TIMEOUT", "30")
+    assert mentor_helm.llm_timeout_s() == 30.0
+    monkeypatch.setenv("DAEDALUS_MENTOR_TIMEOUT", "2")
+    assert mentor_helm.llm_timeout_s() == 3.0
+    monkeypatch.setenv("DAEDALUS_MENTOR_TIMEOUT", "999")
+    assert mentor_helm.llm_timeout_s() == 60.0
+    monkeypatch.setenv("DAEDALUS_MENTOR_TIMEOUT", "nope")
+    assert mentor_helm.llm_timeout_s() == 10.0

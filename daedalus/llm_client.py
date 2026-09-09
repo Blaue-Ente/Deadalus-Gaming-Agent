@@ -10,6 +10,61 @@ log = logging.getLogger(__name__)
 _TOOL_MAX_TOKENS = 12288
 
 
+def is_no_image_support(exc: BaseException) -> bool:
+    text = str(exc).lower()
+    return (
+        "image input" in text
+        or "filter by image support" in text
+        or "does not support image" in text
+        or "vision is not supported" in text
+        or "no endpoints found that support image" in text
+    )
+
+
+def _block_is_image(block: Any) -> bool:
+    if not isinstance(block, dict):
+        return False
+    kind = str(block.get("type") or "")
+    if kind in {"image_url", "image"}:
+        return True
+    return "image_url" in block and kind != "text"
+
+
+def content_has_images(content: Any) -> bool:
+    if isinstance(content, list):
+        return any(_block_is_image(b) or content_has_images(b) for b in content)
+    if isinstance(content, dict):
+        if _block_is_image(content):
+            return True
+        return content_has_images(content.get("content"))
+    return False
+
+
+def messages_have_images(messages: list[dict[str, Any]]) -> bool:
+    return any(content_has_images(m.get("content")) for m in messages)
+
+
+def strip_images_from_content(content: Any) -> Any:
+    if not isinstance(content, list):
+        return content
+    kept = [b for b in content if not _block_is_image(b)]
+    if kept:
+        return kept
+    return (
+        "Visual proof frame omitted — this model has no image input. "
+        "Use the text summary of the proof (uncaught / blank / compile)."
+    )
+
+
+def strip_images_from_messages(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for msg in messages:
+        row = dict(msg)
+        row["content"] = strip_images_from_content(msg.get("content"))
+        out.append(row)
+    return out
+
+
 def _usage_dict(usage: Any) -> dict[str, int]:
     if usage is None:
         return {}
@@ -216,11 +271,23 @@ async def call_with_tools(
     try:
         resp = await client.chat.completions.create(**create_kw)
     except Exception as exc:
-        log.warning("tool LLM %s/%s failed: %s", provider, model, exc)
-        return {
-            "stop_reason": "end_turn",
-            "content": [{"type": "text", "text": f"LLM error: {exc}"[:800]}],
-        }
+        if is_no_image_support(exc) and messages_have_images(oa_messages):
+            log.warning("tool LLM %s/%s has no vision; retrying without proof frames", provider, model)
+            create_kw["messages"] = strip_images_from_messages(oa_messages)
+            try:
+                resp = await client.chat.completions.create(**create_kw)
+            except Exception as exc2:
+                log.warning("tool LLM %s/%s failed: %s", provider, model, exc2)
+                return {
+                    "stop_reason": "end_turn",
+                    "content": [{"type": "text", "text": f"LLM error: {exc2}"[:800]}],
+                }
+        else:
+            log.warning("tool LLM %s/%s failed: %s", provider, model, exc)
+            return {
+                "stop_reason": "end_turn",
+                "content": [{"type": "text", "text": f"LLM error: {exc}"[:800]}],
+            }
     choice = resp.choices[0] if resp.choices else None
     msg = choice.message if choice else None
     content: list[dict[str, Any]] = []

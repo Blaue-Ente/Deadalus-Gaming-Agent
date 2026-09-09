@@ -70,6 +70,7 @@ class ProofResult:
             "error": self.error,
             "honest_gap": self.honest_gap,
             "blank_screen": self.blank_screen,
+            "page_errors": list((self.details or {}).get("page_errors") or [])[:5],
         }
 
     def as_tool_text(self) -> str:
@@ -77,6 +78,9 @@ class ProofResult:
         gap = f" gap={self.honest_gap}" if self.honest_gap else ""
         frames = f" frames={','.join(self.frames)}" if self.frames else ""
         err = f"\n{self.error}" if self.error else ""
+        pages = (self.details or {}).get("page_errors") or []
+        if pages:
+            err += "\nUNCAUGHT: " + str(pages[0])[:240]
         return (
             f"── visual_proof {status} tool={self.tool} slug={self.slug} "
             f"kind={self.kind}{gap}{frames} ──\n{self.summary}{err}"

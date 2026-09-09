@@ -32,7 +32,7 @@ log = logging.getLogger(__name__)
 _DB_KEY = "adn:daedalus_mentor"
 _DEFAULT_ON = True
 _EXTRA_ROUNDS = 2
-_MAX_GRANTS = 1
+_MAX_GRANTS = 2
 
 _MAIN_CANDIDATES = (
     "src/main.js",
@@ -48,8 +48,18 @@ _SCAFFOLD_RE = re.compile(
     re.I,
 )
 _PHASER_BOOT_RE = re.compile(r"new\s+phaser\.game\b", re.I)
+_PHASER_PARENT_RE = re.compile(r"parent\s*:\s*['\"]([^'\"]+)['\"]", re.I)
+_HTML_ID_RE = re.compile(r"\bid\s*=\s*['\"]([^'\"]+)['\"]", re.I)
 _RAF_RE = re.compile(r"requestanimationframe|new\s+pixi\.application", re.I)
 _CANVAS_RE = re.compile(r"<canvas\b|id=[\"']game[\"']", re.I)
+_REL_IMPORT_RE = re.compile(
+    r"""(?:from|import)\s+['\"](\.[^'\"]+)['\"]""",
+    re.I,
+)
+_PHASER_FROM_RE = re.compile(r"""from\s+['\"]phaser['\"]""", re.I)
+_PHASER_AUTO_RE = re.compile(r"type\s*:\s*Phaser\.AUTO\b")
+_PHASER_CANVAS_CFG_RE = re.compile(r"\bcanvas\s*:")
+_VITE_KINDS = frozenset({"vite", "vite-react", "phaser"})
 
 
 def env_override() -> bool | None:
@@ -146,6 +156,15 @@ class ProjectView:
     scaffold_main: bool = False
     dist_exists: bool = False
     exists: bool = False
+    needs_npm: bool = False
+    phaser_parent: str = ""
+    html_ids: tuple[str, ...] = ()
+    mount_mismatch: bool = False
+    scene_files: tuple[str, ...] = ()
+    missing_scenes: bool = False
+    missing_imports: tuple[str, ...] = ()
+    phaser_no_import: tuple[str, ...] = ()
+    phaser_auto_canvas: bool = False
 
     @property
     def entry_boots(self) -> bool:
@@ -181,6 +200,58 @@ class Steer:
         return line
 
 
+def _missing_src_imports(root: Path, *, main_path: str, main_js: str) -> tuple[str, ...]:
+    """Relative ``from './x.js'`` in src/ that do not exist on disk."""
+    src = root / "src"
+    try:
+        root_res = root.resolve()
+        main_res = (root / main_path).resolve() if main_path else None
+    except OSError:
+        return ()
+    files: list[Path] = []
+    seen: set[Path] = set()
+    candidates: list[Path] = []
+    if main_path:
+        candidates.append(root / main_path)
+    if src.is_dir():
+        candidates.extend(
+            p for p in src.rglob("*")
+            if p.is_file() and p.suffix.lower() in {".js", ".ts"}
+        )
+    for path in candidates:
+        try:
+            key = path.resolve()
+        except OSError:
+            continue
+        if key in seen or not path.is_file():
+            continue
+        seen.add(key)
+        files.append(path)
+    missing: list[str] = []
+    miss_seen: set[str] = set()
+    for js in files:
+        text = main_js if main_res is not None and js.resolve() == main_res and main_js else _read(js)
+        for m in _REL_IMPORT_RE.finditer(text or ""):
+            spec = m.group(1).split("?")[0].split("#")[0]
+            target = (js.parent / spec).resolve()
+            if target.is_file():
+                continue
+            if not target.suffix:
+                if any(target.with_suffix(ext).is_file() for ext in (".js", ".ts")):
+                    continue
+            try:
+                rel = str(target.relative_to(root_res)).replace("\\", "/")
+            except ValueError:
+                rel = spec.lstrip("./")
+            if rel in miss_seen:
+                continue
+            miss_seen.add(rel)
+            missing.append(rel)
+            if len(missing) >= 6:
+                return tuple(missing)
+    return tuple(missing)
+
+
 def _read(path: Path, limit: int = 12000) -> str:
     try:
         if path.is_file():
@@ -188,6 +259,34 @@ def _read(path: Path, limit: int = 12000) -> str:
     except OSError:
         return ""
     return ""
+
+
+def _phaser_files_missing_import(root: Path) -> tuple[str, ...]:
+    """``extends Phaser.Scene`` (etc.) without ``import Phaser from 'phaser'``."""
+    src = root / "src"
+    if not src.is_dir():
+        return ()
+    missing: list[str] = []
+    try:
+        root_res = root.resolve()
+    except OSError:
+        return ()
+    for path in src.rglob("*"):
+        if not path.is_file() or path.suffix.lower() not in {".js", ".ts"}:
+            continue
+        text = _read(path)
+        if not text or not re.search(r"\bPhaser\b", text):
+            continue
+        if _PHASER_FROM_RE.search(text):
+            continue
+        try:
+            rel = str(path.resolve().relative_to(root_res)).replace("\\", "/")
+        except ValueError:
+            continue
+        missing.append(rel)
+        if len(missing) >= 6:
+            break
+    return tuple(missing)
 
 
 def inspect_project(slug: str, *, kind: str = "") -> ProjectView:
@@ -216,6 +315,42 @@ def inspect_project(slug: str, *, kind: str = "") -> ProjectView:
     view.has_phaser_boot = bool(_PHASER_BOOT_RE.search(blob))
     view.has_raf = bool(_RAF_RE.search(blob))
     view.scaffold_main = bool(view.main_js) and bool(_SCAFFOLD_RE.search(view.main_js)) and not view.has_phaser_boot
+    parent_m = _PHASER_PARENT_RE.search(view.main_js)
+    view.phaser_parent = (parent_m.group(1).strip() if parent_m else "")
+    view.html_ids = tuple(dict.fromkeys(_HTML_ID_RE.findall(view.index_html)))
+    view.mount_mismatch = bool(view.phaser_parent) and view.phaser_parent not in view.html_ids
+    scenes_dir = root / "src" / "scenes"
+    if scenes_dir.is_dir():
+        view.scene_files = tuple(
+            sorted(
+                p.name
+                for p in scenes_dir.iterdir()
+                if p.is_file() and p.suffix.lower() in {".js", ".ts"}
+            )
+        )
+    view.missing_scenes = (
+        not view.scaffold_main
+        and bool(view.has_phaser_boot)
+        and not view.scene_files
+        and (
+            (kind or "").lower() in _VITE_KINDS
+            or "phaser" in (view.package_json or "").lower()
+        )
+    )
+    view.missing_imports = _missing_src_imports(
+        root, main_path=view.main_path, main_js=view.main_js,
+    )
+    view.phaser_no_import = _phaser_files_missing_import(root)
+    view.phaser_auto_canvas = bool(
+        _PHASER_AUTO_RE.search(view.main_js or "")
+        and _PHASER_CANVAS_CFG_RE.search(view.main_js or "")
+    )
+    pkg = view.package_json.lower()
+    has_dep = "phaser" in pkg or '"vite"' in pkg or "'vite'" in pkg
+    mods = root / "node_modules"
+    view.needs_npm = bool(view.package_json) and (
+        has_dep or (kind or "").lower() in _VITE_KINDS
+    ) and not (mods / "phaser").is_dir() and not (mods / "vite").is_dir()
     return view
 
 
@@ -257,18 +392,71 @@ def extra_round_budget(loop: Any) -> int:
         return 0
     from .tool_catalog import canonical
 
+    nxt = canonical(decision.next_tool).lower()
+    # Proof already failed — extra rounds are for the *writer*, not another browser.
+    if nxt in {"browser", "engine", "visual_proof"} and _proof_runtime_failed(loop):
+        return 0
     fails = getattr(loop, "unrecovered_failures", lambda: [])()
     if fails:
         last = canonical(fails[-1].tool).lower()
-        nxt = canonical(decision.next_tool).lower()
         capped = getattr(loop, "retry_capped", lambda _t: False)(fails[-1].tool)
         if nxt == last and capped:
             return 0
     return _EXTRA_ROUNDS
 
 
+def _proof_runtime_failed(loop: Any) -> bool:
+    """Chromium ran and the page is not a pass (uncaught / blank / failed requests)."""
+    if getattr(loop, "kernel_proof_ran", False):
+        if getattr(loop, "proof_gap", ""):
+            return False
+        return not bool(getattr(loop, "proof_ok", False))
+    hits = []
+    if hasattr(loop, "_proof_hits"):
+        try:
+            hits = list(loop._proof_hits() or [])
+        except Exception:
+            hits = []
+    if not hits:
+        return False
+    return any(not o.ok for o in hits) and not any(o.ok for o in hits)
+
+
+def _proof_error_head(loop: Any) -> str:
+    errs = [str(x) for x in (getattr(loop, "proof_errors", None) or []) if x]
+    if errs:
+        return errs[0][:100]
+    summary = str(getattr(loop, "proof_summary", "") or "").strip()
+    return summary[:100]
+
+
+def _writer_fix(
+    slug: str,
+    view: ProjectView,
+    *,
+    reason: str,
+    blockers: list[str],
+    rag: list[str],
+    forbid: list[str],
+    path: str = "",
+) -> Steer:
+    return Steer(
+        action="continue",
+        next_tool="write_file",
+        next_args={"slug": slug, "path": path or view.main_path or "src/main.js"},
+        reason=reason,
+        blockers=blockers,
+        rag_refs=rag,
+        forbid_tools=forbid,
+    )
+
+
 def steer(loop: Any) -> Steer | None:
-    """Return a helm decision, or None when Mentor is off / nothing to say."""
+    """Return a helm decision, or None when Mentor is off / nothing to say.
+
+    Checks fail closed. A failed proof does **not** mean another browser call —
+    it returns the defect to the writer (write_file / npm). Mentor does not write.
+    """
     if not enabled() or loop is None:
         return None
     slug = str(getattr(loop, "slug", "") or "")
@@ -289,9 +477,16 @@ def steer(loop: Any) -> Steer | None:
         blockers.append("index.html has a canvas but the JS entry never boots a game loop.")
     elif view.has_canvas and not view.main_js:
         blockers.append("canvas in index.html but no src/main.js (or game.js) yet.")
+    if view.needs_npm:
+        blockers.append("package.json lists Vite/Phaser but node_modules is missing — npm install first.")
+    if view.mount_mismatch:
+        blockers.append(
+            f"Phaser parent '{view.phaser_parent}' is not an id in index.html "
+            f"(have: {', '.join(view.html_ids) or 'none'})."
+        )
 
     rag: list[str] = []
-    if view.scaffold_main or kind in {"vite", "vite-react", "phaser"}:
+    if view.scaffold_main or kind in _VITE_KINDS:
         rag = _rag_hits("vite phaser src/main.js Phaser.Game entry not scaffold")
 
     v = getattr(loop, "last_verdict", None) or (
@@ -307,11 +502,13 @@ def steer(loop: Any) -> Steer | None:
         plan_why = str(nxt.why or "")
 
     proof_blank = bool(getattr(loop, "proof_blank", False))
+    proof_failed = _proof_runtime_failed(loop)
     proof_ok = bool(
         getattr(loop, "kernel_proof_ran", False)
         and getattr(loop, "_has_successful_proof", lambda: False)()
         and not proof_blank
         and not getattr(loop, "proof_gap", "")
+        and not proof_failed
     )
     unrecovered = [
         o for o in getattr(loop, "unrecovered_failures", lambda: [])()
@@ -333,22 +530,106 @@ def steer(loop: Any) -> Steer | None:
         )
 
     if view.scaffold_main or (view.has_canvas and not view.entry_boots):
-        return Steer(
-            action="continue",
-            next_tool="write_file",
-            next_args={
-                "slug": slug,
-                "path": view.main_path or "src/main.js",
-            },
+        return _writer_fix(
+            slug, view,
             reason=(
                 "Overwrite the Vite #app scaffold with new Phaser.Game "
                 "(scenes in src/scenes/). Do not retry generate_image."
                 if "generate_image" in forbid
                 else "Overwrite src/main.js so Phaser.Game (or rAF) actually boots."
             ),
+            blockers=blockers, rag=rag, forbid=forbid,
+        )
+
+    if view.needs_npm:
+        return Steer(
+            action="continue",
+            next_tool="run_command",
+            next_args={"slug": slug, "command": "npm install", "timeout": 120},
+            reason=(
+                "RETURN TO WRITER: Vite/Phaser deps are not installed. "
+                'run_command command="npm install" slug=' + (slug or "<project>")
+                + " — no pipes, no &&. Then the kernel will open the game."
+            ),
             blockers=blockers,
             rag_refs=rag,
             forbid_tools=forbid,
+        )
+
+    if view.mount_mismatch:
+        return _writer_fix(
+            slug, view,
+            path="index.html",
+            reason=(
+                f"RETURN TO WRITER: Phaser parent '{view.phaser_parent}' is missing in HTML. "
+                f"Add <div id=\"{view.phaser_parent}\"></div> (or change parent). Mentor does not write."
+            ),
+            blockers=blockers, rag=rag, forbid=forbid,
+        )
+
+    if view.missing_scenes:
+        return _writer_fix(
+            slug, view,
+            path="src/scenes/Boot.js",
+            reason=(
+                "RETURN TO WRITER: Phaser.Game is in src/main.js but src/scenes/ is empty. "
+                "write_file src/scenes/Boot.js (then Menu / Grove / Dusk / Result). Mentor does not write."
+            ),
+            blockers=blockers or ["missing src/scenes"],
+            rag=rag, forbid=forbid,
+        )
+
+    if view.missing_imports:
+        gap = view.missing_imports[0]
+        return _writer_fix(
+            slug, view,
+            path=gap,
+            reason=(
+                f"RETURN TO WRITER: {gap} is imported but missing on disk. "
+                "write_file that path. Mentor does not write."
+            ),
+            blockers=blockers or [f"missing {gap}"],
+            rag=rag, forbid=forbid,
+        )
+
+    if view.phaser_no_import:
+        gap = view.phaser_no_import[0]
+        return _writer_fix(
+            slug, view,
+            path=gap,
+            reason=(
+                f"RETURN TO WRITER: {gap} uses Phaser without "
+                "import Phaser from 'phaser'. Add the import. Mentor does not write."
+            ),
+            blockers=blockers or [f"Phaser global in {gap}"],
+            rag=rag, forbid=forbid,
+        )
+
+    if view.phaser_auto_canvas:
+        return _writer_fix(
+            slug, view,
+            path=view.main_path or "src/main.js",
+            reason=(
+                "RETURN TO WRITER: Phaser.AUTO + config.canvas is a custom environment. "
+                "Set type: Phaser.WEBGL (or CANVAS). Mentor does not write."
+            ),
+            blockers=blockers or ["Phaser.AUTO with canvas"],
+            rag=rag, forbid=forbid,
+        )
+
+    if proof_blank or proof_failed:
+        err = _proof_error_head(loop)
+        why = "Last proof frame was blank." if proof_blank else "Visual proof failed."
+        if err:
+            why = f"{why} {err}"
+        return _writer_fix(
+            slug, view,
+            reason=(
+                f"RETURN TO WRITER: {why} "
+                "You write the fix (entry / mount / import). Do not open browser again. Mentor does not write."
+            )[:140],
+            blockers=blockers or ["visual proof failed"],
+            rag=rag, forbid=forbid,
         )
 
     if getattr(loop, "_has_writes", lambda: False)() and not getattr(loop, "kernel_proof_ran", False):
@@ -362,18 +643,9 @@ def steer(loop: Any) -> Steer | None:
             forbid_tools=forbid,
         )
 
-    if proof_blank:
-        return Steer(
-            action="continue",
-            next_tool="write_file",
-            next_args={"slug": slug, "path": view.main_path or "src/main.js"},
-            reason="Last proof frame was blank. Fix the entry, do not repeat generate_image.",
-            blockers=blockers or ["blank screen"],
-            rag_refs=rag,
-            forbid_tools=forbid,
-        )
+    from .visual_proof import PROOF_TOOLS as _PROOF
 
-    if plan_tool and not retry_capped(plan_tool):
+    if plan_tool and plan_tool.lower() not in _PROOF and not retry_capped(plan_tool):
         return Steer(
             action="continue",
             next_tool=plan_tool,
@@ -385,20 +657,23 @@ def steer(loop: Any) -> Steer | None:
         )
 
     if unrecovered and retry_capped(unrecovered[-1].tool):
-        return Steer(
-            action="continue",
-            next_tool="write_file",
-            next_args={"slug": slug, "path": view.main_path or "src/main.js"},
+        last = unrecovered[-1].tool
+        if str(last).lower() in _PROOF:
+            return _writer_fix(
+                slug, view,
+                reason="RETURN TO WRITER: browser/proof failed twice. Fix the files; Mentor does not write.",
+                blockers=blockers, rag=rag, forbid=forbid,
+            )
+        return _writer_fix(
+            slug, view,
             reason=(
-                f"{unrecovered[-1].tool} failed twice — change approach "
+                f"{last} failed twice — change approach "
                 "(Boot canvas textures / skip PNG / fix the entry)."
             ),
-            blockers=blockers,
-            rag_refs=rag,
-            forbid_tools=forbid,
+            blockers=blockers, rag=rag, forbid=forbid,
         )
 
-    if v is not None and not getattr(v, "complete", False) and plan_tool:
+    if v is not None and not getattr(v, "complete", False) and plan_tool and plan_tool.lower() not in _PROOF:
         return Steer(
             action="continue",
             next_tool=plan_tool,
@@ -414,20 +689,17 @@ def steer(loop: Any) -> Steer | None:
             action="continue",
             next_tool="browser",
             next_args={"slug": slug},
-            reason="Still no painted visual proof.",
+            reason="Still no painted visual proof — kernel will open the running game.",
             blockers=blockers,
             rag_refs=rag,
             forbid_tools=forbid,
         )
 
-    return Steer(
-        action="continue",
-        next_tool="write_file",
-        next_args={"slug": slug, "path": view.main_path or "index.html"},
+    return _writer_fix(
+        slug, view,
+        path=view.main_path or "index.html",
         reason="Keep writing the playable slice in the Playground slug.",
-        blockers=blockers,
-        rag_refs=rag,
-        forbid_tools=forbid,
+        blockers=blockers, rag=rag, forbid=forbid,
     )
 
 
@@ -446,10 +718,20 @@ def inspect_digest(loop: Any) -> dict[str, Any]:
         "has_canvas": bool(view.has_canvas),
         "entry_boots": bool(view.entry_boots),
         "has_phaser_boot": bool(view.has_phaser_boot),
+        "needs_npm": bool(view.needs_npm),
+        "mount_mismatch": bool(view.mount_mismatch),
+        "missing_scenes": bool(view.missing_scenes),
+        "missing_imports": bool(view.missing_imports),
+        "phaser_no_import": bool(view.phaser_no_import),
+        "phaser_auto_canvas": bool(view.phaser_auto_canvas),
         "proof_blank": bool(getattr(loop, "proof_blank", False)),
+        "proof_failed": _proof_runtime_failed(loop),
         "kernel_proof_ran": bool(getattr(loop, "kernel_proof_ran", False)),
         "image_retry_capped": bool(getattr(loop, "retry_capped", lambda _t: False)("generate_image")),
     }
+    errs = [str(x)[:80] for x in (getattr(loop, "proof_errors", None) or []) if x][:3]
+    if errs:
+        last_fails = list(last_fails) + [f"proof:{e}" for e in errs]
     return {
         "kind": kind,
         "scaffold": bool(view.scaffold_main),
@@ -545,7 +827,19 @@ def progress_next(loop: Any, *, fallback: str = "") -> str:
     if decision is None:
         return fallback
     slug = str(getattr(loop, "slug", "") or "")
-    lines = [decision.next_line(slug=slug)]
+    lines: list[str] = []
+    nxt = (decision.next_tool or "").lower()
+    if decision.action == "continue" and nxt in {"write_file", "run_command"}:
+        lines.append(
+            "RETURN TO WRITER: a check failed. You (the model that writes files) "
+            "must fix it. Mentor does not write game files."
+        )
+        if nxt == "write_file":
+            lines.append(
+                "Do not list_dir / playground_read / find. The check already named the defect. "
+                "write_file the fix now."
+            )
+    lines.append(decision.next_line(slug=slug))
     if decision.forbid_tools:
         lines.append("FORBID: " + ", ".join(decision.forbid_tools) + " (same error twice — change approach).")
     if decision.blockers:
@@ -571,8 +865,9 @@ def persona_wrapup(loop: Any) -> str:
         lines.append(f"Steer: stop — {decision.reason}")
     else:
         lines.append(
-            "Steer: not done. Do not dump leftover JS into chat. "
-            "Do not emit NEED_* / JSON tool dumps. The kernel already wrote files."
+            "Steer: not done. A check failed — RETURN TO WRITER. "
+            "Do not dump leftover JS into chat. Do not emit NEED_* / JSON tool dumps. "
+            "Mentor does not write files. Call the NEXT tool now."
         )
         lines.append(decision.next_line(slug=str(getattr(loop, "slug", "") or "")))
         if decision.forbid_tools:
@@ -584,8 +879,13 @@ def persona_wrapup(loop: Any) -> str:
         lines.append(
             "Honest: src/main.js is still the Vite scaffold — Chromium will show a blank page."
         )
-    elif getattr(loop, "proof_blank", False):
-        lines.append("Honest: last proof frame was blank. Prototype, not store-ready.")
+    elif getattr(loop, "proof_blank", False) or _proof_runtime_failed(loop):
+        err = _proof_error_head(loop)
+        lines.append(
+            "Honest: visual proof failed"
+            + (f" ({err})" if err else "")
+            + ". Not store-ready. Writer must fix, then the kernel opens the game again."
+        )
     return "\n".join(lines)
 
 
