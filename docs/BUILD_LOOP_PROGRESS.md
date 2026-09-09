@@ -237,3 +237,32 @@ FAILED so the loop's NEXT is a corrected `write_file`, not eight hunting rounds.
 
 Internal study `docs/GODOGEN_STUDY.md`. Steal: pixels of the running game.
 Keep: playbooks, scaffolds, build loop. Do not delete the kernel.
+
+## S5 slice — Writer assist (Off / Auto / Kernel)
+
+Kernel Phaser skeleton so a weak writer still *boots*. Mentor does not write
+`index.html` / `src/main.js`. Default **Off** (Vite Hello). Studio segmented
+control: Auto | Off | Kernel. `DAEDALUS_WRITER_ASSIST` locks the process.
+
+- **Off** — today's Vite `#app` Hello (racer still wins on F-Zero briefs).
+- **Auto** — Phaser seed when `kind=vite` and the brief names Phaser.
+- **Kernel** — Phaser seed for every new Vite project that is not a racer.
+  Files: `#game`, `Phaser.WEBGL`, `import Phaser from 'phaser'`, Boot/Menu/Play.
+
+Do **not** reuse `playground_game_scaffold.startGame(parent='app')` / `Phaser.AUTO`.
+
+A/B runner: `scripts/sim_writer_assist.py --pair` (Ember Walk, Mentor off).
+
+OpenRouter pick for the first sim (tool-call probe 2026-09-09; Bit Flows blog
+is stale — `qwen/qwen3-coder:free` and `poolside/laguna-m.1:free` are gone):
+
+| Role | Model | Probe |
+|------|--------|-------|
+| Free writer | `cohere/north-mini-code:free` | ok, ~1.7s |
+| Free writer alt | `nex-agi/nex-n2.5-mini:free` | ok, ~1.5s |
+| Free writer alt | `poolside/laguna-xs-2.1:free` | ok, ~10s |
+| Paid fallback | `qwen/qwen3-coder-30b-a3b-instruct` | ok, ~2.4s |
+| Skip as writer | `nvidia/nemotron-3-ultra-550b-a55b:free` | too slow |
+| Skip | `openrouter/free` | inconsistent routing |
+
+Live A/B results land in this section after `sim_writer_assist.py --pair`.
