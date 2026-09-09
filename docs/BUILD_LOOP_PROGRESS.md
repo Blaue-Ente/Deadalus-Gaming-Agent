@@ -281,8 +281,23 @@ exclusive `files[]`; verify is Chromium/compile, not another LLM opinion.
 
 Same Studio family as Writer assist (`off | auto | crew`), not a second
 product. Game vs app is the **playbook** (`playground.vite` vs fastapi/static),
-not a Mentor debate. First live probe of “Mentor already steers”: Ember Walk
-Kernel + Mentor on (`--mentor-choice or-glm-53-flash`).
+not a Mentor debate.
+
+### Live 2026-09-09 — Kernel + Mentor GLM 5.3 Flash, same cheap writer
+
+`scripts/sim_writer_assist.py --assist kernel-scaffold --mentor-choice or-glm-53-flash`
+
+| | Kernel alone (prior cell) | Kernel + Mentor |
+|--|---------------------------|-----------------|
+| Wall | 173s | 276s |
+| Proof | Menu painted | Menu painted (same seed) |
+| Play.js | writer filled orbs + cursors | **still the stub** “fill this scene” |
+| Mentor | off | LLM `action=ship` — `kernel_proof_ran, no proof_failed, loop_ok → ship` |
+
+Mentor told the writer to **stop** because Chromium painted the seed Menu.
+Painted ≠ playable. This is why a ticket file must exist: Play.js not stub,
+WASD, 3 orbs, then ship. Without that program, a director on a weak writer
+can hurt.
 
 OpenRouter pick for the first sim (tool-call probe 2026-09-09):
 
