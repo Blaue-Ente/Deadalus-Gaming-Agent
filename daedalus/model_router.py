@@ -43,7 +43,7 @@ def from_config(cfg: dict[str, Any] | None) -> ModelRoute:
 
 
 def _route_for_provider(provider: str, model: str, *, source: str) -> ModelRoute | None:
-    from .llm_config import PROVIDER_DEFAULTS, resolve_provider_api_key
+    from .llm_config import PROVIDER_DEFAULTS, is_loopback_gateway, resolve_provider_api_key
     from .local_llm import is_local_provider, resolve_local_config
 
     p = (provider or "").strip().lower()
@@ -59,7 +59,7 @@ def _route_for_provider(provider: str, model: str, *, source: str) -> ModelRoute
         return from_config(local)
     pd = PROVIDER_DEFAULTS.get(p) or {}
     key = resolve_provider_api_key(p)
-    if not key and p not in ("ollama", "lmstudio", "llamacpp", "vllm"):
+    if not key and p not in ("ollama", "lmstudio", "llamacpp", "vllm") and not is_loopback_gateway(p):
         return None
     return ModelRoute(
         provider=p,

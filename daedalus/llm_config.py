@@ -35,7 +35,16 @@ PROVIDER_ENV_KEYS: dict[str, str] = {
     "replit_openai":  "AI_INTEGRATIONS_OPENAI_API_KEY",
     "replit_gemini":  "AI_INTEGRATIONS_GEMINI_API_KEY",
     "anthropic":      "ANTHROPIC_API_KEY",
+    "omniroute":      "OMNIROUTE_API_KEY",
 }
+
+# Local OpenAI-compat sidecar (not Ollama). Dummy key is enough on loopback.
+LOOPBACK_GATEWAYS = frozenset({"omniroute"})
+
+
+def is_loopback_gateway(provider: str) -> bool:
+    """True for a loopback OpenAI-compat gateway that is not an Ollama-class backend."""
+    return (provider or "").strip().lower() in LOOPBACK_GATEWAYS
 
 
 def resolve_provider_api_key(provider: str, fallback: str = "") -> str:
@@ -44,9 +53,16 @@ def resolve_provider_api_key(provider: str, fallback: str = "") -> str:
     if not p:
         return fallback
     env_name = PROVIDER_ENV_KEYS.get(p, "")
-    if not env_name:
-        return fallback
-    return (os.environ.get(env_name) or "").strip() or fallback
+    if env_name:
+        val = (os.environ.get(env_name) or "").strip()
+        if val:
+            return val
+    if p == "omniroute":
+        extra = (os.environ.get("DAEDALUS_API_KEY") or "").strip()
+        if extra:
+            return extra
+        return fallback or "omniroute"
+    return fallback
 
 
 def provider_env_hint(provider: str) -> str:
@@ -157,6 +173,13 @@ PROVIDER_DEFAULTS: dict[str, dict] = {
     "nvidia": {
         "base_url": "https://integrate.api.nvidia.com/v1",
         "default_model": "qwen/qwen3-next-80b-a3b-instruct",
+        "sdk": "openai",
+    },
+    # OmniRoute — local OpenAI-compat sidecar (free-tier fallback via model `auto`).
+    # Not vendored. Owner runs the gateway; Daedalus only points /v1 at it.
+    "omniroute": {
+        "base_url": "http://127.0.0.1:20128/v1",
+        "default_model": "auto",
         "sdk": "openai",
     },
     # Local OpenAI-compatible servers (no API key on loopback)
@@ -272,6 +295,11 @@ PRESET_MODELS = [
     {"id": "openai/gpt-oss-120b",                     "label": "GPT-OSS 120B (NVIDIA) 🆓 reasoning",  "provider": "nvidia", "tier": "power"},
     {"id": "qwen/qwen3-next-80b-a3b-instruct",        "label": "Qwen3 Next 80B (NVIDIA) 🆓 ⚡",       "provider": "nvidia", "tier": "fast"},
     # ── Local (Ollama / LM Studio / llama.cpp / vLLM) ────────────────────────
+    # OmniRoute sidecar — virtual combos; the gateway picks a healthy free/paid target.
+    {"id": "auto",              "label": "OmniRoute auto (sidecar) 🆓",         "provider": "omniroute", "tier": "cheap"},
+    {"id": "auto/coding",       "label": "OmniRoute auto/coding 💻",              "provider": "omniroute", "tier": "fast"},
+    {"id": "auto/fast",        "label": "OmniRoute auto/fast ⚡",                 "provider": "omniroute", "tier": "cheap"},
+    {"id": "auto/cheap",       "label": "OmniRoute auto/cheap 🆓",                "provider": "omniroute", "tier": "cheap"},
     {"id": "qwen2.5-coder:7b",     "label": "Qwen2.5 Coder 7B (Ollama) 🖥 local",  "provider": "ollama", "tier": "fast"},
     {"id": "qwen2.5-coder:14b",    "label": "Qwen2.5 Coder 14B (Ollama) 🖥",       "provider": "ollama", "tier": "power"},
     {"id": "llama3.2",             "label": "Llama 3.2 (Ollama) 🖥 local",         "provider": "ollama", "tier": "cheap"},
@@ -494,6 +522,18 @@ def _resolve_llm_config() -> dict:
     env_url  = os.environ.get("DAEDALUS_BASE_URL")
     env_model = os.environ.get("DAEDALUS_MODEL")
     env_provider = os.environ.get("DAEDALUS_PROVIDER", "")
+    if is_loopback_gateway(env_provider):
+        p = env_provider.strip().lower()
+        pd = PROVIDER_DEFAULTS.get(p) or PROVIDER_DEFAULTS["omniroute"]
+        return {
+            "provider": p,
+            "model": (env_model or "").strip() or str(pd.get("default_model") or "auto"),
+            "api_key": (env_key or "").strip() or resolve_provider_api_key(p),
+            "base_url": env_url or pd.get("base_url") or "",
+            "sdk": pd.get("sdk") or "openai",
+            "use_cache": False,
+            "source": "env_loopback",
+        }
     if env_model and (env_key or is_local_provider(env_provider) or env_url):
         provider = env_provider or ("custom" if env_url else "anthropic")
         if is_local_provider(provider) or (env_url and not env_key):

@@ -472,20 +472,23 @@ def _inherit_master_local(workers: dict, master: dict) -> dict:
     Saved OpenRouter/NVIDIA worker defaults must not keep calling the cloud
     while Studio chat, CLI, and autopilot are on Ollama.
     """
-    from .llm_config import PROVIDER_DEFAULTS
+    from .llm_config import PROVIDER_DEFAULTS, is_loopback_gateway
     from .local_llm import is_local_provider, local_requested
 
+    master_provider = str(master.get("provider") or "")
     if not (
         local_requested()
         or master.get("local")
-        or is_local_provider(str(master.get("provider") or ""))
+        or is_local_provider(master_provider)
+        or is_loopback_gateway(master_provider)
     ):
         return workers
     provider = master.get("provider") or "ollama"
     pd = PROVIDER_DEFAULTS.get(provider) or PROVIDER_DEFAULTS.get("ollama") or {}
     out: dict[str, dict] = {}
     for slot, w in workers.items():
-        if is_local_provider(str(w.get("provider") or "")):
+        slot_provider = str(w.get("provider") or "")
+        if is_local_provider(slot_provider) or is_loopback_gateway(slot_provider):
             out[slot] = w
             continue
         out[slot] = {
