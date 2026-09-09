@@ -121,6 +121,24 @@ def status() -> dict[str, Any]:
     except Exception:
         log.exception("mentor director status unavailable")
         out["llm"] = {"enabled": False, "catalog": [], "spend": {}}
+    try:
+        from .learned_skills import pending_corrections
+        rows = pending_corrections()
+        out["pending_corrections"] = len(rows)
+        out["corrections"] = [
+            {
+                "id": r.get("id"),
+                "name": r.get("name"),
+                "description": r.get("description"),
+                "next_tool": (r.get("extra") or {}).get("next_tool"),
+                "hint": (r.get("extra") or {}).get("kernel_hint")
+                or (r.get("extra") or {}).get("hint"),
+            }
+            for r in rows[:5]
+        ]
+    except Exception:
+        out["pending_corrections"] = 0
+        out["corrections"] = []
     return out
 
 
@@ -732,8 +750,15 @@ def inspect_digest(loop: Any) -> dict[str, Any]:
     errs = [str(x)[:80] for x in (getattr(loop, "proof_errors", None) or []) if x][:3]
     if errs:
         last_fails = list(last_fails) + [f"proof:{e}" for e in errs]
+    playbook_id = ""
+    route = getattr(loop, "route", None)
+    if route is not None:
+        pb = getattr(route, "playbook", None)
+        playbook_id = str(getattr(pb, "id", "") or "")
+    from .mentor_graph import for_inspect
     return {
         "kind": kind,
+        "playbook": playbook_id,
         "scaffold": bool(view.scaffold_main),
         "loop_ok": bool(view.entry_boots),
         "has_src_main": bool(view.main_js),
@@ -743,6 +768,7 @@ def inspect_digest(loop: Any) -> dict[str, Any]:
         "flags": flags,
         "last_fails": last_fails,
         "native_hint": str(getattr(loop, "stop_reason", "") or ""),
+        "graph": for_inspect(playbook_id, flags=flags),
     }
 
 
@@ -887,6 +913,88 @@ def persona_wrapup(loop: Any) -> str:
             + ". Not store-ready. Writer must fix, then the kernel opens the game again."
         )
     return "\n".join(lines)
+
+
+def record_outcome(loop: Any) -> dict[str, Any] | None:
+    """Queue a pending correction (or success note) for owner Approve.
+
+    Called when a native build turn actually ends. Never auto-applies harness
+    patches. Idempotent per loop.
+    """
+    if loop is None:
+        return None
+    cached = getattr(loop, "_mentor_outcome", None)
+    if getattr(loop, "_mentor_outcome_recorded", False):
+        return cached if isinstance(cached, dict) else None
+    loop._mentor_outcome_recorded = True
+    if not getattr(loop, "_has_writes", lambda: False)():
+        loop._mentor_outcome = None
+        return None
+    inspect = inspect_digest(loop)
+    flags = inspect.get("flags") if isinstance(inspect.get("flags"), dict) else {}
+    graph = inspect.get("graph") if isinstance(inspect.get("graph"), dict) else {}
+    rec = graph.get("recovery") if isinstance(graph.get("recovery"), dict) else {}
+    decision = _decision_for(loop) if enabled() else None
+    proof_fail = bool(flags.get("proof_failed"))
+    proof_ok = bool(flags.get("kernel_proof_ran")) and not proof_fail
+    errors = [str(x) for x in (inspect.get("last_fails") or []) if x]
+    stop = str(getattr(loop, "stop_reason", "") or "")
+    if stop:
+        errors.append(stop)
+    kind = str(inspect.get("kind") or getattr(loop, "kind", "") or "game")
+    playbook = str(inspect.get("playbook") or "")
+    slug = str(getattr(loop, "slug", "") or "")
+    try:
+        from .learned_skills import draft_from_success, queue_correction
+        if proof_ok and (decision is None or decision.action == "ship"):
+            path = draft_from_success(
+                kind=kind,
+                summary=(
+                    f"slug={slug} playbook={playbook} painted. "
+                    f"{getattr(loop, 'proof_summary', '') or ''}"
+                )[:400],
+            )
+            out = {"ok": True, "kind": "success", "path": str(path) if path else ""}
+            loop._mentor_outcome = out
+            return out
+        if not proof_fail and not rec and not (decision and decision.forbid_tools):
+            loop._mentor_outcome = None
+            return None
+        nxt = str(
+            rec.get("next")
+            or (decision.next_tool if decision is not None else "")
+            or "write_file"
+        )
+        hint = str(
+            rec.get("hint")
+            or (decision.reason if decision is not None else "")
+            or ""
+        )
+        args = dict(rec.get("next_args") or {})
+        if not args and decision is not None:
+            args = dict(decision.next_args or {})
+        path = queue_correction(
+            kind=kind,
+            playbook=playbook,
+            errors=errors or [hint or "check failed"],
+            next_tool=nxt,
+            next_args=args,
+            hint=hint,
+            context=f"slug={slug} stop={stop}",
+        )
+        out = {
+            "ok": True,
+            "kind": "correction",
+            "path": str(path) if path else "",
+            "next_tool": nxt,
+            "hint": hint[:140],
+        }
+        loop._mentor_outcome = out
+        return out
+    except Exception:
+        log.debug("mentor record_outcome skipped", exc_info=True)
+        loop._mentor_outcome = None
+        return None
 
 
 def maybe_capture_lesson(loop: Any, memory: Any = None) -> None:

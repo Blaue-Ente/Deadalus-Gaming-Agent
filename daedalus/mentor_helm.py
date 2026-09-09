@@ -41,13 +41,15 @@ MENTOR_TIMEOUT_MAX_S = 60.0
 
 SYSTEM_PROMPT = (
     "You are Daedalus Mentor: a terse professional game director. "
-    "You do not write files. You pick the next native tool using your own "
-    "game-craft knowledge plus the inspect digest. Output JSON only, no markdown, "
-    "no chain-of-thought. Schema: "
-    '{"action":"call_tool|continue|stop","next_tool":"string|null",'
+    "You do not write files. The inspect digest includes a tool graph "
+    "(tools, flow, edges, standards, recovery). Pick next_tool only from "
+    "graph.tools. If graph.recovery.next is set, use it. proof_failed → "
+    "write_file, never browser. kernel_proof_ran and not proof_failed and "
+    "loop_ok → action ship. Output JSON only, no markdown, no chain-of-thought. "
+    "Schema: "
+    '{"action":"call_tool|continue|stop|ship","next_tool":"string|null",'
     '"next_args":{},"reason":"<=140 chars","forbid_tools":[],"blockers":[]}. '
-    "Prefer existing Vite/Phaser loops, generate_image for missing art, "
-    "run_command for npm run build/dev. Never invent tools. Spend few tokens."
+    "Never invent tools. Spend few tokens."
 )
 
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
@@ -565,6 +567,7 @@ def build_user_prompt(inspect: dict[str, Any]) -> str:
     compact_flags = {k: v for k, v in flags.items() if v}
     body = {
         "kind": inspect.get("kind"),
+        "playbook": inspect.get("playbook"),
         "scaffold": inspect.get("scaffold"),
         "loop_ok": inspect.get("loop_ok"),
         "has_src_main": inspect.get("has_src_main"),
@@ -575,6 +578,9 @@ def build_user_prompt(inspect: dict[str, Any]) -> str:
         "last_fails": (inspect.get("last_fails") or [])[:4],
         "native_hint": inspect.get("native_hint") or "",
     }
+    graph = inspect.get("graph")
+    if isinstance(graph, dict) and graph:
+        body["graph"] = graph
     raw = json.dumps(body, ensure_ascii=False, separators=(",", ":"))
     return _truncate(raw, max_in_tokens())
 
@@ -739,10 +745,12 @@ async def consult(
     why = skip_reason(inspect, rules_steer, turn_calls=turn_calls)
     if why:
         log.info("mentor helm skip: %s", why)
-        return _rules_fallback(rules_steer, why)
+        from .mentor_graph import guard_steer
+        return guard_steer(_rules_fallback(rules_steer, why), inspect, rules_steer)
     endpoint = _resolve_endpoint()
     if endpoint is None:
-        return _rules_fallback(rules_steer, "no_key")
+        from .mentor_graph import guard_steer
+        return guard_steer(_rules_fallback(rules_steer, "no_key"), inspect, rules_steer)
     provider, model = endpoint
     user = build_user_prompt(inspect)
     in_tok = estimate_tokens(SYSTEM_PROMPT) + estimate_tokens(user)
@@ -754,14 +762,20 @@ async def consult(
         )
     except Exception as exc:
         log.info("mentor helm LLM failed: %s: %s", type(exc).__name__, exc or "(empty)")
-        return _rules_fallback(rules_steer, "llm_error")
+        from .mentor_graph import guard_steer
+        return guard_steer(_rules_fallback(rules_steer, "llm_error"), inspect, rules_steer)
     parsed = parse_director_json(text or "")
     out_tok = estimate_tokens(text or "")
     record_spend(in_tok + out_tok)
     elapsed_ms = int((time.monotonic() - t0) * 1000)
     if not parsed:
         log.info("mentor helm LLM bad_json model=%s ms=%s", model, elapsed_ms)
-        return _rules_fallback(rules_steer, "bad_json", llm_ms=elapsed_ms)
+        from .mentor_graph import guard_steer
+        return guard_steer(
+            _rules_fallback(rules_steer, "bad_json", llm_ms=elapsed_ms),
+            inspect,
+            rules_steer,
+        )
     merged_forbid = list(dict.fromkeys(
         list(parsed.get("forbid_tools") or []) + list(rules_steer.get("forbid_tools") or [])
     ))
@@ -781,6 +795,8 @@ async def consult(
         parsed["next_tool"] = rules_steer.get("next_tool")
         parsed["next_args"] = rules_steer.get("next_args") or {}
         parsed["reason"] = (parsed.get("reason") or "") or (rules_steer.get("reason") or "")
+    from .mentor_graph import guard_steer
+    parsed = guard_steer(parsed, inspect, rules_steer)
     log.info(
         "mentor helm LLM ok model=%s action=%s next=%s ms=%s tokens=%s",
         model,
