@@ -266,7 +266,7 @@ Bit Flows’ free-coder list is stale (`qwen/qwen3-coder:free` and
 
 **Where to help more (not done in this MR):** stop the writer swapping `#game` for `<canvas>`; keep arcade physics + `scale.FIT` if they rewrite `main.js`. Mentor already steers Vite Hello; it does not yet lock the mount node.
 
-**Owner pick:** Studio stays **Off** until you flip it. **Auto** is the conservative default (Phaser briefs only). **Kernel** if every new Vite project should boot as Phaser.
+**Owner pick (after playable-gate follow-up):** Studio default is **Auto** — Phaser briefs get a playable WEBGL seed (WASD Play.js + `playtest/scenario.json`); other Vite apps stay Hello. **Off** is Vite Hello. **Kernel** if every new Vite project should boot as Phaser. Optional **$5 / $20 / $50** run budget overlays writer + mentor; budget Off keeps Brain and Mentor pickers.
 
 ### Crew protocol (design — not shipped)
 
