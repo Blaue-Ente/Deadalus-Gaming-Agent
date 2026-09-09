@@ -139,9 +139,10 @@ async def complete(
     sdk = cfg.get("sdk") or "openai"
     used_model = model or cfg.get("model") or ""
     if not api_key:
+        from .llm_config import is_loopback_gateway
         from .local_llm import dummy_api_key, is_local_provider
-        if is_local_provider(provider) or cfg.get("local"):
-            api_key = dummy_api_key(provider)
+        if is_local_provider(provider) or cfg.get("local") or is_loopback_gateway(provider):
+            api_key = dummy_api_key(provider) if is_local_provider(provider) else (api_key or "omniroute")
         else:
             raise RuntimeError(
                 "Няма API ключ. Задай ALLTOKEN_API_KEY, OPENROUTER_API_KEY, "
@@ -230,7 +231,7 @@ async def call_with_tools(
     Returns the unified ``{stop_reason, content}`` shape used by
     ``run_native_discovery_pass`` (text + tool_use blocks).
     """
-    from .llm_config import get_config, openai_compat_extra_body, openai_compat_headers
+    from .llm_config import get_config, is_loopback_gateway, openai_compat_extra_body, openai_compat_headers
     from .local_llm import dummy_api_key, is_local_provider
     from .native_tools import openai_tool_specs, to_anthropic_messages, to_openai_messages
 
@@ -243,6 +244,8 @@ async def call_with_tools(
     if not api_key:
         if is_local_provider(provider) or cfg.get("local"):
             api_key = dummy_api_key(provider)
+        elif is_loopback_gateway(provider):
+            api_key = "omniroute"
         else:
             return {"stop_reason": "end_turn", "content": []}
 

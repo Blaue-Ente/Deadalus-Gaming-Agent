@@ -250,7 +250,7 @@ def would_block(provider: str | None = None) -> bool:
     p = (provider or "").strip().lower()
     if not p:
         return True
-    if p in {"ollama", "lmstudio", "llamacpp", "vllm"}:
+    if p in {"ollama", "lmstudio", "llamacpp", "vllm", "omniroute"}:
         return False
     return True
 

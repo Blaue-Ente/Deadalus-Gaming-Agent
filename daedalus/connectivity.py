@@ -162,21 +162,21 @@ FIELDS: list[dict[str, Any]] = [
     {
         "key": "DAEDALUS_PROVIDER", "group": "llm", "secret": False,
         "label": "Provider",
-        "why": "openrouter / alltoken / novita / nvidia / ollama / custom. Empty = auto. Ollama is switched from the wardrobe above.",
+        "why": "openrouter / alltoken / novita / nvidia / ollama / omniroute / custom. Empty = auto. Ollama is switched from the wardrobe above. omniroute = local sidecar on :20128 (preset omniroute).",
         "placeholder": "openrouter",
         "advanced": True,
     },
     {
         "key": "DAEDALUS_MODEL", "group": "llm", "secret": False,
         "label": "Model",
-        "why": "Concrete id. For $0 on OpenRouter: poolside/laguna-s-2.1:free (preset or_free).",
+        "why": "Concrete id. For $0: OpenRouter poolside/laguna-s-2.1:free (preset or_free), or OmniRoute auto (preset omniroute).",
         "placeholder": "poolside/laguna-s-2.1:free",
         "advanced": True,
     },
     {
         "key": "DAEDALUS_BASE_URL", "group": "llm", "secret": False,
         "label": "Custom base URL",
-        "why": "For xAI Grok: https://api.x.ai/v1 plus a key as OPENAI_API_KEY or DAEDALUS_API_KEY. For Ollama you usually leave this.",
+        "why": "For xAI Grok: https://api.x.ai/v1 plus a key as OPENAI_API_KEY or DAEDALUS_API_KEY. OmniRoute default is http://127.0.0.1:20128/v1. For Ollama you usually leave this.",
         "placeholder": "https://api.x.ai/v1",
         "advanced": True,
     },
@@ -502,7 +502,7 @@ def _has_llm() -> bool:
         if current_value(key):
             return True
     provider = (current_value("DAEDALUS_PROVIDER") or os.environ.get("DAEDALUS_PROVIDER") or "").strip().lower()
-    if provider in {"ollama", "lmstudio", "llamacpp", "vllm"}:
+    if provider in {"ollama", "lmstudio", "llamacpp", "vllm", "omniroute"}:
         return True
     try:
         from .llm_wardrobe import wants_local

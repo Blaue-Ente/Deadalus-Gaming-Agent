@@ -56,6 +56,8 @@ Optional: `OPENROUTER_HTTP_REFERER`, `OPENROUTER_APP_TITLE` (sent on OpenRouter 
 | `DAEDALUS_LAB_DOCKER` | `0` — never start a Docker lab; local HTTP only |
 | `DAEDALUS_LAB_INSTALL_ROOT` | extra allowed root for `play_lab` install paths |
 
+Optional loopback sidecar (not vendored): `DAEDALUS_PROVIDER=omniroute` points at `http://127.0.0.1:20128/v1` with model `auto`. Studio preset **omniroute** pins workers to `auto` / `auto/fast` / `auto/coding`. The gateway process must already be running.
+
 Studio → Connectors **Brain** (or Studio → Brain wardrobe) switches models without editing `.env` (`wardrobe.json` under the data dir). That choice is the process-wide brain: chat, workers, autopilot, and CLI all read it. `OLLAMA_HOST` is an advanced Connectors field if the daemon is not on `127.0.0.1:11434`.
 
 ## Agent behaviour

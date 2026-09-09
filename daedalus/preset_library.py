@@ -71,6 +71,10 @@ _METRICS: dict[str, dict[str, float]] = {
     "poolside/laguna-s-2.1:free":                   {"cin": .000,"cout": .000,"lat": 5.0, "ctx": 262, "q": 82, "r": 70, "c": 90},
     "poolside/laguna-xs-2.1:free":                  {"cin": .000,"cout": .000,"lat": 3.0, "ctx": 262, "q": 70, "r": 55, "c": 80},
     "openrouter/free":                              {"cin": .000,"cout": .000,"lat": 4.0, "ctx": 200, "q": 68, "r": 50, "c": 70},
+    "auto":                                         {"cin": .000,"cout": .000,"lat": 4.0, "ctx": 128, "q": 70, "r": 55, "c": 74},
+    "auto/coding":                                  {"cin": .000,"cout": .000,"lat": 5.0, "ctx": 128, "q": 74, "r": 58, "c": 86},
+    "auto/fast":                                    {"cin": .000,"cout": .000,"lat": 2.0, "ctx": 64,  "q": 62, "r": 42, "c": 64},
+    "auto/cheap":                                   {"cin": .000,"cout": .000,"lat": 3.5, "ctx": 64,  "q": 60, "r": 40, "c": 62},
     "google/gemma-4-31b-it:free":                   {"cin": .000,"cout": .000,"lat": 4.0, "ctx": 262, "q": 74, "r": 58, "c": 72},
     "z-ai/glm-5.2:free":                            {"cin": .000,"cout": .000,"lat": 5.0, "ctx": 256, "q": 80, "r": 72, "c": 82},
     "qwen3.6-flash":                                {"cin": .050,"cout": .200,"lat": 3.0, "ctx": 128, "q": 76, "r": 70, "c": 76},
@@ -98,7 +102,7 @@ _DEFAULT_METRIC = {"cin": .30, "cout": 1.0, "lat": 6, "ctx": 64, "q": 70, "r": 6
 
 # Curated subset shown in the library + "what it's best for" (BG).
 CHOSEN_IDS = [
-    "balanced", "eco", "or_free", "nvidia_free", "premium", "code", "speed",
+    "balanced", "eco", "or_free", "omniroute", "nvidia_free", "premium", "code", "speed",
     "hybrid", "or_china_mix",
     "at_nano", "at_gems", "at_coder", "at_frontier",
 ]
@@ -107,6 +111,7 @@ BEST_FOR: dict[str, str] = {
     "balanced":     "Ежедневна работа — баланс ум/цена. Добрият избор по подразбиране.",
     "eco":          "Масови batch задачи и discovery loops — максимална икономия.",
     "or_free":      "OpenRouter :free — $0 live тест / собственик без кредит. Rate-limited.",
+    "omniroute":    "Локален OmniRoute sidecar (:20128) — $0 auto / auto/coding. Gateway-ът не е в репото.",
     "nvidia_free":  "NVIDIA NIM free preview — $0, отделен NVIDIA_API_KEY.",
     "premium":      "Критични задачи където качеството е над всичко (Claude).",
     "code":         "Кодиране и игри в Playground — специализирани coder модели.",

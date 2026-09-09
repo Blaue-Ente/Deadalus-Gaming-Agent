@@ -281,7 +281,7 @@ def apply_provider_hint(provider: str) -> dict[str, Any]:
         return use_local(p)
     cloudish = {
         "openrouter", "alltoken", "novita", "nvidia", "openai",
-        "anthropic", "groq", "gemini", "custom", "poolside",
+        "anthropic", "groq", "gemini", "custom", "poolside", "omniroute",
     }
     if p in cloudish:
         return use_cloud()

@@ -70,6 +70,22 @@ CONFIG_PRESETS: list[dict] = [
         "deep":     {"provider": "openrouter", "model": "poolside/laguna-s-2.1:free"},
     },
     {
+        "id": "omniroute",
+        "label": "🆓 OmniRoute — local sidecar ($0 auto)",
+        "is_default": False,
+        "description": (
+            "Мозъкът сочи към локален OmniRoute на :20128 (OpenAI-compat /v1). "
+            "Master = auto (gateway-ът реди free-tier fallback). Fast = auto/fast, "
+            "deep/coder = auto/coding. Не вендорираме gateway-а — ако процесът "
+            "не слуша, заявките fail closed. Ключ не е нужен за keyless free pool."
+        ),
+        "budget": "$0 (sidecar; free-tier quotas, rate-limited)",
+        "master":   {"provider": "omniroute", "model": "auto"},
+        "fast":     {"provider": "omniroute", "model": "auto/fast"},
+        "balanced": {"provider": "omniroute", "model": "auto"},
+        "deep":     {"provider": "omniroute", "model": "auto/coding"},
+    },
+    {
         "id": "eco",
         "label": "🌱 Eco — Максимална икономия",
         "is_default": False,
@@ -384,6 +400,12 @@ def is_openrouter_free_id(model: str) -> bool:
     """True for OpenRouter $0 model ids (`:free` suffix or the free router)."""
     m = (model or "").strip()
     return m.endswith(":free") or m == "openrouter/free"
+
+
+def is_omniroute_auto_id(model: str) -> bool:
+    """True for OmniRoute virtual combo ids (`auto` or `auto/…`)."""
+    m = (model or "").strip()
+    return m == "auto" or m.startswith("auto/")
 
 
 def get_preset(preset_id: str) -> Optional[dict]:
