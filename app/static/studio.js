@@ -242,7 +242,7 @@
   }
 
   function paintAssist(data) {
-    const mode = String((data && data.mode) || "off");
+    const mode = String((data && data.mode) || "auto");
     const locked = !!(data && data.env_locked);
     document.querySelectorAll(".assist button").forEach((btn) => {
       btn.setAttribute("aria-pressed", btn.dataset.assist === mode ? "true" : "false");
@@ -259,7 +259,7 @@
       const data = await api("/api/v1/daedalus/writer-assist", { timeoutMs: 8000 });
       paintAssist(data);
     } catch {
-      paintAssist({ mode: "off", env_locked: false });
+      paintAssist({ mode: "auto", env_locked: false });
     }
   }
 
@@ -273,6 +273,44 @@
       paintAssist(data);
     } catch (e) {
       add("bot", t("studio.assistAria") + ": " + errText(e));
+    }
+  }
+
+  function paintBudget(data) {
+    const usd = String((data && data.usd != null) ? data.usd : 0);
+    const locked = !!(data && data.env_locked);
+    document.querySelectorAll(".budget button").forEach((btn) => {
+      btn.setAttribute("aria-pressed", btn.dataset.budget === usd ? "true" : "false");
+      btn.disabled = locked;
+    });
+    const group = document.querySelector(".budget");
+    if (group) {
+      const plan = (data && data.plan) || {};
+      group.title = locked
+        ? t("studio.budgetLocked")
+        : (plan.note || t("studio.budgetHint"));
+    }
+  }
+
+  async function loadBudget() {
+    try {
+      const data = await api("/api/v1/daedalus/run-budget", { timeoutMs: 8000 });
+      paintBudget(data);
+    } catch {
+      paintBudget({ usd: 0, env_locked: false });
+    }
+  }
+
+  async function setBudget(usd) {
+    try {
+      const data = await api("/api/v1/daedalus/run-budget", {
+        method: "POST",
+        body: JSON.stringify({ usd: Number(usd) || 0 }),
+        timeoutMs: 8000,
+      });
+      paintBudget(data);
+    } catch (e) {
+      add("bot", t("studio.budgetAria") + ": " + errText(e));
     }
   }
 
@@ -382,6 +420,9 @@
   });
   document.querySelectorAll(".assist button").forEach((btn) => {
     btn.onclick = () => setAssist(btn.dataset.assist);
+  });
+  document.querySelectorAll(".budget button").forEach((btn) => {
+    btn.onclick = () => setBudget(btn.dataset.budget);
   });
   const mentorChoice = $("mentor-choice");
   if (mentorChoice) {
@@ -1770,6 +1811,7 @@
   setEffort(state.effort);
   loadMentor();
   loadAssist();
+  loadBudget();
   function showGreeting() {
     const existing = msgs.querySelector(".msg.bot[data-greeting]");
     if (existing) { text(existing, t("studio.greeting")); return; }
@@ -1793,6 +1835,7 @@
     previewEffort();
     loadMentor();
     loadAssist();
+    loadBudget();
     const shout = $("shout");
     if (shout && !state.lastCwd && (shout.textContent === "Ready." || shout.textContent === "Готов." || shout.textContent === t("studio.ready"))) {
       text(shout, t("studio.ready"));

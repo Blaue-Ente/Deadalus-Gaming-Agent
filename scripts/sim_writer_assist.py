@@ -63,10 +63,12 @@ _WASD_RE = re.compile(r"\bWASD\b|cursors|keyboard\.addKeys|createCursorKeys", re
 _ORB_RE = re.compile(r"\borb|collect|harvest|score\b", re.I)
 
 
-def _isolate(data: Path, assist: str, *, mentor: str = "") -> None:
+def _isolate(data: Path, assist: str, *, mentor: str = "", budget: str = "") -> None:
     _chat._isolate_env(data)
     os.environ["DAEDALUS_WRITER_ASSIST"] = assist
     os.environ["DAEDALUS_MENTOR"] = "1" if mentor.strip() else "0"
+    if str(budget or "").strip():
+        os.environ["DAEDALUS_RUN_BUDGET"] = str(budget).strip()
     os.environ.setdefault("DAEDALUS_NATIVE_TOOLS", "1")
     os.environ.setdefault("DAEDALUS_VISUAL_PROOF", "1")
     os.environ.setdefault("DAEDALUS_WRITE_GATE", "1")
@@ -104,6 +106,8 @@ def _assist_quality(slug: str) -> dict:
         "play_wasd": bool(_WASD_RE.search(play_txt)),
         "play_orbs": bool(_ORB_RE.search(play_txt)),
         "play_still_stub": stub_play,
+        "play_has_input": bool(_WASD_RE.search(play_txt)),
+        "scenario": (root / "playtest" / "scenario.json").is_file(),
         "menu_title": "Ember Walk" in menu_txt or "Ember Walk" in main_txt,
         "dist": (root / "dist" / "index.html").is_file(),
         "node_modules": (root / "node_modules" / "phaser").is_dir(),
@@ -139,11 +143,12 @@ async def run_cell(
     effort: str,
     shots: Path,
     mentor: str = "",
+    budget: str = "",
 ) -> dict:
-    _isolate(data, assist, mentor=mentor)
+    _isolate(data, assist, mentor=mentor, budget=budget)
     _chat._reset_path_caches()
     _leb._pin_openrouter(model)
-    _isolate(data, assist, mentor=mentor)
+    _isolate(data, assist, mentor=mentor, budget=budget)
     _chat._reset_path_caches()
     mentor_pin = None
     if mentor.strip():
@@ -206,6 +211,7 @@ async def run_cell(
                 "proof_frames", "proof_gap", "kind",
                 "mentor_source", "mentor_llm_calls", "mentor_next",
                 "mentor_skip", "mentor_model", "mentor_reason",
+                "play_bot_ok", "play_bot_ran", "play_bot_summary",
             )
         },
         "project": snap,
@@ -232,6 +238,9 @@ def _summary(cell: dict) -> dict:
         "phaser_webgl": aq.get("phaser_webgl"),
         "play_wasd": aq.get("play_wasd"),
         "play_still_stub": aq.get("play_still_stub"),
+        "scenario": aq.get("scenario"),
+        "play_bot_ok": loop.get("play_bot_ok"),
+        "play_bot_ran": loop.get("play_bot_ran"),
         "node_modules": aq.get("node_modules"),
         "dist": aq.get("dist"),
         "proof_frames": loop.get("proof_frames"),
@@ -267,6 +276,7 @@ async def main_async(args: argparse.Namespace) -> int:
             effort=args.effort,
             shots=shots / assist if args.pair else shots,
             mentor=args.mentor_choice,
+            budget=args.budget,
         )
         cells.append(cell)
         print(json.dumps(_summary(cell), ensure_ascii=False, indent=2), flush=True)
@@ -312,6 +322,11 @@ def main() -> None:
         "--mentor-choice",
         default="",
         help="Pin Mentor director (or-glm-53-flash, or-fable-51, rules). Empty = Mentor off.",
+    )
+    parser.add_argument(
+        "--budget",
+        default="",
+        help="Run envelope: 5, 20, 50, or off. Pins DAEDALUS_RUN_BUDGET for the cell.",
     )
     args = parser.parse_args()
     raise SystemExit(asyncio.run(main_async(args)))

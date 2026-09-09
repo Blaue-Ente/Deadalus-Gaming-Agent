@@ -4634,7 +4634,9 @@ class Daedalus:
         started = datetime.now(timezone.utc)
         msg = message.strip()
         from .task_effort import bind as bind_effort, briefing as effort_briefing, classify as classify_effort
+        from .run_budget import bind as bind_budget, briefing as budget_briefing, plan_for_turn
         effort_dec = classify_effort(msg, requested=effort)
+        budget_plan = plan_for_turn()
         if for_self:
             msg = (
                 "[SELF-IMPROVEMENT MODE — improvements you find here are for "
@@ -4675,6 +4677,9 @@ class Daedalus:
         brief = effort_briefing(effort_dec)
         if brief:
             msg = brief + "\n\n" + msg
+        bbrief = budget_briefing(budget_plan)
+        if bbrief:
+            msg = bbrief + "\n\n" + msg
 
         from .session_context import bind as bind_turn, resolve_turn
         turn_pack = resolve_turn(
@@ -4686,7 +4691,7 @@ class Daedalus:
         if turn_pack.attachment_text:
             msg = turn_pack.attachment_text + "\n\n" + msg
 
-        with bind_effort(effort_dec), bind_turn(turn_pack):
+        with bind_effort(effort_dec), bind_budget(budget_plan), bind_turn(turn_pack):
             raw, summary = await self._build_context_and_call(
                 user_message=msg,
                 session_id=session_id,

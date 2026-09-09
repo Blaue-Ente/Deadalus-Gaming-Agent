@@ -40,13 +40,19 @@ MENTOR_TIMEOUT_MIN_S = 3.0
 MENTOR_TIMEOUT_MAX_S = 60.0
 
 SYSTEM_PROMPT = (
-    "You are Daedalus Mentor: a terse professional game director. "
-    "You do not write files. The inspect digest includes a tool graph "
-    "(tools, flow, edges, standards, recovery). Pick next_tool only from "
-    "graph.tools. If graph.recovery.next is set, use it. proof_failed → "
-    "write_file, never browser. kernel_proof_ran and not proof_failed and "
-    "loop_ok → action ship. Output JSON only, no markdown, no chain-of-thought. "
-    "Schema: "
+    "You are Daedalus Mentor: an external evaluator with your own game-craft "
+    "knowledge, not a dispatcher. You do not write files. You do not assign "
+    "workers. Judge: is this slice playable? Painted Menu is not playable. "
+    "Play.js stub is not playable. <canvas id=game>+WEBGL is a black screen. "
+    "The kernel computer (playtest/scenario.json) is the playable standard. "
+    "The inspect digest includes a tool graph (tools, flow, edges, standards, "
+    "recovery). Pick next_tool only from graph.tools. If graph.recovery.next "
+    "is set, use it. proof_failed → write_file, never browser. "
+    "play_stub / play_incomplete / canvas_game_trap / play_bot_failed → "
+    "write_file, never ship. "
+    "kernel_proof_ran and play_bot_ok and not proof_failed → action ship. "
+    "Otherwise return a verdict to the writer: continue + next_tool. "
+    "Output JSON only, no markdown, no chain-of-thought. Schema: "
     '{"action":"call_tool|continue|stop|ship","next_tool":"string|null",'
     '"next_args":{},"reason":"<=140 chars","forbid_tools":[],"blockers":[]}. '
     "Never invent tools. Spend few tokens."
@@ -421,6 +427,34 @@ def get_choice() -> dict[str, Any]:
         if warn:
             out["warn"] = warn
         return out
+    try:
+        from .run_budget import applied_mentor
+        bud = applied_mentor()
+    except Exception:
+        bud = None
+    if isinstance(bud, dict) and bud.get("choice_id"):
+        cid = str(bud.get("choice_id") or "")
+        if cid == "rules":
+            return {
+                "id": "rules",
+                "label": "Rules only (no LLM)",
+                "provider": "",
+                "model": "",
+                "source": "run-budget",
+            }
+        row = find_row(cid)
+        if row:
+            out = {
+                "id": row["id"],
+                "label": row["label"],
+                "provider": row.get("provider") or bud.get("provider") or "",
+                "model": row.get("model") or bud.get("model") or "",
+                "source": "run-budget",
+            }
+            warn = thinking_warn(str(out.get("model") or ""))
+            if warn:
+                out["warn"] = warn
+            return out
     stored = _kv_json(KV_CHOICE, None)
     if isinstance(stored, dict) and (stored.get("id") or stored.get("model")):
         cid = str(stored.get("id") or "")
@@ -534,6 +568,16 @@ def rules_unambiguous(inspect: dict[str, Any], steer: dict[str, Any]) -> bool:
     if flags.get("phaser_no_import") and nxt == "write_file":
         return True
     if flags.get("phaser_auto_canvas") and nxt == "write_file":
+        return True
+    if flags.get("play_stub") and nxt == "write_file":
+        return True
+    if flags.get("play_incomplete") and nxt == "write_file":
+        return True
+    if flags.get("canvas_game_trap") and nxt == "write_file":
+        return True
+    if flags.get("play_bot_failed") and nxt == "write_file":
+        return True
+    if flags.get("scenario_missing") and nxt == "write_file":
         return True
     return False
 

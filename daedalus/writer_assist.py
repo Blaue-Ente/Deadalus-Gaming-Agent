@@ -2,7 +2,8 @@
 
 Mentor steers NEXT. This module *writes the first files* when the owner
 asks for help: a Phaser 3 + Vite project that already paints a Menu on
-``#game`` with ``Phaser.WEBGL`` and ``import Phaser from 'phaser'``.
+``#game`` with ``Phaser.WEBGL``, walks in Play.js (WASD), and ships
+``playtest/scenario.json`` so the kernel computer can prove it plays.
 
 The Vite Hello ``#app`` counter is the blank-screen trap. Kernel-scaffold
 skips it. Racer scaffold still wins when the brief is F-Zero-class.
@@ -13,7 +14,7 @@ Toggle (highest wins):
    (tests, live sims). ``0``/``false`` = off; ``1``/``true``/``on`` =
    kernel-scaffold.
 2. KV ``adn:daedalus_writer_assist`` — Studio persist.
-3. Default **off** until the owner promotes Auto after A/B sims.
+3. Default **auto** — Phaser briefs get the kernel seed; other Vite apps stay Hello.
 
 Modes:
 
@@ -39,7 +40,7 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 _DB_KEY = "adn:daedalus_writer_assist"
-_DEFAULT_MODE = "off"
+_DEFAULT_MODE = "auto"
 MODES = ("off", "auto", "kernel-scaffold")
 _ALIASES = {
     "0": "off",
@@ -203,10 +204,12 @@ def seed_note(slug: str) -> str:
     return (
         "\nKernel Phaser skeleton is already on disk: index.html #game (a div, not a "
         "<canvas>), src/main.js Phaser.WEBGL, src/scenes/Boot.js Menu.js Play.js, "
-        "package.json has vite + phaser. Fill src/scenes/Play.js (WASD, "
-        "orbs, HUD). Do not revert src/main.js to the Vite Hello / #app "
-        "counter. Do not replace #game with a <canvas> — Phaser.WEBGL then "
-        "paints black in Chromium. Then npm install (no pipes) and npm run build."
+        "package.json has vite + phaser. Play.js already walks (WASD) and "
+        "collects orbs. Keep that playable — do not revert to “fill this scene” "
+        "or the Vite Hello / #app counter. Do not replace #game with a <canvas> — "
+        "Phaser.WEBGL then paints black in Chromium. playtest/scenario.json is "
+        "the computer’s playable gate (Enter then WASD). Then npm install "
+        "(no pipes) and npm run build."
     )
 
 
@@ -282,6 +285,7 @@ def _skeleton_files(*, title: str, slug: str, description: str) -> dict[str, str
         "src/scenes/Boot.js": _BOOT_JS,
         "src/scenes/Menu.js": _MENU_JS.format(title_js=title_js, hint_js=hint_js),
         "src/scenes/Play.js": _PLAY_JS,
+        "playtest/scenario.json": _SCENARIO_JSON,
     }
 
 
@@ -421,12 +425,81 @@ export class Play extends Phaser.Scene {
   }
 
   create() {
+    const { width, height } = this.scale;
     this.cameras.main.setBackgroundColor('#12182a');
-    this.add.text(24, 24, 'Play — fill this scene', {
+
+    const g = this.add.graphics();
+    g.fillStyle(0xe8a04a, 1);
+    g.fillCircle(10, 10, 10);
+    g.generateTexture('walker', 20, 20);
+    g.clear();
+    g.fillStyle(0x7ec8ff, 1);
+    g.fillCircle(6, 6, 6);
+    g.generateTexture('orb', 12, 12);
+    g.destroy();
+
+    this.player = this.physics.add.sprite(width / 2, height / 2, 'walker');
+    this.player.setCollideWorldBounds(true);
+
+    this.orbs = this.physics.add.group();
+    const spots = [
+      [width * 0.25, height * 0.3],
+      [width * 0.75, height * 0.35],
+      [width * 0.5, height * 0.7],
+    ];
+    spots.forEach(([x, y]) => this.orbs.create(x, y, 'orb'));
+    this.collected = 0;
+    this.hud = this.add.text(24, 24, '0 / 3', {
       fontFamily: 'system-ui, sans-serif',
       fontSize: '18px',
       color: '#dce7ff',
     });
+
+    this.cursors = this.input.keyboard.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT');
+    this.physics.add.overlap(this.player, this.orbs, (_player, orb) => {
+      orb.destroy();
+      this.collected += 1;
+      this.hud.setText(`${this.collected} / 3`);
+      if (this.collected >= 3) {
+        this.add.text(width / 2, height / 2, 'You win', {
+          fontFamily: 'system-ui, sans-serif',
+          fontSize: '28px',
+          color: '#c9a227',
+        }).setOrigin(0.5);
+      }
+    });
   }
+
+  update() {
+    const speed = 220;
+    const k = this.cursors;
+    let vx = 0;
+    let vy = 0;
+    if (k.A.isDown || k.LEFT.isDown) vx -= speed;
+    if (k.D.isDown || k.RIGHT.isDown) vx += speed;
+    if (k.W.isDown || k.UP.isDown) vy -= speed;
+    if (k.S.isDown || k.DOWN.isDown) vy += speed;
+    this.player.setVelocity(vx, vy);
+  }
+}
+"""
+
+_SCENARIO_JSON = """\
+{
+  "version": 1,
+  "fps_budget": 30,
+  "memory_budget_mb": 256,
+  "require_win": false,
+  "require_lose": false,
+  "steps": [
+    {"op": "wait", "ms": 500},
+    {"op": "hold_keys", "keys": ["Enter"], "ms": 200},
+    {
+      "op": "hold_keys",
+      "keys": ["w", "d"],
+      "ms": 700,
+      "expect": {"canvas_changed": true}
+    }
+  ]
 }
 """

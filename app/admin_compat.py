@@ -311,6 +311,20 @@ async def daedalus_set_writer_assist(request: Request):
     return JSONResponse({"ok": True, **st})
 
 
+@router.get("/daedalus/run-budget")
+async def daedalus_get_run_budget():
+    from daedalus.run_budget import status
+    return JSONResponse(status())
+
+
+@router.post("/daedalus/run-budget")
+async def daedalus_set_run_budget(request: Request):
+    from daedalus.run_budget import apply_update
+    body = await _body(request)
+    st = apply_update(body)
+    return JSONResponse({"ok": True, **st})
+
+
 @router.get("/daedalus/sessions")
 async def daedalus_list_sessions(limit: int = 60):
     try:
