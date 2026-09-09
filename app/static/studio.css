@@ -201,6 +201,15 @@ button.chip {
   opacity: 0.55;
   cursor: not-allowed;
 }
+.budget-spend {
+  font-size: 0.68rem;
+  color: var(--faint);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.budget-spend.warn {
+  color: var(--warn);
+}
 
 .mentor {
   display: inline-flex;
