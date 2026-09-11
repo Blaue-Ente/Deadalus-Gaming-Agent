@@ -227,8 +227,10 @@ def test_persona_still_compact_with_skill_tool(monkeypatch):
 
 def test_agent_discloses_once_and_success_draft_wired():
     agent = (ROOT / "daedalus" / "agent.py").read_text(encoding="utf-8")
+    assembler = (ROOT / "daedalus" / "context_assembler.py").read_text(encoding="utf-8")
     assert "from .learned_skills import format_block" not in agent
-    assert "disclose" in agent
+    assert "from .learned_skills import format_block" not in assembler
+    assert "disclose" in assembler
     assert "draft_from_success" in agent
     auto = (ROOT / "daedalus" / "kernel" / "full_autopilot.py").read_text(encoding="utf-8")
     assert "draft_from_success" in auto
