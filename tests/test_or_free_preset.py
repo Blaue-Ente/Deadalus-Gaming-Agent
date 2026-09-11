@@ -137,8 +137,10 @@ def test_call_with_tools_lives_outside_agent():
 
     import daedalus.llm_client as client
     assert callable(client.call_with_tools)
-    src = Path("daedalus/agent.py").read_text(encoding="utf-8")
-    assert "from .llm_client import call_with_tools" in src
+    gw = Path("daedalus/model_gateway.py").read_text(encoding="utf-8")
+    assert "from .llm_client import call_with_tools" in gw
+    agent = Path("daedalus/agent.py").read_text(encoding="utf-8")
+    assert "from .llm_client import call_with_tools" not in agent
 
 
 def test_openrouter_tool_rounds_require_parameters():
