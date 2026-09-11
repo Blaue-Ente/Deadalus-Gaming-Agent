@@ -4,9 +4,9 @@ This file records current behavior. It is not permission to delete, skip, or wea
 
 ## Environment
 
-- Generated at: 2026-09-11T23:27:36.004408+00:00
-- Git commit: `80b8b0e1afc3aee3dfa1cd0cfa713007df78105d`
-- Git branch: `p0/15-run-finalizer`
+- Generated at: 2026-09-11T23:43:05.203708+00:00
+- Git commit: `fb014ced2cc2584c19740780506d763aabc37fa5`
+- Git branch: `p0/16-structured-commands`
 - Python: 3.12.3
 - Extras installed: `dev` only (no playwright / computer / gui)
 - `DAEDALUS_STANDALONE=1`
@@ -14,16 +14,16 @@ This file records current behavior. It is not permission to delete, skip, or wea
 
 ## Pytest summary
 
-- Collected / reported tests: 865
-- Passed: 864
+- Collected / reported tests: 881
+- Passed: 880
 - Failed: 0
 - Errors: 0
 - Skipped: 1
-- Duration (s): 61.556
+- Duration (s): 56.155
 - Pytest exit code: 0
-- Coverage line-rate (`daedalus`, observational): 48.65%
+- Coverage line-rate (`daedalus`, observational): 48.76%
 
-- Pytest last line: `864 passed, 1 skipped, 1 warning in 61.59s (0:01:01)`
+- Pytest last line: `880 passed, 1 skipped, 1 warning in 56.18s`
 
 ## Failed or errored tests
 
@@ -37,6 +37,6 @@ No product test failures or errors were recorded.
 - ok: True
 - passed/total: 15/15
 - bake_off: False
-- ms: 29
+- ms: 25
 
 No honesty-suite case failures.
