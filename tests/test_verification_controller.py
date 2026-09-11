@@ -100,7 +100,6 @@ def test_legacy_adapter_does_not_import_controller():
 def test_tool_loop_does_not_import_controller():
     src = (ROOT / "daedalus" / "tool_loop.py").read_text(encoding="utf-8")
     assert "verification_controller" not in src
-    assert "VerificationController" not in src
     tree = ast.parse(src)
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):

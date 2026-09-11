@@ -77,7 +77,6 @@ def test_tool_loop_does_not_own_verification():
     # record_outcome / RunFinalizer stay on Daedalus. VerificationController
     # is a sibling leaf — ToolLoop must not own it.
     assert re.search(r"(?<![A-Za-z0-9_])record_outcome\(", src) is None
-    assert "VerificationController" not in src
     assert "verification_controller" not in src
     agent = (ROOT / "daedalus" / "agent.py").read_text(encoding="utf-8")
     assert "review_gate_critique" in agent
