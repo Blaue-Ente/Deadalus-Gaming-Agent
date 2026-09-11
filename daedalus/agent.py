@@ -43,7 +43,6 @@ from . import plan_lock as _plan_lock
 from . import daedalusignore as _daedalusignore
 from .improvements import (
     get_error_tracker,
-    call_with_fallback,
     record_tool_error_for_promotion,
     record_outcome,
     question_budget_check_and_increment,
@@ -51,6 +50,12 @@ from .improvements import (
     needs_read_first_hint,
     review_gate_critique,
     detect_intent_without_action,
+)
+from .model_gateway import (
+    DaedalusError,
+    complete_persona as _call_claude,
+    complete_primary as _call_claude_primary,
+    complete_with_tools as _call_claude_with_tools,
 )
 from .knowledge import DaedalusKnowledge
 from .memory import DaedalusMemory
@@ -90,177 +95,16 @@ log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Errors
+# Errors + LLM façade (bodies live in model_gateway)
 # ---------------------------------------------------------------------------
-
-class DaedalusError(Exception):
-    """Base error for Daedalus."""
-
 
 class DaedalusBadRequest(DaedalusError):
     """Invalid user input — maps to HTTP 400."""
 
 
-# ---------------------------------------------------------------------------
-# LLM client — AsyncAnthropic (native) + OpenAI-compat + prompt caching
-# ---------------------------------------------------------------------------
-
 _MODEL = "claude-sonnet-4-6"   # fallback if llm_config not available
-_MAX_TOKENS = 8192
 
 from .llm_config import get_config
-
-
-async def _call_claude(system: str, messages: list[dict[str, Any]],
-                       *,
-                       use_cache_override: bool | None = None) -> str:
-    """Unified async LLM call with rate-limit fallback chain.
-
-    Tries primary provider first; on 429 / overload falls back to
-    replit_openai gpt-5.4 → replit_gemini gemini-2.5-flash automatically.
-    Cheap writers (DeepSeek / MiniMax / GLM) often have no image input —
-    a proof PNG then 404s. Retry the same turn without vision; the text
-    proof summary is enough for RETURN TO WRITER.
-    """
-    from .llm_client import (
-        is_no_image_support,
-        messages_have_images,
-        strip_images_from_messages,
-    )
-
-    try:
-        return await call_with_fallback(
-            _call_claude_primary, system, messages,
-            use_cache_override=use_cache_override,
-        )
-    except Exception as exc:
-        if is_no_image_support(exc) and messages_have_images(messages):
-            log.warning("persona LLM has no vision; retrying without proof frames")
-            stripped = strip_images_from_messages(messages)
-            return await call_with_fallback(
-                _call_claude_primary, system, stripped,
-                use_cache_override=use_cache_override,
-            )
-        raise
-
-
-async def _call_claude_primary(system: str, messages: list[dict[str, Any]],
-                                *,
-                                use_cache_override: bool | None = None) -> str:
-    """Direct provider call (the original logic). Used by call_with_fallback."""
-    import time as _t
-    try:
-        from argos_data_nexus.modules.llm_live_trace import record_llm_call
-    except Exception:
-        def record_llm_call(*_a, **_k):  # type: ignore
-            return None
-
-    cfg = get_config()
-    provider = cfg.get("provider", "anthropic")
-    model    = cfg.get("model", _MODEL)
-    api_key  = cfg.get("api_key", "")
-    base_url = cfg.get("base_url", "")
-    sdk      = cfg.get("sdk", "anthropic")
-    do_cache = cfg.get("use_cache", True) if use_cache_override is None else use_cache_override
-    t0 = _t.perf_counter()
-    err = ""
-    try:
-        if sdk == "anthropic":
-            try:
-                from anthropic import AsyncAnthropic
-            except ImportError as exc:
-                raise DaedalusError("anthropic SDK not installed") from exc
-            if not api_key:
-                raise DaedalusError(
-                    "Anthropic API key not configured "
-                    "(set DAEDALUS_API_KEY env var or configure in Admin › LLM)"
-                )
-            kwargs: dict = dict(api_key=api_key, max_retries=0)
-            if base_url:
-                kwargs["base_url"] = base_url
-
-            client = AsyncAnthropic(**kwargs)
-
-            if do_cache:
-                system_param: list | str = [
-                    {"type": "text", "text": system,
-                     "cache_control": {"type": "ephemeral"}}
-                ]
-            else:
-                system_param = system
-
-            from .native_tools import to_anthropic_messages as _to_anth_msgs
-
-            resp = await client.messages.create(
-                model=model,
-                max_tokens=_MAX_TOKENS,
-                system=system_param,
-                messages=_to_anth_msgs(messages),
-            )
-            block = resp.content[0]
-            return block.text if block.type == "text" else ""
-
-        # OpenAI-compatible (openai SDK) — Groq, Gemini, OpenAI, custom
-        try:
-            from openai import AsyncOpenAI
-        except ImportError as exc:
-            raise DaedalusError(
-                "openai SDK not installed — run: pip install openai"
-            ) from exc
-        if not api_key:
-            from .local_llm import dummy_api_key, is_local_provider
-            if is_local_provider(provider) or cfg.get("local"):
-                api_key = dummy_api_key(provider)
-            else:
-                raise DaedalusError(
-                    f"API key not configured for provider '{provider}' "
-                    "(set DAEDALUS_API_KEY env var or configure in Admin › LLM, "
-                    "or DAEDALUS_PROVIDER=ollama for a local model)"
-                )
-        from .llm_config import openai_compat_headers
-        oa_client = AsyncOpenAI(
-            api_key=api_key,
-            base_url=base_url or None,
-            max_retries=1,
-            default_headers=(openai_compat_headers(provider) or None),
-        )
-        oa_messages = [{"role": "system", "content": system}] + list(messages)
-        resp = await oa_client.chat.completions.create(
-            model=model,
-            max_tokens=_MAX_TOKENS,
-            messages=oa_messages,
-        )
-        return resp.choices[0].message.content or ""
-    except Exception as exc:
-        err = str(exc)[:300]
-        raise
-    finally:
-        try:
-            record_llm_call(
-                channel="daedalus_chat",
-                provider=provider,
-                model=model,
-                model_requested=model,
-                configured_provider=provider,
-                configured_model=model,
-                config_source=cfg.get("source", ""),
-                client_id="daedalus",
-                latency_ms=int((_t.perf_counter() - t0) * 1000),
-                ok=not err,
-                error=err,
-            )
-        except Exception:
-            pass
-
-
-async def _call_claude_with_tools(
-    system: str,
-    messages: list[dict[str, Any]],
-    tools: list[dict[str, Any]],
-) -> dict[str, Any]:
-    """Native tool round. Implementation lives in ``llm_client`` (no chroma)."""
-    from .llm_client import call_with_tools
-    return await call_with_tools(system, messages, tools, max_tokens=_MAX_TOKENS)
 
 
 def _extract_marker(raw: str, name: str) -> str | None:
@@ -1185,70 +1029,34 @@ class Daedalus:
                     "Just speak naturally. If discussing your own behavior or architecture, be honest and insightful. "
                     + (f"Navigator hint: {_chat_hint}" if _chat_hint else "")
                 )
-                _haiku_reply = ""
-                if dm.use_mesh_router():
-                    _mesh_res = await dm.complete(
+                from .model_gateway import CompleteRequest, ModelGateway
+                _cheap_res = await ModelGateway().complete_cheap(
+                    CompleteRequest(
                         system=_chat_system,
-                        user=user_message,
+                        messages=[{"role": "user", "content": user_message}],
                         intent="cheap" if _chat_budget == "short" else "chat",
                         max_tokens=_chat_max_tokens,
                         client_id=dm.client_id("chat", "fast-path"),
-                        use_cache=True,
+                        role="cheap",
+                    ),
+                )
+                _haiku_reply = _cheap_res.text
+                if _haiku_reply and _cheap_res.routed_via == "mesh":
+                    log.info(
+                        "cost-aware route: session=%s intent=chat budget=%s mesh_router (%d chars, $%.6f)",
+                        session_id, _chat_budget, len(_haiku_reply),
+                        float(_cheap_res.cost_usd or 0.0),
                     )
-                    _haiku_reply = dm.extract_text(_mesh_res)
-                    if _haiku_reply:
-                        log.info(
-                            "cost-aware route: session=%s intent=chat budget=%s mesh_router (%d chars, $%.6f)",
-                            session_id, _chat_budget, len(_haiku_reply),
-                            float(_mesh_res.get("cost_usd") or 0.0),
-                        )
-                if not _haiku_reply:
-                    from .llm_config import get_config
-                    try:
-                        _mcfg = get_config()
-                        if _mcfg.get("api_key") and _mcfg.get("sdk") == "openai":
-                            from openai import AsyncOpenAI
-                            _hc = AsyncOpenAI(
-                                api_key=_mcfg["api_key"],
-                                base_url=_mcfg.get("base_url") or None,
-                                max_retries=1,
-                            )
-                            _hr = await _hc.chat.completions.create(
-                                model=_mcfg.get("model", ""),
-                                max_tokens=_chat_max_tokens,
-                                messages=[
-                                    {"role": "system", "content": _chat_system},
-                                    {"role": "user", "content": user_message},
-                                ],
-                            )
-                            _haiku_reply = _hr.choices[0].message.content or ""
-                            log.info(
-                                "cost-aware route: session=%s intent=chat budget=%s served by master-config (%d chars)",
-                                session_id, _chat_budget, len(_haiku_reply),
-                            )
-                    except Exception as _cfg_exc:
-                        log.debug("chat fast-path master-config fallback failed: %s", _cfg_exc)
-                if not _haiku_reply:
-                    from openai import AsyncOpenAI
-                    from .cheap_llm import resolve_cheap_openai
-                    _cheap = resolve_cheap_openai()
-                    if _cheap:
-                        _hc = AsyncOpenAI(
-                            api_key=_cheap["api_key"],
-                            base_url=_cheap["base_url"],
-                            max_retries=1,
-                        )
-                        _hr = await _hc.chat.completions.create(
-                            model=_cheap["model"],
-                            max_tokens=_chat_max_tokens,
-                            messages=[
-                                {"role": "system", "content": _chat_system},
-                                {"role": "user", "content": user_message},
-                            ],
-                        )
-                        _haiku_reply = _hr.choices[0].message.content or ""
-                        log.info("cost-aware route: session=%s intent=chat budget=%s served by fast-model (%d chars)",
-                                 session_id, _chat_budget, len(_haiku_reply))
+                elif _haiku_reply and _cheap_res.routed_via == "master-config":
+                    log.info(
+                        "cost-aware route: session=%s intent=chat budget=%s served by master-config (%d chars)",
+                        session_id, _chat_budget, len(_haiku_reply),
+                    )
+                elif _haiku_reply and _cheap_res.routed_via == "cheap":
+                    log.info(
+                        "cost-aware route: session=%s intent=chat budget=%s served by fast-model (%d chars)",
+                        session_id, _chat_budget, len(_haiku_reply),
+                    )
                 if _haiku_reply:
                     # Honor a NEED_MODE marker even on the chat fast-path so Дедал
                     # can switch himself out of talk mode (and strip it from reply).
@@ -3952,45 +3760,31 @@ class Daedalus:
                     f"Дай кратко резюме за owner-а."
                 )
                 from . import daedalus_mesh as dm
-                raw = ""
-                if dm.use_mesh_router():
-                    try:
-                        _wrap_res = await dm.complete(
-                            system=_wrap_system,
-                            user=_wrap_user,
-                            intent="cheap",
-                            max_tokens=600,
-                            client_id=dm.client_id("chat", "wrap-up"),
-                            use_cache=False,
-                        )
-                        raw = dm.extract_text(_wrap_res)
-                        if raw:
-                            log.info(
-                                "empty-reply guard: mesh_router produced %d chars ($%.6f)",
-                                len(raw), float(_wrap_res.get("cost_usd") or 0.0),
-                            )
-                    except Exception as _wrm_exc:
-                        log.debug("empty-reply guard mesh_router failed: %s", _wrm_exc)
-                if not raw:
-                    from openai import AsyncOpenAI
-                    from .cheap_llm import resolve_cheap_openai
-                    _cheap = resolve_cheap_openai()
-                    if _cheap:
-                        _hc = AsyncOpenAI(
-                            api_key=_cheap["api_key"],
-                            base_url=_cheap["base_url"],
-                            max_retries=1,
-                        )
-                        _hr = await _hc.chat.completions.create(
-                            model=_cheap["model"],
-                            max_tokens=600,
-                            messages=[
-                                {"role": "system", "content": _wrap_system},
-                                {"role": "user", "content": _wrap_user},
-                            ],
-                        )
-                        raw = _hr.choices[0].message.content or ""
-                        log.info("empty-reply guard: cheap-llm (%s) produced %d chars", _cheap["model"], len(raw))
+                from .model_gateway import CompleteRequest, ModelGateway
+                _wrap_res = await ModelGateway().complete_cheap(
+                    CompleteRequest(
+                        system=_wrap_system,
+                        messages=[{"role": "user", "content": _wrap_user}],
+                        intent="cheap",
+                        max_tokens=600,
+                        client_id=dm.client_id("chat", "wrap-up"),
+                        use_cache=False,
+                        role="wrap",
+                    ),
+                    include_master_config=False,
+                    swallow_mesh_error=True,
+                )
+                raw = _wrap_res.text
+                if raw and _wrap_res.routed_via == "mesh":
+                    log.info(
+                        "empty-reply guard: mesh_router produced %d chars ($%.6f)",
+                        len(raw), float(_wrap_res.cost_usd or 0.0),
+                    )
+                elif raw and _wrap_res.routed_via == "cheap":
+                    log.info(
+                        "empty-reply guard: cheap-llm (%s) produced %d chars",
+                        _wrap_res.model, len(raw),
+                    )
                 if not (raw or "").strip():
                     # Haiku creds missing OR Haiku returned empty → deterministic fallback
                     raw = (

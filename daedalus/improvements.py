@@ -287,94 +287,10 @@ def get_error_tracker() -> ErrorTracker:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 3. RateLimitFallback — try alt provider when primary rate-limits
+# 3. RateLimitFallback — bodies live in model_gateway (re-exported)
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Fallback chain: (label, model, sdk, base_url_env, api_key_env)
-FALLBACK_CHAIN: list[tuple[str, str, str, str, str]] = [
-    # (label, model, sdk, base_url_env_OR_literal_https_url, api_key_env)
-    # If base_url field starts with "https://", it is used as-is (literal URL).
-    # Otherwise it is treated as an env var name.
-    # NOTE: Replit AI Integrations (replit_openai / replit_gemini) are intentionally
-    # excluded — ADN runs only on external keys (OpenRouter + Novita).
-    # OpenRouter — Claude Sonnet as first external fallback (proven protocol follower)
-    ("openrouter_claude", "anthropic/claude-sonnet-4-5", "openai",
-     "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"),
-    # Novita — cheapest meaningful fallback: DeepSeek V3.2 ($0.30/$0.90)
-    # Tested ✅: deepseek/deepseek-v3.2, qwen/qwen3-235b-a22b-instruct-2507,
-    #            qwen/qwen3-coder-30b-a3b-instruct, meta-llama/llama-3.1-8b-instruct
-    ("novita", "deepseek/deepseek-v3.2", "openai",
-     "https://api.novita.ai/v3/openai", "NOVITA_API_KEY"),
-]
-
-
-def _is_rate_limit_error(exc: Exception) -> bool:
-    msg = str(exc).lower()
-    return ("429" in msg or "rate" in msg or "too many requests" in msg
-            or "ratelimit" in msg or "overloaded" in msg or "529" in msg)
-
-
-async def call_with_fallback(primary_call_fn, system: str,
-                             messages: list[dict], **kwargs) -> str:
-    """Try primary; on RateLimitError fall back to alt providers in order."""
-    try:
-        return await primary_call_fn(system, messages, **kwargs)
-    except Exception as exc:
-        if not _is_rate_limit_error(exc):
-            raise
-        try: record_rate_limit_hit("primary")
-        except Exception: pass
-        log.warning("RateLimitFallback: primary rate-limited (%s); trying alternates",
-                    str(exc)[:120])
-
-    for label, model, sdk, burl_env, akey_env in FALLBACK_CHAIN:
-        try:
-            # Support literal "https://..." URLs directly in the chain
-            base_url = burl_env if burl_env.startswith("https://") else os.environ.get(burl_env, "")
-            api_key  = os.environ.get(akey_env, "")
-            if not (base_url and api_key):
-                log.debug("RateLimitFallback: skip %s (missing env)", label)
-                continue
-            from openai import AsyncOpenAI
-            c = AsyncOpenAI(api_key=api_key, base_url=base_url)
-            is_reasoning = model.startswith(("gpt-5", "o4", "o3"))
-            k: dict = {
-                "model": model,
-                "messages": [{"role": "system", "content": system}] + messages,
-            }
-            if is_reasoning:
-                k["max_completion_tokens"] = 4000
-            else:
-                k["max_tokens"] = 4000
-            r = await c.chat.completions.create(**k)
-            txt = r.choices[0].message.content or ""
-            log.info("RateLimitFallback: served by %s/%s (%d chars)", label, model, len(txt))
-            try: record_fallback_use(label)
-            except Exception: pass
-            try:
-                from argos_data_nexus.modules.llm_live_trace import record_llm_call
-                record_llm_call(
-                    channel="daedalus_fallback",
-                    provider=label,
-                    model=model,
-                    model_requested="primary_rate_limited",
-                    configured_model="(fallback)",
-                    config_source="fallback_chain",
-                    client_id="daedalus",
-                    ok=True,
-                    extra={"fallback_label": label},
-                )
-            except Exception:
-                pass
-            return f"[fallback:{label}] {txt}" if txt else txt
-        except Exception as exc2:
-            log.warning("RateLimitFallback: %s/%s failed: %s", label, model, exc2)
-            if _is_rate_limit_error(exc2):
-                try: record_rate_limit_hit(label)
-                except Exception: pass
-            continue
-
-    raise RuntimeError("Rate-limited by primary and all fallbacks failed")
+from .model_gateway import FALLBACK_CHAIN, call_with_fallback  # noqa: F401
 
 
 # ═══════════════════════════════════════════════════════════════════════════
