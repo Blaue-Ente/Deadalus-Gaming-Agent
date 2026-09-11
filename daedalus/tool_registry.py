@@ -1,7 +1,8 @@
 """ToolRegistry — register / resolve / authorize / execute / describe.
 
-P0.04 migrates only read_file, list_dir, and code_search. Live dispatch still
-goes through execute_native_tool; this module is the dual-path for those three.
+P0.05 registers read_file, list_dir, code_search plus write_file, edit_file,
+and run_command. Live dispatch still goes through execute_native_tool; this
+module is the dual-path for those six. Leftover if-arms stay for the rest.
 Do not import this module from agent.py.
 """
 from __future__ import annotations
@@ -14,6 +15,10 @@ from typing import Any
 from daedalus.contracts import PermissionDecision, ToolRequest, ToolResult, ToolSpec
 
 READ_TOOLS: frozenset[str] = frozenset({"read_file", "list_dir", "code_search"})
+WRITE_COMMAND_TOOLS: frozenset[str] = frozenset(
+    {"write_file", "edit_file", "run_command"}
+)
+REGISTERED_TOOLS: frozenset[str] = READ_TOOLS | WRITE_COMMAND_TOOLS
 
 Handler = Callable[[dict[str, Any], "ToolContext"], Awaitable[str]]
 
@@ -159,6 +164,33 @@ def bootstrap_read_tools(registry: ToolRegistry | None = None) -> ToolRegistry:
     return target
 
 
+def bootstrap_write_command_tools(registry: ToolRegistry | None = None) -> ToolRegistry:
+    """Register the P0.05 write/command tools. Imports native helpers lazily."""
+    from daedalus.native_tools import (
+        NATIVE_TOOL_SPECS,
+        PERM_MAP,
+        _run_edit_file,
+        _run_run_command,
+        _run_write_file,
+    )
+    from daedalus.tool_adapt import spec_from_native
+    from daedalus.tool_catalog import native_entries
+
+    target = registry if registry is not None else ToolRegistry()
+    handlers: Mapping[str, Handler] = {
+        "write_file": _wrap_async(_run_write_file),
+        "edit_file": _wrap_async(_run_edit_file),
+        "run_command": _wrap_sync(_run_run_command),
+    }
+    entries = {e.name: e for e in native_entries()}
+    by_name = {str(t["name"]): t for t in NATIVE_TOOL_SPECS}
+    for name, handler in handlers.items():
+        raw = by_name[name]
+        spec = spec_from_native(raw, meta=entries.get(name), perm=PERM_MAP.get(name))
+        target.register(name, handler, spec)
+    return target
+
+
 _default: ToolRegistry | None = None
 _bootstrapped = False
 
@@ -169,6 +201,7 @@ def default_registry() -> ToolRegistry:
         _default = ToolRegistry()
     if not _bootstrapped:
         bootstrap_read_tools(_default)
+        bootstrap_write_command_tools(_default)
         _bootstrapped = True
     return _default
 
@@ -190,7 +223,7 @@ async def try_dispatch(
     """Live hook for execute_native_tool. Exact native names only (no aliases)."""
     if not registry_enabled():
         return None
-    if name not in READ_TOOLS:
+    if name not in REGISTERED_TOOLS:
         return None
     hit = default_registry().get_exact(name)
     if hit is None:
@@ -204,10 +237,13 @@ async def try_dispatch(
 
 __all__ = [
     "READ_TOOLS",
+    "REGISTERED_TOOLS",
+    "WRITE_COMMAND_TOOLS",
     "RegisteredTool",
     "ToolContext",
     "ToolRegistry",
     "bootstrap_read_tools",
+    "bootstrap_write_command_tools",
     "default_registry",
     "registry_enabled",
     "reset_registry_for_tests",
