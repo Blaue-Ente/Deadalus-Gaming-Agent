@@ -37,6 +37,7 @@ from daedalus.contracts import (
     RunBudgetSpend,
     RunCheckpoint,
     RunEvent,
+    RunStage,
     Slice,
     SliceRole,
     SideEffectClass,
@@ -180,6 +181,28 @@ def test_run_roundtrip_json():
 def test_run_rejects_unknown_status():
     with pytest.raises(ValidationError):
         Run.model_validate(_run_payload(status="running"))
+
+
+def test_run_stage_values_are_pipeline_positions():
+    assert RunStage("intake") is RunStage.INTAKE
+    assert {stage.value for stage in RunStage} == {
+        "intake",
+        "discover",
+        "plan",
+        "implement",
+        "static_verify",
+        "build",
+        "engine_test",
+        "playtest",
+        "visual_verify",
+        "review",
+        "repair",
+        "accepted",
+        "blocked",
+        "failed",
+        "cancelled",
+    }
+    assert EventKind.STAGE.value == "stage"
 
 
 def test_slice_roles_are_ledger_roles():

@@ -130,8 +130,8 @@
     ]
   },
   "tests": {
-    "modules": 62,
-    "functions": 744
+    "modules": 63,
+    "functions": 760
   },
   "modules": {
     "daedalus": [

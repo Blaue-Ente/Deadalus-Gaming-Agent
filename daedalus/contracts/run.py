@@ -19,6 +19,26 @@ class RunStatus(str, Enum):
     INTERRUPTED = "interrupted"
 
 
+class RunStage(str, Enum):
+    """Pipeline position. Orthogonal to RunStatus (lifecycle)."""
+
+    INTAKE = "intake"
+    DISCOVER = "discover"
+    PLAN = "plan"
+    IMPLEMENT = "implement"
+    STATIC_VERIFY = "static_verify"
+    BUILD = "build"
+    ENGINE_TEST = "engine_test"
+    PLAYTEST = "playtest"
+    VISUAL_VERIFY = "visual_verify"
+    REVIEW = "review"
+    REPAIR = "repair"
+    ACCEPTED = "accepted"
+    BLOCKED = "blocked"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
 class SliceRole(str, Enum):
     EXPLORER = "explorer"
     CODER = "coder"
