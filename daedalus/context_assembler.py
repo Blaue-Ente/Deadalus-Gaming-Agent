@@ -1,8 +1,8 @@
 """Retrieve + compose front matter for Daedalus._build_context_and_call.
 
-Leaf module. Do not import agent.py. Native tools, leftover NEED_* ladder,
-and cheap-path routing stay on Daedalus. ContextAssembler is retrieve then
-compose — cheap chat returns between those two steps.
+Leaf module. Do not import agent.py. Native tools, leftover NEED_* if-arms,
+cheap-path routing, and ToolLoop stay on Daedalus. ContextAssembler is
+retrieve then compose — cheap chat returns between those two steps.
 """
 from __future__ import annotations
 

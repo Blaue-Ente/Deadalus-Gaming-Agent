@@ -2028,205 +2028,23 @@ async def run_native_discovery_pass(
     ``loop`` is a ``build_loop.BuildLoop``. With it, a quiet round (no tool
     calls) does not end the turn: the loop scores the plan and, while fix
     rounds remain, injects PLAN PROGRESS as the next user turn.
+
+    Body lives in ``tool_loop.ToolLoop.run_native``. This name stays the
+    importable façade for characterization stubs and ``agent.py``.
     """
-    from .tool_dumps import extract_tool_dumps
+    from .tool_loop import NativeRoundRequest, ToolLoop
 
-    try:
-        from . import writer_assist as _writer_assist
-        _writer_assist.set_ask(user_content)
-    except Exception:
-        pass
-    specs = tools or NATIVE_TOOL_SPECS
-    messages: list[dict[str, Any]] = [{"role": "user", "content": user_content}]
-    tool_log: list[dict[str, Any]] = []
-    all_results: list[str] = []
-
-    budget = max_rounds
-    _round = -1
-    while True:
-        if _round + 1 >= budget:
-            if loop is not None and not getattr(loop, "stop_reason", ""):
-                if getattr(loop, "wants_exhaust_proof", lambda: False)():
-                    try:
-                        proof_block = await _kernel_visual_proof(loop)
-                        if proof_block:
-                            all_results.append(proof_block)
-                        if loop.observations:
-                            tool_log.append(loop.observations[-1].as_call())
-                    except Exception as exc:
-                        log.warning("kernel visual proof on exhaust failed: %s", exc)
-                if loop is not None and getattr(loop, "wants_play_bot", lambda: False)():
-                    try:
-                        play_block = await _kernel_play_bot(loop)
-                        if play_block:
-                            all_results.append(play_block)
-                        if loop.observations:
-                            tool_log.append(loop.observations[-1].as_call())
-                    except Exception as exc:
-                        log.warning("kernel play bot on exhaust failed: %s", exc)
-                extra = 0
-                try:
-                    from . import mentor as _mentor
-                    await _mentor.refresh_helm(loop)
-                    extra = int(_mentor.extra_round_budget(loop) or 0)
-                except Exception:
-                    extra = 0
-                if extra > 0:
-                    loop.mentor_grants = int(getattr(loop, "mentor_grants", 0) or 0) + 1
-                    budget += extra
-                    try:
-                        from . import mentor as _mentor
-                        _mentor.maybe_capture_lesson(loop, memory)
-                    except Exception:
-                        pass
-                    nudge = loop.progress_block()
-                    vision = list(getattr(loop, "proof_vision", None) or [])
-                    messages.append(_user_turn(nudge, vision or None))
-                    continue
-                loop.stop_reason = "round budget exhausted"
-                loop.verdict("")
-            break
-        _round += 1
-        resp = await call_with_tools_fn(system, messages, specs)
-        if resp.get("budget_stopped"):
-            final = ""
-            for block in resp.get("content") or []:
-                if block.get("type") == "text":
-                    final = str(block.get("text") or "")
-                    break
-            if loop is not None:
-                loop.stop_reason = "run budget exhausted"
-                loop.verdict(final)
-            _mentor_record_outcome(loop)
-            return (final or None), tool_log
-        content_blocks = resp.get("content", [])
-
-        assistant_content: list[dict[str, Any]] = []
-        tool_uses: list[dict[str, Any]] = []
-        text_parts: list[str] = []
-
-        for block in content_blocks:
-            if block.get("type") == "text":
-                text_parts.append(block.get("text", ""))
-                assistant_content.append(block)
-            elif block.get("type") == "tool_use":
-                tool_uses.append(block)
-                assistant_content.append(block)
-
-        if not tool_uses:
-            for i, dump in enumerate(extract_tool_dumps("\n".join(text_parts))):
-                tool_uses.append({
-                    "type": "tool_use",
-                    "id": f"dump_{_round}_{i}",
-                    "name": dump.name,
-                    "input": dump.args,
-                })
-                assistant_content.append(tool_uses[-1])
-
-        if not tool_uses:
-            final = "\n".join(text_parts).strip()
-            proof_block = ""
-            if loop is not None and getattr(loop, "wants_kernel_proof", lambda: False)():
-                try:
-                    proof_block = await _kernel_visual_proof(loop)
-                    if loop.observations:
-                        tool_log.append(loop.observations[-1].as_call())
-                except Exception as exc:
-                    log.warning("kernel visual proof failed: %s", exc)
-                    proof_block = f"━━━ VISUAL PROOF (kernel) ━━━\nProof crashed: {exc}\n"
-            play_block = ""
-            if loop is not None and getattr(loop, "wants_play_bot", lambda: False)():
-                try:
-                    play_block = await _kernel_play_bot(loop)
-                    if loop.observations:
-                        tool_log.append(loop.observations[-1].as_call())
-                except Exception as exc:
-                    log.warning("kernel play bot failed: %s", exc)
-                    play_block = f"━━━ PLAYABLE (kernel computer) ━━━\nFAILED: {exc}\n"
-            nudge = None
-            if loop is not None:
-                try:
-                    from . import mentor as _mentor
-                    await _mentor.refresh_helm(loop)
-                except Exception:
-                    pass
-                nudge = loop.on_quiet(final)
-            if nudge:
-                extra = "\n\n".join(p for p in (proof_block, play_block, nudge) if p)
-                messages.append({
-                    "role": "assistant",
-                    "content": assistant_content or [{"type": "text", "text": final or "(no reply)"}],
-                })
-                vision = list(getattr(loop, "proof_vision", None) or []) if loop is not None else []
-                messages.append(_user_turn(extra, vision or None))
-                budget += loop.rounds_per_fix
-                continue
-            for block in (proof_block, play_block):
-                if block:
-                    all_results.append(block)
-            _mentor_record_outcome(loop)
-            if all_results:
-                combined = (
-                    "━━━ NATIVE TOOL RESULTS ━━━\n"
-                    + "\n\n".join(all_results)
-                    + ("\n\n━━━ MODEL FOLLOW-UP ━━━\n" + final if final else "")
-                )
-                return combined, tool_log
-            return None, []
-
-        messages.append({"role": "assistant", "content": assistant_content})
-
-        tool_result_blocks: list[dict[str, Any]] = []
-        for tu in tool_uses:
-            tid = tu.get("id", "")
-            tname = tu.get("name", "")
-            tinput = tu.get("input") or {}
-            if isinstance(tinput, str):
-                try:
-                    tinput = json.loads(tinput)
-                except json.JSONDecodeError:
-                    tinput = {"raw": tinput}
-
-            result_text = await execute_native_tool(
-                tname, tinput,
-                memory=memory, session_id=session_id,
-                read_file_fn=read_file_fn,
-            )
-            all_results.append(result_text)
-            blocked = "BLOCKED" in result_text
-            ok = blocked or ("FAILED" not in result_text and "ERROR" not in result_text)
-            tool_log.append({
-                "tool": tname,
-                "input": {k: v for k, v in tinput.items() if k != "content"} if isinstance(tinput, dict) else {},
-                "ok": ok,
-                "blocked": blocked,
-            })
-            if loop is not None:
-                loop.observe(
-                    tname, tinput if isinstance(tinput, dict) else {}, result_text,
-                    ok=ok, blocked=blocked,
-                )
-                from .tool_catalog import canonical as _can
-                tcan = _can(tname).lower()
-                if tcan in {"browser", "engine", "visual_proof", "run_command"} and not ok:
-                    try:
-                        from . import mentor as _mentor
-                        if _mentor.enabled():
-                            ret = _mentor.progress_next(loop)
-                            if ret:
-                                result_text = result_text + "\n" + ret
-                                all_results[-1] = result_text
-                    except Exception:
-                        pass
-            tool_result_blocks.append({
-                "type": "tool_result",
-                "tool_use_id": tid,
-                "content": result_text,
-            })
-
-        messages.append({"role": "user", "content": tool_result_blocks})
-
-    _mentor_record_outcome(loop)
-    if all_results:
-        return "━━━ NATIVE TOOL RESULTS ━━━\n" + "\n\n".join(all_results), tool_log
-    return None, []
+    result = await ToolLoop().run_native(
+        NativeRoundRequest(
+            system=system,
+            user_content=user_content,
+            call_with_tools_fn=call_with_tools_fn,
+            memory=memory,
+            session_id=session_id,
+            read_file_fn=read_file_fn,
+            max_rounds=max_rounds,
+            tools=tools,
+            loop=loop,
+        )
+    )
+    return result.text, result.tool_log
