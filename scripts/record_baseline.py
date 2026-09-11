@@ -79,6 +79,8 @@ LOOPS = {
     "tdd_loop": "daedalus/tdd_loop.py",
     "autopilot": "daedalus/kernel/full_autopilot.py",
     "builder_runtime": "daedalus/builder_runtime.py",
+    "tool_loop": "daedalus/tool_loop.py",
+    "verification_controller": "daedalus/verification_controller.py",
 }
 INVENTORY_KEYS = (
     "generated_at",
