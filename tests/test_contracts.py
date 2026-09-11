@@ -15,6 +15,8 @@ from daedalus.contracts import (
     CONTRACT_SCHEMA_VERSION,
     KNOWN_PERMISSION_IDS,
     PERMISSION_CATALOG,
+    TOOL_SPEC_OVERLAY,
+    ArtifactRef,
     BuildArtifactRef,
     BuildVerdict,
     CapabilityEvidenceRecord,
@@ -23,8 +25,10 @@ from daedalus.contracts import (
     ErrorClass,
     EventKind,
     NamedArtifact,
+    Observation,
     PermissionDecision,
     PermissionGrant,
+    PermissionRequirement,
     Plan,
     PlanScore,
     PlanStep,
@@ -35,13 +39,19 @@ from daedalus.contracts import (
     RunEvent,
     Slice,
     SliceRole,
+    SideEffectClass,
     StageRow,
     TaskAction,
     TaskEvent,
+    ToolError,
     ToolLogRow,
+    ToolObservation,
     ToolRequest,
     ToolResult,
+    ToolRisk,
     ToolSource,
+    ToolSpec,
+    overlay_for,
 )
 from daedalus.contracts.artifacts import NAMED_ARTIFACT_MAX_CHARS
 
@@ -377,6 +387,156 @@ def test_contract_error_classes():
 def test_extra_field_forbidden():
     with pytest.raises(ValidationError):
         Run.model_validate(_run_payload(nope=1))
+
+
+def test_side_effect_and_risk_enums():
+    assert {c.value for c in SideEffectClass} == {
+        "read",
+        "write",
+        "shell",
+        "network",
+        "database",
+        "spawn",
+        "engine",
+        "memory",
+        "mcp",
+    }
+    assert {r.value for r in ToolRisk} == {"low", "medium", "high"}
+    with pytest.raises(ValidationError):
+        ToolSpec.model_validate({"name": "x", "side_effect": "explode"})
+    with pytest.raises(ValidationError):
+        ToolSpec.model_validate({"name": "x", "risk": "critical"})
+
+
+def test_tool_spec_roundtrip():
+    spec = ToolSpec(
+        name="web_search",
+        description="Search the public web",
+        input_schema={"type": "object", "properties": {"query": {"type": "string"}}},
+        side_effect="network",
+        risk="medium",
+        permission=PermissionRequirement(perm_class="web_search", fail_open=True),
+        aliases=("NEED_WEB", "NEED_SEARCH"),
+        need_marker="NEED_WEB",
+        tags=("web",),
+        module="daedalus.tools",
+        when="Search the public web for docs or APIs.",
+        network=True,
+    )
+    again = ToolSpec.model_validate(json.loads(json.dumps(spec.model_dump(mode="json"))))
+    assert again == spec
+    assert again.schema_version == 1
+    with pytest.raises(ValidationError):
+        ToolSpec.model_validate({"name": "web_search", "nope": 1})
+
+
+def test_tool_error_uses_error_class():
+    err = ToolError(error_class=ErrorClass.OFFLINE, message="offline", tool="web_search", retryable=True)
+    assert isinstance(err, ContractError)
+    again = ToolError.model_validate(err.model_dump(mode="json"))
+    assert again.error_class is ErrorClass.OFFLINE
+    assert again.retryable is True
+    for cls in (
+        ErrorClass.TOOL_FAILED,
+        ErrorClass.TOOL_BLOCKED,
+        ErrorClass.PERMISSION_DENIED,
+        ErrorClass.OFFLINE,
+        ErrorClass.UNKNOWN_TOOL,
+    ):
+        ToolError(error_class=cls, message=cls.value, tool="x")
+
+
+def test_permission_requirement_rejects_unknown():
+    PermissionRequirement(perm_class="web_search")
+    PermissionRequirement(perm_class="postgres_query")
+    with pytest.raises(ValidationError):
+        PermissionRequirement(perm_class="not_a_perm")
+
+
+def test_artifact_ref_distinct_from_build():
+    ref = ArtifactRef(kind="file", path="index.html", slug="snake")
+    hashed = BuildArtifactRef(
+        project_id="snake",
+        revision="rev1",
+        target="web",
+        artifact_hash="sha256:aa",
+        path="dist/index.html",
+        immutable=True,
+    )
+    dumped = ref.model_dump()
+    assert "artifact_hash" not in dumped
+    assert "content" not in dumped
+    assert set(dumped) != set(hashed.model_dump())
+    assert ArtifactRef.model_validate(ref.model_dump(mode="json")) == ref
+    with pytest.raises(ValidationError):
+        ArtifactRef(kind="blob", path="x")
+
+
+def test_tool_result_additive_defaults():
+    result = ToolResult(
+        name="read_file",
+        ok=True,
+        text="── read_file OK ──",
+        data={"path": "x.py"},
+        source="native",
+        blocked=False,
+    )
+    dumped = result.model_dump()
+    assert dumped["error"] is None
+    assert dumped["artifacts"] == ()
+    assert dumped["risk"] is None
+    assert ToolResult.model_validate(result.model_dump(mode="json")) == result
+
+
+def test_tool_result_with_error_roundtrip():
+    err = ToolError(error_class=ErrorClass.OFFLINE, message="offline", tool="web_search")
+    result = ToolResult(
+        name="web_search",
+        ok=True,
+        text="── OFFLINE KIT: web_search е изключен ──",
+        blocked=False,
+        error=err,
+        artifacts=(ArtifactRef(kind="url", uri="https://example.com"),),
+        risk=ToolRisk.MEDIUM,
+    )
+    again = ToolResult.model_validate(result.model_dump(mode="json"))
+    assert again == result
+    assert again.error is not None
+    assert again.error.error_class is ErrorClass.OFFLINE
+
+
+def test_observation_is_tool_observation():
+    assert Observation is ToolObservation
+    obs = Observation(tool="code_search", ok=True, blocked=True, args={"query": "x"}, head="BLOCKED")
+    again = Observation.model_validate(obs.model_dump(mode="json"))
+    assert again == obs
+    assert again.error is None
+    with_err = ToolObservation(
+        tool="web_search",
+        ok=True,
+        blocked=False,
+        error=ToolError(error_class=ErrorClass.OFFLINE, message="offline", tool="web_search"),
+    )
+    assert ToolObservation.model_validate(with_err.model_dump(mode="json")) == with_err
+
+
+def test_tool_spec_overlay_covers_inventory():
+    inv = json.loads((ROOT / "artifacts" / "baseline" / "architecture-inventory.json").read_text(encoding="utf-8"))
+    names = set(inv["native_tools"])
+    overlay_keys = set(TOOL_SPEC_OVERLAY)
+    assert overlay_keys <= names
+    assert names <= overlay_keys
+    side, risk, perm = overlay_for("web_search")
+    assert side is SideEffectClass.NETWORK
+    assert risk is ToolRisk.MEDIUM
+    assert perm == "web_search"
+    unknown_side, unknown_risk, unknown_perm = overlay_for("not_a_real_tool")
+    assert unknown_side is SideEffectClass.READ
+    assert unknown_risk is ToolRisk.LOW
+    assert unknown_perm == ""
+    for name, (_side, _risk, perm_class) in TOOL_SPEC_OVERLAY.items():
+        if perm_class:
+            assert perm_class in KNOWN_PERMISSION_IDS, name
 
 
 def test_contracts_do_not_import_runtime():
