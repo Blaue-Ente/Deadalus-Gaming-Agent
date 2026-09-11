@@ -129,46 +129,48 @@ def _const_str(node: ast.AST) -> str | None:
     return None
 
 
+def _assigned_value(tree: ast.AST, name: str) -> ast.AST | None:
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            if any(isinstance(t, ast.Name) and t.id == name for t in node.targets):
+                return node.value
+        elif isinstance(node, ast.AnnAssign):
+            if isinstance(node.target, ast.Name) and node.target.id == name:
+                return node.value
+    return None
+
+
 def native_tool_names(root: Path | None = None) -> list[str]:
     path = (root or ROOT) / "daedalus" / "native_tools.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
+    value = _assigned_value(tree, "NATIVE_TOOL_SPECS")
     names: list[str] = []
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Assign):
+    if not isinstance(value, ast.List):
+        return names
+    for elt in value.elts:
+        if not isinstance(elt, ast.Dict):
             continue
-        if not any(isinstance(t, ast.Name) and t.id == "NATIVE_TOOL_SPECS" for t in node.targets):
-            continue
-        if not isinstance(node.value, ast.List):
-            continue
-        for elt in node.value.elts:
-            if not isinstance(elt, ast.Dict):
-                continue
-            for key, val in zip(elt.keys, elt.values):
-                if _const_str(key) == "name":
-                    name = _const_str(val)
-                    if name:
-                        names.append(name)
-                    break
+        for key, val in zip(elt.keys, elt.values):
+            if _const_str(key) == "name":
+                name = _const_str(val)
+                if name:
+                    names.append(name)
+                break
     return names
 
 
 def honesty_case_ids(root: Path | None = None) -> list[str]:
     path = (root or ROOT) / "daedalus" / "game_agent_bench.py"
     tree = ast.parse(path.read_text(encoding="utf-8"))
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Assign):
-            continue
-        if not any(isinstance(t, ast.Name) and t.id == "CASES" for t in node.targets):
-            continue
-        if not isinstance(node.value, ast.Dict):
-            continue
-        ids: list[str] = []
-        for key in node.value.keys:
-            name = _const_str(key)
-            if name:
-                ids.append(name)
-        return ids
-    return []
+    value = _assigned_value(tree, "CASES")
+    if not isinstance(value, ast.Dict):
+        return []
+    ids: list[str] = []
+    for key in value.keys:
+        name = _const_str(key)
+        if name:
+            ids.append(name)
+    return ids
 
 
 def list_py_modules(package_dir: Path) -> list[str]:
@@ -489,6 +491,10 @@ def coverage_line_rate(xml_path: Path) -> float | None:
 
 def coverage_has_daedalus(xml_path: Path) -> bool:
     root = ET.parse(xml_path).getroot()
+    for src in iter_elements(root, "source"):
+        text = (src.text or "").strip().rstrip("/\\")
+        if text.endswith("daedalus"):
+            return True
     for pkg in iter_elements(root, "package"):
         name = pkg.get("name") or ""
         if name == "daedalus" or name.startswith("daedalus."):
