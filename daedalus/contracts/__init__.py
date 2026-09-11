@@ -29,6 +29,14 @@ from .run import (
     SliceRole,
     SliceStatus,
 )
+from .commands import (
+    CommandRequest,
+    CommandResult,
+    EnvPolicy,
+    ExecutionBackend,
+    FilesystemPolicy,
+    NetworkPolicy,
+)
 from .tools import (
     TOOL_SPEC_OVERLAY,
     ArtifactRef,
@@ -50,6 +58,12 @@ __all__ = [
     "CONTRACT_SCHEMA_VERSION",
     "ArtifactRef",
     "BuildArtifactRef",
+    "CommandRequest",
+    "CommandResult",
+    "EnvPolicy",
+    "ExecutionBackend",
+    "FilesystemPolicy",
+    "NetworkPolicy",
     "BuildVerdict",
     "CapabilityEvidenceRecord",
     "ContractError",

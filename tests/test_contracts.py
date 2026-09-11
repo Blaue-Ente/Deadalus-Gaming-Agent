@@ -20,11 +20,17 @@ from daedalus.contracts import (
     BuildArtifactRef,
     BuildVerdict,
     CapabilityEvidenceRecord,
+    CommandRequest,
+    CommandResult,
     ContractError,
     DodVerdict,
+    EnvPolicy,
     ErrorClass,
     EventKind,
+    ExecutionBackend,
+    FilesystemPolicy,
     NamedArtifact,
+    NetworkPolicy,
     Observation,
     PermissionDecision,
     PermissionGrant,
@@ -249,6 +255,32 @@ def test_plan_step_and_score_roundtrip():
     assert Plan.model_validate(plan.model_dump(mode="json")) == plan
     assert PlanScore.model_validate(score.model_dump(mode="json")) == score
     assert BuildVerdict.model_validate(verdict.model_dump(mode="json")) == verdict
+
+
+def test_command_request_defaults_and_roundtrip():
+    req = CommandRequest(executable="npm", arguments=("install",), slug="snake")
+    assert req.env_policy is EnvPolicy.STRIP_SECRETS
+    assert req.network_policy is NetworkPolicy.UNRESTRICTED
+    assert req.filesystem_policy is FilesystemPolicy.JAIL
+    assert req.timeout_s is None
+    assert req.schema_version == 1
+    again = CommandRequest.model_validate(req.model_dump(mode="json"))
+    assert again == req
+    with pytest.raises(ValidationError):
+        CommandRequest.model_validate({"executable": "ls", "unknown_field": 1})
+    res = CommandResult(ok=True, command="ls", ran="ls", exit_code=0, cwd="/tmp")
+    assert CommandResult.model_validate(res.model_dump(mode="json")) == res
+    assert ExecutionBackend is not None
+
+
+def test_command_contracts_do_not_import_shell_center():
+    tree = ast.parse((CONTRACTS_DIR / "commands.py").read_text(encoding="utf-8"))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                assert "shell_center" not in alias.name
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            assert "shell_center" not in node.module
 
 
 def test_tool_request_mirrors_protocol_fields():
