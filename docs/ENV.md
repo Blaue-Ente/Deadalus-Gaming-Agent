@@ -36,6 +36,7 @@ Optional: `OPENROUTER_HTTP_REFERER`, `OPENROUTER_APP_TITLE` (sent on OpenRouter 
 | `DAEDALUS_TOKEN` | (generated on loopback) | Owner secret for Studio/API. File: `$DAEDALUS_DATA/owner.token` |
 | `DAEDALUS_SHELL_ISOLATION` | — | `1` allows `run_command` when not on loopback |
 | `DAEDALUS_SHELL_LEGACY` | — | `1` opts in to shell metacharacters (still not a container) |
+| `DAEDALUS_EXEC_BACKEND` | `local` | `local` / `host` — host subprocess. `docker` — fail-closed stub until P0.18. `fake` is not a selector. |
 | `DAEDALUS_DATA` | `data/daedalus/` | SQLite, Chroma, proposals, evolution |
 | `DAEDALUS_PLAYGROUND` | `playground/projects` | Working projects |
 | `DAEDALUS_WINDOWS_APP` | — | Set by the Windows installer; data goes to `%LOCALAPPDATA%\Daedalus` |

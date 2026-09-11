@@ -59,7 +59,7 @@ class CommandResult(ContractModel):
 
 
 class ExecutionBackend(Protocol):
-    """P0.17 consumer. No Local/Docker/Fake implementations in this ticket."""
+    """Implemented by LocalBackend, FakeBackend, and DockerBackend (stub)."""
 
     def run(self, request: CommandRequest) -> CommandResult: ...
 
