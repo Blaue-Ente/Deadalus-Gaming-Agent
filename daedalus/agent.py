@@ -49,7 +49,6 @@ from .improvements import (
     question_budget_check_and_increment,
     mark_schema_read,
     needs_read_first_hint,
-    select_skills,
     review_gate_critique,
     detect_intent_without_action,
 )
@@ -57,7 +56,7 @@ from .knowledge import DaedalusKnowledge
 from .memory import DaedalusMemory
 from .memory_mem0 import Mem0Memory
 from .workers import parse_worker_markers, call_workers_parallel, format_worker_results
-from .mesh_tools import format_mesh_for_prompt, get_mesh_snapshot
+from .mesh_tools import get_mesh_snapshot
 from .reflection import run_reflection_cycle
 from . import continuity as _continuity
 from . import mode as _mode
@@ -80,12 +79,12 @@ from .batch_verify import (
     execute_batch, execute_verify,
     BATCH_BLOCK_RE, VERIFY_BLOCK_RE,
 )
-from .context_compaction import maybe_compact_session_context, track_files_from_text
+from .context_assembler import format_injected_context as _format_injected_context
+from .context_compaction import track_files_from_text
 from .edit_diff import extract_edit_markers, process_need_edit
 from .native_tools import native_tools_enabled, run_native_discovery_pass
 from .need_scan import scan_need_markers
-from .session_branching import build_branch_context_block, branch_session as _branch_session_fn
-from .steering_queue import pop_steering_messages
+from .session_branching import branch_session as _branch_session_fn
 
 log = logging.getLogger(__name__)
 
@@ -262,84 +261,6 @@ async def _call_claude_with_tools(
     """Native tool round. Implementation lives in ``llm_client`` (no chroma)."""
     from .llm_client import call_with_tools
     return await call_with_tools(system, messages, tools, max_tokens=_MAX_TOKENS)
-
-
-# ---------------------------------------------------------------------------
-# Context formatting
-# ---------------------------------------------------------------------------
-
-def _format_injected_context(
-    knowledge: list[dict[str, Any]],
-    memory: list[dict[str, Any]],
-    artifacts: list[dict[str, Any]],
-    session_recent: list[dict[str, Any]],
-    lessons: list[dict[str, Any]] | None = None,
-    episodes: list[dict[str, Any]] | None = None,
-    mesh_block: str = "",
-) -> str:
-    parts: list[str] = []
-
-    if mesh_block:
-        parts.append(mesh_block)
-
-    if lessons:
-        parts.append("\n━━━ LESSONS YOU LEARNED (self-reflection) ━━━")
-        for L in lessons:
-            meta = L.get("metadata", {})
-            parts.append(
-                f"  • [{meta.get('kind','general')}] {L.get('content','')[:240]}"
-            )
-
-    if episodes:
-        parts.append("\n━━━ EPISODIC MEMORIES (past session summaries) ━━━")
-        for ep in episodes:
-            meta = ep.get("metadata", {})
-            parts.append(
-                f"\n[session={meta.get('session_id','?')[:10]} "
-                f"@ {meta.get('ended_at','?')[:19]} turns={meta.get('turn_count','?')}]"
-            )
-            parts.append(ep.get("content", "")[:1500])
-
-    if knowledge:
-        parts.append("\n━━━ RELEVANT IYVERIS KNOWLEDGE (auto-retrieved) ━━━")
-        for k in knowledge:
-            meta = k.get("metadata", {})
-            title = meta.get("title", "?")
-            src = meta.get("source", "?")
-            parts.append(f"\n[{meta.get('category','?')}] {title}  ({src})")
-            parts.append(k.get("content", "")[:1200])
-
-    if memory:
-        parts.append("\n━━━ RELEVANT PAST MEMORY (cross-session) ━━━")
-        for m in memory:
-            meta = m.get("metadata", {})
-            parts.append(
-                f"\n[{meta.get('role','?')} @ {meta.get('timestamp','?')[:19]} "
-                f"session={meta.get('session_id','?')[:8]}]"
-            )
-            parts.append(m.get("content", "")[:800])
-
-    if artifacts:
-        parts.append("\n━━━ SIMILAR PAST ARTIFACTS YOU GENERATED ━━━")
-        for a in artifacts:
-            meta = a.get("metadata", {})
-            parts.append(
-                f"\n• {meta.get('filename','?')} ({meta.get('language','?')}) — "
-                f"{meta.get('summary','')[:200]}"
-            )
-
-    if session_recent:
-        parts.append("\n━━━ RECENT TURNS IN THIS SESSION (chronological) ━━━")
-        for t in session_recent:
-            meta = t.get("metadata", {})
-            parts.append(
-                f"\n[{meta.get('role','?')} @ {meta.get('timestamp','?')[:19]}]"
-            )
-            parts.append(t.get("content", "")[:800])
-
-    if not parts:
-        return ""
-    return "\n".join(parts)
 
 
 def _extract_marker(raw: str, name: str) -> str | None:
@@ -1183,7 +1104,10 @@ class Daedalus:
         expect_json: bool = False,
         for_self: bool = False,
     ) -> tuple[str, dict[str, Any]]:
-        """Shared pipeline: retrieve → format → call → capture.
+        """Shared pipeline: retrieve → cheap path → compose → call → capture.
+
+        ContextAssembler owns retrieve/compose. Cheap-path routing and the
+        leftover tool ladder stay here.
 
         Returns (raw_llm_response, retrieval_summary).
         """
@@ -1191,126 +1115,27 @@ class Daedalus:
         started_at = _time_mod.time()
         await self.ensure_knowledge_loaded()
 
-        # Phase 3 — steering queue: inject mid-run owner instructions
-        _steering_block = pop_steering_messages(session_id or "")
-        if _steering_block:
-            user_message = _steering_block + "\n\n" + user_message
-
-        # Semantic retrieval — Mem0 v2 hybrid (BM25 + dense + RRF + importance-scored
-        # episodic).  Single fused call covers global/sessions/lessons/episodic/working.
-        # We keep artifacts + session_recent + episodes separate (mem0 doesn't index them)
-        # and rebuild the legacy lists for backward compatibility with the formatter.
-        q = retrieval_query or user_message
-        fused = self.mem0.fused_context(session_id, q, top_k=14)
-
-        # Partition fused entries back into the buckets expected by _format_injected_context
-        knowledge: list[dict[str, Any]] = []
-        past_memory: list[dict[str, Any]] = []
-        lessons: list[dict[str, Any]] = []
-        episodic_fused: list[dict[str, Any]] = []
-        for e in fused:
-            row = {"id": e.id, "content": e.content, "metadata": e.metadata, "distance": None}
-            if e.source == "global":
-                knowledge.append(row)
-            elif e.source == "lesson":
-                lessons.append(row)
-            elif e.source == "episodic":
-                episodic_fused.append(row)
-            else:  # semantic | working | hybrid
-                past_memory.append(row)
-
-        artifacts = self.memory.find_similar_artifacts(q, top_k=3)
-        session_recent = self.memory.session_history(session_id, limit=6)
-        # Phase 0 — pi-style context compaction when history is large
-        _compaction_block: str | None = None
-        try:
-            session_recent, _compaction_block = maybe_compact_session_context(
-                session_id, session_recent,
-            )
-        except Exception as _cmp_exc:
-            log.debug("context compaction skipped: %s", _cmp_exc)
-        episodes = self.memory.retrieve_episodes(q, top_k=2)
-        # Promote episodic facts into lessons list for prompt visibility (treated as
-        # owner-validated knowledge by the formatter)
-        if episodic_fused:
-            lessons = lessons + episodic_fused
-
-        # Live mesh awareness (no HTTP — uses cached health_monitor data)
-        mesh_block = ""
-        try:
-            mesh_block = format_mesh_for_prompt(get_mesh_snapshot())
-        except Exception as exc:
-            log.debug("mesh snapshot unavailable: %s", exc)
-
-        injected = _format_injected_context(
-            knowledge, past_memory, artifacts, session_recent,
-            lessons=lessons, episodes=episodes, mesh_block=mesh_block,
+        from .context_assembler import AssembleRequest, ContextAssembler
+        assembler = ContextAssembler(self.memory, self.mem0)
+        req = AssembleRequest(
+            user_message=user_message,
+            session_id=session_id,
+            retrieval_query=retrieval_query,
+            expect_json=expect_json,
+            for_self=for_self,
+            persona=self.persona,
         )
-        try:
-            from .preferences import format_block as _pref_block
-            _prefs = _pref_block()
-            if _prefs:
-                injected = _prefs + ("\n\n" + injected if injected else "")
-        except Exception as _mem_exc:
-            log.debug("preference inject skipped: %s", _mem_exc)
-
-        # Inject unread Agent Inbox messages (Replit Agent → Daedalus)
-        inbox_block = ""
-        try:
-            from .planner import get_unread_inbox_for_prompt
-            inbox_block = await get_unread_inbox_for_prompt()
-        except Exception as exc:
-            log.debug("inbox inject failed (non-fatal): %s", exc)
-
-        # ─── NAVIGATOR (Phase 3): Haiku pre-flight briefing ─────────────────
-        # Compresses the user's request + retrieved memory into a focused
-        # briefing that prepends Sonnet's context. Never blocks the request —
-        # any failure falls back to running Sonnet alone with full context.
-        briefing_block = ""
-        briefing_dict: dict[str, Any] | None = None
-        try:
-            # Live status: navigator фаза (преди да обвием Sonnet с reasoning)
-            try:
-                from .stream import set_live as _nav_set_live
-                _nav_set_live(session_id, "navigator", 0,
-                              "Haiku подготвя маршрут…")
-            except Exception:
-                pass
-            from .navigator import navigate, preflight_feasibility
-            briefing = await navigate(
-                user_message,
-                lessons=lessons,
-                episodes=episodes,
-                session_recent=session_recent,
-            )
-            # T10 — augment briefing.hint with feasibility red-flags BEFORE
-            # serialising to prompt block, so Sonnet sees them inline with
-            # the normal navigator hint.
-            try:
-                _preflight_hint = preflight_feasibility(user_message, briefing)
-                if _preflight_hint:
-                    _merged = (
-                        (briefing.hint or "").strip() + " · " + _preflight_hint
-                    ).strip(" ·")
-                    # Briefing.hint contract: ≤ 300 chars (see navigator_vocab)
-                    briefing.hint = _merged[:300]
-                    log.info("preflight: session=%s flags=%s",
-                             session_id[:10], _preflight_hint[:160])
-            except Exception as _pf_exc:
-                log.debug("preflight skipped: %s", _pf_exc)
-            briefing_block = briefing.to_prompt_block()
-            briefing_dict = briefing.to_dict()
-        except Exception as exc:
-            log.debug("navigator failed (non-fatal): %s", exc)
-
-        # ── Conversation mode gate (talk / build / auto) ────────────────────
-        # talk  → ALWAYS route to the chat model (pure conversation, no markers)
-        # build → NEVER short-circuit to chat (run the full agent loop so Дедал acts)
-        # auto  → defer to the Navigator's intent classification (original behaviour)
-        try:
-            _conv_mode = _mode.get_mode()
-        except Exception:
-            _conv_mode = "auto"
+        retrieved = await assembler.retrieve(req)
+        user_message = retrieved.user_message
+        knowledge = retrieved.knowledge
+        past_memory = retrieved.past_memory
+        artifacts = retrieved.artifacts
+        session_recent = retrieved.session_recent
+        lessons = retrieved.lessons
+        episodes = retrieved.episodes
+        mesh_block = retrieved.mesh_block
+        briefing_dict = retrieved.briefing_dict
+        _conv_mode = retrieved.conv_mode
         from .playground_agent_routing import (
             is_playground_work_session,
             treat_as_conversational,
@@ -1448,122 +1273,9 @@ class Daedalus:
             except Exception as _cr_exc:
                 log.debug("cost-aware route failed (falling back to Sonnet): %s", _cr_exc)
 
-        # Compose final user content — briefing goes FIRST so Sonnet sees the
-        # focus before the raw memory dump.
-        parts: list[str] = []
-        if briefing_block:
-            parts.append(briefing_block)
-        # Progressive disclosure: catalog + at most one SKILL.md body.
-        try:
-            from .learned_skills import disclose as _disclose
-            _intent_for_skills = (briefing_dict or {}).get("intent", "") if briefing_dict else ""
-            _hint_for_skills = (briefing_dict or {}).get("hint", "") if briefing_dict else ""
-            _skill_names = select_skills(user_message, _intent_for_skills, _hint_for_skills)
-            try:
-                from .game_engineer import extra_skill_ids, prefer_skill_id
-                _skill_names = list(dict.fromkeys(
-                    list(_skill_names) + extra_skill_ids(
-                        user_message, _intent_for_skills, _hint_for_skills,
-                    )
-                ))
-                _prefer = prefer_skill_id(user_message, intent=_intent_for_skills)
-            except Exception:
-                _prefer = None
-            _pin_ids: list[str] = []
-            try:
-                from .session_context import current as _turn_now
-                _pack = _turn_now()
-                if _pack:
-                    _pin_ids = list(_pack.skill_ids)
-            except Exception:
-                _pack = None
-            _skill_block = _disclose(
-                user_message, extra_ids=_skill_names, prefer_id=_prefer, pin_ids=_pin_ids,
-            )
-            if _skill_block:
-                parts.append(_skill_block)
-                log.info("skills disclosed: %s pins=%s (session=%s)", _skill_names, _pin_ids, session_id[:10])
-            if _pack and _pack.mcp_ids:
-                from .session_context import mcp_prompt_block as _mcp_block
-                _mb = _mcp_block(_pack.mcp_ids)
-                if _mb:
-                    parts.append(_mb)
-        except Exception as _sk_exc:
-            log.debug("skill injection skipped: %s", _sk_exc)
-        if injected:
-            parts.append(injected)
-        if inbox_block:
-            parts.append(inbox_block)
-        if _compaction_block:
-            parts.append(_compaction_block)
-        # Phase 3 — session branch lineage
-        try:
-            _branch_block = build_branch_context_block(session_id)
-            if _branch_block:
-                parts.append(_branch_block)
-        except Exception as _br_exc:
-            log.debug("branch context skipped: %s", _br_exc)
-
-        # ── PROJECT AWARENESS (read-only snapshot injected at session start) ──
-        # Gives Дедал situational context without prompting: playground state,
-        # error patterns, pending tasks. Rule: awareness ≠ action.
-        try:
-            from .awareness import build_project_awareness as _bpa
-            _awareness = await _bpa(session_id=session_id)
-            if _awareness:
-                parts.append(_awareness)
-        except Exception as _aw_exc:
-            log.debug("awareness injection skipped: %s", _aw_exc)
-
-        if parts:
-            user_content = "\n\n".join(parts) + f"\n\n━━━ NEW REQUEST FROM OWNER ━━━\n{user_message}"
-        else:
-            user_content = user_message
-
-        # [Phase 17A] DoD injection — за coding задачи инжектираме checklist
-        try:
-            _dod_intent = (briefing_dict or {}).get("intent", "") if briefing_dict else ""
-            if _dod.is_coding_task(user_message, _dod_intent):
-                user_content = user_content + "\n\n" + _dod.generate_dod_block(user_message, _dod_intent)
-        except Exception as _dod_exc:
-            log.debug("DoD injection skipped: %s", _dod_exc)
-
-        try:
-            from .game_engineer import prompt_block as _eng_block
-            _eng_intent = (briefing_dict or {}).get("intent", "") if briefing_dict else ""
-            _eng = _eng_block(user_message, intent=_eng_intent)
-            if _eng:
-                user_content = user_content + "\n\n" + _eng
-        except Exception as _eng_exc:
-            log.debug("game engineer contract skipped: %s", _eng_exc)
-
-        # [Phase 17B] Task state injection — ако има активна cross-session задача
-        try:
-            _ts_block = _task_state.get_context_block()
-            if _ts_block:
-                user_content = _ts_block + "\n\n" + user_content
-        except Exception as _ts_exc:
-            log.debug("task-state injection skipped: %s", _ts_exc)
-
-        try:
-            from .job_ledger import format_session_block as _job_block
-            _jb = _job_block(session_id or "")
-            if _jb:
-                user_content = _jb + "\n\n" + user_content
-        except Exception as _jb_exc:
-            log.debug("job ledger injection skipped: %s", _jb_exc)
-
-        # Inject continuity context into system prompt (per-request, always fresh)
-        # [Playground Isolation] session_id filters tasks/digests to this project only
-        _continuity_block = _continuity.build_continuity_context(session_id=session_id)
-        _call_persona = (self.persona + "\n\n" + _continuity_block) if _continuity_block else self.persona
-        # Inject the active conversation mode so Дедал knows whether to talk or act.
-        try:
-            _mode_block = _mode.build_mode_context(_conv_mode)
-            if _mode_block:
-                _call_persona = _call_persona + "\n\n" + _mode_block
-        except Exception:
-            pass
+        assembled = await assembler.compose(req, retrieved)
+        user_content = assembled.user_content
+        _call_persona = assembled.system_prompt
 
         # Trigger yesterday's digest generation in background (non-blocking)
         try:
