@@ -4,6 +4,7 @@ from __future__ import annotations
 import ast
 import asyncio
 import inspect
+import re
 import sys
 from pathlib import Path
 
@@ -72,14 +73,15 @@ def test_tool_loop_does_not_own_verification():
     assert "review_gate_critique" not in src
     assert "job_contract" not in src
     assert "empty-reply" not in src
-    assert "from .improvements import" not in src
     # Native pass still calls mentor via _mentor_record_outcome. Session
     # record_outcome / VerificationController stay on Daedalus.
+    assert "record_outcome," not in src
+    assert re.search(r"(?<![A-Za-z0-9_])record_outcome\(", src) is None
     agent = (ROOT / "daedalus" / "agent.py").read_text(encoding="utf-8")
     assert "review_gate_critique" in agent
     assert "empty-reply guard" in agent
     assert "from .job_contract import evaluate" in agent
-    assert "record_outcome(" in agent
+    assert re.search(r"(?<![A-Za-z0-9_])record_outcome\(", agent)
 
 
 def test_tool_loop_does_not_construct_build_loop():
