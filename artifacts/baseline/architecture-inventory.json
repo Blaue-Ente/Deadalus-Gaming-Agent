@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-11T20:23:24.637016+00:00",
+  "generated_at": "2026-09-11T23:10:13.447016+00:00",
   "package_version": "0.3.8",
-  "git_commit": "b24fe61ad717485939bfba90f5bb23644a746b67",
+  "git_commit": "f07533657e76c9aa0b1b29cbe93e8077ac5a942c",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -9,8 +9,8 @@
   "hotspots": [
     {
       "path": "daedalus/agent.py",
-      "lines": 4130,
-      "broad_excepts": 138
+      "lines": 4136,
+      "broad_excepts": 130
     },
     {
       "path": "app/admin_compat.py",
@@ -20,7 +20,7 @@
     {
       "path": "daedalus/native_tools.py",
       "lines": 2050,
-      "broad_excepts": 20
+      "broad_excepts": 11
     },
     {
       "path": "daedalus/identity.py",
@@ -62,7 +62,8 @@
     "tdd_loop": "daedalus/tdd_loop.py",
     "autopilot": "daedalus/kernel/full_autopilot.py",
     "builder_runtime": "daedalus/builder_runtime.py",
-    "tool_loop": "daedalus/tool_loop.py"
+    "tool_loop": "daedalus/tool_loop.py",
+    "verification_controller": "daedalus/verification_controller.py"
   },
   "native_tools": [
     "read_file",
@@ -131,8 +132,8 @@
     ]
   },
   "tests": {
-    "modules": 67,
-    "functions": 819
+    "modules": 68,
+    "functions": 841
   },
   "modules": {
     "daedalus": [
@@ -176,6 +177,16 @@
       "daedalus/context_assembler.py",
       "daedalus/context_compaction.py",
       "daedalus/continuity.py",
+      "daedalus/contracts/__init__.py",
+      "daedalus/contracts/_base.py",
+      "daedalus/contracts/artifacts.py",
+      "daedalus/contracts/errors.py",
+      "daedalus/contracts/events.py",
+      "daedalus/contracts/evidence.py",
+      "daedalus/contracts/permissions.py",
+      "daedalus/contracts/plan.py",
+      "daedalus/contracts/run.py",
+      "daedalus/contracts/tools.py",
       "daedalus/daedalus_mesh.py",
       "daedalus/daedalusignore.py",
       "daedalus/dissection.py",
@@ -185,6 +196,7 @@
       "daedalus/engine_runners.py",
       "daedalus/engine_session.py",
       "daedalus/error_brain.py",
+      "daedalus/event_log.py",
       "daedalus/evolution.py",
       "daedalus/expo_platform_guide.py",
       "daedalus/game_agent_bench.py",
@@ -340,6 +352,7 @@
       "daedalus/rejection_lessons.py",
       "daedalus/run_budget.py",
       "daedalus/run_engine.py",
+      "daedalus/run_state.py",
       "daedalus/sandbox.py",
       "daedalus/scratch_journal.py",
       "daedalus/self_improve.py",
@@ -350,6 +363,7 @@
       "daedalus/skill_acquisition.py",
       "daedalus/skill_catalog.py",
       "daedalus/spatial.py",
+      "daedalus/stage_machine.py",
       "daedalus/standalone_boot.py",
       "daedalus/steering_queue.py",
       "daedalus/store.py",
@@ -360,16 +374,19 @@
       "daedalus/task_playbooks.py",
       "daedalus/task_state.py",
       "daedalus/tdd_loop.py",
+      "daedalus/tool_adapt.py",
       "daedalus/tool_catalog.py",
       "daedalus/tool_dumps.py",
       "daedalus/tool_loop.py",
       "daedalus/tool_parser.py",
       "daedalus/tool_protocol.py",
+      "daedalus/tool_registry.py",
       "daedalus/tool_router.py",
       "daedalus/tools.py",
       "daedalus/unity_platform_guide.py",
       "daedalus/unity_runtime.py",
       "daedalus/upgrade_pool_scanner.py",
+      "daedalus/verification_controller.py",
       "daedalus/visual_proof.py",
       "daedalus/web_first.py",
       "daedalus/web_search_standalone.py",
