@@ -1,0 +1,131 @@
+{
+  "ok": true,
+  "passed": 15,
+  "total": 15,
+  "failed": [],
+  "cases": [
+    {
+      "id": "skip_is_not_ok",
+      "ok": true,
+      "detail": "skipped browser is not evidence; N/A may still pass",
+      "ms": 9
+    },
+    {
+      "id": "ship_is_not_store",
+      "ok": true,
+      "detail": "racer ship mesh is not a store claim",
+      "ms": 0
+    },
+    {
+      "id": "empty_world_not_campaign",
+      "ok": true,
+      "detail": "map has no regions; no quests — world/quests.json is empty; no dialogue graphs — characters/*.dialogue.json missing",
+      "ms": 0
+    },
+    {
+      "id": "empty_systems_not_production",
+      "ok": true,
+      "detail": "empty systems map is not a production layer",
+      "ms": 0
+    },
+    {
+      "id": "unity_without_editor_honest",
+      "ok": true,
+      "detail": "No Unity Editor in this cloud. Set UNITY_PATH for batchmode or DAEDALUS_UNITY_MCP for a local Editor MCP. Scaffold is not Play. We do not vendor Unity.",
+      "ms": 4
+    },
+    {
+      "id": "explorer_cannot_write",
+      "ok": true,
+      "detail": "explorer/verify are read-only; coder may write",
+      "ms": 2
+    },
+    {
+      "id": "native_tools_present",
+      "ok": true,
+      "detail": "native tools: assets, engine, game_canon, game_lint, math3d, production, profiler, skill, spatial, world",
+      "ms": 0
+    },
+    {
+      "id": "assets_coder_only",
+      "ok": true,
+      "detail": "assets is coder-only (writes files)",
+      "ms": 0
+    },
+    {
+      "id": "skill_cannot_self_approve",
+      "ok": true,
+      "detail": "Owner Approve in Studio. The agent cannot approve itself.",
+      "ms": 3
+    },
+    {
+      "id": "racing_gates_not_blocking",
+      "ok": true,
+      "detail": "guided racing gates warn, they do not block",
+      "ms": 3
+    },
+    {
+      "id": "gates_wired",
+      "ok": true,
+      "detail": "all honesty flags are True",
+      "ms": 0
+    },
+    {
+      "id": "quality_default_on",
+      "ok": true,
+      "detail": "quality critic on unless DAEDALUS_QUALITY=0",
+      "ms": 0
+    },
+    {
+      "id": "persona_compact",
+      "ok": true,
+      "detail": "standalone persona 11472 chars / 193 newlines",
+      "ms": 0
+    },
+    {
+      "id": "one_builder",
+      "ok": true,
+      "detail": "Studio/API/light map to full_autopilot",
+      "ms": 0
+    },
+    {
+      "id": "not_vendor_bakeoff",
+      "ok": true,
+      "detail": "suite measures this harness; not a competitor table",
+      "ms": 0
+    }
+  ],
+  "ms": 25,
+  "gates": {
+    "ok": true,
+    "allowed": true,
+    "missing": [],
+    "gates": {
+      "owner_token": true,
+      "typed_tool_protocol": true,
+      "atomic_model_router": true,
+      "durable_run_log": true,
+      "skip_is_not_ok": true,
+      "one_builder_pipeline": true,
+      "quality_gate_default_on": true,
+      "playwright_gameplay": true,
+      "world_kit_runtime": true,
+      "godot_headless_required": true,
+      "unity_runner": true,
+      "asset_pipeline": true,
+      "asset_pipeline_v2": true,
+      "skill_memory_approve": true,
+      "production_layer": true,
+      "unity_mcp_or_honest": true,
+      "honesty_suite": true,
+      "ci_ruff": true,
+      "uv_lock": true
+    },
+    "note": "Gates are wired. The suite runs in-process honesty checks against this harness. This repo still does not ship a vendor bake-off. A skipped browser check is not a playtest.",
+    "bake_off": false,
+    "suite": "python -m daedalus.game_agent_bench"
+  },
+  "note": "Gates are wired. The suite runs in-process honesty checks against this harness. This repo still does not ship a vendor bake-off. A skipped browser check is not a playtest.",
+  "bake_off": false,
+  "at": "2026-09-11T20:22:30.260976+00:00"
+}
