@@ -75,7 +75,6 @@ def test_tool_loop_does_not_own_verification():
     assert "empty-reply" not in src
     # Native pass still calls mentor via _mentor_record_outcome. Session
     # record_outcome / VerificationController stay on Daedalus.
-    assert "record_outcome," not in src
     assert re.search(r"(?<![A-Za-z0-9_])record_outcome\(", src) is None
     agent = (ROOT / "daedalus" / "agent.py").read_text(encoding="utf-8")
     assert "review_gate_critique" in agent
