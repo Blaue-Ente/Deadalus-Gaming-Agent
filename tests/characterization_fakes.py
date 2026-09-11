@@ -32,6 +32,12 @@ class FakeMemory:
     def __init__(self) -> None:
         self.turns: list[tuple[str, str, str]] = []
         self.discoveries: list[dict[str, Any]] = []
+        self.global_col = SimpleNamespace(count=lambda: 0)
+        self.sessions_col = SimpleNamespace(count=lambda: 0)
+        self.artifacts_col = SimpleNamespace(count=lambda: 0)
+        self.lessons_col = SimpleNamespace(count=lambda: 0)
+        self.episodes_col = SimpleNamespace(count=lambda: 0)
+        self.discoveries_col = SimpleNamespace(count=lambda: 0)
 
     def find_similar_artifacts(self, *_a, **_k) -> list:
         return []

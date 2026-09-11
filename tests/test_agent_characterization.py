@@ -167,6 +167,37 @@ def test_build_context_need_read_then_final_reply(char_env, monkeypatch):
 
 
 def test_build_context_tool_reroll_failure_appends_fallback(char_env, monkeypatch):
+    async def _ws(*_a, **_k):
+        return {"result_count": 0, "results": []}
+
+    monkeypatch.setattr("daedalus.outbox.check_permission", lambda *_a, **_k: True)
+    monkeypatch.setattr("daedalus.agent.web_search_tool", _ws)
+    agent = bare_daedalus()
+    _patch_claude(
+        monkeypatch,
+        ScriptedClaude(
+            [
+                "<NEED_WEB: characterization query>",
+                RuntimeError("llm down"),
+            ]
+        ),
+    )
+    raw, _summary = asyncio.run(
+        agent._build_context_and_call(
+            # Avoid "please" — playground.mobile keywords include "eas".
+            user_message="Find facts about characterization topic immediately.",
+            session_id="chat-reroll",
+        )
+    )
+    assert "follow-up call failed" in raw
+    assert "llm down" in raw
+    assert "web_search" in raw
+
+
+def test_build_context_reroll_fallback_keyerror_when_rows_lack_query(
+    char_env, monkeypatch
+):
+    """Current hole: fallback formats every tool row as query/result_count."""
     agent = bare_daedalus()
     _patch_claude(
         monkeypatch,
@@ -177,14 +208,13 @@ def test_build_context_tool_reroll_failure_appends_fallback(char_env, monkeypatc
             ]
         ),
     )
-    raw, _summary = asyncio.run(
-        agent._build_context_and_call(
-            user_message="please read tests/conftest.py",
-            session_id=PLAYGROUND_SID,
+    with pytest.raises(KeyError, match="query"):
+        asyncio.run(
+            agent._build_context_and_call(
+                user_message="please read tests/conftest.py",
+                session_id=PLAYGROUND_SID,
+            )
         )
-    )
-    assert "follow-up call failed" in raw
-    assert "llm down" in raw
 
 
 def test_build_context_native_pass_attaches_loop_summary(char_env, monkeypatch):

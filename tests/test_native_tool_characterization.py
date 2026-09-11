@@ -91,6 +91,7 @@ def test_offline_denies_web_search(char_env, monkeypatch):
         return {"results": []}
 
     monkeypatch.setenv("DAEDALUS_OFFLINE", "1")
+    monkeypatch.setattr("daedalus.outbox.check_permission", lambda *_a, **_k: True)
     monkeypatch.setattr("daedalus.tools.web_search_tool", _ws)
     text = _exec("web_search", {"query": "x"})
     assert "OFFLINE KIT" in text
