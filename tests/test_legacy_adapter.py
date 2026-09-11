@@ -95,7 +95,10 @@ class FakeAgent:
         if self.exc is not None:
             raise self.exc
         out = dict(self.payload)
-        out.setdefault("session_id", kwargs.get("session_id") or "chat-fake")
+        if kwargs.get("session_id"):
+            out["session_id"] = kwargs["session_id"]
+        else:
+            out.setdefault("session_id", "chat-fake")
         return out
 
 
@@ -185,11 +188,12 @@ def test_tool_row_emits_tool_event_and_implement(char_env, monkeypatch):
     assert reads
     assert result.stage is RunStage.IMPLEMENT
     tools = [ev for ev in result.events if _kind(ev) == EventKind.TOOL.value]
-    assert tools and tools[0].data.get("tool") == "read_file"
+    read_ev = next((ev for ev in tools if ev.data.get("tool") == "read_file"), None)
+    assert read_ev is not None
     if "ok" in reads[0]:
-        assert tools[0].data.get("ok") == reads[0]["ok"]
+        assert read_ev.data.get("ok") == reads[0]["ok"]
     else:
-        assert "ok" not in tools[0].data
+        assert "ok" not in read_ev.data
     assert peek_stage(result.events) is RunStage.IMPLEMENT
     assert len(script.calls) >= 2
 
