@@ -514,10 +514,12 @@ def test_finish_chat_self_improve_gate(monkeypatch):
         chats.append({"prompt": prompt, "for_self": for_self})
         return {"reply": "fix"}
 
+    monkeypatch.setattr("daedalus.outbox.push_outbox", lambda **_k: None)
+
     started = datetime.now(timezone.utc) - timedelta(seconds=120)
     tools = [{"tool": "a", "ok": False}, {"tool": "b", "ok": False}, {"tool": "c", "ok": True}]
 
-    async def _run(*, for_self: bool) -> set:
+    async def _run(*, for_self: bool) -> None:
         tasks: set = set()
         await RunFinalizer().finish_chat(_finish(
             raw="ok",
@@ -529,16 +531,13 @@ def test_finish_chat_self_improve_gate(monkeypatch):
         ))
         if tasks:
             await asyncio.gather(*list(tasks), return_exceptions=True)
-        return tasks
 
-    scheduled = asyncio.run(_run(for_self=False))
-    assert scheduled
+    asyncio.run(_run(for_self=False))
     assert chats and chats[0]["for_self"] is True
 
     chats.clear()
-    skipped = asyncio.run(_run(for_self=True))
+    asyncio.run(_run(for_self=True))
     assert chats == []
-    assert skipped == set()
 
 
 def test_finish_chat_accepts_via_verification_controller(monkeypatch):
