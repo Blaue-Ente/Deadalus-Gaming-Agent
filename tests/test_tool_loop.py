@@ -72,11 +72,14 @@ def test_tool_loop_does_not_own_verification():
     assert "review_gate_critique" not in src
     assert "job_contract" not in src
     assert "empty-reply" not in src
-    assert "record_outcome" not in src
+    assert "from .improvements import" not in src
+    # Native pass still calls mentor via _mentor_record_outcome. Session
+    # record_outcome / VerificationController stay on Daedalus.
     agent = (ROOT / "daedalus" / "agent.py").read_text(encoding="utf-8")
     assert "review_gate_critique" in agent
     assert "empty-reply guard" in agent
     assert "from .job_contract import evaluate" in agent
+    assert "record_outcome(" in agent
 
 
 def test_tool_loop_does_not_construct_build_loop():
