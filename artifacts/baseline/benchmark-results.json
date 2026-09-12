@@ -95,7 +95,7 @@
       "ms": 0
     }
   ],
-  "ms": 25,
+  "ms": 26,
   "gates": {
     "ok": true,
     "allowed": true,
@@ -127,5 +127,5 @@
   },
   "note": "Gates are wired. The suite runs in-process honesty checks against this harness. This repo still does not ship a vendor bake-off. A skipped browser check is not a playtest.",
   "bake_off": false,
-  "at": "2026-09-12T00:07:30.966296+00:00"
+  "at": "2026-09-12T00:20:55.411224+00:00"
 }

@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-12T00:07:31.498405+00:00",
+  "generated_at": "2026-09-12T00:20:55.932282+00:00",
   "package_version": "0.3.8",
-  "git_commit": "9aa65ad924bd062bf53ecfdb84679400341097ab",
+  "git_commit": "96c3917c5b13f0a2f0b9178a38c816d2f0622c49",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -19,7 +19,7 @@
     },
     {
       "path": "daedalus/native_tools.py",
-      "lines": 2050,
+      "lines": 2051,
       "broad_excepts": 11
     },
     {
@@ -133,8 +133,8 @@
     ]
   },
   "tests": {
-    "modules": 72,
-    "functions": 915
+    "modules": 73,
+    "functions": 935
   },
   "modules": {
     "daedalus": [
@@ -258,6 +258,7 @@
       "daedalus/machine_profile.py",
       "daedalus/math3d.py",
       "daedalus/mcp_client.py",
+      "daedalus/mcp_policy.py",
       "daedalus/memory.py",
       "daedalus/memory_mem0.py",
       "daedalus/mentor.py",
