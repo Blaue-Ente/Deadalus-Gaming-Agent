@@ -5,6 +5,9 @@ Cwd is jailed to product / playground / data. Secrets are stripped from the
 child environment. This is **not** a container: a child ``python`` can still
 open host paths. Public bind disables the runner unless
 ``DAEDALUS_SHELL_ISOLATION=1``.
+
+``run_command(str, …)`` is the adapter entry. Structured form is
+``CommandRequest``; ``execute_command`` holds the host subprocess body.
 """
 from __future__ import annotations
 
@@ -17,6 +20,8 @@ import subprocess
 import time
 from pathlib import Path
 from typing import Any
+
+from daedalus.contracts.commands import CommandRequest, CommandResult
 
 from .paths import data_root, playground_projects_dir, product_root
 
@@ -212,39 +217,48 @@ def history(limit: int = 40) -> list[dict[str, Any]]:
     return rows
 
 
-def _fail(
+def _fail_result(
     command: str,
     reason: str,
     *,
     cwd: str = "",
     disabled: bool = False,
     elapsed_ms: int = 0,
-) -> dict[str, Any]:
-    return {
-        "ok": False,
-        "blocked": True,
-        "disabled": disabled,
-        "error": reason,
-        "command": command,
-        "stdout": "",
-        "stderr": "",
-        "exit_code": 126,
-        "cwd": cwd,
-        "elapsed_ms": elapsed_ms,
-    }
+) -> CommandResult:
+    return CommandResult(
+        ok=False,
+        blocked=True,
+        disabled=disabled,
+        error=reason,
+        command=command,
+        stdout="",
+        stderr="",
+        exit_code=126,
+        cwd=cwd,
+        elapsed_ms=elapsed_ms,
+    )
 
 
-def run_command(
-    command: str,
-    *,
-    cwd: str | None = None,
-    slug: str = "",
-    timeout: int | None = None,
-) -> dict[str, Any]:
-    """Run ``command`` as argv (or legacy shell if opted in) inside the cwd jail."""
+def _command_text(req: CommandRequest) -> str:
+    if req.raw_command:
+        return req.raw_command
+    parts = ((req.executable,) if req.executable else ()) + tuple(req.arguments)
+    if not parts:
+        return ""
+    return shlex.join(parts)
+
+
+def execute_command(req: CommandRequest) -> CommandResult:
+    """Host subprocess body. P0.17 replaces this with ExecutionBackend.run."""
+    from daedalus.command_adapt import result_from_legacy
+
+    command = _command_text(req)
+    cwd = req.cwd or None
+    slug = req.slug
+    timeout = req.timeout_s
     t0 = time.perf_counter()
     if not shell_enabled():
-        return _fail(
+        return _fail_result(
             command,
             "shell disabled: public bind requires DAEDALUS_SHELL_ISOLATION=1",
             disabled=True,
@@ -256,11 +270,11 @@ def run_command(
         effective = peeled
     reason = _blocked(effective)
     if reason:
-        return _fail(command, reason)
+        return _fail_result(command, reason)
     try:
         workdir = resolve_cwd(cwd, slug=slug)
     except ValueError as exc:
-        return _fail(command, str(exc), cwd=cwd or "")
+        return _fail_result(command, str(exc), cwd=cwd or "")
 
     timeout_s = DEFAULT_TIMEOUT_S if timeout is None else int(timeout)
     if timeout is None and _PKG_HEAD.match(effective.strip()):
@@ -272,9 +286,11 @@ def run_command(
         try:
             argv = shlex.split(effective, posix=True)
         except ValueError as exc:
-            return _fail(command, f"could not parse command: {exc}", cwd=str(workdir))
+            return _fail_result(
+                command, f"could not parse command: {exc}", cwd=str(workdir),
+            )
         if not argv:
-            return _fail(command, "empty command", cwd=str(workdir))
+            return _fail_result(command, "empty command", cwd=str(workdir))
     try:
         proc = subprocess.run(
             effective if use_shell else argv,
@@ -287,7 +303,7 @@ def run_command(
         )
         stdout = (proc.stdout or "")[:MAX_OUTPUT_CHARS]
         stderr = (proc.stderr or "")[:MAX_OUTPUT_CHARS]
-        row = {
+        row: dict[str, Any] = {
             "ok": proc.returncode == 0,
             "blocked": False,
             "disabled": False,
@@ -334,4 +350,18 @@ def run_command(
         "exit_code": row.get("exit_code"),
         "elapsed_ms": row.get("elapsed_ms"),
     })
-    return row
+    return result_from_legacy(row)
+
+
+def run_command(
+    command: str,
+    *,
+    cwd: str | None = None,
+    slug: str = "",
+    timeout: int | None = None,
+) -> dict[str, Any]:
+    """Run ``command`` as argv (or legacy shell if opted in) inside the cwd jail."""
+    from daedalus.command_adapt import request_from_legacy, result_to_legacy
+
+    req = request_from_legacy(command, cwd=cwd, slug=slug, timeout=timeout)
+    return result_to_legacy(execute_command(req))
