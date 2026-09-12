@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-11T23:43:05.149334+00:00",
+  "generated_at": "2026-09-11T23:54:13.631866+00:00",
   "package_version": "0.3.8",
-  "git_commit": "fb014ced2cc2584c19740780506d763aabc37fa5",
+  "git_commit": "f2d7cee0e82a4d625c10dc6c4b8dd0c87c3914be",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -133,8 +133,8 @@
     ]
   },
   "tests": {
-    "modules": 70,
-    "functions": 881
+    "modules": 71,
+    "functions": 896
   },
   "modules": {
     "daedalus": [
@@ -201,6 +201,7 @@
       "daedalus/error_brain.py",
       "daedalus/event_log.py",
       "daedalus/evolution.py",
+      "daedalus/execution_backends.py",
       "daedalus/expo_platform_guide.py",
       "daedalus/game_agent_bench.py",
       "daedalus/game_build_contract.py",
