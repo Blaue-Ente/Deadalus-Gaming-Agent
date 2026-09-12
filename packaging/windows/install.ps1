@@ -84,7 +84,7 @@ function Resolve-Python {
     }
     $sys = Find-SystemPython
     if ($sys) { return $sys }
-    Write-Host "No Python 3.11+ on PATH — installing a private CPython for Daedalus (not added to PATH)."
+    Write-Host "No Python 3.11+ on PATH - installing a private CPython for Daedalus (not added to PATH)."
     Install-DaedalusBundledPython -RuntimeRoot (Join-Path $Root "runtime") -RedistDir (Join-Path $PSScriptRoot "redist")
     return @{ Exe = $bundledExe; Args = @() }
 }
@@ -103,31 +103,33 @@ function Write-CmdAndVbs([string] $Root) {
     $vbsPath = Join-Path $Root "Daedalus.vbs"
     $pyw = Join-Path $Root ".venv\Scripts\pythonw.exe"
     $py = Join-Path $Root ".venv\Scripts\python.exe"
-    @"
-@echo off
-setlocal
-cd /d "%~dp0"
-set DAEDALUS_STANDALONE=1
-set DAEDALUS_WINDOWS_APP=1
-set DAEDALUS_DATA=%LOCALAPPDATA%\Daedalus
-set DAEDALUS_PLAYGROUND=%LOCALAPPDATA%\Daedalus\playground
-set HOST=127.0.0.1
-set PORT=8787
-"$py" -m app.cli desktop
-"@ | Set-Content -Encoding ASCII -Path $cmdPath
-    $vbs = @"
-Set sh = CreateObject("WScript.Shell")
-sh.CurrentDirectory = "$Root"
-sh.Run """$pyw"" -m app.cli desktop", 0, False
-"@
-    $vbs | Set-Content -Encoding ASCII -Path $vbsPath
+    # PS 5.1 here-strings must start at column 0; use line arrays instead.
+    $cmdLines = @(
+        '@echo off'
+        'setlocal'
+        'cd /d "%~dp0"'
+        'set DAEDALUS_STANDALONE=1'
+        'set DAEDALUS_WINDOWS_APP=1'
+        'set DAEDALUS_DATA=%LOCALAPPDATA%\Daedalus'
+        'set DAEDALUS_PLAYGROUND=%LOCALAPPDATA%\Daedalus\playground'
+        'set HOST=127.0.0.1'
+        'set PORT=8787'
+        "`"$py`" -m app.cli desktop"
+    )
+    ($cmdLines -join "`r`n") | Set-Content -Encoding ASCII -Path $cmdPath
+    $vbsLines = @(
+        'Set sh = CreateObject("WScript.Shell")'
+        "sh.CurrentDirectory = `"$Root`""
+        "sh.Run `"`"`"$pyw`"`" -m app.cli desktop`", 0, False"
+    )
+    ($vbsLines -join "`r`n") | Set-Content -Encoding ASCII -Path $vbsPath
 }
 
 function Write-DaedalusExe([string] $Root) {
     $cs = Join-Path $PSScriptRoot "DaedalusLauncher.cs"
     $out = Join-Path $Root "Daedalus.exe"
     if (-not (Test-Path $cs)) {
-        Write-Host "Launcher source missing ($cs) — Start Menu will use Daedalus.vbs." -ForegroundColor Yellow
+        Write-Host "Launcher source missing ($cs) - Start Menu will use Daedalus.vbs." -ForegroundColor Yellow
         return $false
     }
     $code = Get-Content -Raw -Encoding UTF8 $cs
@@ -160,7 +162,7 @@ function New-DaedalusShortcut([string] $LinkPath, [string] $Target) {
     $s.TargetPath = $Target
     $s.WorkingDirectory = $InstallRoot
     $s.WindowStyle = 7
-    $s.Description = "$DisplayName — coding agent (Studio)"
+    $s.Description = "$DisplayName - coding agent (Studio)"
     $iconIco = Join-Path $InstallRoot "packaging\windows\daedalus.ico"
     if (-not (Test-Path $iconIco)) {
         $iconIco = Join-Path $InstallRoot "app\static\favicon.ico"
@@ -171,7 +173,7 @@ function New-DaedalusShortcut([string] $LinkPath, [string] $Target) {
     $s.Save()
 }
 
-Write-Host "=== $DisplayName — Windows install ==="
+Write-Host "=== $DisplayName - Windows install ==="
 if ($InPlace) {
     $InstallRoot = $RepoRoot
 }
@@ -188,7 +190,7 @@ $envExample = Join-Path $InstallRoot ".env.example"
 $envTarget = Join-Path $DataRoot ".env"
 if ((Test-Path $envExample) -and -not (Test-Path $envTarget)) {
     Copy-Item $envExample $envTarget
-    Write-Host "Created $envTarget — add an API key or use Ollama."
+    Write-Host "Created $envTarget - add an API key or use Ollama."
 }
 
 $venv = Join-Path $InstallRoot ".venv"
@@ -212,7 +214,7 @@ finally {
     Pop-Location
 }
 if (-not $guiOk) {
-    Write-Host "pywebview did not install — Tk or the browser will be used." -ForegroundColor Yellow
+    Write-Host "pywebview did not install - Tk or the browser will be used." -ForegroundColor Yellow
 }
 
 Write-CmdAndVbs -Root $InstallRoot
@@ -226,7 +228,7 @@ $exeOk = Write-DaedalusExe -Root $InstallRoot
 $launch = Join-Path $InstallRoot "Daedalus.exe"
 if (-not $exeOk) {
     $launch = Join-Path $InstallRoot "Daedalus.vbs"
-    Write-Host "Daedalus.exe was not built — shortcuts point at Daedalus.vbs." -ForegroundColor Yellow
+    Write-Host "Daedalus.exe was not built - shortcuts point at Daedalus.vbs." -ForegroundColor Yellow
 }
 
 $startMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
@@ -252,7 +254,7 @@ New-ItemProperty -Path $reg -Name "UninstallString" -Value $uninst -Force | Out-
 New-ItemProperty -Path $reg -Name "DisplayIcon" -Value $launch -Force | Out-Null
 
 Write-Host ""
-Write-Host "Done. Start: Start Menu → $DisplayName"
+Write-Host "Done. Start: Start Menu -> $DisplayName"
 if (Test-Path (Join-Path $InstallRoot "Daedalus.exe")) {
     Write-Host "Launcher: $InstallRoot\Daedalus.exe"
 }
