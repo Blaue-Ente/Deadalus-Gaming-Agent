@@ -133,8 +133,8 @@
     ]
   },
   "tests": {
-    "modules": 78,
-    "functions": 1034
+    "modules": 79,
+    "functions": 1048
   },
   "modules": {
     "daedalus": [
@@ -191,6 +191,7 @@
       "daedalus/contracts/errors.py",
       "daedalus/contracts/events.py",
       "daedalus/contracts/evidence.py",
+      "daedalus/contracts/memory.py",
       "daedalus/contracts/permissions.py",
       "daedalus/contracts/plan.py",
       "daedalus/contracts/run.py",
@@ -268,6 +269,7 @@
       "daedalus/mcp_policy.py",
       "daedalus/memory.py",
       "daedalus/memory_mem0.py",
+      "daedalus/memory_provenance.py",
       "daedalus/mentor.py",
       "daedalus/mentor_graph.py",
       "daedalus/mentor_helm.py",
