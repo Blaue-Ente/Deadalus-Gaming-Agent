@@ -54,10 +54,19 @@ from .tools import (
     overlay_for,
 )
 from .workspace import DirtyBaseline, RunWorkspace
+from .baseline import (
+    BaselineCheck,
+    BaselineReport,
+    DependencySnapshot,
+    EngineProbe,
+    KnownFailure,
+)
 
 __all__ = [
     "CONTRACT_SCHEMA_VERSION",
     "ArtifactRef",
+    "BaselineCheck",
+    "BaselineReport",
     "BuildArtifactRef",
     "CommandRequest",
     "CommandResult",
@@ -69,12 +78,15 @@ __all__ = [
     "CapabilityEvidenceRecord",
     "ContractError",
     "ContractModel",
+    "DependencySnapshot",
     "DirtyBaseline",
     "DodVerdict",
     "EffortTier",
+    "EngineProbe",
     "ErrorClass",
     "EventKind",
     "KNOWN_PERMISSION_IDS",
+    "KnownFailure",
     "NamedArtifact",
     "Observation",
     "PERMISSION_CATALOG",

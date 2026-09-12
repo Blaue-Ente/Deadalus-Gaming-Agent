@@ -133,8 +133,8 @@
     ]
   },
   "tests": {
-    "modules": 75,
-    "functions": 973
+    "modules": 76,
+    "functions": 993
   },
   "modules": {
     "daedalus": [
@@ -150,6 +150,7 @@
       "daedalus/autopilot_loop_guard.py",
       "daedalus/awareness.py",
       "daedalus/balance_sim.py",
+      "daedalus/baseline_verifier.py",
       "daedalus/batch_verify.py",
       "daedalus/blender_jobs.py",
       "daedalus/blender_mcp.py",
@@ -182,6 +183,7 @@
       "daedalus/contracts/__init__.py",
       "daedalus/contracts/_base.py",
       "daedalus/contracts/artifacts.py",
+      "daedalus/contracts/baseline.py",
       "daedalus/contracts/commands.py",
       "daedalus/contracts/errors.py",
       "daedalus/contracts/events.py",
