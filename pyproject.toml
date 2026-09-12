@@ -47,6 +47,7 @@ daedalus = ["skills/*.md", "knowledge/*.md"]
 markers = [
     "docker: live docker daemon and daedalus-exec image (not in the default CI job)",
     "playwright: Chromium / playwright extra (not in the default CI job)",
+    "live_engine: live Godot / Unity / Blender binaries (not in the default CI job)",
 ]
 
 [tool.coverage.run]

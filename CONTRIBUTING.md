@@ -45,9 +45,12 @@ export DAEDALUS_STANDALONE=1
 export COVERAGE_FILE=/tmp/daedalus-ci.coverage
 python3 -m pytest tests -q -m "not docker and not playwright"
 python3 -m daedalus.game_agent_bench --no-persist
+python3 -m daedalus.game_agent_bench --suite game --no-persist
 ```
 
-CI (`.gitlab-ci.yml`) is hermetic: standalone on, LLM keys unset, coverage floor 45%, no Docker-in-Docker on the default pytest job. Live docker tests are `@pytest.mark.docker` (optional job). Chromium extras are `@pytest.mark.playwright`. If you add a Godot/Blender path, cover the detector/scaffold with a unit test even when the Godot binary is missing in CI.
+CI (`.gitlab-ci.yml`) is hermetic: standalone on, LLM keys unset, coverage floor 45%, no Docker-in-Docker on the default pytest job. Live docker tests are `@pytest.mark.docker` (optional job). Chromium extras are `@pytest.mark.playwright`. Live engine overlays are `@pytest.mark.live_engine` / `--suite game --live` (optional `bench-live` job). If you add a Godot/Blender path, cover the detector/scaffold with a unit test even when the Godot binary is missing in CI.
+
+P0.22 may compare `artifacts/baseline/benchmark-results.json` (honesty, 15 cases) with `--suite game --no-persist --json` (game_v1, 20 hermetic tasks). Live engines are not a release requirement. Do not implement that gate in a bench-only change.
 
 Without docker the required gates stay fail-closed: sandbox unit tests must refuse, not fall through to the host. Do not rewrite leftover `NEED_*` holes to silence ruff — `daedalus/tool_loop.py` F821 is a preserved ignore.
 

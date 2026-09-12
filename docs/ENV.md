@@ -79,6 +79,7 @@ Studio → Connectors **Brain** (or Studio → Brain wardrobe) switches models w
 | `DAEDALUS_VISUAL_PROOF` | `0` turns off kernel-run browser/Godot proof after the last write (default on). Missing Chromium/Godot is not a skip-pass. |
 | `DAEDALUS_WRITE_GATE` | `0` turns off the `write_file` syntax/arcade gate (default on). Duplicate `let` and missing canvas/loop become FAILED writes. |
 | `DAEDALUS_QUALITY` | `0` turns the visual critic off (default on). Unparsed critic / skipped browser is not a pass. |
+| `DAEDALUS_BENCH_LIVE` | `1` appends live Godot/Unity/Blender overlays to `--suite game|all`. Missing `GODOT_BIN` / `UNITY_PATH` / `BLENDER_BIN` is fail-closed, not a pass. Default CI does not set this. |
 | `DAEDALUS_EVOLUTION` | `1` turns the gardener on at boot; `0` is a kill switch |
 | `GODOT_BIN` | Path to Godot 4.3. Missing binary fails Godot kinds. When set, the TCP runtime bridge (player must move) is required — static files are not a playtest. |
 | `GODOT_EXPORT_TEMPLATES` | Directory of Godot 4.3 export templates. Missing templates fail Stage 7 export (skip is not a pass). Default lookup: `~/.local/share/godot/export_templates/4.3.stable`. |

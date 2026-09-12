@@ -629,7 +629,7 @@ def select_skills(user_message: str, intent: str, hint: str = "") -> list[str]:
                           "unity editor in the cloud"],
         "game_agent_bench": ["game agent bench", "honesty suite", "не bake-off",
                              "vendor bake-off", "game-agent-bench",
-                             "честност suite"],
+                             "честност suite", "game_v1", "game bench"],
         "dissection": ["дисекция", "dissect", "мостра", "play lab",
                        "лаборатория", "разглоби играта", "specimen game"],
         "transform_math": ["quaternion", "slerp", "ray-triangle", "ray triangle",

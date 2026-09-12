@@ -633,9 +633,9 @@ async def live_catalog() -> dict[str, Any]:
 
 
 @router.get("/api/v1/daedalus/bench")
-async def bench_get(persist: bool = False) -> dict[str, Any]:
-    from daedalus.game_agent_bench import run_suite
-    return run_suite(persist=persist)
+async def bench_get(persist: bool = False, suite: str = "honesty") -> dict[str, Any]:
+    from daedalus.game_agent_bench import evaluate
+    return evaluate(persist=persist, suite=suite)
 
 
 @router.post("/api/v1/daedalus/bench")

@@ -99,6 +99,19 @@ pytest-docker:
     - pip install --no-cache-dir -e ".[dev]"
     - python3 -m pytest tests -q -m docker
 
+# Optional. Not a required gate. Default runners have no Godot / Unity / Blender.
+bench-live:
+  extends: [.python]
+  stage: test
+  allow_failure: true
+  rules:
+    - if: $DAEDALUS_CI_LIVE == "1"
+    - when: manual
+      allow_failure: true
+  script:
+    - pip install --no-cache-dir -e ".[dev]"
+    - python3 -m daedalus.game_agent_bench --suite game --live --no-persist
+
 secret-scan:
   extends: [.python, .ci_rules]
   stage: audit
