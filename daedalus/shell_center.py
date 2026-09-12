@@ -9,6 +9,7 @@ open host paths. Public bind disables the runner unless
 ``run_command(str, …)`` is the adapter entry. Structured form is
 ``CommandRequest``; ``execute_command`` selects an ``ExecutionBackend``.
 ``LocalBackend`` / ``execute_host`` is the host subprocess path.
+``DockerBackend`` uses ``daedalus.docker_sandbox`` (not this host ``subprocess.run``).
 """
 from __future__ import annotations
 

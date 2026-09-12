@@ -43,6 +43,11 @@ include = ["daedalus*", "app*"]
 [tool.setuptools.package-data]
 daedalus = ["skills/*.md", "knowledge/*.md"]
 
+[tool.pytest.ini_options]
+markers = [
+    "docker: live docker daemon and daedalus-exec image (skipped when missing)",
+]
+
 [tool.ruff]
 target-version = "py311"
 line-length = 120

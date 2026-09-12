@@ -127,13 +127,16 @@ def test_fake_backend_fail_closed_when_empty():
     assert res.command == "echo x"
 
 
-def test_docker_backend_fail_closed_stub(tmp_path, monkeypatch):
+def test_docker_backend_fail_closed_without_docker(tmp_path, monkeypatch):
     _standalone(tmp_path, monkeypatch)
+    import daedalus.docker_sandbox as ds
+
+    monkeypatch.setattr(ds, "docker_bin", lambda: None)
     seen: list[object] = []
 
     def boom(*_a, **_k):
         seen.append(1)
-        raise AssertionError("DockerBackend must not call subprocess")
+        raise AssertionError("DockerBackend must not call host subprocess")
 
     monkeypatch.setattr("daedalus.shell_center.subprocess.run", boom)
     req = CommandRequest(raw_command="echo should-not-run")
@@ -141,13 +144,19 @@ def test_docker_backend_fail_closed_stub(tmp_path, monkeypatch):
     assert res.ok is False
     assert res.blocked is True
     assert res.exit_code == 126
-    assert "P0.18" in res.error
+    assert "docker not on PATH" in res.error
+    assert "P0.18" not in res.error
+    assert "not implemented" not in res.error.lower()
     assert res.command == "echo should-not-run"
+    assert "should-not-run" not in (res.stdout or "")
     assert seen == []
 
 
-def test_env_docker_selects_stub_not_host(tmp_path, monkeypatch):
+def test_env_docker_fail_closed_not_host(tmp_path, monkeypatch):
     _standalone(tmp_path, monkeypatch)
+    import daedalus.docker_sandbox as ds
+
+    monkeypatch.setattr(ds, "docker_bin", lambda: None)
     monkeypatch.setenv("DAEDALUS_EXEC_BACKEND", "docker")
     reset_execution_backend()
     assert isinstance(get_execution_backend(), DockerBackend)
@@ -156,7 +165,10 @@ def test_env_docker_selects_stub_not_host(tmp_path, monkeypatch):
     row = run_command("echo should-not-run")
     assert row["ok"] is False
     assert row["blocked"] is True
-    assert "P0.18" in row["error"]
+    assert row["exit_code"] == 126
+    assert "docker not on PATH" in row["error"]
+    assert "P0.18" not in row["error"]
+    assert "not implemented" not in row["error"].lower()
     assert "should-not-run" not in (row.get("stdout") or "")
 
 
@@ -214,6 +226,7 @@ def test_import_execution_backends_does_not_load_agent_or_shell():
         "backend = b.get_execution_backend()\n"
         "assert isinstance(backend, b.LocalBackend)\n"
         "assert 'daedalus.shell_center' not in sys.modules\n"
+        "assert 'daedalus.docker_sandbox' not in sys.modules\n"
         "print('import-ok', c.ExecutionBackend, b.FakeBackend, b.DockerBackend)\n"
     )
     result = subprocess.run(
@@ -237,9 +250,12 @@ def test_agent_does_not_import_execution_backends():
                 assert "execution_backends" not in alias.name
         elif isinstance(node, ast.ImportFrom) and node.module:
             assert node.module != "daedalus.execution_backends"
+            assert node.module != "daedalus.docker_sandbox"
             assert "execution_backends" not in (node.module or "")
+            assert "docker_sandbox" not in (node.module or "")
     assert "ExecutionBackend" not in src
     assert "FakeBackend" not in src
+    assert "docker_sandbox" not in src
 
 
 def test_leftover_ladder_untouched():
@@ -252,6 +268,16 @@ def test_leftover_ladder_untouched():
     assert "NEED_SANDBOX" in agent
     assert "code_sandbox_tool" in agent
     assert (ROOT / "daedalus" / "kernel" / "command_runner.py").is_file()
+    assert (ROOT / "daedalus" / "sandbox.py").is_file()
+    assert "docker_sandbox" not in agent
+    sandbox_src = (ROOT / "daedalus" / "docker_sandbox.py").read_text(encoding="utf-8")
+    tree = ast.parse(sandbox_src)
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module:
+            assert "play_lab" not in node.module
+        elif isinstance(node, ast.Import):
+            for alias in node.names:
+                assert "play_lab" not in alias.name
 
 
 def test_contracts_still_do_not_import_shell_center():
