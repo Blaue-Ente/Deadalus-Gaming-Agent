@@ -18,4 +18,5 @@ packaging/windows/runtime/
 /pip-audit.json
 /trivy-fs.txt
 /secret-scan.txt
+/p0-release-gate.json
 .coverage
