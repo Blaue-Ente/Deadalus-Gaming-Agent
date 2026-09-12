@@ -360,11 +360,7 @@ def test_uv_missing_lock_check_skip_not_ok(tmp_path, monkeypatch):
     _isolate(tmp_path, monkeypatch)
     monkeypatch.setenv("DAEDALUS_SUPPLY_CHAIN", "1")
     root = _write_fixture(tmp_path / "no-uv")
-    monkeypatch.setattr("daedalus.supply_chain.shutil.which", lambda _name: None)
-    monkeypatch.setattr(
-        "daedalus.supply_chain.sys.executable",
-        str(tmp_path / "missing-python"),
-    )
+    monkeypatch.setattr("daedalus.supply_chain._uv_cmd", lambda: None)
     report = SupplyChain().inspect(SupplyRequest(run_id="no-uv", root=root))
     row = _by_id(report)["lock_check"]
     assert row.skipped is True
