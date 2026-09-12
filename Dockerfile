@@ -6,20 +6,22 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends git curl ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml README.md LICENSE .env.example ./
+COPY pyproject.toml README.md LICENSE .env.example uv.lock ./
 COPY daedalus ./daedalus
 COPY app ./app
 COPY ui ./ui
 COPY .agents ./.agents
 
-RUN pip install --no-cache-dir -e .
+RUN pip install --no-cache-dir uv==0.12.12 \
+    && uv sync --frozen --no-dev
 
 ENV DAEDALUS_STANDALONE=1 \
     DAEDALUS_DATA=/var/lib/daedalus \
     DAEDALUS_PLAYGROUND=/var/lib/daedalus/playground \
     HOST=0.0.0.0 \
     PORT=8787 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PATH="/app/.venv/bin:$PATH"
 
 RUN mkdir -p /var/lib/daedalus/chroma /var/lib/daedalus/playground
 
