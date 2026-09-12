@@ -41,11 +41,17 @@ GitLab: [Merge requests](https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/merge_
 ## Tests
 
 ```bash
-python3 -m pytest tests -q
+export DAEDALUS_STANDALONE=1
+export COVERAGE_FILE=/tmp/daedalus-ci.coverage
+python3 -m pytest tests -q -m "not docker and not playwright"
 python3 -m daedalus.game_agent_bench --no-persist
 ```
 
-CI runs the same in `.gitlab-ci.yml`. If you add a Godot/Blender path, cover the detector/scaffold with a unit test even when the Godot binary is missing in CI.
+CI (`.gitlab-ci.yml`) is hermetic: standalone on, LLM keys unset, coverage floor 45%, no Docker-in-Docker on the default pytest job. Live docker tests are `@pytest.mark.docker` (optional job). Chromium extras are `@pytest.mark.playwright`. If you add a Godot/Blender path, cover the detector/scaffold with a unit test even when the Godot binary is missing in CI.
+
+Without docker the required gates stay fail-closed: sandbox unit tests must refuse, not fall through to the host. Do not rewrite leftover `NEED_*` holes to silence ruff — `daedalus/tool_loop.py` F821 is a preserved ignore.
+
+`main` should require a green pipeline (`ruff`, `mypy`, `uv-lock`, `pytest`, `secret-scan`, `pip-audit`, `trivy-fs`) before merge. Image build / live docker are not required. `trivy-fs` uses `--ignore-unfixed` (same as pip-audit) and documents Studio Dockerfile `USER` in `.trivyignore.yaml`.
 
 ## Style
 

@@ -304,7 +304,10 @@ def _provider_ready(provider: str) -> bool:
 
 
 def _brain_ready() -> bool:
-    cfg = llm_config.get_config()
+    try:
+        cfg = llm_config.get_config()
+    except Exception:
+        return False
     if cfg.get("api_key"):
         return True
     return _provider_ready(str(cfg.get("provider") or ""))

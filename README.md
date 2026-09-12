@@ -355,10 +355,29 @@ After `pip install -e .` the command is `daedalus` (same as `python -m app.cli`)
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-python3 -m pytest tests -q
+export DAEDALUS_STANDALONE=1
+# Coverage data must not land at repo root (P0.00 pack check).
+export COVERAGE_FILE=/tmp/daedalus-ci.coverage
+python3 -m pytest tests -q -m "not docker and not playwright"
 ```
 
-GitLab CI (`.gitlab-ci.yml`) runs the same tests and builds a Docker image; when `CI_REGISTRY` is set it pushes `$CI_REGISTRY_IMAGE:latest`.
+GitLab CI (`.gitlab-ci.yml`) is the source of truth. Required jobs (no Docker-in-Docker):
+
+| Job | Gate |
+|---|---|
+| `ruff` | Syntax / undefined-name on `daedalus` `app` `tests` (`agent.py` excluded; leftover `tool_loop` F821 ignored) |
+| `mypy` | Staged file list in `pyproject.toml` |
+| `uv-lock` | `uv lock --check` |
+| `pytest` | Hermetic suite, `--cov-fail-under=45`, markers `docker` / `playwright` excluded |
+| `secret-scan` | `scripts/secret_scan.py` |
+| `pip-audit` | Declared install |
+| `trivy-fs` | Filesystem / `uv.lock` / Dockerfile (no DinD; `--ignore-unfixed`; Studio `USER` documented in `.trivyignore.yaml`) |
+
+`build-image` uses Docker-in-Docker and is **not** required to merge. `pytest-docker` is optional (`DAEDALUS_CI_DOCKER=1` or manual). Without docker, `DockerBackend` unit tests still fail closed (no Local fall-through); live `@pytest.mark.docker` tests are not in the default job.
+
+Branch protection on `main` (GitLab settings): protect the branch, no force-push, merge via MR only, pipelines must succeed. Require `ruff`, `mypy`, `uv-lock`, `pytest`, `secret-scan`, `pip-audit`. Do not require `build-image` or `pytest-docker`.
+
+When `CI_REGISTRY` is set, `build-image` pushes `$CI_REGISTRY_IMAGE:latest`.
 
 ---
 
