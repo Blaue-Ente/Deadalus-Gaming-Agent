@@ -71,6 +71,7 @@ Defaults:
 | SQLite + Chroma + proposals | `$DAEDALUS_DATA` → `data/daedalus/` |
 | Projects | `playground/projects/{slug}/` |
 | Run worktrees | `$DAEDALUS_DATA/worktrees/{run_id}/` — opt-in `DAEDALUS_WORKTREE=1` |
+| Pre-edit baselines | `$DAEDALUS_DATA/baselines/{run_id}/` — optional persist from `BaselineVerifier` |
 | Docker data | `/var/lib/daedalus` |
 | Windows data | `%LOCALAPPDATA%\Daedalus` |
 
