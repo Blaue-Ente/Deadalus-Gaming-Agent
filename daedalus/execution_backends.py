@@ -1,7 +1,7 @@
 """Selectable command backends behind ``execute_command``.
 
 LocalBackend wraps ``shell_center.execute_host`` (host ``subprocess.run``).
-FakeBackend is test injection only. DockerBackend is a fail-closed P0.18 stub.
+FakeBackend is test injection only. DockerBackend runs ``docker_sandbox``.
 Do not import this module from agent.py.
 """
 from __future__ import annotations
@@ -57,16 +57,12 @@ class FakeBackend:
 
 
 class DockerBackend:
-    """Fail-closed stub. P0.18 fills the sandbox. No docker CLI, no Local fall-through."""
+    """Command sandbox. Fail-closed without docker / daemon / image. No Local fall-through."""
 
     def run(self, request: CommandRequest) -> CommandResult:
-        return CommandResult(
-            ok=False,
-            blocked=True,
-            error="docker backend not implemented (P0.18)",
-            command=_request_command(request),
-            exit_code=126,
-        )
+        from daedalus.docker_sandbox import run_in_docker
+
+        return run_in_docker(request)
 
 
 class _UnknownBackend:

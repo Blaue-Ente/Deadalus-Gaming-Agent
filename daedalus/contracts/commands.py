@@ -59,7 +59,7 @@ class CommandResult(ContractModel):
 
 
 class ExecutionBackend(Protocol):
-    """Implemented by LocalBackend, FakeBackend, and DockerBackend (stub)."""
+    """Implemented by LocalBackend, FakeBackend, and DockerBackend."""
 
     def run(self, request: CommandRequest) -> CommandResult: ...
 
