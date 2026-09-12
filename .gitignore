@@ -13,3 +13,9 @@ dist/
 build/
 packaging/windows/redist/*.nupkg
 packaging/windows/runtime/
+/coverage.xml
+/test-results.xml
+/pip-audit.json
+/trivy-fs.txt
+/secret-scan.txt
+.coverage

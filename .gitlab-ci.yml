@@ -1,43 +1,149 @@
 # CI for Daedalus — this directory is the product root.
-stages: [test, build]
+#
+# Default pytest does NOT use Docker-in-Docker. Live docker tests are optional.
+# Without docker the required jobs stay fail-closed:
+#   - DockerBackend / run_in_docker unit tests must still refuse (no Local fall-through)
+#   - @pytest.mark.docker is excluded from the required pytest job
+#   - ruff / mypy / uv-lock / coverage / secret-scan / pip-audit / trivy-fs need no daemon
+# build-image is the only DinD job and is not a required merge gate.
+#
+# Branch protection (owner applies in GitLab settings — this file cannot):
+#   protect main, no force-push, merge only via MR, pipelines must succeed.
+#   Required jobs: ruff, mypy, uv-lock, pytest, secret-scan, pip-audit.
+#   Do not require build-image, trivy-image, or pytest-docker.
+
+workflow:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_COMMIT_TAG
+
+stages: [lint, test, audit, build]
+
+variables:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONDONTWRITEBYTECODE: "1"
+
+.python:
+  image: python:3.12-slim
+  variables:
+    DAEDALUS_STANDALONE: "1"
+    DAEDALUS_MENTOR: "0"
+    DAEDALUS_VISUAL_PROOF: "0"
+    DAEDALUS_RUN_BUDGET: "off"
+    DAEDALUS_MCP_POLICY: "enforce"
+    ALLTOKEN_API_KEY: ""
+    OPENROUTER_API_KEY: ""
+    NOVITA_API_KEY: ""
+    NVIDIA_API_KEY: ""
+    DAEDALUS_API_KEY: ""
+
+.ci_rules:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_COMMIT_TAG
 
 ruff:
-  stage: test
-  image: python:3.12-slim
+  extends: [.python, .ci_rules]
+  stage: lint
   script:
     - pip install --no-cache-dir ruff
-    - ruff check daedalus/tool_protocol.py daedalus/model_router.py daedalus/run_engine.py daedalus/need_scan.py daedalus/game_build_contract.py daedalus/game_agent_bench.py daedalus/engine_runners.py daedalus/quality_gate.py daedalus/playtest_scenario.py daedalus/balance_sim.py daedalus/playground_gameplay_verify.py daedalus/game_studio_gates.py daedalus/world_runtime.py daedalus/world_kit.py daedalus/png_codec.py daedalus/atlas.py daedalus/sfx_kit.py daedalus/mesh_jobs.py daedalus/asset_pipeline.py daedalus/learned_skills.py daedalus/production_layer.py daedalus/unity_runtime.py daedalus/chat_jobs.py tests/test_harness_kernel.py tests/test_gameplay_bot.py tests/test_world_runtime.py tests/test_asset_pipeline.py tests/test_skill_memory.py tests/test_production_layer.py tests/test_unity_runtime.py tests/test_game_agent_bench.py tests/test_studio_hardening.py
-    - ruff check --select E9,F63,F7,F82 --exclude daedalus/agent.py daedalus app tests
-  rules:
-    - if: $CI_COMMIT_BRANCH
+    - ruff check daedalus app tests
 
 mypy:
-  stage: test
-  image: python:3.12-slim
+  extends: [.python, .ci_rules]
+  stage: lint
   script:
     - pip install --no-cache-dir mypy
-    - python3 -m mypy daedalus/game_build_contract.py daedalus/game_agent_bench.py daedalus/engine_runners.py daedalus/quality_gate.py daedalus/model_router.py daedalus/run_engine.py daedalus/tool_protocol.py
-  rules:
-    - if: $CI_COMMIT_BRANCH
+    - python3 -m mypy
 
 uv-lock:
-  stage: test
-  image: python:3.12-slim
+  extends: [.python, .ci_rules]
+  stage: lint
   script:
     - pip install --no-cache-dir uv
     - python3 -m uv lock --check
-  rules:
-    - if: $CI_COMMIT_BRANCH
 
 pytest:
+  extends: [.python, .ci_rules]
   stage: test
-  image: python:3.12-slim
   script:
     - pip install --no-cache-dir -e ".[dev]"
-    - python3 -m pytest tests -q --cov=daedalus --cov-report=term-missing --cov-fail-under=0
-  rules:
-    - if: $CI_COMMIT_BRANCH
+    - >
+      python3 -m pytest tests -q -m "not docker and not playwright"
+      --cov=daedalus --cov-report=term-missing --cov-report=xml:coverage.xml
+      --cov-fail-under=45 --junitxml=test-results.xml
+  artifacts:
+    when: always
+    expire_in: 14 days
+    reports:
+      junit: test-results.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage.xml
+    paths:
+      - coverage.xml
+      - test-results.xml
+  coverage: '/TOTAL.*?(\d+%)/'
 
+# Optional. Not a required gate. Default runners have no docker socket.
+pytest-docker:
+  extends: [.python]
+  stage: test
+  allow_failure: true
+  rules:
+    - if: $DAEDALUS_CI_DOCKER == "1"
+    - when: manual
+      allow_failure: true
+  script:
+    - pip install --no-cache-dir -e ".[dev]"
+    - python3 -m pytest tests -q -m docker
+
+secret-scan:
+  extends: [.python, .ci_rules]
+  stage: audit
+  script:
+    - python3 scripts/secret_scan.py
+  artifacts:
+    when: on_failure
+    expire_in: 14 days
+    paths:
+      - secret-scan.txt
+
+pip-audit:
+  extends: [.python, .ci_rules]
+  stage: audit
+  script:
+    - pip install --no-cache-dir -e "." pip-audit
+    - python3 -m pip_audit --progress-spinner off --format json --output pip-audit.json
+    - python3 -m pip_audit --progress-spinner off
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - pip-audit.json
+
+# Filesystem / Dockerfile scan. No DinD. Missing scanner image fails the job.
+trivy-fs:
+  extends: .ci_rules
+  stage: audit
+  image:
+    name: aquasec/trivy:0.58.1
+    entrypoint: [""]
+  script:
+    - >
+      trivy fs --exit-code 1 --severity HIGH,CRITICAL
+      --skip-dirs .git --skip-dirs artifacts --scanners vuln,misconfig
+      --format table --output trivy-fs.txt .
+    - cat trivy-fs.txt
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - trivy-fs.txt
+
+# DinD — image only. Not required for merge. Not attached to default pytest.
 build-image:
   stage: build
   image: docker:24
@@ -56,4 +162,6 @@ build-image:
         docker push "$CI_REGISTRY_IMAGE:latest"
       fi
   rules:
-    - if: $CI_COMMIT_BRANCH
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+    - if: $CI_COMMIT_TAG

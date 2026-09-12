@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from typing import Any
 
 from daedalus.navigator_vocab import Briefing
+from tests.hermetic import strip_provider_keys, stub_hermetic_llm_config
 
 
 PLAYGROUND_SID = "playground:char-01"
@@ -179,10 +180,8 @@ def isolate_paths(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("DAEDALUS_VISUAL_PROOF", "0")
     monkeypatch.setenv("DAEDALUS_RUN_BUDGET", "off")
     monkeypatch.setenv("DAEDALUS_NATIVE_TOOLS", "1")
-    monkeypatch.delenv("DAEDALUS_API_KEY", raising=False)
-    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
-    monkeypatch.delenv("ALLTOKEN_API_KEY", raising=False)
-    monkeypatch.delenv("NOVITA_API_KEY", raising=False)
+    strip_provider_keys(monkeypatch)
+    stub_hermetic_llm_config(monkeypatch)
 
     from daedalus.paths import data_root, playground_projects_dir, product_root, repo_root
     data_root.cache_clear()
