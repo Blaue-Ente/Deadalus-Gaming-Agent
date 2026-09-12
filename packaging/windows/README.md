@@ -14,9 +14,15 @@ binds `127.0.0.1:8787` only. No Administrator.
 Ollama, Godot, Blender, and Node are still separate apps if you use those features.
 The private CPython build has no Tcl/Tk: the window is WebView2 or the browser.
 
-## A. PowerShell (ZIP or git)
+## A. Double-click (ZIP, no terminal)
 
 1. Download the repo ZIP from GitLab (**Code → Download source code**) or `git clone`.
+2. Unzip the folder. Windows will **not** auto-run anything on extract.
+3. Double-click **`Install-Daedalus.bat`** at the repo root (calls this folder’s `install.ps1` with `-ExecutionPolicy Bypass`).
+
+## B. PowerShell (ZIP or git)
+
+1. Same download/unzip as above.
 2. Optional: install [Python 3.11+](https://www.python.org/downloads/windows/) yourself. If you skip this, the script fetches a private 64-bit CPython (official NuGet `python` package) and does **not** add it to PATH.
 3. In the repo folder:
 
@@ -37,7 +43,7 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 | `.env`, memory, games | `%LOCALAPPDATA%\Daedalus\` |
 | Console if the window fails | `%LOCALAPPDATA%\Programs\Daedalus\Daedalus.cmd` |
 
-## B. `Daedalus-Setup.exe`
+## C. `Daedalus-Setup.exe`
 
 GitLab CI on Linux cannot compile this binary. On a Windows machine with
 [Inno Setup 6](https://jrsoftware.org/isinfo.php):

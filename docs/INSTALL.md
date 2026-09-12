@@ -7,8 +7,9 @@ pick an install path. Studio UI copy may still be Bulgarian; these docs are Engl
 
 | Path | Best for | Needs |
 |---|---|---|
-| **Windows Setup.exe** | Double-click installer + Start Menu `Daedalus.exe` | 64-bit Windows 10/11, internet for `pip` the first time |
-| **Windows `install.ps1`** | Same app, from a ZIP, no Inno | Same; Python on PATH is optional |
+| **Windows `Install-Daedalus.bat`** | ZIP → unzip → double-click (no terminal) | 64-bit Windows 10/11, internet for `pip` the first time |
+| **Windows Setup.exe** | Wizard installer + Start Menu `Daedalus.exe` | Same |
+| **Windows `install.ps1`** | Same app, from PowerShell / git | Same; Python on PATH is optional |
 | **venv + `daedalus serve`** | Linux, macOS, Windows developers | Python 3.11+ |
 | **Docker** | VPS / “I already use Compose” | Docker |
 
@@ -34,9 +35,24 @@ cd deadalus-agent-0
 1. Open https://gitlab.com/Blaue-Ente/deadalus-agent-0
 2. **Code → Download source code → zip**
    or https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/archive/main/deadalus-agent-0-main.zip
-3. Unzip. You should see `daedalus/`, `app/`, `packaging/`, `README.md`.
+3. Unzip. You should see `daedalus/`, `app/`, `packaging/`, `Install-Daedalus.bat`, `README.md`.
 
 Copy the whole folder, not a single file.
+
+Windows does **not** run anything automatically when you unzip (security). After extract, double-click **`Install-Daedalus.bat`** in the folder — no PowerShell commands needed.
+
+---
+
+## Windows — double-click from ZIP
+
+In the extracted folder:
+
+1. Double-click **`Install-Daedalus.bat`** (top level of the repo).
+2. Wait for `Done.` (first run can take a few minutes).
+3. Start → **Daedalus** or **Дедал** → http://127.0.0.1:8787
+4. Add an LLM key in `%LOCALAPPDATA%\Daedalus\.env` or use Ollama (Studio → LLM).
+
+The `.bat` file calls `packaging\windows\install.ps1` with `-ExecutionPolicy Bypass` and `-DesktopShortcut`.
 
 ---
 

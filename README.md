@@ -28,11 +28,11 @@ The GitLab tree **is** the product. Copy the whole repo (ZIP or `git clone`). Gi
 
 | How | Windows | Linux / macOS |
 |---|---|---|
-| Extra `.exe` option | `install.ps1` or `Daedalus-Setup.exe` → Start Menu **Daedalus.exe**. Private CPython is fetched if you have none. Not a PyInstaller one-file freeze. | — |
+| Extra `.exe` option | **`Install-Daedalus.bat`** (ZIP, double-click) or `install.ps1` / `Daedalus-Setup.exe` → Start Menu **Daedalus.exe**. Private CPython is fetched if you have none. Not a PyInstaller one-file freeze. | — |
 | Developer | Python 3.11+ venv (below) | Python 3.11+ venv (below) |
 | Docker | `docker compose up --build` | same |
 
-**ZIP (no git):** [deadalus-agent-0-main.zip](https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/archive/main/deadalus-agent-0-main.zip) or **Code → Download source code**. Unzip, then:
+**ZIP (no git):** [deadalus-agent-0-main.zip](https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/archive/main/deadalus-agent-0-main.zip) or **Code → Download source code**. Unzip, then **double-click `Install-Daedalus.bat`** (Windows — no terminal). Or from PowerShell:
 
 ```powershell
 # Windows — Start Menu + Daedalus.exe (downloads CPython if PATH has no 3.11+)
