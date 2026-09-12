@@ -9,8 +9,8 @@
   "hotspots": [
     {
       "path": "daedalus/agent.py",
-      "lines": 5023,
-      "broad_excepts": 162
+      "lines": 4735,
+      "broad_excepts": 144
     },
     {
       "path": "app/admin_compat.py",
@@ -130,8 +130,8 @@
     ]
   },
   "tests": {
-    "modules": 64,
-    "functions": 775
+    "modules": 65,
+    "functions": 788
   },
   "modules": {
     "daedalus": [
@@ -172,6 +172,7 @@
       "daedalus/confidence_scorer.py",
       "daedalus/connectivity.py",
       "daedalus/connectors_config.py",
+      "daedalus/context_assembler.py",
       "daedalus/context_compaction.py",
       "daedalus/continuity.py",
       "daedalus/daedalus_mesh.py",

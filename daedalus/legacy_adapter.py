@@ -1,7 +1,8 @@
 """Leaf adapter: future Run Engine calls the old chat path through here.
 
 Does not rewrite agent.py. Lazy-imports get_daedalus. Do not import this
-module from agent.py or native_tools.py. ContextAssembler is out of scope.
+module from agent.py or native_tools.py. Prompt front matter is assembled
+by context_assembler; this file still only wraps chat.
 """
 from __future__ import annotations
 
