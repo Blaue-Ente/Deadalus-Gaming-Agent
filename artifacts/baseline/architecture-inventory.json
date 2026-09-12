@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-11T23:27:35.949678+00:00",
+  "generated_at": "2026-09-11T23:43:05.149334+00:00",
   "package_version": "0.3.8",
-  "git_commit": "80b8b0e1afc3aee3dfa1cd0cfa713007df78105d",
+  "git_commit": "fb014ced2cc2584c19740780506d763aabc37fa5",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -133,8 +133,8 @@
     ]
   },
   "tests": {
-    "modules": 69,
-    "functions": 865
+    "modules": 70,
+    "functions": 881
   },
   "modules": {
     "daedalus": [
@@ -170,6 +170,7 @@
       "daedalus/clarification_tracker.py",
       "daedalus/code_index.py",
       "daedalus/coding_tools.py",
+      "daedalus/command_adapt.py",
       "daedalus/computer.py",
       "daedalus/computer_smolvm.py",
       "daedalus/confidence_scorer.py",
@@ -181,6 +182,7 @@
       "daedalus/contracts/__init__.py",
       "daedalus/contracts/_base.py",
       "daedalus/contracts/artifacts.py",
+      "daedalus/contracts/commands.py",
       "daedalus/contracts/errors.py",
       "daedalus/contracts/events.py",
       "daedalus/contracts/evidence.py",
