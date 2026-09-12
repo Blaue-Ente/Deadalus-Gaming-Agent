@@ -1,4 +1,4 @@
-"""EngineAdapter leaf — discover / preflight / gated run. Godot live is mocked."""
+"""EngineAdapter leaf — discover / preflight / gated run. Live verify is mocked."""
 from __future__ import annotations
 
 import ast
@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from daedalus.capability_registry import REGISTRY
+from daedalus.capability_registry import PLATFORMS, REGISTRY
 from daedalus.contracts import Run, RunCheckpoint
 from daedalus.contracts.engine import (
     EngineCapability,
@@ -111,6 +111,7 @@ def test_leaf_does_not_import_runtime():
     src = LEAF.read_text(encoding="utf-8")
     assert "run_godot(" not in src
     assert "run_unity(" not in src
+    assert "adapter_run_deferred" not in src
     code = (
         "import daedalus.engine_adapter as ea\n"
         "import sys\n"
@@ -153,6 +154,7 @@ def test_agent_and_write_path_untouched():
     assert "NEED_SANDBOX" in agent
     assert "NEED_VERIFY" in agent
     assert REGISTRY.adapter("godot").name == "EngineAdapter"
+    assert "unity" not in PLATFORMS
     assert isinstance(adapters()["godot"], GodotEngineAdapter)
     assert isinstance(adapters()["unity"], UnityEngineAdapter)
     assert adapters()["godot"].kind == EngineKind.GODOT.value
@@ -273,6 +275,7 @@ def test_run_live_false_is_gated(tmp_path, monkeypatch):
     _missing_bins(monkeypatch)
     _tripwire_runners(monkeypatch)
     monkeypatch.setattr("daedalus.godot_first.runtime_verify", _boom_runtime)
+    monkeypatch.setattr("daedalus.unity_runtime.runtime_verify", _boom_runtime)
     root = _godot_tree(tmp_path / "arena")
     out = run(EngineRequest(kind="godot", root=root, live=False))
     assert out.skipped is True
@@ -304,7 +307,24 @@ def test_godot_run_live_false_does_not_call_runtime_verify(tmp_path, monkeypatch
     assert "live_gated" in out.blockers
 
 
-def test_unity_run_live_true_is_deferred(tmp_path, monkeypatch):
+def test_unity_run_live_false_does_not_call_runtime_verify(tmp_path, monkeypatch):
+    _isolate(tmp_path, monkeypatch)
+    _missing_bins(monkeypatch)
+    _tripwire_runners(monkeypatch)
+    called: list[Path] = []
+
+    def track(root: Path) -> dict:
+        called.append(root)
+        raise AssertionError("runtime_verify must not run when live=False")
+
+    monkeypatch.setattr("daedalus.unity_runtime.runtime_verify", track)
+    out = run(EngineRequest(kind="unity", root=_unity_tree(tmp_path / "idle"), live=False))
+    assert called == []
+    assert "live_gated" in out.blockers
+    assert out.play is False
+
+
+def test_unity_run_live_missing_bin_is_skip_not_deferred(tmp_path, monkeypatch):
     _isolate(tmp_path, monkeypatch)
     _missing_bins(monkeypatch)
     _tripwire_runners(monkeypatch)
@@ -315,7 +335,10 @@ def test_unity_run_live_true_is_deferred(tmp_path, monkeypatch):
     assert unity.ok is False
     assert unity.ran is False
     assert unity.play is False
-    assert "adapter_run_deferred" in unity.blockers
+    assert unity.via == "none"
+    assert "unity_local" in unity.blockers or "unity_local" in unity.error
+    assert "adapter_run_deferred" not in unity.blockers
+    assert unity.error != "adapter_run_deferred"
 
 
 def test_godot_run_live_missing_bin_is_skip_not_deferred(tmp_path, monkeypatch):
@@ -462,6 +485,136 @@ def test_godot_run_live_headless_fallback_via(tmp_path, monkeypatch):
     assert out.ok is False
 
 
+def test_unity_run_live_wraps_runtime_verify(tmp_path, monkeypatch):
+    _isolate(tmp_path, monkeypatch)
+    _missing_bins(monkeypatch)
+    _tripwire_runners(monkeypatch)
+    root = _unity_tree(tmp_path / "batch")
+    seen: list[Path] = []
+
+    def fake_verify(path: Path) -> dict:
+        seen.append(path)
+        return {
+            "ok": True,
+            "skipped": False,
+            "ran": True,
+            "play": False,
+            "via": "batchmode",
+            "blockers": [],
+            "error": "",
+        }
+
+    monkeypatch.setattr("daedalus.unity_runtime.runtime_verify", fake_verify)
+    out = run(EngineRequest(kind="unity", root=root, live=True))
+    assert seen == [root]
+    assert out.ok is True
+    assert out.skipped is False
+    assert out.ran is True
+    assert out.play is False
+    assert out.live is True
+    assert out.via == "batchmode"
+    assert "adapter_run_deferred" not in out.blockers
+
+
+def test_unity_run_live_skipped_probe_is_not_ok(tmp_path, monkeypatch):
+    _isolate(tmp_path, monkeypatch)
+    _missing_bins(monkeypatch)
+    _tripwire_runners(monkeypatch)
+
+    def fake_verify(_path: Path) -> dict:
+        return {
+            "ok": True,
+            "skipped": True,
+            "ran": False,
+            "play": False,
+            "via": "none",
+            "blockers": ["unity_local"],
+            "error": "unity_local",
+        }
+
+    monkeypatch.setattr("daedalus.unity_runtime.runtime_verify", fake_verify)
+    out = run(EngineRequest(kind="unity", root=_unity_tree(tmp_path / "skip"), live=True))
+    assert out.skipped is True
+    assert out.ok is False
+    assert out.ran is False
+    assert out.play is False
+    assert out.via == "none"
+    assert "unity_local" in out.blockers
+
+
+def test_unity_run_live_failed_run_is_not_skip(tmp_path, monkeypatch):
+    _isolate(tmp_path, monkeypatch)
+    _missing_bins(monkeypatch)
+    _tripwire_runners(monkeypatch)
+
+    def fake_verify(_path: Path) -> dict:
+        return {
+            "ok": False,
+            "skipped": False,
+            "ran": True,
+            "play": False,
+            "via": "batchmode",
+            "blockers": ["unity rc=1"],
+            "error": "unity rc=1",
+        }
+
+    monkeypatch.setattr("daedalus.unity_runtime.runtime_verify", fake_verify)
+    out = run(EngineRequest(kind="unity", root=_unity_tree(tmp_path / "fail"), live=True))
+    assert out.ok is False
+    assert out.skipped is False
+    assert out.ran is True
+    assert out.play is False
+    assert out.via == "batchmode"
+    assert "unity rc=1" in out.blockers
+
+
+def test_unity_run_live_timeout_does_not_claim_ran(tmp_path, monkeypatch):
+    _isolate(tmp_path, monkeypatch)
+    _missing_bins(monkeypatch)
+    _tripwire_runners(monkeypatch)
+
+    def fake_verify(_path: Path) -> dict:
+        return {
+            "ok": False,
+            "skipped": False,
+            "ran": False,
+            "play": False,
+            "via": "none",
+            "blockers": ["timed out"],
+            "error": "timed out",
+        }
+
+    monkeypatch.setattr("daedalus.unity_runtime.runtime_verify", fake_verify)
+    out = run(EngineRequest(kind="unity", root=_unity_tree(tmp_path / "hang"), live=True))
+    assert out.ok is False
+    assert out.skipped is False
+    assert out.ran is False
+    assert out.play is False
+    assert out.via == "none"
+    assert any("timed out" in item for item in out.blockers)
+
+
+def test_unity_run_live_mcp_only_is_honest_refuse(tmp_path, monkeypatch):
+    _isolate(tmp_path, monkeypatch)
+    _missing_bins(monkeypatch)
+    _tripwire_runners(monkeypatch)
+    monkeypatch.setenv("DAEDALUS_UNITY_MCP", "unity-local")
+
+    async def boom_mcp(*_a: object, **_k: object) -> dict:
+        raise AssertionError("leaf run must not call Unity MCP")
+
+    monkeypatch.setattr("daedalus.mcp_client.list_tools", boom_mcp)
+    monkeypatch.setattr("daedalus.mcp_client.call_tool", boom_mcp)
+    out = run(EngineRequest(kind="unity", root=_unity_tree(tmp_path / "mcp"), live=True))
+    assert out.skipped is True
+    assert out.ok is False
+    assert out.ran is False
+    assert out.play is False
+    assert out.via == "none"
+    assert "unity_local" in out.blockers or "unity_local" in out.error
+    assert "adapter_run_deferred" not in out.blockers
+
+
 def test_godot_preflight_parity_missing_bin(tmp_path, monkeypatch):
     _isolate(tmp_path, monkeypatch)
     _missing_bins(monkeypatch)
@@ -482,4 +635,5 @@ def test_golden_pack_unchanged(tmp_path, monkeypatch):
     discover(EngineRequest(kind="godot", root=tmp_path))
     preflight(EngineRequest(kind="unity", root=tmp_path))
     run(EngineRequest(kind="godot", root=tmp_path, live=True))
+    run(EngineRequest(kind="unity", root=tmp_path, live=True))
     assert GOLDEN_FAILURES.read_bytes() == before

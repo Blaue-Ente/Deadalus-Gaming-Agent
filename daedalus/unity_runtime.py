@@ -9,8 +9,11 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
 from pathlib import Path
 from typing import Any
+
+_BATCHMODE_TIMEOUT_S = 180
 
 HONEST = (
     "No Unity Editor in this cloud. Set UNITY_PATH for batchmode or "
@@ -259,6 +262,91 @@ def batchmode_run(slug: str) -> dict[str, Any]:
     if out.get("ok"):
         out["note"] = "batchmode import is not Play mode"
     return out
+
+
+def runtime_verify(root: Path | str) -> dict[str, Any]:
+    """Host probe for EngineAdapter. Path batchmode import; not Play. Skip ≠ ok.
+
+    Does not call ``run_unity(slug)``, MCP, or ``engine_session``. Missing
+    Editor is ``unity_local``. ``DAEDALUS_UNITY_MCP`` is not this leaf.
+    """
+    from .engine_runners import unity_bin
+
+    base = Path(root)
+    binary = unity_bin() or ""
+    if not binary:
+        return {
+            "ok": False,
+            "skipped": True,
+            "ran": False,
+            "play": False,
+            "via": "none",
+            "blockers": ["unity_local"],
+            "error": "unity_local",
+            "preflight": {
+                "binary": "",
+                "ok": False,
+                "skipped": True,
+                "blockers": ["unity_local"],
+            },
+        }
+    out = _batchmode_at(base, binary)
+    ran = bool(out.get("ran"))
+    ok = bool(out.get("ok")) and ran
+    error = str(out.get("error") or "")
+    blockers: list[str] = []
+    if not ok:
+        blockers.append(error or "unity_batchmode")
+    return {
+        "ok": ok,
+        "skipped": False,
+        "ran": ran,
+        "play": False,
+        "via": "batchmode" if ran else "none",
+        "blockers": blockers,
+        "error": error,
+        "preflight": {
+            "binary": binary,
+            "ok": True,
+            "skipped": False,
+            "blockers": [],
+        },
+    }
+
+
+def _batchmode_at(root: Path, binary: str, *, timeout: int = _BATCHMODE_TIMEOUT_S) -> dict[str, Any]:
+    cmd = [
+        binary,
+        "-batchmode",
+        "-nographics",
+        "-quit",
+        "-projectPath",
+        str(root),
+    ]
+    if root.is_dir():
+        log_file = root / "Logs" / "daedalus-adapter.log"
+        try:
+            log_file.parent.mkdir(parents=True, exist_ok=True)
+            cmd.extend(["-logFile", str(log_file)])
+        except OSError:
+            pass
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=str(root) if root.is_dir() else None,
+            capture_output=True,
+            text=True,
+            timeout=max(30, timeout),
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {"ok": False, "ran": False, "error": str(exc)[:400]}
+    ok = proc.returncode == 0
+    return {
+        "ok": ok,
+        "ran": True,
+        "error": "" if ok else (proc.stderr or f"unity rc={proc.returncode}")[:400],
+        "returncode": proc.returncode,
+    }
 
 
 async def run_engine_action(action: str, slug: str, **fields: Any) -> dict[str, Any]:
