@@ -1164,6 +1164,174 @@ async def _run_code_search(
     return "\n".join(lines)
 
 
+async def _run_write_file(
+    args: dict[str, Any],
+    *,
+    session_id: str,
+    read_file_fn: Callable[..., dict] | None = None,
+) -> str:
+    del session_id, read_file_fn
+    from . import playground as pg
+    slug = str(
+        args.get("slug") or args.get("project") or args.get("name") or ""
+    ).strip()
+    path = str(
+        args.get("path")
+        or args.get("file")
+        or args.get("filename")
+        or args.get("file_path")
+        or ""
+    ).strip()
+    content = str(args.get("content") or args.get("text") or args.get("code") or "")
+    if "/" in slug and not path:
+        slug, path = slug.split("/", 1)
+    if not slug or not path:
+        keys = ",".join(sorted(str(k) for k in args if k != "content"))
+        return (
+            "── write_file FAILED: slug and path required ──\n"
+            f"Got keys={keys or '(none)'}. "
+            "Example: write_file slug=<project> path=index.html content=…"
+        )
+    existing = None
+    try:
+        existing = await pg.get_project(slug)
+    except Exception:
+        existing = None
+    if not existing:
+        from .godot_first import coerce_kind
+        kind_new = coerce_kind("static", slug, "auto-created on write", path)
+        await pg.create_project(
+            slug, kind=kind_new, source="built",
+            description="auto-created on write", slug=slug,
+        )
+        existing = {"slug": slug, "kind": kind_new}
+    kind = str((existing or {}).get("kind") or "static")
+    pg.write_file(slug, path, content)
+    from .write_gate import check_write
+    gate = check_write(path, content, kind=kind, slug=slug)
+    if not gate.ok:
+        return (
+            f"── write_file FAILED {slug}/{path} ──\n"
+            f"Wrote playground/projects/{slug}/{path} ({len(content)} chars) "
+            "but the quality gate rejected it.\n"
+            f"{gate.summary()}\n"
+            f"NEXT: call write_file with slug={slug} path={path} and fix the blockers. "
+            "Do not find /workspace or list the harness."
+        )
+    try:
+        from .project_status import record_built
+        from .playground import project_dir as _pdir
+        record_built(_pdir(slug), f"wrote {path}")
+    except Exception:
+        pass
+    return (
+        f"── write_file OK {slug}/{path} ({len(content)} chars) ──\n"
+        f"File is `{path}` in Playground slug `{slug}` "
+        f"(playground/projects/{slug}/{path}). "
+        "Do not find /workspace or list the harness. "
+        "Keep write_file with this slug. "
+        "When you stop, the kernel opens the running game for visual proof."
+    )
+
+
+async def _run_edit_file(
+    args: dict[str, Any],
+    *,
+    session_id: str,
+    read_file_fn: Callable[..., dict] | None = None,
+) -> str:
+    del session_id, read_file_fn
+    from . import playground as pg
+    slug = str(args.get("slug") or args.get("project") or "").strip()
+    path = str(args.get("path") or args.get("file") or "").strip()
+    search = str(args.get("search") or args.get("old") or "")
+    replace = str(args.get("replace") or args.get("new") or "")
+    if not slug or not path:
+        return (
+            "── edit_file FAILED: slug and path required ──\n"
+            "Example: edit_file slug=<project> path=scripts/player.gd "
+            "search=… replace=…"
+        )
+    existing = None
+    try:
+        existing = await pg.get_project(slug)
+    except Exception:
+        existing = None
+    if not existing:
+        return (
+            f"── edit_file FAILED {slug}/{path} ──\n"
+            "Project does not exist. Call playground_new first, or write_file for a new file."
+        )
+    r = pg.edit_file(slug, path, search, replace)
+    if not r.get("ok"):
+        return (
+            f"── edit_file FAILED {slug}/{path} ──\n"
+            f"{r.get('error') or 'search/replace failed'}\n"
+            f"NEXT: read_file slug={slug} path={path} then edit_file with exact search text."
+        )
+    return (
+        f"── edit_file OK {slug}/{path} ──\n"
+        f"Replaced one block in playground/projects/{slug}/{path} "
+        f"({r.get('old_size')} → {r.get('new_size')} chars)."
+        + _nav_hint(
+            slug=slug,
+            path=path,
+            next_line=f"Keep edit_file / write_file with slug={slug}.",
+        )
+    )
+
+
+def _run_run_command(
+    args: dict[str, Any],
+    *,
+    session_id: str,
+    read_file_fn: Callable[..., dict] | None = None,
+) -> str:
+    del read_file_fn
+    cmd = str(args.get("command") or "")
+    if _playground_session(session_id) and re.search(r"\bfind\s+/", cmd):
+        return f"── run_command BLOCKED ──\n{_HARNESS_JAIL}"
+    from .shell_center import run_command
+    r = run_command(
+        cmd,
+        cwd=str(args.get("cwd") or "") or None,
+        slug=str(args.get("slug") or ""),
+        timeout=args.get("timeout"),
+    )
+    body = (r.get("stdout") or "") + (("\n" + r["stderr"]) if r.get("stderr") else "")
+    status = "OK" if r.get("ok") else "FAILED"
+    hint = ""
+    slug_h = str(args.get("slug") or "").strip()
+    ran = str(r.get("ran") or "")
+    if ran and ran.strip() != cmd.strip():
+        hint += f"\nKernel dropped pipes/&& and ran: {ran}"
+    if status == "FAILED":
+        err = str(r.get("error") or "")
+        low = (body + " " + err).lower()
+        if "metacharacters" in low:
+            hint += (
+                "\nNEXT: retry run_command without | && or 2>&1. "
+                f'command="npm install" slug={slug_h or "<project>"}'
+            )
+        elif "no such file" in low or "not found" in low:
+            hint += (
+                "\nHint: Playground files live in the project slug, not /workspace. "
+                "Pass slug=" + (slug_h or "<project>") + " (cwd = that folder). "
+                "Do not find / or list_dir the harness."
+            )
+    nxt = ""
+    if status == "FAILED" and slug_h:
+        nxt = (
+            f"NEXT: fix the command (plain argv, slug={slug_h}), "
+            "or write_file the defect. Do not open browser yet."
+        )
+    return (
+        f"── run_command {status} exit={r.get('exit_code')} cwd={r.get('cwd')} ──\n"
+        f"{body[:8000]}{hint}"
+        + (_nav_hint(slug=slug_h, next_line=nxt) if slug_h or nxt else "")
+    )
+
+
 async def execute_native_tool(
     name: str,
     args: dict[str, Any],
@@ -1242,150 +1410,18 @@ async def execute_native_tool(
             )
 
         if name == "write_file":
-            from . import playground as pg
-            slug = str(
-                args.get("slug") or args.get("project") or args.get("name") or ""
-            ).strip()
-            path = str(
-                args.get("path")
-                or args.get("file")
-                or args.get("filename")
-                or args.get("file_path")
-                or ""
-            ).strip()
-            content = str(args.get("content") or args.get("text") or args.get("code") or "")
-            if "/" in slug and not path:
-                slug, path = slug.split("/", 1)
-            if not slug or not path:
-                keys = ",".join(sorted(str(k) for k in args if k != "content"))
-                return (
-                    "── write_file FAILED: slug and path required ──\n"
-                    f"Got keys={keys or '(none)'}. "
-                    "Example: write_file slug=<project> path=index.html content=…"
-                )
-            existing = None
-            try:
-                existing = await pg.get_project(slug)
-            except Exception:
-                existing = None
-            if not existing:
-                from .godot_first import coerce_kind
-                kind_new = coerce_kind("static", slug, "auto-created on write", path)
-                await pg.create_project(
-                    slug, kind=kind_new, source="built",
-                    description="auto-created on write", slug=slug,
-                )
-                existing = {"slug": slug, "kind": kind_new}
-            kind = str((existing or {}).get("kind") or "static")
-            pg.write_file(slug, path, content)
-            from .write_gate import check_write
-            gate = check_write(path, content, kind=kind, slug=slug)
-            if not gate.ok:
-                return (
-                    f"── write_file FAILED {slug}/{path} ──\n"
-                    f"Wrote playground/projects/{slug}/{path} ({len(content)} chars) "
-                    "but the quality gate rejected it.\n"
-                    f"{gate.summary()}\n"
-                    f"NEXT: call write_file with slug={slug} path={path} and fix the blockers. "
-                    "Do not find /workspace or list the harness."
-                )
-            try:
-                from .project_status import record_built
-                from .playground import project_dir as _pdir
-                record_built(_pdir(slug), f"wrote {path}")
-            except Exception:
-                pass
-            return (
-                f"── write_file OK {slug}/{path} ({len(content)} chars) ──\n"
-                f"File is `{path}` in Playground slug `{slug}` "
-                f"(playground/projects/{slug}/{path}). "
-                "Do not find /workspace or list the harness. "
-                "Keep write_file with this slug. "
-                "When you stop, the kernel opens the running game for visual proof."
+            return await _run_write_file(
+                args, session_id=session_id, read_file_fn=read_file_fn,
             )
 
         if name == "edit_file":
-            from . import playground as pg
-            slug = str(args.get("slug") or args.get("project") or "").strip()
-            path = str(args.get("path") or args.get("file") or "").strip()
-            search = str(args.get("search") or args.get("old") or "")
-            replace = str(args.get("replace") or args.get("new") or "")
-            if not slug or not path:
-                return (
-                    "── edit_file FAILED: slug and path required ──\n"
-                    "Example: edit_file slug=<project> path=scripts/player.gd "
-                    "search=… replace=…"
-                )
-            existing = None
-            try:
-                existing = await pg.get_project(slug)
-            except Exception:
-                existing = None
-            if not existing:
-                return (
-                    f"── edit_file FAILED {slug}/{path} ──\n"
-                    "Project does not exist. Call playground_new first, or write_file for a new file."
-                )
-            r = pg.edit_file(slug, path, search, replace)
-            if not r.get("ok"):
-                return (
-                    f"── edit_file FAILED {slug}/{path} ──\n"
-                    f"{r.get('error') or 'search/replace failed'}\n"
-                    f"NEXT: read_file slug={slug} path={path} then edit_file with exact search text."
-                )
-            return (
-                f"── edit_file OK {slug}/{path} ──\n"
-                f"Replaced one block in playground/projects/{slug}/{path} "
-                f"({r.get('old_size')} → {r.get('new_size')} chars)."
-                + _nav_hint(
-                    slug=slug,
-                    path=path,
-                    next_line=f"Keep edit_file / write_file with slug={slug}.",
-                )
+            return await _run_edit_file(
+                args, session_id=session_id, read_file_fn=read_file_fn,
             )
 
         if name == "run_command":
-            cmd = str(args.get("command") or "")
-            if _playground_session(session_id) and re.search(r"\bfind\s+/", cmd):
-                return f"── run_command BLOCKED ──\n{_HARNESS_JAIL}"
-            from .shell_center import run_command
-            r = run_command(
-                cmd,
-                cwd=str(args.get("cwd") or "") or None,
-                slug=str(args.get("slug") or ""),
-                timeout=args.get("timeout"),
-            )
-            body = (r.get("stdout") or "") + (("\n" + r["stderr"]) if r.get("stderr") else "")
-            status = "OK" if r.get("ok") else "FAILED"
-            hint = ""
-            slug_h = str(args.get("slug") or "").strip()
-            ran = str(r.get("ran") or "")
-            if ran and ran.strip() != cmd.strip():
-                hint += f"\nKernel dropped pipes/&& and ran: {ran}"
-            if status == "FAILED":
-                err = str(r.get("error") or "")
-                low = (body + " " + err).lower()
-                if "metacharacters" in low:
-                    hint += (
-                        "\nNEXT: retry run_command without | && or 2>&1. "
-                        f'command="npm install" slug={slug_h or "<project>"}'
-                    )
-                elif "no such file" in low or "not found" in low:
-                    hint += (
-                        "\nHint: Playground files live in the project slug, not /workspace. "
-                        "Pass slug=" + (slug_h or "<project>") + " (cwd = that folder). "
-                        "Do not find / or list_dir the harness."
-                    )
-            nxt = ""
-            if status == "FAILED" and slug_h:
-                nxt = (
-                    f"NEXT: fix the command (plain argv, slug={slug_h}), "
-                    "or write_file the defect. Do not open browser yet."
-                )
-            return (
-                f"── run_command {status} exit={r.get('exit_code')} cwd={r.get('cwd')} ──\n"
-                f"{body[:8000]}{hint}"
-                + (_nav_hint(slug=slug_h, next_line=nxt) if slug_h or nxt else "")
+            return _run_run_command(
+                args, session_id=session_id, read_file_fn=read_file_fn,
             )
 
         if name == "web_search":

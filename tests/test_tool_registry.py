@@ -13,6 +13,8 @@ from daedalus.native_tools import _HARNESS_JAIL, execute_native_tool
 from daedalus.tool_adapt import live_specs
 from daedalus.tool_registry import (
     READ_TOOLS,
+    REGISTERED_TOOLS,
+    WRITE_COMMAND_TOOLS,
     ToolContext,
     ToolRegistry,
     default_registry,
@@ -20,6 +22,7 @@ from daedalus.tool_registry import (
     reset_registry_for_tests,
 )
 from tests.characterization_fakes import PLAYGROUND_SID, isolate_paths
+from tests.test_write_gate import CLEAN_CANVAS, SNAKE_DUP
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -51,7 +54,7 @@ def test_register_resolve_describe_read_tools():
         assert spec.side_effect.value == "read"
         assert spec.risk.value == "low"
         assert spec.permission is None
-    assert reg.resolve("write_file") is None
+    assert reg.resolve("write_file") is not None
     assert reg.describe("engine") is None
     assert reg.get_exact("cat") is None
 
@@ -64,6 +67,12 @@ def test_resolve_aliases():
     assert reg.resolve("cat").name == "read_file"
     assert reg.resolve("ls").name == "list_dir"
     assert reg.resolve("NEED_CODE_SEARCH").name == "code_search"
+    assert reg.resolve("NEED_PLAYGROUND_WRITE").name == "write_file"
+    assert reg.resolve("playground_write").name == "write_file"
+    assert reg.resolve("NEED_PLAYGROUND_EDIT").name == "edit_file"
+    assert reg.resolve("shell").name == "run_command"
+    assert reg.get_exact("NEED_PLAYGROUND_WRITE") is None
+    assert reg.get_exact("shell") is None
 
 
 def test_resolve_unknown_is_none():
@@ -76,7 +85,7 @@ def test_describe_matches_live_specs():
     reset_registry_for_tests()
     by = {s.name: s for s in live_specs()}
     reg = default_registry()
-    for name in READ_TOOLS:
+    for name in REGISTERED_TOOLS:
         assert reg.describe(name) == by[name]
 
 
@@ -166,11 +175,39 @@ def test_authorize_read_tools_allow(tmp_path, monkeypatch):
         assert decision.perm_class == ""
 
 
+def test_register_describe_write_command_tools():
+    reset_registry_for_tests()
+    reg = default_registry()
+    write = reg.describe("write_file")
+    edit = reg.describe("edit_file")
+    run = reg.describe("run_command")
+    assert write is not None and edit is not None and run is not None
+    assert write.side_effect.value == "write" and write.risk.value == "high"
+    assert edit.side_effect.value == "write" and edit.risk.value == "high"
+    assert run.side_effect.value == "shell" and run.risk.value == "high"
+    assert write.permission is None and edit.permission is None
+    assert run.permission is None
+    assert WRITE_COMMAND_TOOLS <= REGISTERED_TOOLS
+
+
+def test_authorize_write_command_tools_allow(tmp_path, monkeypatch):
+    isolate_paths(tmp_path, monkeypatch)
+    reset_registry_for_tests()
+    ctx = ToolContext(session_id=PLAYGROUND_SID)
+    for name in WRITE_COMMAND_TOOLS:
+        decision = default_registry().authorize(name, ctx)
+        assert decision.allowed is True
+        assert decision.reason == ""
+        assert decision.perm_class == ""
+
+
 def test_unregistered_stays_on_ladder(tmp_path, monkeypatch):
     isolate_paths(tmp_path, monkeypatch)
     reset_registry_for_tests()
     monkeypatch.setenv("DAEDALUS_TOOL_REGISTRY", "1")
-    assert default_registry().get_exact("write_file") is None
+    assert default_registry().get_exact("write_file") is not None
+    assert default_registry().get_exact("engine") is None
+    assert default_registry().get_exact("playground_new") is None
     unknown = _exec("not_a_real_tool", {})
     assert unknown == "── unknown native tool: not_a_real_tool ──"
     write = _exec("write_file", {})
@@ -250,3 +287,231 @@ def test_local_register_does_not_require_native_bootstrap():
     )
     assert result.text == "── fake OK ── hi"
     assert result.ok is True
+
+
+def _flag_pair(monkeypatch, name, args, **kwargs):
+    reset_registry_for_tests()
+    monkeypatch.setenv("DAEDALUS_TOOL_REGISTRY", "1")
+    on = _exec(name, args, **kwargs)
+    reset_registry_for_tests()
+    monkeypatch.setenv("DAEDALUS_TOOL_REGISTRY", "0")
+    off = _exec(name, args, **kwargs)
+    return on, off
+
+
+def _stub_static_write(monkeypatch):
+    async def fake_get(slug):
+        return {"slug": slug, "kind": "static"}
+
+    monkeypatch.setattr("daedalus.playground.get_project", fake_get)
+    monkeypatch.setattr("daedalus.playground.write_file", lambda *a, **k: None)
+    monkeypatch.setattr("daedalus.project_status.record_built", lambda *a, **k: None)
+
+
+def test_flag_on_off_write_file_missing_args_identical(tmp_path, monkeypatch):
+    isolate_paths(tmp_path, monkeypatch)
+    on, off = _flag_pair(monkeypatch, "write_file", {})
+    assert on == off
+    assert on.startswith("── write_file FAILED: slug and path required ──")
+    assert "Got keys=(none)." in on
+    assert "Example: write_file slug=<project> path=index.html content=…" in on
+
+
+def test_flag_on_off_write_file_filename_alias_identical(tmp_path, monkeypatch):
+    isolate_paths(tmp_path, monkeypatch)
+    _stub_static_write(monkeypatch)
+    args = {"project": "dungeon-keys", "filename": "index.html", "code": CLEAN_CANVAS}
+    on, off = _flag_pair(monkeypatch, "write_file", args)
+    assert on == off
+    assert "write_file OK dungeon-keys/index.html" in on
+    assert "FAILED" not in on
+    assert "playground/projects/dungeon-keys/index.html" in on
+    assert "visual proof" in on.lower()
+
+
+def test_flag_on_off_write_file_gate_failed_identical(tmp_path, monkeypatch):
+    isolate_paths(tmp_path, monkeypatch)
+    _stub_static_write(monkeypatch)
+    args = {"slug": "snake-game", "path": "index.html", "content": SNAKE_DUP}
+    on, off = _flag_pair(monkeypatch, "write_file", args)
+    assert on == off
+    assert "write_file FAILED snake-game/index.html" in on
+    assert "js-duplicate-binding" in on
+    assert "Wrote playground/projects/snake-game/index.html" in on
+    assert "NEXT: call write_file with slug=snake-game" in on
+
+
+def test_flag_on_off_write_file_gate_off_identical(tmp_path, monkeypatch):
+    isolate_paths(tmp_path, monkeypatch)
+    monkeypatch.setenv("DAEDALUS_WRITE_GATE", "0")
+    _stub_static_write(monkeypatch)
+    args = {"slug": "snake-game", "path": "index.html", "content": SNAKE_DUP}
+    on, off = _flag_pair(monkeypatch, "write_file", args)
+    assert on == off
+    assert "write_file OK snake-game/index.html" in on
+    assert "FAILED" not in on
+
+
+def test_flag_on_off_write_file_gd_autocreate_identical(tmp_path, monkeypatch):
+    isolate_paths(tmp_path, monkeypatch)
+    monkeypatch.setattr("daedalus.outbox.check_permission", lambda *_a, **_k: True)
+    args = {
+        "slug": "veins-gd",
+        "path": "scripts/mob.gd",
+        "content": "extends Node\nfunc _ready():\n\tpass\n",
+    }
+    on, off = _flag_pair(monkeypatch, "write_file", args)
+    assert on == off
+    assert "write_file OK veins-gd/scripts/mob.gd" in on
+    from daedalus import playground as pg
+    proj = asyncio.run(pg.get_project("veins-gd"))
+    assert proj is not None
+    assert proj.get("kind") == "godot"
+    pdir = pg.project_dir("veins-gd")
+    assert (pdir / "scripts" / "mob.gd").is_file()
+    assert (pdir / "project.godot").is_file()
+
+
+def test_flag_on_off_edit_file_missing_args_identical(tmp_path, monkeypatch):
+    isolate_paths(tmp_path, monkeypatch)
+    on, off = _flag_pair(monkeypatch, "edit_file", {})
+    assert on == off
+    assert on == (
+        "── edit_file FAILED: slug and path required ──\n"
+        "Example: edit_file slug=<project> path=scripts/player.gd "
+        "search=… replace=…"
+    )
+
+
+def test_flag_on_off_edit_file_missing_project_identical(tmp_path, monkeypatch):
+    isolate_paths(tmp_path, monkeypatch)
+    args = {"slug": "no-such", "path": "index.html", "search": "a", "replace": "b"}
+    on, off = _flag_pair(monkeypatch, "edit_file", args)
+    assert on == off
+    assert on == (
+        "── edit_file FAILED no-such/index.html ──\n"
+        "Project does not exist. Call playground_new first, or write_file for a new file."
+    )
+
+
+def test_flag_on_off_edit_file_search_miss_identical(tmp_path, monkeypatch):
+    isolate_paths(tmp_path, monkeypatch)
+    from daedalus import playground as pg
+
+    asyncio.run(pg.create_project(
+        "patch-me", kind="static", source="built",
+        description="edit char", slug="patch-me",
+    ))
+    pg.write_file("patch-me", "index.html", "hello world")
+    args = {
+        "slug": "patch-me", "path": "index.html",
+        "search": "missing-token", "replace": "x",
+    }
+    on, off = _flag_pair(monkeypatch, "edit_file", args)
+    assert on == off
+    assert "── edit_file FAILED patch-me/index.html ──" in on
+    assert "search текстът не е намерен" in on
+    assert "NEXT: read_file slug=patch-me path=index.html then edit_file" in on
+
+
+def test_flag_on_off_edit_file_ok_identical(tmp_path, monkeypatch):
+    isolate_paths(tmp_path, monkeypatch)
+    from daedalus import playground as pg
+
+    asyncio.run(pg.create_project(
+        "patch-ok", kind="static", source="built",
+        description="edit char", slug="patch-ok",
+    ))
+    pg.write_file("patch-ok", "index.html", "hello world")
+    args = {
+        "project": "patch-ok", "file": "index.html",
+        "old": "hello", "new": "howdy",
+    }
+    reset_registry_for_tests()
+    monkeypatch.setenv("DAEDALUS_TOOL_REGISTRY", "1")
+    on = _exec("edit_file", args)
+    pg.write_file("patch-ok", "index.html", "hello world")
+    reset_registry_for_tests()
+    monkeypatch.setenv("DAEDALUS_TOOL_REGISTRY", "0")
+    off = _exec("edit_file", args)
+    assert on == off
+    assert "── edit_file OK patch-ok/index.html ──" in on
+    assert "playground/projects/patch-ok/index.html" in on
+    assert "Keep edit_file / write_file with slug=patch-ok." in on
+    assert (pg.project_dir("patch-ok") / "index.html").read_text() == "howdy world"
+
+
+def test_flag_on_off_run_command_find_blocked_identical(tmp_path, monkeypatch):
+    isolate_paths(tmp_path, monkeypatch)
+    on, off = _flag_pair(
+        monkeypatch, "run_command", {"command": "find /workspace"},
+        session_id=PLAYGROUND_SID,
+    )
+    assert on == off
+    assert on == f"── run_command BLOCKED ──\n{_HARNESS_JAIL}"
+
+
+def test_flag_on_off_run_command_ok_stub_identical(tmp_path, monkeypatch):
+    isolate_paths(tmp_path, monkeypatch)
+
+    def fake_run(cmd, *, cwd=None, slug="", timeout=None):
+        return {
+            "ok": True,
+            "exit_code": 0,
+            "cwd": "/data/playground/snake-game",
+            "stdout": "HTML OK\n",
+            "stderr": "",
+            "ran": cmd,
+        }
+
+    monkeypatch.setattr("daedalus.shell_center.run_command", fake_run)
+    args = {"command": "ls", "slug": "snake-game"}
+    on, off = _flag_pair(monkeypatch, "run_command", args)
+    assert on == off
+    assert on.startswith("── run_command OK exit=0 cwd=/data/playground/snake-game ──")
+    assert "HTML OK" in on
+    assert "Keep tools on slug=snake-game." in on
+
+
+def test_flag_on_off_run_command_failed_meta_identical(tmp_path, monkeypatch):
+    isolate_paths(tmp_path, monkeypatch)
+
+    def fake_run(cmd, *, cwd=None, slug="", timeout=None):
+        return {
+            "ok": False,
+            "exit_code": 126,
+            "cwd": "",
+            "stdout": "",
+            "stderr": "",
+            "error": "shell metacharacters refused (pipes, redirection, and &&)",
+            "ran": cmd,
+        }
+
+    monkeypatch.setattr("daedalus.shell_center.run_command", fake_run)
+    args = {"command": "echo hi | wc", "slug": "snake-game"}
+    on, off = _flag_pair(monkeypatch, "run_command", args)
+    assert on == off
+    assert "── run_command FAILED exit=126 cwd= ──" in on
+    assert "NEXT: retry run_command without | && or 2>&1." in on
+    assert 'command="npm install" slug=snake-game' in on
+    assert "NEXT: fix the command (plain argv, slug=snake-game)" in on
+
+
+def test_flag_on_off_run_command_peeled_hint_identical(tmp_path, monkeypatch):
+    isolate_paths(tmp_path, monkeypatch)
+
+    def fake_run(cmd, *, cwd=None, slug="", timeout=None):
+        return {
+            "ok": True,
+            "exit_code": 0,
+            "cwd": "snake-game",
+            "stdout": "ok",
+            "stderr": "",
+            "ran": "npm install",
+        }
+
+    monkeypatch.setattr("daedalus.shell_center.run_command", fake_run)
+    args = {"command": "npm install 2>&1 | tail", "slug": "snake-game"}
+    on, off = _flag_pair(monkeypatch, "run_command", args)
+    assert on == off
+    assert "Kernel dropped pipes/&& and ran: npm install" in on

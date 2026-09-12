@@ -65,7 +65,7 @@ Studio → Connectors **Brain** (or Studio → Brain wardrobe) switches models w
 | Variable | Meaning |
 |---|---|
 | `DAEDALUS_NATIVE_TOOLS` | `0` = NEED_* markers only; native tools are on by default |
-| `DAEDALUS_TOOL_REGISTRY` | `0` = leftover if-ladder for every native tool; default on routes `read_file` / `list_dir` / `code_search` through `ToolRegistry` (same strings) |
+| `DAEDALUS_TOOL_REGISTRY` | `0` = leftover if-ladder for every native tool; default on routes `read_file` / `list_dir` / `code_search` / `write_file` / `edit_file` / `run_command` through `ToolRegistry` (same strings) |
 | `DAEDALUS_BUILD_FIX_ROUNDS` | Fix nudges when the plan is incomplete (default `3`; `0` = old passive stop) |
 | `DAEDALUS_VISUAL_PROOF` | `0` turns off kernel-run browser/Godot proof after the last write (default on). Missing Chromium/Godot is not a skip-pass. |
 | `DAEDALUS_WRITE_GATE` | `0` turns off the `write_file` syntax/arcade gate (default on). Duplicate `let` and missing canvas/loop become FAILED writes. |
