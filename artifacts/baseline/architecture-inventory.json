@@ -133,8 +133,8 @@
     ]
   },
   "tests": {
-    "modules": 79,
-    "functions": 1048
+    "modules": 80,
+    "functions": 1061
   },
   "modules": {
     "daedalus": [
@@ -192,6 +192,7 @@
       "daedalus/contracts/events.py",
       "daedalus/contracts/evidence.py",
       "daedalus/contracts/memory.py",
+      "daedalus/contracts/otel.py",
       "daedalus/contracts/permissions.py",
       "daedalus/contracts/plan.py",
       "daedalus/contracts/run.py",
@@ -286,6 +287,7 @@
       "daedalus/navigator_vocab.py",
       "daedalus/need_scan.py",
       "daedalus/offline.py",
+      "daedalus/otel.py",
       "daedalus/outbox.py",
       "daedalus/owner_auth.py",
       "daedalus/paths.py",
