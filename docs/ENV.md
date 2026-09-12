@@ -44,7 +44,7 @@ Optional: `OPENROUTER_HTTP_REFERER`, `OPENROUTER_APP_TITLE` (sent on OpenRouter 
 | `DAEDALUS_EXEC_MEMORY` | `512m` | `--memory` / `--memory-swap` for the exec container. |
 | `DAEDALUS_EXEC_PIDS` | `128` | `--pids-limit` for the exec container (clamped 8–1024). |
 | `DAEDALUS_WORKTREE` | — | `1` creates a git worktree per coding run under `$DAEDALUS_DATA/worktrees/{run_id}/`. Default off: the live checkout is unchanged. Leaf only — `write_file` is not redirected yet. |
-| `DAEDALUS_DATA` | `data/daedalus/` | SQLite, Chroma, proposals, evolution |
+| `DAEDALUS_DATA` | `data/daedalus/` | SQLite, Chroma, proposals, evolution. Optional pre-edit snapshots: `$DAEDALUS_DATA/baselines/{run_id}/`. |
 | `DAEDALUS_PLAYGROUND` | `playground/projects` | Working projects |
 | `DAEDALUS_WINDOWS_APP` | — | Set by the Windows installer; data goes to `%LOCALAPPDATA%\Daedalus` |
 | `DAEDALUS_MCP_POLICY` | `enforce` | `enforce` (default / unset) — unverified MCP install/connect/call fail closed. `open` restores the old spawn (unsafe escape). |
