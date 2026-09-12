@@ -3838,20 +3838,24 @@ class Daedalus:
 
         dod = None
         try:
-            from .job_contract import evaluate, finish_nudge
+            from .job_contract import finish_nudge
             from .learned_skills import draft_from_failure, draft_from_success
+            from .verification_controller import VerificationController, VerifyRequest
             _open_slices = 0
             try:
                 from .job_ledger import open_count_for_session
                 _open_slices = open_count_for_session(session_id or "")
             except Exception:
                 _open_slices = 0
-            dod = evaluate(
-                message, raw or "",
-                tool_calls=summary.get("tool_calls") or [],
-                open_slices=_open_slices,
-                kind=str(summary.get("build_kind") or ""),
-                browser_ok=summary.get("browser_ok"),
+            dod = VerificationController().accept(
+                VerifyRequest(
+                    ask=message,
+                    reply=raw or "",
+                    tool_calls=summary.get("tool_calls") or [],
+                    open_slices=_open_slices,
+                    kind=str(summary.get("build_kind") or ""),
+                    browser_ok=summary.get("browser_ok"),
+                )
             )
             if not dod.complete and dod.coding_task:
                 raw = (raw or "") + finish_nudge(dod)
@@ -3952,7 +3956,9 @@ class Daedalus:
             "elapsed_seconds": round(elapsed, 2),
             "timestamp": started.isoformat(),
             "complete": None if dod is None else dod.complete,
-            "dod": None if dod is None else dod.as_dict(),
+            "dod": None if dod is None else (
+                dod.as_dict() if hasattr(dod, "as_dict") else dod.model_dump()
+            ),
             "run_budget": budget_status,
         }
 

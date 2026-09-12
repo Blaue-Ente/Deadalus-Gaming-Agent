@@ -127,5 +127,5 @@
   },
   "note": "Gates are wired. The suite runs in-process honesty checks against this harness. This repo still does not ship a vendor bake-off. A skipped browser check is not a playtest.",
   "bake_off": false,
-  "at": "2026-09-11T20:22:30.260976+00:00"
+  "at": "2026-09-11T23:10:12.920430+00:00"
 }
