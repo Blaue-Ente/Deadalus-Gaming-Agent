@@ -1,8 +1,9 @@
 """Engine host snapshots. Not part of Run / RunCheckpoint.
 
 P1.03 records Godot/Unity discover and preflight beside the run.
-Schema v1 on Run stays unchanged. Do not import agent, native_tools,
-run_engine, or engine_session.
+Godot live run wraps ``godot_first.runtime_verify``. Unity live stays
+deferred. Schema v1 on Run stays unchanged. Do not import agent,
+native_tools, run_engine, or engine_session.
 """
 from __future__ import annotations
 
@@ -70,7 +71,7 @@ class EnginePreflight(ContractModel):
 
 
 class EngineRunResult(ContractModel):
-    """Gated run row. P1.03 never launches an editor or Play."""
+    """Gated run row. Godot live=True wraps runtime_verify. play is never Editor Play."""
 
     kind: str
     ok: bool
