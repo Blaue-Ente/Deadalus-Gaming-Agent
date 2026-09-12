@@ -374,6 +374,7 @@ GitLab CI (`.gitlab-ci.yml`) is the source of truth. Required jobs (no Docker-in
 | `pip-audit` | Declared install |
 | `trivy-fs` | Filesystem / `uv.lock` / Dockerfile (no DinD; `--ignore-unfixed`; Studio `USER` documented in `.trivyignore.yaml`) |
 | `p0-release-gate` | Hermetic P0.22 aggregator (`scripts/p0_release_gate.py`). Live engines are not required. |
+| `supply-chain` | P1.10 hermetic lock/pin leaf (`python -m daedalus.supply_chain`). Not a P0 branch-protection name. |
 
 `build-image` uses Docker-in-Docker and is **not** required to merge. `pytest-docker` is optional (`DAEDALUS_CI_DOCKER=1` or manual). `bench-live` is optional. Without docker, `DockerBackend` unit tests still fail closed (no Local fall-through); live `@pytest.mark.docker` tests are not in the default job.
 

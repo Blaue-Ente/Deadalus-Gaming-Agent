@@ -24,9 +24,9 @@ jobs:
           python-version: "3.12"
       - name: Ruff and mypy
         run: |
-          pip install ruff mypy
-          python3 -m ruff check daedalus app tests
-          python3 -m mypy
+          pip install uv==0.12.12
+          python3 -m uv run --frozen --extra dev ruff check daedalus app tests
+          python3 -m uv run --frozen --extra dev python -m mypy
 
   test:
     runs-on: ubuntu-latest
@@ -39,8 +39,9 @@ jobs:
         env:
           COVERAGE_FILE: /tmp/daedalus-ci.coverage
         run: |
-          pip install -e ".[dev]"
-          python3 -m pytest tests -q -m "not docker and not playwright" \
+          pip install uv==0.12.12
+          python3 -m uv sync --frozen --extra dev
+          .venv/bin/python -m pytest tests -q -m "not docker and not playwright" \
             --cov=daedalus --cov-report=term-missing --cov-fail-under=45
 
   build:
