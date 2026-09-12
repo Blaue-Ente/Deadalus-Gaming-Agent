@@ -133,8 +133,8 @@
     ]
   },
   "tests": {
-    "modules": 80,
-    "functions": 1061
+    "modules": 81,
+    "functions": 1080
   },
   "modules": {
     "daedalus": [
@@ -195,6 +195,7 @@
       "daedalus/contracts/otel.py",
       "daedalus/contracts/permissions.py",
       "daedalus/contracts/plan.py",
+      "daedalus/contracts/review.py",
       "daedalus/contracts/run.py",
       "daedalus/contracts/tools.py",
       "daedalus/contracts/workspace.py",
@@ -237,6 +238,7 @@
       "daedalus/host.py",
       "daedalus/identity.py",
       "daedalus/identity_standalone.py",
+      "daedalus/independent_reviewer.py",
       "daedalus/image_client.py",
       "daedalus/improvements.py",
       "daedalus/job_contract.py",

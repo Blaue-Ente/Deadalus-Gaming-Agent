@@ -86,6 +86,13 @@ from .otel import (
     OtelReport,
     OtelSpanRecord,
 )
+from .review import (
+    ReviewFinding,
+    ReviewMode,
+    ReviewReport,
+    ReviewSubjectKind,
+    ReviewVerdict,
+)
 
 __all__ = [
     "CONTRACT_SCHEMA_VERSION",
@@ -142,6 +149,11 @@ __all__ = [
     "PlanStep",
     "PlanStepStatus",
     "ReleaseManifest",
+    "ReviewFinding",
+    "ReviewMode",
+    "ReviewReport",
+    "ReviewSubjectKind",
+    "ReviewVerdict",
     "Run",
     "RunBudgetSpend",
     "RunCheckpoint",
