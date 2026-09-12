@@ -15,10 +15,11 @@ description: In-process honesty suite plus hermetic game_v1 tasks. Not a vendor 
 5. Results may land in `$DAEDALUS_DATA/bench/latest.json`. That is a local report, not a public leaderboard.
 6. Chromium, Godot, Unity, and Blender are not required for the default honesty or hermetic game_v1 path.
 
-**P0.22 comparison hooks** (do not implement the release gate here):
+**P0.22 release gate** (`scripts/p0_release_gate.py` — not this module):
 - Honesty snapshot: `artifacts/baseline/benchmark-results.json` from `--no-persist --json` (15 cases, `bake_off=false`).
-- Game_v1 snapshot: `--suite game --no-persist --json` (20 hermetic ids). Optional sibling `artifacts/baseline/game-benchmark-results.json`.
+- Game_v1 snapshot: `--suite game --no-persist --json` (20 hermetic ids) and sibling `artifacts/baseline/game-benchmark-results.json`.
 - Live rows are never required for release. `known-failures.md` is observational.
+- Human merge of the P0 MR stack and GitLab branch protection are owner work, not this suite.
 
 **Anti-patterns**:
 - Shipping a vendor bake-off or a competitor leaderboard in this repo.

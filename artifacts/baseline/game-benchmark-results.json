@@ -1,0 +1,216 @@
+{
+  "ok": true,
+  "passed": 20,
+  "total": 20,
+  "failed": [],
+  "cases": [
+    {
+      "id": "godot_kind_never_vite",
+      "ok": true,
+      "detail": "Godot words / .gd / .tscn never become Vite/HTML",
+      "ms": 18,
+      "family": "godot",
+      "mode": "hermetic"
+    },
+    {
+      "id": "godot_2d_scaffold_dod",
+      "ok": true,
+      "detail": "2D scaffold DoD green; preview is not Play",
+      "ms": 9,
+      "family": "godot",
+      "mode": "hermetic"
+    },
+    {
+      "id": "godot_3d_slice_not_racer",
+      "ok": true,
+      "detail": "3D puzzle room, not the Vite racer",
+      "ms": 7,
+      "family": "godot",
+      "mode": "hermetic"
+    },
+    {
+      "id": "godot_broken_signal_fails",
+      "ok": true,
+      "detail": "planted missing signal handler fails static DoD",
+      "ms": 2,
+      "family": "godot",
+      "mode": "hermetic"
+    },
+    {
+      "id": "godot_3d_planted_defects",
+      "ok": true,
+      "detail": "stripped Camera3D / Goal-Door-Plate fail closed",
+      "ms": 5,
+      "family": "godot",
+      "mode": "hermetic"
+    },
+    {
+      "id": "godot_missing_binary_not_ok",
+      "ok": true,
+      "detail": "missing GODOT_BIN is skip≠ok",
+      "ms": 11,
+      "family": "godot",
+      "mode": "hermetic"
+    },
+    {
+      "id": "godot_pipeline_slice_fail_closed",
+      "ok": true,
+      "detail": "pipeline through slice fail-closed without Godot",
+      "ms": 3,
+      "family": "godot",
+      "mode": "hermetic"
+    },
+    {
+      "id": "godot_world_kit_waits",
+      "ok": true,
+      "detail": "world kit waits unless epic/campaign",
+      "ms": 0,
+      "family": "godot",
+      "mode": "hermetic"
+    },
+    {
+      "id": "godot_bridge_sidecars",
+      "ok": true,
+      "detail": "bridge autoload + .import sidecars; no duplicate",
+      "ms": 0,
+      "family": "godot",
+      "mode": "hermetic"
+    },
+    {
+      "id": "godot_publish_needs_artifact",
+      "ok": true,
+      "detail": "publish needs export artifact; HTML is not Play",
+      "ms": 2,
+      "family": "godot",
+      "mode": "hermetic"
+    },
+    {
+      "id": "unity_scaffold_not_play",
+      "ok": true,
+      "detail": "Unity scaffold files exist; status.play is false",
+      "ms": 5,
+      "family": "unity",
+      "mode": "hermetic"
+    },
+    {
+      "id": "unity_without_editor_honest",
+      "ok": true,
+      "detail": "no Editor → honest refuse; vite is N/A",
+      "ms": 0,
+      "family": "unity",
+      "mode": "hermetic"
+    },
+    {
+      "id": "unity_cloud_claim_fails",
+      "ok": true,
+      "detail": "cloud Editor claim fail-closed; bare unity is not a claim",
+      "ms": 0,
+      "family": "unity",
+      "mode": "hermetic"
+    },
+    {
+      "id": "unity_batchmode_not_play",
+      "ok": true,
+      "detail": "batchmode promise is not Play",
+      "ms": 0,
+      "family": "unity",
+      "mode": "hermetic"
+    },
+    {
+      "id": "blender_emit_jobs_no_bpy",
+      "ok": true,
+      "detail": "emit bpy scripts; Daedalus does not import bpy",
+      "ms": 1,
+      "family": "blender",
+      "mode": "hermetic"
+    },
+    {
+      "id": "blender_mcp_emit_only",
+      "ok": true,
+      "detail": "MCP lists JOB_IDS and emits tools/blender/*.py",
+      "ms": 13,
+      "family": "blender",
+      "mode": "hermetic"
+    },
+    {
+      "id": "blender_execute_without_bin_honest",
+      "ok": true,
+      "detail": "execute without BLENDER_BIN is not a verified export",
+      "ms": 0,
+      "family": "blender",
+      "mode": "hermetic"
+    },
+    {
+      "id": "build_skip_and_quality",
+      "ok": true,
+      "detail": "skip≠ok and quality default on",
+      "ms": 0,
+      "family": "build",
+      "mode": "hermetic"
+    },
+    {
+      "id": "build_leftover_ladder_stays",
+      "ok": true,
+      "detail": "leftover NEED_* ladder and F821 ignore stay",
+      "ms": 0,
+      "family": "build",
+      "mode": "hermetic"
+    },
+    {
+      "id": "build_docker_refuse_hermetic",
+      "ok": true,
+      "detail": "DockerBackend refuses without docker; no host fall-through",
+      "ms": 0,
+      "family": "build",
+      "mode": "hermetic"
+    }
+  ],
+  "ms": 99,
+  "gates": {
+    "ok": true,
+    "allowed": true,
+    "missing": [],
+    "gates": {
+      "owner_token": true,
+      "typed_tool_protocol": true,
+      "atomic_model_router": true,
+      "durable_run_log": true,
+      "skip_is_not_ok": true,
+      "one_builder_pipeline": true,
+      "quality_gate_default_on": true,
+      "playwright_gameplay": true,
+      "world_kit_runtime": true,
+      "godot_headless_required": true,
+      "unity_runner": true,
+      "asset_pipeline": true,
+      "asset_pipeline_v2": true,
+      "skill_memory_approve": true,
+      "production_layer": true,
+      "unity_mcp_or_honest": true,
+      "honesty_suite": true,
+      "ci_ruff": true,
+      "uv_lock": true
+    },
+    "note": "Gates are wired. The suite runs in-process honesty checks against this harness. This repo still does not ship a vendor bake-off. A skipped browser check is not a playtest.",
+    "bake_off": false,
+    "suite": "python -m daedalus.game_agent_bench"
+  },
+  "note": "game_v1 is a hermetic 20-task layer on this harness. Live Godot/Unity/Blender overlays are opt-in and fail closed. This is not a vendor bake-off. P0.22 may compare snapshots; this is not that gate.",
+  "bake_off": false,
+  "suite": "game",
+  "layer": "game_v1",
+  "live": false,
+  "live_ran": [],
+  "live_gated": [],
+  "p0_22_hooks": {
+    "honesty_cli": "python -m daedalus.game_agent_bench --no-persist --json",
+    "game_cli": "python -m daedalus.game_agent_bench --suite game --no-persist --json",
+    "honesty_artifact": "artifacts/baseline/benchmark-results.json",
+    "game_artifact": "artifacts/baseline/game-benchmark-results.json",
+    "honesty_case_count": 15,
+    "game_task_count": 20,
+    "live_required_for_release": false,
+    "note": "P0.22 aggregates honesty (15) plus hermetic game_v1 (20) against the recorded pack via scripts/p0_release_gate.py. Live rows are never required. Human merge of the P0 MR stack and GitLab branch protection are not CI."
+  },
+  "at": "2026-09-12T01:11:28.190902+00:00"
+}
