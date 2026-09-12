@@ -3,7 +3,10 @@
 Hermes-class agents speak MCP. Daedalus did not. This module lists and calls
 tools on optional servers declared in ``$DAEDALUS_DATA/mcp.json``.
 
-No npm runtime dependency — stdlib + httpx. Fail open if a server is missing.
+No npm runtime dependency — stdlib + httpx. Framing is unchanged.
+``mcp_policy`` is evaluated at install / connect / call. Default enforce
+blocks unverified ``npx -y`` and unsigned hosts; ``DAEDALUS_MCP_POLICY=open``
+restores the old spawn. A missing server is still an error, not a spawn.
 """
 from __future__ import annotations
 
@@ -132,8 +135,19 @@ def upsert_server(name: str, spec: dict[str, Any]) -> dict[str, Any]:
         cleaned = {str(k): str(v) for k, v in env.items() if str(k).strip() and str(v).strip()}
         if cleaned:
             row["env"] = cleaned
+    from .mcp_policy import evaluate_install, record_enable
+
+    decision = evaluate_install(key, row)
+    if not decision.allowed:
+        return {
+            "ok": False,
+            "error": decision.reason,
+            "blocked": True,
+            "need_pin": decision.need_pin,
+        }
     servers[key] = row
     save_servers(servers)
+    record_enable(key, row, source="custom")
     return {"ok": True, "name": key, "config": str(config_path())}
 
 
@@ -161,9 +175,21 @@ def set_server_env(name: str, env: dict[str, str], *, merge: bool = True) -> dic
     return {"ok": True, "name": name, "env_keys": list(current)}
 
 
-async def _http_rpc(url: str, payload: dict[str, Any], timeout: float = 25.0) -> dict[str, Any]:
+async def _http_rpc(
+    url: str,
+    payload: dict[str, Any],
+    timeout: float = 25.0,
+    *,
+    hosts_allow: tuple[str, ...] = (),
+) -> dict[str, Any]:
+    from .mcp_policy import http_url_allowed, policy_is_open
+
+    if not policy_is_open():
+        allowed = http_url_allowed(url, hosts_allow=hosts_allow)
+        if not allowed.allowed:
+            raise RuntimeError(allowed.reason)
     import httpx
-    async with httpx.AsyncClient(timeout=timeout) as client:
+    async with httpx.AsyncClient(timeout=timeout, follow_redirects=False) as client:
         r = await client.post(url, json=payload, headers={"Content-Type": "application/json", "Accept": "application/json"})
         r.raise_for_status()
         data = r.json()
@@ -180,10 +206,11 @@ async def _stdio_session(spec: dict[str, Any], calls: list[dict[str, Any]], time
         argv = [str(x) for x in command]
     else:
         raise ValueError("stdio MCP server needs command")
-    env = os.environ.copy()
-    extra = spec.get("env") or {}
-    if isinstance(extra, dict):
-        env.update({str(k): str(v) for k, v in extra.items()})
+    from .mcp_policy import child_env, is_unverified_npx, policy_is_open
+
+    if not policy_is_open() and is_unverified_npx(spec):
+        raise RuntimeError("unverified npx -y will not spawn — pin @version and approve the server")
+    env = child_env(spec)
 
     proc = await asyncio.create_subprocess_exec(
         *argv,
@@ -236,13 +263,19 @@ async def list_tools(server: str) -> dict[str, Any]:
     spec = load_servers().get(server)
     if not spec:
         return {"ok": False, "error": f"unknown MCP server {server!r}", "servers": list(load_servers())}
+    from .mcp_policy import denied_payload, evaluate_connect, resolve_policy
+
+    decision = evaluate_connect(server, spec)
+    if not decision.allowed:
+        return denied_payload(server, decision)
+    hosts = resolve_policy(server, spec).hosts_allow
     try:
         calls = await handshake_payloads()
         calls.append(rpc("tools/list", {}, id=2))
         if spec.get("url"):
             # HTTP servers typically keep session themselves; send tools/list after init.
-            await _http_rpc(str(spec["url"]), calls[0])
-            data = await _http_rpc(str(spec["url"]), calls[2])
+            await _http_rpc(str(spec["url"]), calls[0], hosts_allow=hosts)
+            data = await _http_rpc(str(spec["url"]), calls[2], hosts_allow=hosts)
             tools = ((data.get("result") or {}).get("tools")) if isinstance(data.get("result"), dict) else data.get("tools")
             return {"ok": True, "server": server, "tools": tools or data}
         replies = await _stdio_session(spec, calls)
@@ -258,11 +291,18 @@ async def call_tool(server: str, tool: str, arguments: dict[str, Any] | None = N
     spec = load_servers().get(server)
     if not spec:
         return {"ok": False, "error": f"unknown MCP server {server!r}"}
-    params = {"name": tool, "arguments": arguments or {}}
+    from .mcp_policy import denied_payload, evaluate_call, resolve_policy
+
+    args = arguments if isinstance(arguments, dict) else {}
+    decision = evaluate_call(server, spec, tool, args)
+    if not decision.allowed:
+        return denied_payload(server, decision, tool=tool)
+    hosts = resolve_policy(server, spec).hosts_allow
+    params = {"name": tool, "arguments": args}
     try:
         if spec.get("url"):
-            await _http_rpc(str(spec["url"]), (await handshake_payloads())[0])
-            data = await _http_rpc(str(spec["url"]), rpc("tools/call", params, id=2))
+            await _http_rpc(str(spec["url"]), (await handshake_payloads())[0], hosts_allow=hosts)
+            data = await _http_rpc(str(spec["url"]), rpc("tools/call", params, id=2), hosts_allow=hosts)
             if data.get("error"):
                 return {"ok": False, "server": server, "tool": tool, "error": data["error"]}
             return {"ok": True, "server": server, "tool": tool, "result": data.get("result", data)}
@@ -278,16 +318,23 @@ async def call_tool(server: str, tool: str, arguments: dict[str, Any] | None = N
 
 
 def status() -> dict[str, Any]:
+    from .mcp_policy import overlay_path, policy_is_open, status_entry
+
     servers = load_servers()
     return {
         "ok": True,
         "config": str(config_path()),
+        "policy": {
+            "mode": "open" if policy_is_open() else "enforce",
+            "overlay": str(overlay_path()),
+        },
         "servers": {
             name: {
                 "transport": "http" if spec.get("url") else "stdio",
                 "url": spec.get("url"),
                 "command": spec.get("command"),
                 "env_keys": list((spec.get("env") or {}).keys()) if isinstance(spec.get("env"), dict) else [],
+                "policy": status_entry(name, spec),
             }
             for name, spec in servers.items()
         },

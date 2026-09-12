@@ -193,7 +193,17 @@ def enable(addon_id: str, extra_env: dict[str, str] | None = None) -> dict[str, 
     data["servers"][item["id"]] = spec
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-    return {"ok": True, "item": item, "config": str(path)}
+    from .mcp_policy import record_enable
+
+    overlay = record_enable(item["id"], spec, source="catalog", catalog_id=item["id"])
+    return {
+        "ok": True,
+        "item": item,
+        "config": str(path),
+        "trust": overlay.trust.value,
+        "npx_yes": overlay.provenance.npx_yes,
+        "need_pin": overlay.trust.value == "unverified",
+    }
 
 
 def disable(addon_id: str) -> dict[str, Any]:
@@ -209,4 +219,7 @@ def disable(addon_id: str) -> dict[str, Any]:
         return {"ok": True, "removed": False}
     servers.pop(addon_id)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    from .mcp_policy import remove_overlay
+
+    remove_overlay(addon_id)
     return {"ok": True, "removed": True}

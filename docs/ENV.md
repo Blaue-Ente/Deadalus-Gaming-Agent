@@ -46,6 +46,8 @@ Optional: `OPENROUTER_HTTP_REFERER`, `OPENROUTER_APP_TITLE` (sent on OpenRouter 
 | `DAEDALUS_DATA` | `data/daedalus/` | SQLite, Chroma, proposals, evolution |
 | `DAEDALUS_PLAYGROUND` | `playground/projects` | Working projects |
 | `DAEDALUS_WINDOWS_APP` | — | Set by the Windows installer; data goes to `%LOCALAPPDATA%\Daedalus` |
+| `DAEDALUS_MCP_POLICY` | `enforce` | `enforce` (default / unset) — unverified MCP install/connect/call fail closed. `open` restores the old spawn (unsafe escape). |
+| `DAEDALUS_MCP_POLICY_FILE` | `$DAEDALUS_DATA/mcp_policy.json` | Overlay: digest, trust, tool allowlists, host pins. Not git. |
 
 ## Local LLM
 
@@ -113,7 +115,8 @@ Without a mesh key: `assets({action:mesh})` returns `need_key`. Greybox (`action
 
 ## MCP and sidecar
 
-- MCP servers: `$DAEDALUS_DATA/mcp.json` (Studio → Connectors writes it).
+- MCP servers: `$DAEDALUS_DATA/mcp.json` (Studio → Connectors writes it). Policy overlay: `$DAEDALUS_DATA/mcp_policy.json`.
+- Unverified `npx -y` and non-loopback HTTP do not spawn unless the owner pins a digest (`DAEDALUS_MCP_POLICY=open` is the only default-open escape).
 - Optional GitHub/GitLab MCP addons reuse `GITHUB_TOKEN` / `GITLAB_TOKEN`. Native `git_forge` already opens PR/MR without those addons.
 - `MIROFISH_URL` / `MIROFISH_UI` — only if you run the AGPL sidecar yourself. It is not vendored here.
 

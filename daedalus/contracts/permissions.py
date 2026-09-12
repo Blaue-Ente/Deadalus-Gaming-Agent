@@ -54,6 +54,7 @@ PERMISSION_CATALOG: tuple[PermissionClass, ...] = (
     PermissionClass(id="claude_worker", label="Claude worker", group=PermissionGroup.WORKERS),
     PermissionClass(id="planner_auto_run", label="Auto planner", group=PermissionGroup.WORKERS),
     PermissionClass(id="mesh_call", label="Iyveris Mesh", group=PermissionGroup.EXTERNAL),
+    PermissionClass(id="mcp_write", label="MCP write tools", group=PermissionGroup.EXTERNAL),
 )
 
 # native_tools.PERM_MAP also uses postgres_query, which is not in the outbox catalog.
