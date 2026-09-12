@@ -330,9 +330,10 @@ P0_22_HOOKS: dict[str, Any] = {
     "game_task_count": GAME_TASK_COUNT,
     "live_required_for_release": False,
     "note": (
-        "P0.22 compares honesty (15) plus hermetic game_v1 (20) against the "
-        "recorded pack. Live rows are never required. This ticket does not "
-        "implement the release-gate aggregator."
+        "P0.22 aggregates honesty (15) plus hermetic game_v1 (20) against the "
+        "recorded pack via scripts/p0_release_gate.py. Live rows are never "
+        "required. Human merge of the P0 MR stack and GitLab branch protection "
+        "are not CI."
     ),
 }
 

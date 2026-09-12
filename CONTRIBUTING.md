@@ -50,11 +50,18 @@ python3 -m daedalus.game_agent_bench --suite game --no-persist
 
 CI (`.gitlab-ci.yml`) is hermetic: standalone on, LLM keys unset, coverage floor 45%, no Docker-in-Docker on the default pytest job. Live docker tests are `@pytest.mark.docker` (optional job). Chromium extras are `@pytest.mark.playwright`. Live engine overlays are `@pytest.mark.live_engine` / `--suite game --live` (optional `bench-live` job). If you add a Godot/Blender path, cover the detector/scaffold with a unit test even when the Godot binary is missing in CI.
 
-P0.22 may compare `artifacts/baseline/benchmark-results.json` (honesty, 15 cases) with `--suite game --no-persist --json` (game_v1, 20 hermetic tasks). Live engines are not a release requirement. Do not implement that gate in a bench-only change.
+P0.22 (`scripts/p0_release_gate.py`) aggregates hermetic evidence: the P0.00 pack, honesty 15 vs `artifacts/baseline/benchmark-results.json`, game_v1 20 vs `artifacts/baseline/game-benchmark-results.json`, skip≠ok, Docker refuse, RunState/checkpoint, typed overlay + six-tool registry + leftover ladder, MCP enforce, and `CHAT_RETURN_KEYS`. Live engines are not a release requirement. Full pytest stays the `pytest` job.
+
+```bash
+python3 scripts/p0_release_gate.py
+python3 scripts/p0_release_gate.py --json
+```
+
+P0 on `main` still needs a human to merge the stacked MRs (`!75`–`!92` plus the release-gate MR) and then the tip into `main`. This file cannot set GitLab branch protection.
 
 Without docker the required gates stay fail-closed: sandbox unit tests must refuse, not fall through to the host. Do not rewrite leftover `NEED_*` holes to silence ruff — `daedalus/tool_loop.py` F821 is a preserved ignore.
 
-`main` should require a green pipeline (`ruff`, `mypy`, `uv-lock`, `pytest`, `secret-scan`, `pip-audit`, `trivy-fs`) before merge. Image build / live docker are not required. `trivy-fs` uses `--ignore-unfixed` (same as pip-audit) and documents Studio Dockerfile `USER` in `.trivyignore.yaml`.
+`main` should require a green pipeline (`ruff`, `mypy`, `uv-lock`, `pytest`, `secret-scan`, `pip-audit`, `trivy-fs`, `p0-release-gate`) before merge. Image build / live docker / live engines are not required. Do not turn on a blanket “pipelines must succeed” that would also wait on DinD `build-image` — prefer a per-job list. `trivy-fs` uses `--ignore-unfixed` (same as pip-audit) and documents Studio Dockerfile `USER` in `.trivyignore.yaml`.
 
 ## Style
 

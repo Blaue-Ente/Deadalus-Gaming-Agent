@@ -373,10 +373,11 @@ GitLab CI (`.gitlab-ci.yml`) is the source of truth. Required jobs (no Docker-in
 | `secret-scan` | `scripts/secret_scan.py` |
 | `pip-audit` | Declared install |
 | `trivy-fs` | Filesystem / `uv.lock` / Dockerfile (no DinD; `--ignore-unfixed`; Studio `USER` documented in `.trivyignore.yaml`) |
+| `p0-release-gate` | Hermetic P0.22 aggregator (`scripts/p0_release_gate.py`). Live engines are not required. |
 
-`build-image` uses Docker-in-Docker and is **not** required to merge. `pytest-docker` is optional (`DAEDALUS_CI_DOCKER=1` or manual). Without docker, `DockerBackend` unit tests still fail closed (no Local fall-through); live `@pytest.mark.docker` tests are not in the default job.
+`build-image` uses Docker-in-Docker and is **not** required to merge. `pytest-docker` is optional (`DAEDALUS_CI_DOCKER=1` or manual). `bench-live` is optional. Without docker, `DockerBackend` unit tests still fail closed (no Local fall-through); live `@pytest.mark.docker` tests are not in the default job.
 
-Branch protection on `main` (GitLab settings): protect the branch, no force-push, merge via MR only, pipelines must succeed. Require `ruff`, `mypy`, `uv-lock`, `pytest`, `secret-scan`, `pip-audit`. Do not require `build-image` or `pytest-docker`.
+Branch protection on `main` (GitLab settings — this repo cannot flip them): protect the branch, no force-push, merge via MR only. Require `ruff`, `mypy`, `uv-lock`, `pytest`, `secret-scan`, `pip-audit`, `trivy-fs`, `p0-release-gate`. Do not require `build-image`, `pytest-docker`, or `bench-live`. A blanket “pipelines must succeed” on merge requests would also wait on DinD `build-image` — prefer a per-job list. Landing P0 on `main` still needs a human to merge the stacked P0 MRs.
 
 When `CI_REGISTRY` is set, `build-image` pushes `$CI_REGISTRY_IMAGE:latest`.
 
