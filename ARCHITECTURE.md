@@ -70,6 +70,7 @@ Defaults:
 | Code | git clone root |
 | SQLite + Chroma + proposals | `$DAEDALUS_DATA` → `data/daedalus/` |
 | Projects | `playground/projects/{slug}/` |
+| Run worktrees | `$DAEDALUS_DATA/worktrees/{run_id}/` — opt-in `DAEDALUS_WORKTREE=1` |
 | Docker data | `/var/lib/daedalus` |
 | Windows data | `%LOCALAPPDATA%\Daedalus` |
 
