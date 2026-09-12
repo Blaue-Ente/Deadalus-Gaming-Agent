@@ -68,6 +68,12 @@ from .engine import (
     EnginePreflight,
     EngineRunResult,
 )
+from .context import (
+    ContextBudgetReport,
+    ContextSlice,
+    ContextSliceKind,
+    ContextWindow,
+)
 
 __all__ = [
     "CONTRACT_SCHEMA_VERSION",
@@ -77,6 +83,10 @@ __all__ = [
     "BuildArtifactRef",
     "CommandRequest",
     "CommandResult",
+    "ContextBudgetReport",
+    "ContextSlice",
+    "ContextSliceKind",
+    "ContextWindow",
     "EnvPolicy",
     "ExecutionBackend",
     "FilesystemPolicy",
