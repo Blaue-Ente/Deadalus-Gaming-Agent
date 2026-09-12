@@ -22,6 +22,7 @@ class EventKind(str, Enum):
     TOOL = "tool"
     TASK = "task"
     CHECKPOINT = "checkpoint"
+    STAGE = "stage"
 
 
 class TaskAction(str, Enum):
