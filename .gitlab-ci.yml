@@ -4,12 +4,14 @@
 # Without docker the required jobs stay fail-closed:
 #   - DockerBackend / run_in_docker unit tests must still refuse (no Local fall-through)
 #   - @pytest.mark.docker is excluded from the required pytest job
-#   - ruff / mypy / uv-lock / coverage / secret-scan / pip-audit / trivy-fs / p0-release-gate need no daemon
+#   - ruff / mypy / uv-lock / coverage / secret-scan / pip-audit / trivy-fs /
+#     supply-chain / p0-release-gate need no daemon
 # build-image is the only DinD job and is not a required merge gate.
 #
 # Branch protection (owner applies in GitLab settings — this file cannot):
 #   protect main, no force-push, merge only via MR, pipelines must succeed.
 #   Required jobs: ruff, mypy, uv-lock, pytest, secret-scan, pip-audit, trivy-fs, p0-release-gate.
+#   supply-chain is the P1.10 hermetic leaf (not a P0 protection name).
 #   Do not require build-image, trivy-image, pytest-docker, or bench-live.
 #   A blanket "pipelines must succeed" on MRs would also wait on DinD build-image —
 #   prefer a per-job required list. Human merge of !75–!92 is not this file.
@@ -47,21 +49,21 @@ ruff:
   extends: [.python, .ci_rules]
   stage: lint
   script:
-    - pip install --no-cache-dir ruff
-    - ruff check daedalus app tests
+    - pip install --no-cache-dir uv==0.12.12
+    - python3 -m uv run --frozen --extra dev ruff check daedalus app tests
 
 mypy:
   extends: [.python, .ci_rules]
   stage: lint
   script:
-    - pip install --no-cache-dir mypy
-    - python3 -m mypy
+    - pip install --no-cache-dir uv==0.12.12
+    - python3 -m uv run --frozen --extra dev python -m mypy
 
 uv-lock:
   extends: [.python, .ci_rules]
   stage: lint
   script:
-    - pip install --no-cache-dir uv
+    - pip install --no-cache-dir uv==0.12.12
     - python3 -m uv lock --check
 
 pytest:
@@ -71,9 +73,10 @@ pytest:
     COVERAGE_FILE: "/tmp/daedalus-ci.coverage"
   script:
     - apt-get update && apt-get install -y --no-install-recommends git
-    - pip install --no-cache-dir -e ".[dev]"
+    - pip install --no-cache-dir uv==0.12.12
+    - python3 -m uv sync --frozen --extra dev
     - >
-      python3 -m pytest tests -q -m "not docker and not playwright"
+      .venv/bin/python -m pytest tests -q -m "not docker and not playwright"
       --cov=daedalus --cov-report=term-missing --cov-report=xml:coverage.xml
       --cov-fail-under=45 --junitxml=test-results.xml
   artifacts:
@@ -99,8 +102,9 @@ pytest-docker:
     - when: manual
       allow_failure: true
   script:
-    - pip install --no-cache-dir -e ".[dev]"
-    - python3 -m pytest tests -q -m docker
+    - pip install --no-cache-dir uv==0.12.12
+    - python3 -m uv sync --frozen --extra dev
+    - .venv/bin/python -m pytest tests -q -m docker
 
 # Optional. Not a required gate. Default runners have no Godot / Unity / Blender.
 bench-live:
@@ -112,8 +116,9 @@ bench-live:
     - when: manual
       allow_failure: true
   script:
-    - pip install --no-cache-dir -e ".[dev]"
-    - python3 -m daedalus.game_agent_bench --suite game --live --no-persist
+    - pip install --no-cache-dir uv==0.12.12
+    - python3 -m uv sync --frozen --extra dev
+    - .venv/bin/python -m daedalus.game_agent_bench --suite game --live --no-persist
 
 secret-scan:
   extends: [.python, .ci_rules]
@@ -130,9 +135,9 @@ pip-audit:
   extends: [.python, .ci_rules]
   stage: audit
   script:
-    - pip install --no-cache-dir uv
+    - pip install --no-cache-dir uv==0.12.12
     - python3 -m uv sync --frozen --no-dev
-    - python3 -m uv pip install pip-audit --python .venv/bin/python
+    - python3 -m uv pip install pip-audit==2.10.1 --python .venv/bin/python
     - .venv/bin/python scripts/pip_audit_project.py
   artifacts:
     when: always
@@ -162,13 +167,28 @@ trivy-fs:
     paths:
       - trivy-fs.txt
 
+# P1.10 hermetic leaf. No DinD. Does not replace pip-audit / trivy-fs / secret-scan.
+supply-chain:
+  extends: [.python, .ci_rules]
+  stage: audit
+  script:
+    - pip install --no-cache-dir uv==0.12.12
+    - python3 -m uv sync --frozen --no-dev
+    - .venv/bin/python -m daedalus.supply_chain --json > supply-chain.json
+  artifacts:
+    when: always
+    expire_in: 14 days
+    paths:
+      - supply-chain.json
+
 # Hermetic P0.22 aggregator. No DinD. Live engines are not required.
 p0-release-gate:
   extends: [.python, .ci_rules]
   stage: gate
   script:
-    - pip install --no-cache-dir -e ".[dev]"
-    - python3 scripts/p0_release_gate.py --json > p0-release-gate.json
+    - pip install --no-cache-dir uv==0.12.12
+    - python3 -m uv sync --frozen --extra dev
+    - .venv/bin/python scripts/p0_release_gate.py --json > p0-release-gate.json
   artifacts:
     when: always
     expire_in: 14 days

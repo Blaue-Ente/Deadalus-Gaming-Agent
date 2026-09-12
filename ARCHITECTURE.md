@@ -53,6 +53,7 @@ Daedalus is **one product**: coding agent + Studio + Playground. One FastAPI pro
 | Memory provenance | `memory_provenance.py` | Leaf observational labeler. Maps already-retrieved memory rows to `source_id` + kind/origin (metadata first, then prefix). `ep:` collision is documented via `collection` — ids are not migrated. Does not rewrite Chroma / Mem0 / `capture_*`. Not wired to assembler or ContextBudget. Not on Run. Not Studio I/O. |
 | OpenTelemetry | `otel.py` | Leaf tracer/meter setup. `DAEDALUS_OTEL` off is a no-op and does not set the global provider. Memory exporter for tests; OTLP gRPC when an endpoint is set. `annotate()` copies an allowlist only (run/session + later ContextBudget / MemoryProvenance keys). Not wired to agent, ToolLoop, or FastAPI. Not on Run. Not Studio I/O. Do not set `CHROMA_OTEL_*`. |
 | Independent reviewer | `independent_reviewer.py` | Leaf second-pass sign-off. `DAEDALUS_INDEPENDENT_REVIEW` off is a no-op (`verdict=not_run`, ok). Checklist is the default when opted in. Optional LLM only via an injected `llm_fn` plus `DAEDALUS_INDEPENDENT_REVIEW_LLM` — missing fn / parse fail / offline is skip ≠ ok, not fail-open. Checklist blockers win over an LLM `approved`. Does not import agent, mentor, workers, or VerificationController. Not wired to agent / ToolLoop / RunFinalizer. Not on Run. Not Studio I/O. |
+| Supply chain | `supply_chain.py` | Leaf lock/pin inspect. `DAEDALUS_SUPPLY_CHAIN` off is a no-op (ok). Opt-in reads `uv.lock` (inventory + SHA-256), runs `uv lock --check` (unavailable is skip ≠ ok), checks pyproject names ⊆ lock, pins OpenTelemetry 1.44.0, and refuses unpinned `pip install` / `uv pip install` in GitLab CI, the Studio Dockerfile, and the GitHub workflow. Presence-only check that `uv-lock` / `secret-scan` / `pip-audit` / `trivy-fs` still exist. Does not run those scanners. Not wired to agent / ToolLoop. Not on Run. Not Studio I/O. |
 | Browser | `playground_browser.py`, `browser_session.py` | Smoke + interactive session |
 | Playground | `playground*.py`, `game_*.py` | static, vite, phaser-via-vite, expo, unity, godot; Capacitor wraps vite/static `dist/` |
 | Autopilot | `builder_runtime.py` + `kernel/full_autopilot.py` | Kernel loop |
@@ -81,6 +82,7 @@ Defaults:
 | Memory provenance reports | `$DAEDALUS_DATA/memory/{run_id}.json` — optional persist from `MemoryProvenance` |
 | OpenTelemetry reports | `$DAEDALUS_DATA/otel/{run_id}.json` — optional persist from `OpenTelemetry` |
 | Independent review reports | `$DAEDALUS_DATA/review/{run_id}.json` — optional persist from `IndependentReviewer` |
+| Supply-chain reports | `$DAEDALUS_DATA/supply/{run_id}.json` — optional persist from `SupplyChain` |
 | Docker data | `/var/lib/daedalus` |
 | Windows data | `%LOCALAPPDATA%\Daedalus` |
 

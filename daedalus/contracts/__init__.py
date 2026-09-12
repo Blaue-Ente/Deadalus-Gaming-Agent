@@ -93,6 +93,11 @@ from .review import (
     ReviewSubjectKind,
     ReviewVerdict,
 )
+from .supply import (
+    SupplyCheck,
+    SupplyPackage,
+    SupplyReport,
+)
 
 __all__ = [
     "CONTRACT_SCHEMA_VERSION",
@@ -166,6 +171,9 @@ __all__ = [
     "SliceStatus",
     "SideEffectClass",
     "StageRow",
+    "SupplyCheck",
+    "SupplyPackage",
+    "SupplyReport",
     "TaskAction",
     "TaskEvent",
     "TOOL_SPEC_OVERLAY",
