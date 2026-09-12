@@ -83,6 +83,7 @@ OUTBOX_PERMISSION_IDS = frozenset(
         "claude_worker",
         "planner_auto_run",
         "mesh_call",
+        "mcp_write",
         "postgres_query",
     }
 )

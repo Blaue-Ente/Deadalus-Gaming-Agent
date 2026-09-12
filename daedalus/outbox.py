@@ -366,6 +366,7 @@ KNOWN_PERMISSION_CLASSES: list[dict[str, str]] = [
     {"id": "planner_auto_run",        "label": "Auto planner",   "group": "workers"},
     # Mesh
     {"id": "mesh_call",               "label": "Iyveris Mesh",   "group": "external"},
+    {"id": "mcp_write",               "label": "MCP write tools", "group": "external"},
 ]
 
 # Worker slot → permission class (enforced in workers.py)
