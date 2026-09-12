@@ -130,8 +130,8 @@
     ]
   },
   "tests": {
-    "modules": 63,
-    "functions": 760
+    "modules": 64,
+    "functions": 775
   },
   "modules": {
     "daedalus": [
@@ -224,6 +224,7 @@
       "daedalus/kv.py",
       "daedalus/learned_skills.py",
       "daedalus/learning.py",
+      "daedalus/legacy_adapter.py",
       "daedalus/lint_gate.py",
       "daedalus/live_publish.py",
       "daedalus/llm_benchmark.py",

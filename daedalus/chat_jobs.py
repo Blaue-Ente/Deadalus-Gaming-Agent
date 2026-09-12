@@ -76,16 +76,44 @@ async def start_chat(
 
         try:
             set_live(sid, "thinking", 0, "Започвам…")
-            from daedalus.agent import get_daedalus
+            from daedalus.legacy_adapter import adapter_enabled
 
-            result = await get_daedalus().chat(
-                message=message,
-                session_id=sid,
-                effort=effort,
-                skill_ids=skill_ids,
-                mcp_ids=mcp_ids,
-                attachment_ids=attachment_ids,
-            )
+            if adapter_enabled():
+                from daedalus.legacy_adapter import (
+                    LegacyTurnRequest,
+                    run_turn,
+                    unwrap_chat,
+                )
+
+                packed = await run_turn(
+                    LegacyTurnRequest(
+                        message=message,
+                        session_id=sid,
+                        effort=effort,
+                        skill_ids=skill_ids,
+                        mcp_ids=mcp_ids,
+                        attachment_ids=attachment_ids,
+                    )
+                )
+                if not packed.chat:
+                    msg = (
+                        packed.error.message
+                        if packed.error is not None
+                        else "legacy adapter failed"
+                    )
+                    raise RuntimeError(msg[:400])
+                result = unwrap_chat(packed)
+            else:
+                from daedalus.agent import get_daedalus
+
+                result = await get_daedalus().chat(
+                    message=message,
+                    session_id=sid,
+                    effort=effort,
+                    skill_ids=skill_ids,
+                    mcp_ids=mcp_ids,
+                    attachment_ids=attachment_ids,
+                )
             if row.get("cancelled"):
                 row["status"] = "cancelled"
                 return
