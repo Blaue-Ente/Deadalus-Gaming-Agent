@@ -74,6 +74,12 @@ from .context import (
     ContextSliceKind,
     ContextWindow,
 )
+from .memory import (
+    MemoryKind,
+    MemoryOrigin,
+    MemoryProvenanceRecord,
+    MemoryProvenanceReport,
+)
 
 __all__ = [
     "CONTRACT_SCHEMA_VERSION",
@@ -109,6 +115,10 @@ __all__ = [
     "EventKind",
     "KNOWN_PERMISSION_IDS",
     "KnownFailure",
+    "MemoryKind",
+    "MemoryOrigin",
+    "MemoryProvenanceRecord",
+    "MemoryProvenanceReport",
     "NamedArtifact",
     "Observation",
     "PERMISSION_CATALOG",
