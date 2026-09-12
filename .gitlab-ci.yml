@@ -70,6 +70,7 @@ pytest:
   variables:
     COVERAGE_FILE: "/tmp/daedalus-ci.coverage"
   script:
+    - apt-get update && apt-get install -y --no-install-recommends git
     - pip install --no-cache-dir -e ".[dev]"
     - >
       python3 -m pytest tests -q -m "not docker and not playwright"

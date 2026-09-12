@@ -43,6 +43,7 @@ Optional: `OPENROUTER_HTTP_REFERER`, `OPENROUTER_APP_TITLE` (sent on OpenRouter 
 | `DAEDALUS_EXEC_CPUS` | `1` | `--cpus` for the exec container (clamped 0–8). |
 | `DAEDALUS_EXEC_MEMORY` | `512m` | `--memory` / `--memory-swap` for the exec container. |
 | `DAEDALUS_EXEC_PIDS` | `128` | `--pids-limit` for the exec container (clamped 8–1024). |
+| `DAEDALUS_WORKTREE` | — | `1` creates a git worktree per coding run under `$DAEDALUS_DATA/worktrees/{run_id}/`. Default off: the live checkout is unchanged. Leaf only — `write_file` is not redirected yet. |
 | `DAEDALUS_DATA` | `data/daedalus/` | SQLite, Chroma, proposals, evolution |
 | `DAEDALUS_PLAYGROUND` | `playground/projects` | Working projects |
 | `DAEDALUS_WINDOWS_APP` | — | Set by the Windows installer; data goes to `%LOCALAPPDATA%\Daedalus` |
