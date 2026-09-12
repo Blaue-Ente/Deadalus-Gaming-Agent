@@ -4,9 +4,9 @@ This file records current behavior. It is not permission to delete, skip, or wea
 
 ## Environment
 
-- Generated at: 2026-09-11T20:22:30.696662+00:00
-- Git commit: `b24fe61ad717485939bfba90f5bb23644a746b67`
-- Git branch: `p0/00-baseline`
+- Generated at: 2026-09-11T23:10:13.502432+00:00
+- Git commit: `f07533657e76c9aa0b1b29cbe93e8077ac5a942c`
+- Git branch: `p0/14-verification-controller`
 - Python: 3.12.3
 - Extras installed: `dev` only (no playwright / computer / gui)
 - `DAEDALUS_STANDALONE=1`
@@ -14,21 +14,20 @@ This file records current behavior. It is not permission to delete, skip, or wea
 
 ## Pytest summary
 
-- Collected / reported tests: 580
-- Passed: 579
+- Collected / reported tests: 841
+- Passed: 840
 - Failed: 0
 - Errors: 0
 - Skipped: 1
-- Duration (s): 63.017
+- Duration (s): 61.827
 - Pytest exit code: 0
-- Coverage line-rate (`daedalus`, observational): 41.93%
+- Coverage line-rate (`daedalus`, observational): 48.17%
 
-- Pytest last line: `579 passed, 1 skipped, 1 warning in 63.02s (0:01:03)`
+- Pytest last line: `840 passed, 1 skipped, 1 warning in 61.85s (0:01:01)`
 
 ## Failed or errored tests
 
 No product test failures or errors were recorded.
-
 ## Skipped tests
 
 - `tests/test_gameplay_bot.py::test_chromium_tiny_canvas_bot` — could not import 'playwright': No module named 'playwright'
