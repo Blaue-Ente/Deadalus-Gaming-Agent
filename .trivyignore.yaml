@@ -1,0 +1,17 @@
+# Filesystem scan ignore — keep this list tiny.
+# YAML ignores are experimental: CI must pass --ignorefile .trivyignore.yaml.
+# DS-0002 cannot be inline-ignored (the check is "USER is missing").
+#
+# The Studio image stays root so a first-run named volume at
+# /var/lib/daedalus is writable. Adding USER without a root entrypoint
+# that chowns the mount makes compose fail on an empty root-owned volume.
+# The exec sandbox image already drops to uid 10000 (docker/exec/Dockerfile).
+misconfigurations:
+  - id: DS-0002
+    paths:
+      - Dockerfile
+    statement: Studio volume /var/lib/daedalus is root-owned on first mount; USER would make it unwritable. Exec image already has USER.
+  - id: AVD-DS-0002
+    paths:
+      - Dockerfile
+    statement: Alias used by Trivy <0.69.

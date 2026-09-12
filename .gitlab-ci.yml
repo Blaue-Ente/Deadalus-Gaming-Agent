@@ -124,17 +124,20 @@ pip-audit:
     paths:
       - pip-audit.json
 
-# Filesystem / Dockerfile scan. No DinD. Missing scanner image fails the job.
+# Filesystem / lockfile / Dockerfile scan. No DinD. Missing scanner fails closed.
+# --ignore-unfixed matches pip-audit (chromadb HIGH with no published fix).
+# AVD-DS-0002 on the Studio Dockerfile is documented in .trivyignore.yaml.
 trivy-fs:
   extends: .ci_rules
   stage: audit
   image:
-    name: aquasec/trivy:0.58.1
+    name: aquasec/trivy:0.74.0
     entrypoint: [""]
   script:
     - >
-      trivy fs --exit-code 1 --severity HIGH,CRITICAL
-      --skip-dirs .git --skip-dirs artifacts --scanners vuln,misconfig
+      trivy fs --exit-code 1 --severity HIGH,CRITICAL --ignore-unfixed
+      --skip-dirs .git --skip-dirs artifacts --skip-dirs .venv
+      --scanners vuln,misconfig --ignorefile .trivyignore.yaml
       --format table --output trivy-fs.txt .
     - cat trivy-fs.txt
   artifacts:

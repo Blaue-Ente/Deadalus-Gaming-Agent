@@ -51,7 +51,7 @@ CI (`.gitlab-ci.yml`) is hermetic: standalone on, LLM keys unset, coverage floor
 
 Without docker the required gates stay fail-closed: sandbox unit tests must refuse, not fall through to the host. Do not rewrite leftover `NEED_*` holes to silence ruff — `daedalus/tool_loop.py` F821 is a preserved ignore.
 
-`main` should require a green pipeline (`ruff`, `mypy`, `uv-lock`, `pytest`, `secret-scan`, `pip-audit`) before merge. Image build / live docker are not required.
+`main` should require a green pipeline (`ruff`, `mypy`, `uv-lock`, `pytest`, `secret-scan`, `pip-audit`, `trivy-fs`) before merge. Image build / live docker are not required. `trivy-fs` uses `--ignore-unfixed` (same as pip-audit) and documents Studio Dockerfile `USER` in `.trivyignore.yaml`.
 
 ## Style
 
