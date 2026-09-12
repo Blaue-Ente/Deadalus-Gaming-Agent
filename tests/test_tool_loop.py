@@ -74,16 +74,20 @@ def test_tool_loop_does_not_own_verification():
     assert "job_contract" not in src
     assert "empty-reply" not in src
     # Native pass still calls mentor via _mentor_record_outcome. Session
-    # record_outcome / RunFinalizer stay on Daedalus. VerificationController
-    # is a sibling leaf — ToolLoop must not own it.
+    # record_outcome / RunFinalizer live on the sibling leaf. VerificationController
+    # is a sibling — ToolLoop must not own it.
     assert re.search(r"(?<![A-Za-z0-9_])record_outcome\(", src) is None
     assert "verification_controller" not in src
+    assert "run_finalizer" not in src
     agent = (ROOT / "daedalus" / "agent.py").read_text(encoding="utf-8")
-    assert "review_gate_critique" in agent
-    assert "empty-reply guard" in agent
-    assert "VerificationController" in agent
-    assert "finish_nudge" in agent
-    assert re.search(r"(?<![A-Za-z0-9_])record_outcome\(", agent)
+    assert "RunFinalizer().after_loop" in agent
+    assert "RunFinalizer().finish_chat" in agent
+    fin = (ROOT / "daedalus" / "run_finalizer.py").read_text(encoding="utf-8")
+    assert "review_gate_critique" in fin
+    assert "empty-reply guard" in fin
+    assert "VerificationController" in fin
+    assert "finish_nudge" in fin
+    assert re.search(r"(?<![A-Za-z0-9_])record_outcome\(", fin)
 
 
 def test_tool_loop_does_not_construct_build_loop():

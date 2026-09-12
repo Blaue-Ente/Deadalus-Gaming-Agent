@@ -59,6 +59,7 @@ def test_leaf_does_not_import_agent_or_finalizer():
         "daedalus.batch_verify",
         "daedalus.kernel.full_autopilot",
         "daedalus.game_studio_verify",
+        "daedalus.run_finalizer",
     }
     forbidden_names = {
         "agent",
@@ -108,15 +109,19 @@ def test_tool_loop_does_not_import_controller():
                 assert alias.name != "VerificationController"
 
 
-def test_agent_wires_accept_and_keeps_finalizer():
+def test_agent_wires_finalizer_and_keeps_leftover_verify():
     src = (ROOT / "daedalus" / "agent.py").read_text(encoding="utf-8")
-    assert "VerificationController" in src
-    assert ".accept(" in src
-    assert "finish_nudge" in src
-    assert "empty-reply guard" in src
-    assert "review_gate_critique" in src
+    assert "RunFinalizer" in src
+    assert "after_loop" in src
+    assert "finish_chat" in src
     assert "execute_verify" in src
     assert "NEED_VERIFY" in src
+    fin = (ROOT / "daedalus" / "run_finalizer.py").read_text(encoding="utf-8")
+    assert "VerificationController" in fin
+    assert ".accept(" in fin
+    assert "finish_nudge" in fin
+    assert "empty-reply guard" in fin
+    assert "review_gate_critique" in fin
 
 
 def test_stage_row_skipped_is_not_ok():

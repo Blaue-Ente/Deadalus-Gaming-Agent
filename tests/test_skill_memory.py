@@ -231,7 +231,7 @@ def test_agent_discloses_once_and_success_draft_wired():
     assert "from .learned_skills import format_block" not in agent
     assert "from .learned_skills import format_block" not in assembler
     assert "disclose" in assembler
-    assert "draft_from_success" in agent
+    assert "draft_from_success" in (ROOT / "daedalus" / "run_finalizer.py").read_text(encoding="utf-8")
     auto = (ROOT / "daedalus" / "kernel" / "full_autopilot.py").read_text(encoding="utf-8")
     assert "draft_from_success" in auto
     assert "disclose(" in auto

@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-11T23:10:13.447016+00:00",
+  "generated_at": "2026-09-11T23:27:35.949678+00:00",
   "package_version": "0.3.8",
-  "git_commit": "f07533657e76c9aa0b1b29cbe93e8077ac5a942c",
+  "git_commit": "80b8b0e1afc3aee3dfa1cd0cfa713007df78105d",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -9,8 +9,8 @@
   "hotspots": [
     {
       "path": "daedalus/agent.py",
-      "lines": 4136,
-      "broad_excepts": 130
+      "lines": 3713,
+      "broad_excepts": 109
     },
     {
       "path": "app/admin_compat.py",
@@ -63,7 +63,8 @@
     "autopilot": "daedalus/kernel/full_autopilot.py",
     "builder_runtime": "daedalus/builder_runtime.py",
     "tool_loop": "daedalus/tool_loop.py",
-    "verification_controller": "daedalus/verification_controller.py"
+    "verification_controller": "daedalus/verification_controller.py",
+    "run_finalizer": "daedalus/run_finalizer.py"
   },
   "native_tools": [
     "read_file",
@@ -132,8 +133,8 @@
     ]
   },
   "tests": {
-    "modules": 68,
-    "functions": 841
+    "modules": 69,
+    "functions": 865
   },
   "modules": {
     "daedalus": [
@@ -352,6 +353,7 @@
       "daedalus/rejection_lessons.py",
       "daedalus/run_budget.py",
       "daedalus/run_engine.py",
+      "daedalus/run_finalizer.py",
       "daedalus/run_state.py",
       "daedalus/sandbox.py",
       "daedalus/scratch_journal.py",
