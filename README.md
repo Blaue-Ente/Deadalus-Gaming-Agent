@@ -96,6 +96,7 @@ Data lives under `$DAEDALUS_DATA` (default `data/daedalus/` on the machine, `%LO
 | Native tools | `read_file`, `write_file`, `run_command`, `web_search`, `web_fetch`, `web_read`, `generate_image`, `remember`, `code_search`, `browser`, `mcp_call`, `spawn_subagent`, `playtest`, `play_lab`, `dissect_game`, `engine`, `world`, `assets`, `skill`, `production`, `git_forge`, `math3d`, `spatial`, `game_lint`, `profiler`, `game_canon` |
 | MCP | Studio → **Connectors** (`$DAEDALUS_DATA/mcp.json` + `secrets.env`) |
 | Honesty suite | `python -m daedalus.game_agent_bench` · `GET /api/v1/daedalus/bench` — this harness, not a vendor bake-off |
+| Game bench v1 | `python -m daedalus.game_agent_bench --suite game` · `GET /api/v1/daedalus/bench?suite=game` — 20 hermetic tasks; `--live` is optional and fail-closed |
 | Local LLM | Connectors **Brain** (`/admin/daedalus/connectors#brain`) — Ollama wardrobe for the **whole process** (chat, workers, autopilot, CLI), not Studio-only. Or `DAEDALUS_PROVIDER=ollama` |
 | Offline kit | `DAEDALUS_OFFLINE=1` / Studio toggle — no search/images; local model + capsules still work |
 | Sub-agents | worker slots **and** `spawn_subagent` (files + shell, jailed) |
