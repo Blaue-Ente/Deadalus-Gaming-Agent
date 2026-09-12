@@ -61,6 +61,13 @@ from .baseline import (
     EngineProbe,
     KnownFailure,
 )
+from .engine import (
+    EngineCapability,
+    EngineDiscover,
+    EngineKind,
+    EnginePreflight,
+    EngineRunResult,
+)
 
 __all__ = [
     "CONTRACT_SCHEMA_VERSION",
@@ -82,7 +89,12 @@ __all__ = [
     "DirtyBaseline",
     "DodVerdict",
     "EffortTier",
+    "EngineCapability",
+    "EngineDiscover",
+    "EngineKind",
+    "EnginePreflight",
     "EngineProbe",
+    "EngineRunResult",
     "ErrorClass",
     "EventKind",
     "KNOWN_PERMISSION_IDS",

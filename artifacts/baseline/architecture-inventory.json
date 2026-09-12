@@ -133,8 +133,8 @@
     ]
   },
   "tests": {
-    "modules": 76,
-    "functions": 993
+    "modules": 77,
+    "functions": 1005
   },
   "modules": {
     "daedalus": [
@@ -185,6 +185,7 @@
       "daedalus/contracts/artifacts.py",
       "daedalus/contracts/baseline.py",
       "daedalus/contracts/commands.py",
+      "daedalus/contracts/engine.py",
       "daedalus/contracts/errors.py",
       "daedalus/contracts/events.py",
       "daedalus/contracts/evidence.py",
@@ -200,6 +201,7 @@
       "daedalus/document_generator.py",
       "daedalus/dod.py",
       "daedalus/edit_diff.py",
+      "daedalus/engine_adapter.py",
       "daedalus/engine_runners.py",
       "daedalus/engine_session.py",
       "daedalus/error_brain.py",
