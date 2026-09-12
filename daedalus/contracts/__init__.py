@@ -80,6 +80,12 @@ from .memory import (
     MemoryProvenanceRecord,
     MemoryProvenanceReport,
 )
+from .otel import (
+    OtelMetricRecord,
+    OtelMode,
+    OtelReport,
+    OtelSpanRecord,
+)
 
 __all__ = [
     "CONTRACT_SCHEMA_VERSION",
@@ -121,6 +127,10 @@ __all__ = [
     "MemoryProvenanceReport",
     "NamedArtifact",
     "Observation",
+    "OtelMetricRecord",
+    "OtelMode",
+    "OtelReport",
+    "OtelSpanRecord",
     "PERMISSION_CATALOG",
     "PermissionClass",
     "PermissionDecision",
