@@ -7,7 +7,8 @@ open host paths. Public bind disables the runner unless
 ``DAEDALUS_SHELL_ISOLATION=1``.
 
 ``run_command(str, …)`` is the adapter entry. Structured form is
-``CommandRequest``; ``execute_command`` holds the host subprocess body.
+``CommandRequest``; ``execute_command`` selects an ``ExecutionBackend``.
+``LocalBackend`` / ``execute_host`` is the host subprocess path.
 """
 from __future__ import annotations
 
@@ -21,7 +22,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from daedalus.contracts.commands import CommandRequest, CommandResult
+from daedalus.contracts.commands import CommandRequest, CommandResult, ExecutionBackend
 
 from .paths import data_root, playground_projects_dir, product_root
 
@@ -248,8 +249,8 @@ def _command_text(req: CommandRequest) -> str:
     return shlex.join(parts)
 
 
-def execute_command(req: CommandRequest) -> CommandResult:
-    """Host subprocess body. P0.17 replaces this with ExecutionBackend.run."""
+def execute_host(req: CommandRequest) -> CommandResult:
+    """Host subprocess body. Used by LocalBackend. Keeps ``subprocess.run`` here."""
     from daedalus.command_adapt import result_from_legacy
 
     command = _command_text(req)
@@ -351,6 +352,18 @@ def execute_command(req: CommandRequest) -> CommandResult:
         "elapsed_ms": row.get("elapsed_ms"),
     })
     return result_from_legacy(row)
+
+
+def execute_command(
+    req: CommandRequest,
+    *,
+    backend: ExecutionBackend | None = None,
+) -> CommandResult:
+    """Dispatch to an ExecutionBackend. Default is ``get_execution_backend()``."""
+    from daedalus.execution_backends import get_execution_backend
+
+    runner = backend if backend is not None else get_execution_backend()
+    return runner.run(req)
 
 
 def run_command(
