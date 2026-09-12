@@ -49,6 +49,7 @@ Daedalus is **one product**: coding agent + Studio + Playground. One FastAPI pro
 | Git forges | `playground_github.py`, `playground_gitlab.py`, `playground_git_push.py` | Clone, push, GitHub PR, GitLab MR |
 | Engine session | `engine_session.py`, `godot_bridge.py` | Headless Godot TCP bridge; optional Godot MCP adapter |
 | Engine adapter | `engine_adapter.py` | Leaf host contract for Godot/Unity discover and preflight. Godot `run(live=True)` wraps `godot_first.runtime_verify`. Unity `run(live=True)` wraps `unity_runtime.runtime_verify` (batchmode, not Play). Not Studio I/O. Registry `AdapterSpec.name` stays `"EngineAdapter"` (Godot-only). |
+| Context budget | `context_budget.py` | Leaf window accountant. Char/4 estimate; resolve window (request → `DAEDALUS_CONTEXT_WINDOW` → static table); observational `account()`; optional `pack(trim=False)`. Does not replace `context_assembler`, compaction, the scratch-journal pause, or USD `run_budget`. Not on Run. Not Studio I/O. |
 | Browser | `playground_browser.py`, `browser_session.py` | Smoke + interactive session |
 | Playground | `playground*.py`, `game_*.py` | static, vite, phaser-via-vite, expo, unity, godot; Capacitor wraps vite/static `dist/` |
 | Autopilot | `builder_runtime.py` + `kernel/full_autopilot.py` | Kernel loop |
@@ -73,6 +74,7 @@ Defaults:
 | Projects | `playground/projects/{slug}/` |
 | Run worktrees | `$DAEDALUS_DATA/worktrees/{run_id}/` — opt-in `DAEDALUS_WORKTREE=1` |
 | Pre-edit baselines | `$DAEDALUS_DATA/baselines/{run_id}/` — optional persist from `BaselineVerifier` |
+| Context budget reports | `$DAEDALUS_DATA/context/{run_id}.json` — optional persist from `ContextBudget` |
 | Docker data | `/var/lib/daedalus` |
 | Windows data | `%LOCALAPPDATA%\Daedalus` |
 

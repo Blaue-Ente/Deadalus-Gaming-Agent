@@ -133,8 +133,8 @@
     ]
   },
   "tests": {
-    "modules": 77,
-    "functions": 1021
+    "modules": 78,
+    "functions": 1034
   },
   "modules": {
     "daedalus": [
@@ -178,6 +178,7 @@
       "daedalus/connectivity.py",
       "daedalus/connectors_config.py",
       "daedalus/context_assembler.py",
+      "daedalus/context_budget.py",
       "daedalus/context_compaction.py",
       "daedalus/continuity.py",
       "daedalus/contracts/__init__.py",
@@ -185,6 +186,7 @@
       "daedalus/contracts/artifacts.py",
       "daedalus/contracts/baseline.py",
       "daedalus/contracts/commands.py",
+      "daedalus/contracts/context.py",
       "daedalus/contracts/engine.py",
       "daedalus/contracts/errors.py",
       "daedalus/contracts/events.py",
