@@ -37,6 +37,8 @@ class RunEvent(ContractModel):
     event: EventKind | str
     data: dict[str, Any] = Field(default_factory=dict)
     run_id: str = ""
+    seq: int = 0
+    correlation_id: str = ""
 
 
 class TaskEvent(ContractModel):
