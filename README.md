@@ -356,6 +356,8 @@ After `pip install -e .` the command is `daedalus` (same as `python -m app.cli`)
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 export DAEDALUS_STANDALONE=1
+# Coverage data must not land at repo root (P0.00 pack check).
+export COVERAGE_FILE=/tmp/daedalus-ci.coverage
 python3 -m pytest tests -q -m "not docker and not playwright"
 ```
 

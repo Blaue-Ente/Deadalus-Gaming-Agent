@@ -42,6 +42,7 @@ GitLab: [Merge requests](https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/merge_
 
 ```bash
 export DAEDALUS_STANDALONE=1
+export COVERAGE_FILE=/tmp/daedalus-ci.coverage
 python3 -m pytest tests -q -m "not docker and not playwright"
 python3 -m daedalus.game_agent_bench --no-persist
 ```

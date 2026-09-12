@@ -43,9 +43,6 @@ TestClient.request = _authed_request
 @pytest.fixture(autouse=True)
 def _owner_token_env(monkeypatch):
     monkeypatch.setenv("DAEDALUS_STANDALONE", "1")
-    monkeypatch.setenv("DAEDALUS_MENTOR", "0")
-    monkeypatch.setenv("DAEDALUS_VISUAL_PROOF", "0")
-    monkeypatch.setenv("DAEDALUS_RUN_BUDGET", "off")
     monkeypatch.setenv("DAEDALUS_MCP_POLICY", "enforce")
     monkeypatch.setenv("DAEDALUS_TOKEN", "pytest-owner-token")
     monkeypatch.setenv("DAEDALUS_BIND_HOST", "127.0.0.1")

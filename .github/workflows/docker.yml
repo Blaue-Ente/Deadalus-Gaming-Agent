@@ -7,9 +7,6 @@ on:
 
 env:
   DAEDALUS_STANDALONE: "1"
-  DAEDALUS_MENTOR: "0"
-  DAEDALUS_VISUAL_PROOF: "0"
-  DAEDALUS_RUN_BUDGET: "off"
   DAEDALUS_MCP_POLICY: "enforce"
   ALLTOKEN_API_KEY: ""
   OPENROUTER_API_KEY: ""
@@ -39,6 +36,8 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install and test
+        env:
+          COVERAGE_FILE: /tmp/daedalus-ci.coverage
         run: |
           pip install -e ".[dev]"
           python3 -m pytest tests -q -m "not docker and not playwright" \
