@@ -704,7 +704,7 @@ def _task_unity_cloud_claim_fails() -> dict[str, Any]:
 
 def _task_unity_batchmode_not_play() -> dict[str, Any]:
     import daedalus.engine_runners as engine_runners
-    from daedalus.unity_runtime import run_action, status
+    from daedalus.unity_runtime import honest_refuse, status
 
     with tempfile.TemporaryDirectory() as raw:
         root = Path(raw)
@@ -713,16 +713,15 @@ def _task_unity_batchmode_not_play() -> dict[str, Any]:
         engine_runners.unity_bin = lambda: "/tmp/fake-unity"
         try:
             st = status(root)
-            with _project_root(root):
-                live = run_action("inspect", "batch")
+            refused = honest_refuse("inspect")
         finally:
             engine_runners.unity_bin = old
     passed = (
         st.get("promise") == "batchmode"
         and st.get("play") is False
-        and live.get("play") is False
-        and live.get("honest") is True
-        and live.get("ok") is False
+        and refused.get("play") is False
+        and refused.get("honest") is True
+        and refused.get("ok") is False
     )
     return _ok(passed, "batchmode promise is not Play")
 
