@@ -20,7 +20,7 @@ if (Test-Path $reg) {
     if ($fromReg) { $InstallRoot = $fromReg }
 }
 
-$linkNames = @($DisplayName, "Дедал")
+$linkNames = @($DisplayName, "Dedal")
 $linkDirs = @(
     (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"),
     [Environment]::GetFolderPath("Desktop"),

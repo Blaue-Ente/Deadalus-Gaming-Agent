@@ -5,7 +5,7 @@
 
 Prefetches the official CPython NuGet package into packaging\windows\redist
 so the installer does not need to download Python at install time.
-pip packages (FastAPI, Chroma, …) are still fetched on first install.
+pip packages (FastAPI, Chroma, ...) are still fetched on first install.
 #>
 $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -18,7 +18,7 @@ $redist = Join-Path $here "redist"
 New-Item -ItemType Directory -Force -Path $redist | Out-Null
 $nupkg = Join-Path $redist $script:DaedalusPythonNupkg
 if (-not (Test-Path $nupkg)) {
-    Write-Host "Fetching $script:DaedalusPythonNupkg for the installer payload…"
+    Write-Host "Fetching $script:DaedalusPythonNupkg for the installer payload..."
     $tmpRuntime = Join-Path $env:TEMP "daedalus-python-prefetch"
     if (Test-Path $tmpRuntime) { Remove-Item -Recurse -Force $tmpRuntime }
     # Download + verify via the same helper; then keep only the nupkg in redist.
@@ -41,7 +41,7 @@ if (-not $iscc) {
 }
 if (-not $iscc) {
     Write-Host "Inno Setup 6 not found. Install from https://jrsoftware.org/isinfo.php then re-run." -ForegroundColor Yellow
-    Write-Host "Python nupkg is ready at $nupkg — compile with: iscc packaging\windows\Daedalus.iss"
+    Write-Host "Python nupkg is ready at $nupkg - compile with: iscc packaging\windows\Daedalus.iss"
     exit 2
 }
 

@@ -55,7 +55,7 @@ function Install-DaedalusBundledPython {
 
     $nupkg = Join-Path $RedistDir $script:DaedalusPythonNupkg
     if (-not (Test-Path $nupkg)) {
-        Write-Host "Downloading CPython $($script:DaedalusPythonVersion) (NuGet python package, ~14 MB)…"
+        Write-Host "Downloading CPython $($script:DaedalusPythonVersion) (NuGet python package, ~14 MB)..."
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         $ProgressPreference = "SilentlyContinue"
         Invoke-WebRequest -Uri $script:DaedalusPythonUrl -OutFile $nupkg -UseBasicParsing -UserAgent "Daedalus-installer"
@@ -89,6 +89,6 @@ function Install-DaedalusBundledPython {
     if (-not (Test-DaedalusPythonExe $pythonExe)) {
         throw "Bundled Python did not run after extract: $pythonExe"
     }
-    Write-Host "Bundled CPython $($script:DaedalusPythonVersion) → $pythonExe"
+    Write-Host "Bundled CPython $($script:DaedalusPythonVersion) -> $pythonExe"
     return $pythonExe
 }
