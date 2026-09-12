@@ -133,8 +133,8 @@
     ]
   },
   "tests": {
-    "modules": 74,
-    "functions": 952
+    "modules": 75,
+    "functions": 973
   },
   "modules": {
     "daedalus": [
@@ -190,6 +190,7 @@
       "daedalus/contracts/plan.py",
       "daedalus/contracts/run.py",
       "daedalus/contracts/tools.py",
+      "daedalus/contracts/workspace.py",
       "daedalus/daedalus_mesh.py",
       "daedalus/daedalusignore.py",
       "daedalus/dissection.py",
@@ -360,6 +361,7 @@
       "daedalus/run_engine.py",
       "daedalus/run_finalizer.py",
       "daedalus/run_state.py",
+      "daedalus/run_workspace.py",
       "daedalus/sandbox.py",
       "daedalus/scratch_journal.py",
       "daedalus/self_improve.py",
