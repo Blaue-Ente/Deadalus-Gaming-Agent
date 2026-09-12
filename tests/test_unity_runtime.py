@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -16,6 +17,7 @@ from daedalus.unity_runtime import (
     map_unity_mcp_tool,
     prove_unity,
     run_engine_action,
+    runtime_verify,
     status,
 )
 
@@ -128,6 +130,67 @@ def test_unity_mcp_tool_mapping():
     assert map_unity_mcp_tool("errors", names) == "read_console"
     assert map_unity_mcp_tool("scene_tree", names) == "get_hierarchy"
     assert map_unity_mcp_tool("screenshot", names) == ""
+
+
+def test_runtime_verify_missing_bin_is_skip(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr("daedalus.engine_runners.unity_bin", lambda: "")
+    monkeypatch.setenv("DAEDALUS_UNITY_MCP", "unity-local")
+
+    def boom_sub(*_a: object, **_k: object) -> None:
+        raise AssertionError("runtime_verify must not launch Unity when the Editor is missing")
+
+    monkeypatch.setattr("daedalus.unity_runtime.subprocess.run", boom_sub)
+    _unity_tree(tmp_path)
+    out = runtime_verify(tmp_path)
+    assert out["ok"] is False
+    assert out["skipped"] is True
+    assert out["ran"] is False
+    assert out["play"] is False
+    assert out["via"] == "none"
+    assert "unity_local" in (out.get("blockers") or [])
+
+
+def test_runtime_verify_batchmode_success_is_not_play(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr("daedalus.engine_runners.unity_bin", lambda: "/tmp/fake-unity")
+    seen: list[list[str]] = []
+
+    def fake_run(cmd, **_k: object):
+        seen.append(list(cmd))
+
+        class _Proc:
+            returncode = 0
+            stderr = ""
+            stdout = ""
+
+        return _Proc()
+
+    monkeypatch.setattr("daedalus.unity_runtime.subprocess.run", fake_run)
+    _unity_tree(tmp_path)
+    out = runtime_verify(tmp_path)
+    assert seen
+    assert seen[0][:4] == ["/tmp/fake-unity", "-batchmode", "-nographics", "-quit"]
+    assert "-projectPath" in seen[0]
+    assert out["ok"] is True
+    assert out["skipped"] is False
+    assert out["ran"] is True
+    assert out["play"] is False
+    assert out["via"] == "batchmode"
+
+
+def test_runtime_verify_timeout_does_not_claim_ran(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr("daedalus.engine_runners.unity_bin", lambda: "/tmp/fake-unity")
+
+    def boom_timeout(*_a: object, **_k: object):
+        raise subprocess.TimeoutExpired(cmd="/tmp/fake-unity", timeout=1)
+
+    monkeypatch.setattr("daedalus.unity_runtime.subprocess.run", boom_timeout)
+    _unity_tree(tmp_path)
+    out = runtime_verify(tmp_path)
+    assert out["ok"] is False
+    assert out["skipped"] is False
+    assert out["ran"] is False
+    assert out["play"] is False
+    assert out["via"] == "none"
 
 
 def test_batchmode_is_not_play_mode(tmp_path: Path, monkeypatch):
