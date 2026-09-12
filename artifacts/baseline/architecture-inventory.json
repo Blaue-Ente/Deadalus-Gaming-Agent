@@ -9,8 +9,8 @@
   "hotspots": [
     {
       "path": "daedalus/agent.py",
-      "lines": 4735,
-      "broad_excepts": 144
+      "lines": 4529,
+      "broad_excepts": 138
     },
     {
       "path": "app/admin_compat.py",
@@ -130,8 +130,8 @@
     ]
   },
   "tests": {
-    "modules": 65,
-    "functions": 788
+    "modules": 66,
+    "functions": 805
   },
   "modules": {
     "daedalus": [
@@ -250,6 +250,7 @@
       "daedalus/mirofish_client.py",
       "daedalus/mobile_first.py",
       "daedalus/mode.py",
+      "daedalus/model_gateway.py",
       "daedalus/model_registry.py",
       "daedalus/model_router.py",
       "daedalus/native_tools.py",
