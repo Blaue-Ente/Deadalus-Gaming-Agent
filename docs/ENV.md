@@ -36,7 +36,13 @@ Optional: `OPENROUTER_HTTP_REFERER`, `OPENROUTER_APP_TITLE` (sent on OpenRouter 
 | `DAEDALUS_TOKEN` | (generated on loopback) | Owner secret for Studio/API. File: `$DAEDALUS_DATA/owner.token` |
 | `DAEDALUS_SHELL_ISOLATION` | — | `1` allows `run_command` when not on loopback |
 | `DAEDALUS_SHELL_LEGACY` | — | `1` opts in to shell metacharacters (still not a container) |
-| `DAEDALUS_EXEC_BACKEND` | `local` | `local` / `host` — host subprocess. `docker` — fail-closed stub until P0.18. `fake` is not a selector. |
+| `DAEDALUS_EXEC_BACKEND` | `local` | `local` / `host` — host subprocess. `docker` — command sandbox (`daedalus.docker_sandbox`). Fail-closed without docker / daemon / image. `fake` is not a selector. |
+| `DAEDALUS_EXEC_IMAGE` | `daedalus-exec:p018` | Sandbox image. Build: `docker build -t daedalus-exec:p018 -f docker/exec/Dockerfile docker/exec`. Not `DAEDALUS_LAB_IMAGE`. |
+| `DAEDALUS_EXEC_PULL` | — | `1` allows `docker pull` of the exec image. Off by default. |
+| `DAEDALUS_EXEC_NETWORK` | — | `1` allows container bridge networking. Default is `--network none`. |
+| `DAEDALUS_EXEC_CPUS` | `1` | `--cpus` for the exec container (clamped 0–8). |
+| `DAEDALUS_EXEC_MEMORY` | `512m` | `--memory` / `--memory-swap` for the exec container. |
+| `DAEDALUS_EXEC_PIDS` | `128` | `--pids-limit` for the exec container (clamped 8–1024). |
 | `DAEDALUS_DATA` | `data/daedalus/` | SQLite, Chroma, proposals, evolution |
 | `DAEDALUS_PLAYGROUND` | `playground/projects` | Working projects |
 | `DAEDALUS_WINDOWS_APP` | — | Set by the Windows installer; data goes to `%LOCALAPPDATA%\Daedalus` |
