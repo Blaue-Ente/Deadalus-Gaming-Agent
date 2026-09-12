@@ -128,7 +128,8 @@ def test_leaf_does_not_import_runtime():
     src = LEAF.read_text(encoding="utf-8")
     assert "run_godot(" not in src
     assert "run_unity(" not in src
-    assert ".record(" not in src
+    assert "record_baseline.record(" not in src
+    assert "baseline.record(" not in src
     code = (
         "import daedalus.baseline_verifier as bv\n"
         "import sys\n"

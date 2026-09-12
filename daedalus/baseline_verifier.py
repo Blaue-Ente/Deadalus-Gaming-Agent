@@ -1,7 +1,7 @@
 """Pre-edit baseline snapshot.
 
 Leaf module. Do not import agent.py, native_tools, job_ledger, run_engine,
-or scratch_journal. Do not call record_baseline.record() or live
+or scratch_journal. Do not invoke the P0.00 pack recorder or live
 run_godot / run_unity. Do not overwrite artifacts/baseline/*.
 
 ``current_root()`` is used when a worktree is bound and enabled. Engine
