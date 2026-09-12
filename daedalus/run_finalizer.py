@@ -32,6 +32,15 @@ log = logging.getLogger(__name__)
 
 _MODEL = "claude-sonnet-4-6"
 
+
+def _payload_model() -> str:
+    """Chat payload must not require a live provider. Missing config is the default id."""
+    try:
+        return str(get_config().get("model") or _MODEL)
+    except Exception:
+        return _MODEL
+
+
 _TASK_OPEN_RE = re.compile(r"<TASK_OPEN:\s*([^|>\n]{1,80})\|\s*([^>\n]{1,400})>")
 _TASK_DONE_RE = re.compile(r"<TASK_DONE:\s*([^>\n]{1,100})>")
 _TASK_REWORK_RE = re.compile(r"<TASK_REWORK:\s*([^|>\n]{1,80})\|\s*([^>\n]{1,400})>")
@@ -536,7 +545,7 @@ class RunFinalizer:
             "context": summary,
             "pending_proposal": pending_proposal,
             "task_events": task_events,
-            "model": get_config().get("model", _MODEL),
+            "model": _payload_model(),
             "effort": {
                 k: req.effort_dec.get(k)
                 for k in ("tier", "label", "role", "budget", "note", "world_kit",

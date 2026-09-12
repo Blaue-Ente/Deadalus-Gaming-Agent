@@ -2,6 +2,9 @@
 
 HTTP tests send ``DAEDALUS_TOKEN`` automatically. Use the ``raw_http``
 fixture when asserting 401/403 without a header.
+
+The suite is hermetic: standalone on, provider keys stripped. Tests that
+need a key set it via ``monkeypatch`` after this fixture.
 """
 from __future__ import annotations
 
@@ -12,6 +15,8 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from httpx import Headers
+
+from tests.hermetic import strip_provider_keys
 
 _PRODUCT = Path(__file__).resolve().parents[1]
 if str(_PRODUCT) not in sys.path:
@@ -37,8 +42,11 @@ TestClient.request = _authed_request
 
 @pytest.fixture(autouse=True)
 def _owner_token_env(monkeypatch):
+    monkeypatch.setenv("DAEDALUS_STANDALONE", "1")
+    monkeypatch.setenv("DAEDALUS_MCP_POLICY", "enforce")
     monkeypatch.setenv("DAEDALUS_TOKEN", "pytest-owner-token")
     monkeypatch.setenv("DAEDALUS_BIND_HOST", "127.0.0.1")
+    strip_provider_keys(monkeypatch)
 
 
 @pytest.fixture

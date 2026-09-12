@@ -308,6 +308,7 @@ def test_godot_play_check_is_na():
     assert row["blocking"] is False
 
 
+@pytest.mark.playwright
 @pytest.mark.skipif(
     __import__("daedalus.playground_browser", fromlist=["_find_chrome"])._find_chrome() is None,
     reason="Chromium not on PATH",
