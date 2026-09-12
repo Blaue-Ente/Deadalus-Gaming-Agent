@@ -9,7 +9,7 @@
   "hotspots": [
     {
       "path": "daedalus/agent.py",
-      "lines": 4529,
+      "lines": 4130,
       "broad_excepts": 138
     },
     {
@@ -19,7 +19,7 @@
     },
     {
       "path": "daedalus/native_tools.py",
-      "lines": 2232,
+      "lines": 2050,
       "broad_excepts": 20
     },
     {
@@ -61,7 +61,8 @@
     "build_loop": "daedalus/build_loop.py",
     "tdd_loop": "daedalus/tdd_loop.py",
     "autopilot": "daedalus/kernel/full_autopilot.py",
-    "builder_runtime": "daedalus/builder_runtime.py"
+    "builder_runtime": "daedalus/builder_runtime.py",
+    "tool_loop": "daedalus/tool_loop.py"
   },
   "native_tools": [
     "read_file",
@@ -130,8 +131,8 @@
     ]
   },
   "tests": {
-    "modules": 66,
-    "functions": 805
+    "modules": 67,
+    "functions": 819
   },
   "modules": {
     "daedalus": [
@@ -361,6 +362,7 @@
       "daedalus/tdd_loop.py",
       "daedalus/tool_catalog.py",
       "daedalus/tool_dumps.py",
+      "daedalus/tool_loop.py",
       "daedalus/tool_parser.py",
       "daedalus/tool_protocol.py",
       "daedalus/tool_router.py",
