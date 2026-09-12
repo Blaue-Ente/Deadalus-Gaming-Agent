@@ -1,8 +1,8 @@
 """Parse → authorize → execute → observe → next-turn.
 
 Leaf module. Do not import agent.py. Cheap-path ROUTING, leftover NEED_*
-if-arms, NEED_PROPOSE, and RunFinalizer stay on Daedalus. The verify spine
-façade is a sibling leaf. ToolLoop is the round driver. Execute stays in
+if-arms, and NEED_PROPOSE stay on Daedalus. The verify spine and RunFinalizer
+are sibling leaves. ToolLoop is the round driver. Execute stays in
 native_tools / leftover callback.
 """
 from __future__ import annotations

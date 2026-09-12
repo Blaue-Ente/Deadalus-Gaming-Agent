@@ -1,10 +1,10 @@
 """Static / build / test / game / visual / acceptance façade.
 
-Leaf module. Do not import agent.py. Leftover NEED_* if-arms, NEED_PROPOSE,
-and RunFinalizer (empty-reply, review-gate, session record_outcome) stay on
-Daedalus. ToolLoop keeps in-loop kernel proof. Execute stays in write_gate /
-game_lint / playground_runner / visual_proof / gameplay / platform_acceptance /
-job_contract.
+Leaf module. Do not import agent.py. Leftover NEED_* if-arms and NEED_PROPOSE
+stay on Daedalus. RunFinalizer is a sibling leaf (empty-reply, review-gate,
+session record_outcome, chat payload). ToolLoop keeps in-loop kernel proof.
+Execute stays in write_gate / game_lint / playground_runner / visual_proof /
+gameplay / platform_acceptance / job_contract.
 
 VerificationController is the sequencer the future Run Engine can call.
 It does not replace full_autopilot, game_studio_verify, or the leftover ladder.
@@ -52,7 +52,7 @@ class VerifyResult:
 
 
 class VerificationController:
-    """Stateless façade. Sequences verify leaves. Not RunFinalizer."""
+    """Stateless façade. Sequences verify leaves. Sibling of RunFinalizer."""
 
     async def static_check(self, req: VerifyRequest) -> StageRow:
         blockers: list[str] = []

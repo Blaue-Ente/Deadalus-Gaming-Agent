@@ -44,12 +44,7 @@ from . import daedalusignore as _daedalusignore
 from .improvements import (
     get_error_tracker,
     record_tool_error_for_promotion,
-    record_outcome,
-    question_budget_check_and_increment,
     mark_schema_read,
-    needs_read_first_hint,
-    review_gate_critique,
-    detect_intent_without_action,
 )
 from .model_gateway import (
     DaedalusError,
@@ -90,6 +85,7 @@ from .edit_diff import extract_edit_markers, process_need_edit
 from .native_tools import native_tools_enabled, run_native_discovery_pass
 from .need_scan import scan_need_markers
 from .tool_loop import LeftoverRoundRequest, ToolLoop
+from .run_finalizer import AfterLoopRequest, ChatFinishRequest, RunFinalizer
 from .session_branching import branch_session as _branch_session_fn
 
 log = logging.getLogger(__name__)
@@ -145,10 +141,6 @@ def _extract_sandbox_code(raw: str) -> str | None:
 # Task markers — TASK_OPEN / TASK_DONE / TASK_REWORK / TASK_TOUCH
 # ---------------------------------------------------------------------------
 
-_TASK_OPEN_RE = re.compile(r"<TASK_OPEN:\s*([^|>\n]{1,80})\|\s*([^>\n]{1,400})>")
-_TASK_DONE_RE = re.compile(r"<TASK_DONE:\s*([^>\n]{1,100})>")
-_TASK_REWORK_RE = re.compile(r"<TASK_REWORK:\s*([^|>\n]{1,80})\|\s*([^>\n]{1,400})>")
-_TASK_TOUCH_RE = re.compile(r"<TASK_TOUCH:\s*([^>\n]{1,100})>")
 _MODE_RE = re.compile(r"<NEED_MODE:\s*(talk|build|auto)\s*>", re.IGNORECASE)
 
 
@@ -167,78 +159,6 @@ def process_mode_marker_only(raw: str) -> str:
         except Exception as exc:
             log.debug("mode-only marker failed: %s", exc)
     return _MODE_RE.sub("", raw).strip()
-
-
-def process_task_markers(raw: str, session_id: str) -> tuple[str, list[dict[str, Any]]]:
-    """Execute TASK_* markers found in raw, remove them, return (cleaned_text, events).
-
-    events = [{"action": "open|done|rework|touch", "task": {...}, "ok": bool, ...}]
-    """
-    if not raw:
-        return raw, []
-    events: list[dict[str, Any]] = []
-
-    for m in _TASK_OPEN_RE.finditer(raw):
-        title = m.group(1).strip()
-        summary = m.group(2).strip()
-        try:
-            t = _continuity.create_task(title, summary, session_id=session_id)
-            events.append({"action": "open", "task": t, "ok": True})
-        except Exception as exc:
-            events.append({"action": "open", "ok": False, "error": str(exc)})
-
-    for m in _TASK_DONE_RE.finditer(raw):
-        hint = m.group(1).strip()
-        t = _continuity.find_task_by_hint(hint)
-        if t:
-            updated = _continuity.update_task(t["id"], status="done", add_session_id=session_id)
-            events.append({"action": "done", "task": updated, "ok": True})
-        else:
-            events.append({"action": "done", "ok": False, "error": f"task not found: {hint}"})
-
-    for m in _TASK_REWORK_RE.finditer(raw):
-        hint = m.group(1).strip()
-        reason = m.group(2).strip()
-        t = _continuity.find_task_by_hint(hint)
-        if t:
-            new_summary = t.get("summary", "") + f" | Нуждае от преработка: {reason}"
-            updated = _continuity.update_task(t["id"], status="rework",
-                                              summary=new_summary, add_session_id=session_id)
-            events.append({"action": "rework", "task": updated, "ok": True})
-        else:
-            events.append({"action": "rework", "ok": False, "error": f"task not found: {hint}"})
-
-    for m in _TASK_TOUCH_RE.finditer(raw):
-        hint = m.group(1).strip()
-        t = _continuity.find_task_by_hint(hint)
-        if t:
-            updated = _continuity.update_task(t["id"], add_session_id=session_id)
-            events.append({"action": "touch", "task": updated, "ok": True})
-        else:
-            events.append({"action": "touch", "ok": False, "error": f"task not found: {hint}"})
-
-    # NEED_MODE — Дедал switches the conversation mode himself (talk/build/auto)
-    _last_mode_m = None
-    for _last_mode_m in _MODE_RE.finditer(raw):
-        pass
-    if _last_mode_m:
-        _new_mode = _last_mode_m.group(1).strip().lower()
-        try:
-            _mode.set_mode(_new_mode)
-            events.append({"action": "mode", "mode": _new_mode, "ok": True})
-        except Exception as exc:
-            events.append({"action": "mode", "ok": False, "error": str(exc)})
-
-    cleaned = _TASK_OPEN_RE.sub("", raw)
-    cleaned = _TASK_DONE_RE.sub("", cleaned)
-    cleaned = _TASK_REWORK_RE.sub("", cleaned)
-    cleaned = _TASK_TOUCH_RE.sub("", cleaned)
-    cleaned = _MODE_RE.sub("", cleaned)
-
-    if events:
-        log.info("process_task_markers: %d events session=%s", len(events), session_id[:12])
-
-    return cleaned.strip(), events
 
 
 # NEED_READ_FILE: <NEED_READ_FILE: path/to/file> or <NEED_READ_FILE: path/to/file | 10-50>
@@ -953,6 +873,7 @@ class Daedalus:
 
         ContextAssembler owns retrieve/compose. Cheap-path routing stays here.
         ToolLoop owns native/leftover round driving; leftover if-arms stay here.
+        RunFinalizer.after_loop owns empty-reply / persist / post-reply gates.
 
         Returns (raw_llm_response, retrieval_summary).
         """
@@ -1350,240 +1271,35 @@ class Daedalus:
         _tool_iter = leftover.iterations
         _tool_loop_broke_with_fallback = leftover.broke_with_fallback
 
-        # ── Empty reply guard (T05) — Haiku wrap-up if loop consumed everything
-        # When Дедал's last response was 100% tool markers (now stripped to empty)
-        # we'd return a blank reply. Call Haiku with the tool results to produce
-        # a brief synthesized answer instead.
-        _raw_text_check = re.sub(r"<NEED_[A-Z_]+[^>]*>", "", raw or "")
-        _raw_text_check = re.sub(
-            r"<NEED_(?:PROPOSE_START|SANDBOX)>.*?</NEED_(?:PROPOSE_START|SANDBOX)>",
-            "", _raw_text_check, flags=re.DOTALL,
-        ).strip()
-        if not _raw_text_check:
-            try:
-                log.info("empty-reply guard: session=%s tools=%d — Haiku wrap-up",
-                         session_id, len(tool_calls_used))
-                _tool_summary = "\n".join(
-                    f"  • {c.get('tool')} → {'OK' if c.get('ok', True) else 'FAILED'}"
-                    f"  {str(c.get('query',''))[:80]}"
-                    for c in tool_calls_used[-8:]
-                )
-                _wrap_system = (
-                    "You are Daedalus wrap-up assistant. The main agent used "
-                    "tools but ran out of iterations without producing a final "
-                    "reply. Write ONE concise Bulgarian-language paragraph (3-6 "
-                    "изречения) обобщаващ какво е свършено и какво остава. "
-                    "БЕЗ markers, БЕЗ apologies."
-                )
-                _wrap_user = (
-                    f"Owner asked: {user_message[:400]}\n\n"
-                    f"Tool calls executed:\n{_tool_summary}\n\n"
-                    f"Last partial output:\n{(raw or '')[-1000:]}\n\n"
-                    f"Дай кратко резюме за owner-а."
-                )
-                from . import daedalus_mesh as dm
-                from .model_gateway import CompleteRequest, ModelGateway
-                _wrap_res = await ModelGateway().complete_cheap(
-                    CompleteRequest(
-                        system=_wrap_system,
-                        messages=[{"role": "user", "content": _wrap_user}],
-                        intent="cheap",
-                        max_tokens=600,
-                        client_id=dm.client_id("chat", "wrap-up"),
-                        use_cache=False,
-                        role="wrap",
-                    ),
-                    include_master_config=False,
-                    swallow_mesh_error=True,
-                )
-                raw = _wrap_res.text
-                if raw and _wrap_res.routed_via == "mesh":
-                    log.info(
-                        "empty-reply guard: mesh_router produced %d chars ($%.6f)",
-                        len(raw), float(_wrap_res.cost_usd or 0.0),
-                    )
-                elif raw and _wrap_res.routed_via == "cheap":
-                    log.info(
-                        "empty-reply guard: cheap-llm (%s) produced %d chars",
-                        _wrap_res.model, len(raw),
-                    )
-                if not (raw or "").strip():
-                    # Haiku creds missing OR Haiku returned empty → deterministic fallback
-                    raw = (
-                        "Изпълних инструментите, но не успях да синтезирам финален "
-                        f"отговор. Tools: {', '.join(c.get('tool','?') for c in tool_calls_used[-5:])}. "
-                        "Моля, попитай ме отново или ми кажи какво конкретно искаш."
-                    )
-                    log.info("empty-reply guard: deterministic fallback used")
-            except Exception as _wg_exc:
-                log.warning("empty-reply guard Haiku failed: %s", _wg_exc)
-                raw = (
-                    "Изпълних инструментите, но не успях да синтезирам финален отговор. "
-                    f"Tools: {', '.join(c.get('tool','?') for c in tool_calls_used[-5:])}. "
-                    "Моля, попитай ме отново или ми кажи какво конкретно искаш да направя."
-                )
-
-        # Capture both sides — base ChromaDB + Mem0 episodic/working layer
-        self.memory.capture_turn(session_id, "user", user_message)
-        self.memory.capture_turn(session_id, "assistant", raw, metadata={"format": "json" if expect_json else "text"})
-        self.mem0.capture(session_id, "user", user_message)
-        self.mem0.capture(session_id, "assistant", raw)
-
-        # Изчистваме live статуса след приключване
-        try:
-            _clear_live(session_id)
-        except Exception:
-            pass
-
-        # Fire-and-forget reflection. We MUST keep a strong reference to the
-        # task or the event loop's GC may drop it mid-flight.
-        # SELF-IMPROVEMENT GUARD: reflection auto-writes lessons from the
-        # assistant output. For for_self sessions that would let Daedalus
-        # quietly adopt opinions about himself without owner approval — exactly
-        # the bypass channel the discovery approval flow exists to close.
-        # So we skip reflection entirely on for_self turns.
-        if for_self:
-            log.info("session=%s reflection skipped (for_self=True; owner approval required)", session_id)
-        else:
-            try:
-                t = asyncio.create_task(run_reflection_cycle(
-                    _call_claude, self.memory, session_id, user_message, raw,
-                ))
-                self._background_tasks.add(t)
-                t.add_done_callback(self._background_tasks.discard)
-            except Exception as exc:
-                log.debug("reflection scheduling skipped: %s", exc)
-
-        # ── Clean output: strip any leaked NEED_* markers from the final reply ──
-        # Markers are execution instructions for the tool loop — the owner should
-        # never see them in the chat. Strip both inline <NEED_FOO: ...> markers
-        # and block <NEED_PROPOSE_START>...</NEED_PROPOSE_START> blocks.
-        if raw:
-            raw = re.sub(r"<NEED_[A-Z_]+[^>]*>", "", raw)
-            raw = re.sub(
-                r"<NEED_(?:PROPOSE_START|SANDBOX)>.*?</NEED_(?:PROPOSE_START|SANDBOX)>",
-                "", raw, flags=re.DOTALL,
-            )
-            raw = raw.strip()
-
-        # ── Phase 13: post-reply gates (review + question budget + outcome) ──
-        try:
-            _elapsed_total = _time_mod.time() - started_at
-        except Exception:
-            _elapsed_total = 0.0
-        # Read-first warning baked into reply for owner visibility (non-blocking)
-        try:
-            _rf_hint = needs_read_first_hint(session_id, raw or "")
-            if _rf_hint and raw:
-                log.info("read-first hint emitted for session=%s", session_id[:10])
-        except Exception:
-            pass
-        # Review-gate self-critique (only on TRULY substantial sessions to avoid
-        # adding pressure to the Anthropic quota). Trigger when:
-        #  - real tool work happened (>=3 calls OR any failures), AND
-        #  - elapsed >= 20s (signals genuine engagement, not chat)
-        # Skip if Anthropic was rate-limited during this session (no extra calls).
-        _had_failures = any(c.get("ok") is False for c in (tool_calls_used or []))
-        _rate_limited = "[fallback:" in (raw or "")
-        try:
-            _should_review = (
-                not for_self
-                and not expect_json
-                and not _rate_limited
-                and len((raw or "").strip()) > 80
-                and (len(tool_calls_used) >= 3 or _had_failures)
-                and _elapsed_total >= 20
-            )
-            if _should_review:
-                _crit = await review_gate_critique(
-                    user_message, raw or "", tool_calls_used, _elapsed_total,
-                )
-                if not _crit.get("ok", True) and _crit.get("issue"):
-                    log.warning("review-gate flagged: %s", _crit.get("issue", "")[:200])
-                    raw = (raw or "") + (
-                        f"\n\n— Self-review бележка: {_crit.get('issue','')[:300]} "
-                        f"{('Предложение: ' + _crit.get('suggested_fix','')[:200]) if _crit.get('suggested_fix') else ''}"
-                    )
-        except Exception as _rg_exc:
-            log.debug("review-gate skipped: %s", _rg_exc)
-        # Question budget enforcement (max 1 clarifying question per session)
-        try:
-            allowed, advice = question_budget_check_and_increment(session_id, raw or "")
-            if not allowed and advice:
-                raw = advice + "\n\n" + (raw or "")
-        except Exception:
-            pass
-        # ── Action-forcing detector: caught "intent without action" replies ──
-        # Дедал каза "ще извлека / ще проверя / ще добавя ..." но не emit-на
-        # никакъв NEED_* маркер и не пусна tool. Лог + visible nudge към него
-        # в conversation history (без extra LLM call, за да не натоварваме
-        # rate-limit). Outcome автоматично се записва като 'partial' min.
-        _intent_without_action = False
-        try:
-            _ifa = detect_intent_without_action(raw or "", tool_calls_used)
-            if _ifa.get("detected"):
-                _intent_without_action = True
-                _phrase = _ifa.get("phrase", "")
-                log.warning(
-                    "action-forcing: intent without action detected (session=%s phrase=%r)",
-                    session_id[:10], _phrase,
-                )
-                raw = (raw or "") + (
-                    "\n\n⚠️ ВНИМАНИЕ (self-check): казах "
-                    f"„{_phrase}…“ но не emit-нах NEED_* маркер и не направих "
-                    "нищо конкретно. При следваща моя ход в тази сесия "
-                    "трябва или да emit-на маркер за реалното действие, "
-                    "или директно да изпълня задачата с конкретен код/SQL."
-                )
-        except Exception:
-            pass
-        # Record session outcome to Replit DB (cheap, non-blocking)
-        try:
-            record_outcome(
-                session_id,
+        wrapped = await RunFinalizer().after_loop(
+            AfterLoopRequest(
+                raw=raw,
+                session_id=session_id,
                 user_message=user_message,
-                reply=raw or "",
-                elapsed=_elapsed_total,
+                expect_json=expect_json,
+                for_self=for_self,
                 tool_calls=tool_calls_used,
-                tool_iterations=_tool_iter + 1 if tool_calls_used else 0,
-                intent=(briefing_dict or {}).get("intent", "") if briefing_dict else "",
-                intent_without_action=_intent_without_action,
-            )
-        except Exception:
-            pass
-
-        # Clarification Tracker — засича когато сме поискали уточнение
-        # и логва в DB за дневния стил-урок
-        try:
-            from .clarification_tracker import detect_clarifying_question, log_clarification
-            _clr_qs = detect_clarifying_question(raw or "")
-            if _clr_qs:
-                import asyncio
-                asyncio.create_task(log_clarification(
-                    session_id=session_id,
-                    user_message=user_message,
-                    agent_reply=raw or "",
-                    questions=_clr_qs,
-                ))
-        except Exception:
-            pass
-
-        summary = {
-            "knowledge_used": len(knowledge),
-            "past_memory_used": len(past_memory),
-            "similar_artifacts": len(artifacts),
-            "session_turns_in_context": len(session_recent),
-            "lessons_used": len(lessons),
-            "episodes_used": len(episodes),
-            "mesh_aware": bool(mesh_block),
-            "tool_calls": tool_calls_used,
-            "tool_iterations": _tool_iter + 1 if tool_calls_used else 0,
-            "mem0": self.mem0.stats(),
-            "navigator": briefing_dict,
-            "build_kind": str(getattr(_loop, "kind", "") or "") if _loop is not None else "",
-            "browser_ok": _loop.browser_ok_for_dod() if _loop is not None else None,
-        }
-        return raw, summary
+                leftover_iterations=_tool_iter,
+                started_at=started_at,
+                briefing_dict=briefing_dict,
+                retrieval={
+                    "knowledge": knowledge,
+                    "past_memory": past_memory,
+                    "artifacts": artifacts,
+                    "session_recent": session_recent,
+                    "lessons": lessons,
+                    "episodes": episodes,
+                    "mesh_block": mesh_block,
+                },
+                loop=_loop,
+                memory=self.memory,
+                mem0=self.mem0,
+                background_tasks=self._background_tasks,
+                complete_fn=_call_claude,
+                clear_live=_clear_live,
+            ),
+        )
+        return wrapped.raw, wrapped.summary
 
     async def _execute_leftover_markers(
         self,
@@ -3805,162 +3521,23 @@ class Daedalus:
                 expect_json=False,
                 for_self=for_self,
             )
-        # Process task markers — execute side-effects, strip from reply
-        raw, task_events = process_task_markers(raw, session_id)
-
-        # Fix 4: Save phase context if NEED_PROGRESS was emitted during this session
-        progress_calls = [c for c in (summary.get("tool_calls") or [])
-                         if c.get("tool") == "set_progress"]
-        if not progress_calls:
-            # Also check via outbox progress marker pattern
-            progress_calls = [c for c in (summary.get("tool_calls") or [])
-                             if "progress" in c.get("tool", "").lower()]
-        if progress_calls:
-            last_p = progress_calls[-1]
-            self._phase_save(
+        finished = await RunFinalizer().finish_chat(
+            ChatFinishRequest(
+                raw=raw,
+                summary=summary,
+                message=message,
                 session_id=session_id,
-                pct=float(last_p.get("pct", 0)),
-                task_name=str(last_p.get("task", "task")),
-                msg=str(last_p.get("msg", "")),
-            )
-        # Clear resume if task was marked done this session
-        done_tasks = [e for e in (task_events or []) if e.get("action") == "done"]
-        if done_tasks:
-            self._phase_clear(session_id)
-
-        elapsed = (datetime.now(timezone.utc) - started).total_seconds()
-
-        try:
-            from .preferences import observe_turn
-            observe_turn(message, raw)
-        except Exception:
-            pass
-
-        dod = None
-        try:
-            from .job_contract import finish_nudge
-            from .learned_skills import draft_from_failure, draft_from_success
-            from .verification_controller import VerificationController, VerifyRequest
-            _open_slices = 0
-            try:
-                from .job_ledger import open_count_for_session
-                _open_slices = open_count_for_session(session_id or "")
-            except Exception:
-                _open_slices = 0
-            dod = VerificationController().accept(
-                VerifyRequest(
-                    ask=message,
-                    reply=raw or "",
-                    tool_calls=summary.get("tool_calls") or [],
-                    open_slices=_open_slices,
-                    kind=str(summary.get("build_kind") or ""),
-                    browser_ok=summary.get("browser_ok"),
-                )
-            )
-            if not dod.complete and dod.coding_task:
-                raw = (raw or "") + finish_nudge(dod)
-                try:
-                    draft_from_failure(
-                        kind="chat",
-                        errors=dod.blockers,
-                        context=message[:400],
-                    )
-                except Exception:
-                    pass
-            elif dod.complete and dod.coding_task:
-                try:
-                    draft_from_success(kind="chat", summary=(message or "")[:400])
-                except Exception:
-                    pass
-        except Exception as _dod_exc:
-            log.debug("job contract skipped: %s", _dod_exc)
-
-        # ── Self-improvement on failure (T09) ─────────────────────────────
-        # If session was slow (>90s) OR >50% of tool calls failed → schedule
-        # a fire-and-forget for_self reflection that asks Дедал to propose
-        # a fix to himself (written to outbox for owner review).
-        try:
-            tool_calls = (summary.get("tool_calls") or [])
-            fails = sum(1 for c in tool_calls if c.get("ok") is False)
-            fail_rate = (fails / len(tool_calls)) if tool_calls else 0.0
-            should_reflect = (elapsed > 90 and len(tool_calls) >= 3) or fail_rate > 0.5
-            if should_reflect and not for_self:
-                async def _self_improve_bg():
-                    try:
-                        from .outbox import push_outbox
-                        prompt = (
-                            f"Анализирай тази неуспешна сесия и предложи КОНКРЕТНО "
-                            f"подобрение за себе си.\n\n"
-                            f"Owner request: {message[:300]}\n"
-                            f"Elapsed: {elapsed:.1f}s, tool_calls: {len(tool_calls)}, "
-                            f"failures: {fails} ({fail_rate*100:.0f}%)\n"
-                            f"Failed tools: "
-                            + ", ".join(c.get("tool", "?") for c in tool_calls if c.get("ok") is False)[:200]
-                            + f"\n\nКакво да променя в моите prompts/tools/logic за да "
-                            f"не се повтори? Дай 1 конкретно предложение."
-                        )
-                        result = await self.chat(prompt, for_self=True)
-                        try:
-                            push_outbox(
-                                type="message",
-                                title=f"Self-improvement (session {session_id[:10]})",
-                                body=result.get("reply", "")[:2000],
-                                category="self_improvement",
-                                payload={"trigger": "failure_reflection",
-                                         "elapsed": elapsed, "fail_rate": fail_rate,
-                                         "src_session": session_id},
-                                session_id=session_id,
-                                require_send_perm=True,
-                            )
-                        except Exception:
-                            pass
-                    except Exception as _si_exc:
-                        log.debug("self-improvement bg failed: %s", _si_exc)
-                _t = asyncio.create_task(_self_improve_bg())
-                self._background_tasks.add(_t)
-                _t.add_done_callback(self._background_tasks.discard)
-                log.info("self-improvement reflection scheduled: session=%s elapsed=%.1fs fail_rate=%.2f",
-                         session_id, elapsed, fail_rate)
-        except Exception as _si_outer:
-            log.debug("self-improvement gating failed: %s", _si_outer)
-
-        # Detect if Daedalus created a code proposal — extract ID for inline Approve UI
-        pending_proposal: dict[str, Any] | None = None
-        pid_match = re.search(r"Proposal ID\s*:\s*(prop_[a-f0-9_]+)", raw)
-        fp_match = re.search(r"File\s*:\s*(\S+)", raw)
-        if pid_match:
-            pending_proposal = {
-                "proposal_id": pid_match.group(1),
-                "file_path": fp_match.group(1) if fp_match else "",
-            }
-        budget_status = None
-        try:
-            from .run_budget import status as budget_status_fn
-            budget_status = budget_status_fn()
-        except Exception:
-            budget_status = budget_plan
-        return {
-            "agent": "Daedalus",
-            "session_id": session_id,
-            "for_self": for_self,
-            "reply": raw,
-            "context": summary,
-            "pending_proposal": pending_proposal,
-            "task_events": task_events,
-            "model": get_config().get("model", _MODEL),
-            "effort": {
-                k: effort_dec.get(k)
-                for k in ("tier", "label", "role", "budget", "note", "world_kit",
-                          "source", "model", "model_source")
-            },
-            "elapsed_seconds": round(elapsed, 2),
-            "timestamp": started.isoformat(),
-            "complete": None if dod is None else dod.complete,
-            "dod": None if dod is None else (
-                dod.as_dict() if hasattr(dod, "as_dict") else dod.model_dump()
+                for_self=for_self,
+                started=started,
+                effort_dec=effort_dec,
+                budget_plan=budget_plan,
+                background_tasks=self._background_tasks,
+                chat_fn=self.chat,
+                phase_save_fn=self._phase_save,
+                phase_clear_fn=self._phase_clear,
             ),
-            "run_budget": budget_status,
-        }
+        )
+        return finished.payload
 
     async def generate(
         self,
