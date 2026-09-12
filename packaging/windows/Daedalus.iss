@@ -45,7 +45,7 @@ Source: "redist\*"; DestDir: "{app}\packaging\windows\redist"; Flags: ignorevers
 [Run]
 Filename: "powershell.exe"; \
   Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\packaging\windows\install.ps1"" -InPlace -BundlePython"; \
-  StatusMsg: "Installing private Python, venv, and Daedalus.exe…"; Flags: waituntilterminated
+  StatusMsg: "Installing private Python, venv, and Daedalus.exe..."; Flags: waituntilterminated
 
 [UninstallRun]
 Filename: "powershell.exe"; \

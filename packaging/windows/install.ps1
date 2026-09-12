@@ -194,7 +194,7 @@ if ((Test-Path $envExample) -and -not (Test-Path $envTarget)) {
 }
 
 $venv = Join-Path $InstallRoot ".venv"
-Write-Host "venv + pip install (first run can take a few minutes)…"
+Write-Host "venv + pip install (first run can take a few minutes)..."
 $venvArgs = @($py.Args) + @("-m", "venv", $venv)
 & $py.Exe @venvArgs
 if ($LASTEXITCODE -ne 0) { throw "venv failed" }
@@ -203,7 +203,7 @@ $venvPy = Join-Path $venv "Scripts\python.exe"
 if ($LASTEXITCODE -ne 0) { throw "pip upgrade failed" }
 & $venvPy -m pip install -e $InstallRoot
 if ($LASTEXITCODE -ne 0) { throw "pip install daedalus failed" }
-Write-Host "Installing GUI extra (pywebview / Edge WebView2)…"
+Write-Host "Installing GUI extra (pywebview / Edge WebView2)..."
 $guiOk = $false
 Push-Location $InstallRoot
 try {
@@ -233,8 +233,8 @@ if (-not $exeOk) {
 
 $startMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
 New-DaedalusShortcut (Join-Path $startMenu "$DisplayName.lnk") $launch
-# Keep the previous Bulgarian shortcut name so old links keep working.
-New-DaedalusShortcut (Join-Path $startMenu "Дедал.lnk") $launch
+# Latin alias keeps PS 5.1 happy on non-UTF-8 code pages; same Start Menu entry.
+New-DaedalusShortcut (Join-Path $startMenu "Dedal.lnk") $launch
 if ($DesktopShortcut) {
     New-DaedalusShortcut (Join-Path ([Environment]::GetFolderPath("Desktop")) "$DisplayName.lnk") $launch
 }
