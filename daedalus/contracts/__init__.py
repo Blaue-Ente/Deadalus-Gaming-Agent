@@ -53,6 +53,7 @@ from .tools import (
     ToolSpec,
     overlay_for,
 )
+from .workspace import DirtyBaseline, RunWorkspace
 
 __all__ = [
     "CONTRACT_SCHEMA_VERSION",
@@ -68,6 +69,7 @@ __all__ = [
     "CapabilityEvidenceRecord",
     "ContractError",
     "ContractModel",
+    "DirtyBaseline",
     "DodVerdict",
     "EffortTier",
     "ErrorClass",
@@ -92,6 +94,7 @@ __all__ = [
     "RunEvent",
     "RunStage",
     "RunStatus",
+    "RunWorkspace",
     "Slice",
     "SliceRole",
     "SliceStatus",
