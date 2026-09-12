@@ -19,7 +19,7 @@
     },
     {
       "path": "daedalus/native_tools.py",
-      "lines": 2148,
+      "lines": 2196,
       "broad_excepts": 20
     },
     {
@@ -130,8 +130,8 @@
     ]
   },
   "tests": {
-    "modules": 59,
-    "functions": 677
+    "modules": 60,
+    "functions": 692
   },
   "modules": {
     "daedalus": [

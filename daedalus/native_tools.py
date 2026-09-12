@@ -1040,6 +1040,130 @@ def before_tool_call(tool_name: str, *, marker_name: str | None = None) -> tuple
         return True, ""
 
 
+def _run_read_file(
+    args: dict[str, Any],
+    *,
+    session_id: str,
+    read_file_fn: Callable[..., dict],
+) -> str:
+    path = str(args.get("path", ""))
+    slug_h = str(args.get("slug") or "").strip() or _slug_from_text(path)
+    if _playground_session(session_id) and _harness_target(path):
+        return f"── read_file BLOCKED ──\n{_HARNESS_JAIL}"
+    ls = args.get("line_start")
+    le = args.get("line_end")
+    r = read_file_fn(path, int(ls) if ls else None, int(le) if le else None)
+    if r.get("ok"):
+        trunc = " [TRUNCATED]" if r.get("truncated") else ""
+        loc = str(r.get("path") or path)
+        return (
+            f"── read_file {loc}{trunc} ──\n{r['content']}"
+            + _nav_hint(
+                slug=slug_h or _slug_from_text(loc),
+                path=loc,
+                next_line=(
+                    f"NEXT: call write_file with slug={slug_h or '<project>'} "
+                    f"path={path or 'index.html'} if you are changing this file."
+                ),
+            )
+        )
+    err = r.get("error") or "path required"
+    return (
+        f"── read_file FAILED: {err} ──"
+        + _nav_hint(
+            slug=slug_h,
+            path=path,
+            next_line=(
+                f"NEXT: pass path like index.html plus slug={slug_h or '<project>'}, "
+                "not /workspace."
+            ),
+        )
+    )
+
+
+def _run_list_dir(
+    args: dict[str, Any],
+    *,
+    session_id: str,
+    read_file_fn: Callable[..., dict] | None = None,
+) -> str:
+    del read_file_fn
+    from .shell_center import resolve_cwd
+    rel = str(args.get("path") or ".")
+    slug_h = str(args.get("slug") or "").strip() or _slug_from_text(rel)
+    if _playground_session(session_id) and _harness_target(rel):
+        from .paths import playground_projects_dir
+        root = playground_projects_dir()
+        names = []
+        if root.is_dir():
+            for p in sorted(root.iterdir())[:80]:
+                names.append(p.name + ("/" if p.is_dir() else ""))
+        listing = "\n".join(names) or "(empty playground)"
+        return (
+            f"── list_dir playground (harness listing refused) ──\n"
+            f"{listing}\n{_HARNESS_JAIL}"
+            + _nav_hint(
+                slug=slug_h,
+                next_line=(
+                    "NEXT: call write_file with slug= from playground_new. "
+                    "Do not find /workspace."
+                ),
+            )
+        )
+    try:
+        root = resolve_cwd(rel)
+    except ValueError as exc:
+        return (
+            f"── list_dir FAILED: {exc} ──"
+            + _nav_hint(
+                slug=slug_h,
+                path=rel,
+                next_line="NEXT: list playground/projects/{slug}/ or pass slug=.",
+            )
+        )
+    names = []
+    for p in sorted(root.iterdir())[:80]:
+        names.append(p.name + ("/" if p.is_dir() else ""))
+    return (
+        f"── list_dir {root} ──\n"
+        + "\n".join(names)
+        + _nav_hint(
+            slug=slug_h or _slug_from_text(str(root)),
+            path=str(root),
+            next_line=(
+                f"NEXT: call write_file with slug={slug_h or '<project>'} "
+                "— listing is not a substitute for writing the game."
+            ),
+        )
+    )
+
+
+async def _run_code_search(
+    args: dict[str, Any],
+    *,
+    session_id: str,
+    read_file_fn: Callable[..., dict] | None = None,
+) -> str:
+    del read_file_fn
+    if _playground_session(session_id):
+        return f"── code_search BLOCKED ──\n{_HARNESS_JAIL}"
+    from .tools import search_code_tool
+    q = str(args.get("query", ""))
+    r = await search_code_tool(q)
+    lines = [f"── code_search: {q} ──"]
+    for m in (r.get("semantic_matches") or [])[:5]:
+        if isinstance(m, dict):
+            lines.append(f"  [sem] {m.get('filepath', '')} → {m.get('qualified_name', '')}")
+        else:
+            lines.append(f"  [sem] {m}")
+    for m in (r.get("keyword_matches") or [])[:5]:
+        if isinstance(m, dict):
+            lines.append(f"  [kw] {m.get('file', '')}:{m.get('line', '')}")
+        else:
+            lines.append(f"  [kw] {m}")
+    return "\n".join(lines)
+
+
 async def execute_native_tool(
     name: str,
     args: dict[str, Any],
@@ -1061,94 +1185,31 @@ async def execute_native_tool(
         pass
 
     from .tools import (
-        web_search_tool, postgres_query_tool, search_code_tool,
+        web_search_tool, postgres_query_tool,
         list_endpoints_tool, list_modules_tool, web_fetch_tool,
     )
 
     try:
+        from .tool_registry import try_dispatch
+
+        dispatched = await try_dispatch(
+            name,
+            args,
+            memory=memory,
+            session_id=session_id,
+            read_file_fn=read_file_fn,
+        )
+        if dispatched is not None:
+            return dispatched
+
         if name == "read_file":
-            path = str(args.get("path", ""))
-            slug_h = str(args.get("slug") or "").strip() or _slug_from_text(path)
-            if _playground_session(session_id) and _harness_target(path):
-                return f"── read_file BLOCKED ──\n{_HARNESS_JAIL}"
-            ls = args.get("line_start")
-            le = args.get("line_end")
-            r = read_file_fn(path, int(ls) if ls else None, int(le) if le else None)
-            if r.get("ok"):
-                trunc = " [TRUNCATED]" if r.get("truncated") else ""
-                loc = str(r.get("path") or path)
-                return (
-                    f"── read_file {loc}{trunc} ──\n{r['content']}"
-                    + _nav_hint(
-                        slug=slug_h or _slug_from_text(loc),
-                        path=loc,
-                        next_line=(
-                            f"NEXT: call write_file with slug={slug_h or '<project>'} "
-                            f"path={path or 'index.html'} if you are changing this file."
-                        ),
-                    )
-                )
-            err = r.get("error") or "path required"
-            return (
-                f"── read_file FAILED: {err} ──"
-                + _nav_hint(
-                    slug=slug_h,
-                    path=path,
-                    next_line=(
-                        f"NEXT: pass path like index.html plus slug={slug_h or '<project>'}, "
-                        "not /workspace."
-                    ),
-                )
+            return _run_read_file(
+                args, session_id=session_id, read_file_fn=read_file_fn,
             )
 
         if name == "list_dir":
-            from .shell_center import resolve_cwd
-            rel = str(args.get("path") or ".")
-            slug_h = str(args.get("slug") or "").strip() or _slug_from_text(rel)
-            if _playground_session(session_id) and _harness_target(rel):
-                from .paths import playground_projects_dir
-                root = playground_projects_dir()
-                names = []
-                if root.is_dir():
-                    for p in sorted(root.iterdir())[:80]:
-                        names.append(p.name + ("/" if p.is_dir() else ""))
-                listing = "\n".join(names) or "(empty playground)"
-                return (
-                    f"── list_dir playground (harness listing refused) ──\n"
-                    f"{listing}\n{_HARNESS_JAIL}"
-                    + _nav_hint(
-                        slug=slug_h,
-                        next_line=(
-                            "NEXT: call write_file with slug= from playground_new. "
-                            "Do not find /workspace."
-                        ),
-                    )
-                )
-            try:
-                root = resolve_cwd(rel)
-            except ValueError as exc:
-                return (
-                    f"── list_dir FAILED: {exc} ──"
-                    + _nav_hint(
-                        slug=slug_h,
-                        path=rel,
-                        next_line="NEXT: list playground/projects/{slug}/ or pass slug=.",
-                    )
-                )
-            names = []
-            for p in sorted(root.iterdir())[:80]:
-                names.append(p.name + ("/" if p.is_dir() else ""))
-            return (
-                f"── list_dir {root} ──\n"
-                + "\n".join(names)
-                + _nav_hint(
-                    slug=slug_h or _slug_from_text(str(root)),
-                    path=str(root),
-                    next_line=(
-                        f"NEXT: call write_file with slug={slug_h or '<project>'} "
-                        "— listing is not a substitute for writing the game."
-                    ),
-                )
+            return _run_list_dir(
+                args, session_id=session_id, read_file_fn=read_file_fn,
             )
 
         if name == "playground_new":
@@ -1778,22 +1839,9 @@ async def execute_native_tool(
             return f"── postgres FAILED: {r.get('error')} ──"
 
         if name == "code_search":
-            if _playground_session(session_id):
-                return f"── code_search BLOCKED ──\n{_HARNESS_JAIL}"
-            q = str(args.get("query", ""))
-            r = await search_code_tool(q)
-            lines = [f"── code_search: {q} ──"]
-            for m in (r.get("semantic_matches") or [])[:5]:
-                if isinstance(m, dict):
-                    lines.append(f"  [sem] {m.get('filepath', '')} → {m.get('qualified_name', '')}")
-                else:
-                    lines.append(f"  [sem] {m}")
-            for m in (r.get("keyword_matches") or [])[:5]:
-                if isinstance(m, dict):
-                    lines.append(f"  [kw] {m.get('file', '')}:{m.get('line', '')}")
-                else:
-                    lines.append(f"  [kw] {m}")
-            return "\n".join(lines)
+            return await _run_code_search(
+                args, session_id=session_id, read_file_fn=read_file_fn,
+            )
 
         if name == "list_endpoints":
             flt = str(args.get("filter", "*"))
