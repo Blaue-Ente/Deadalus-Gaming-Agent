@@ -1536,7 +1536,8 @@ async def execute_native_tool(
                     str(args.get("tool") or ""),
                     args.get("arguments") if isinstance(args.get("arguments"), dict) else {},
                 )
-            return f"── mcp_call ──\n{json.dumps(r, ensure_ascii=False, default=str)[:6000]}"
+            banner = "mcp_call BLOCKED" if r.get("blocked") else "mcp_call"
+            return f"── {banner} ──\n{json.dumps(r, ensure_ascii=False, default=str)[:6000]}"
 
         if name == "spawn_subagent":
             from .subagents import run_subagent

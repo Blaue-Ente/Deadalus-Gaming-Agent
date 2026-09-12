@@ -4,9 +4,9 @@ This file records current behavior. It is not permission to delete, skip, or wea
 
 ## Environment
 
-- Generated at: 2026-09-12T00:07:31.553892+00:00
-- Git commit: `9aa65ad924bd062bf53ecfdb84679400341097ab`
-- Git branch: `p0/18-docker-sandbox`
+- Generated at: 2026-09-12T00:20:55.988365+00:00
+- Git commit: `96c3917c5b13f0a2f0b9178a38c816d2f0622c49`
+- Git branch: `p0/19-mcp-security`
 - Python: 3.12.3
 - Extras installed: `dev` only (no playwright / computer / gui)
 - `DAEDALUS_STANDALONE=1`
@@ -14,16 +14,16 @@ This file records current behavior. It is not permission to delete, skip, or wea
 
 ## Pytest summary
 
-- Collected / reported tests: 915
-- Passed: 911
+- Collected / reported tests: 935
+- Passed: 931
 - Failed: 0
 - Errors: 0
 - Skipped: 4
-- Duration (s): 49.849
+- Duration (s): 52.664
 - Pytest exit code: 0
-- Coverage line-rate (`daedalus`, observational): 49.05%
+- Coverage line-rate (`daedalus`, observational): 49.59%
 
-- Pytest last line: `911 passed, 4 skipped, 1 warning in 49.86s`
+- Pytest last line: `931 passed, 4 skipped, 1 warning in 52.68s`
 
 ## Failed or errored tests
 
@@ -40,6 +40,6 @@ No product test failures or errors were recorded.
 - ok: True
 - passed/total: 15/15
 - bake_off: False
-- ms: 25
+- ms: 26
 
 No honesty-suite case failures.

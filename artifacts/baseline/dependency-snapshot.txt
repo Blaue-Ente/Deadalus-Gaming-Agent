@@ -1,8 +1,8 @@
 # Daedalus dependency snapshot
 python: 3.12.3
 platform: Linux-6.12.94+-x86_64-with-glibc2.39
-git_commit: 9aa65ad924bd062bf53ecfdb84679400341097ab
-git_branch: p0/18-docker-sandbox
+git_commit: 96c3917c5b13f0a2f0b9178a38c816d2f0622c49
+git_branch: p0/19-mcp-security
 package_version: 0.3.8
 requires-python: >=3.11
 
@@ -47,7 +47,7 @@ chromadb==1.5.9
 click==8.5.0
 coverage==7.16.0
 cryptography==41.0.7
--e git+https://gitlab.com/Blaue-Ente/deadalus-agent-0.git/@9aa65ad924bd062bf53ecfdb84679400341097ab#egg=daedalus
+-e git+https://gitlab.com/Blaue-Ente/deadalus-agent-0.git/@96c3917c5b13f0a2f0b9178a38c816d2f0622c49#egg=daedalus
 dbus-python==1.3.2
 distro==1.9.0
 dnspython==2.6.1
