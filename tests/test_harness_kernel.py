@@ -168,9 +168,12 @@ def test_wiring_in_source():
     agent = (ROOT / "daedalus" / "agent.py").read_text(encoding="utf-8")
     assert "scan_need_markers" in agent
     assert "max_rounds=max_native" in agent
-    assert "extract_tool_dumps" in agent
+    assert "ToolLoop().run_leftover" in agent
     assert "playground_build_specs" in agent
     assert "tool_router" in agent
+    loop = (ROOT / "daedalus" / "tool_loop.py").read_text(encoding="utf-8")
+    assert "scan_need_markers" in loop
+    assert "extract_tool_dumps" in loop
     cfg = (ROOT / "daedalus" / "llm_config.py").read_text(encoding="utf-8")
     assert "overlay_effort" in cfg
     kernel = (ROOT / "daedalus" / "kernel" / "full_autopilot.py").read_text(encoding="utf-8")

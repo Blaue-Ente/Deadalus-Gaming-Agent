@@ -1,7 +1,8 @@
 """Provider invoke + retries + metering + normalize.
 
-Leaf module. Do not import agent.py. Cheap-path ROUTING, leftover NEED_*
-ladder, and ToolLoop stay on Daedalus. ModelGateway is invoke then normalize.
+Leaf module. Do not import agent.py. Cheap-path ROUTING and leftover NEED_*
+if-arms stay on Daedalus. ToolLoop is the round driver. ModelGateway is
+invoke then normalize.
 """
 from __future__ import annotations
 

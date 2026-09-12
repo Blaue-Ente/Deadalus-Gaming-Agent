@@ -89,6 +89,7 @@ from .context_compaction import track_files_from_text
 from .edit_diff import extract_edit_markers, process_need_edit
 from .native_tools import native_tools_enabled, run_native_discovery_pass
 from .need_scan import scan_need_markers
+from .tool_loop import LeftoverRoundRequest, ToolLoop
 from .session_branching import branch_session as _branch_session_fn
 
 log = logging.getLogger(__name__)
@@ -950,8 +951,8 @@ class Daedalus:
     ) -> tuple[str, dict[str, Any]]:
         """Shared pipeline: retrieve → cheap path → compose → call → capture.
 
-        ContextAssembler owns retrieve/compose. Cheap-path routing and the
-        leftover tool ladder stay here.
+        ContextAssembler owns retrieve/compose. Cheap-path routing stays here.
+        ToolLoop owns native/leftover round driving; leftover if-arms stay here.
 
         Returns (raw_llm_response, retrieval_summary).
         """
@@ -1324,2409 +1325,30 @@ class Daedalus:
         # enabling "first read, then write" flows that a single re-roll cannot.
         # 20 iterations allow large multi-step tasks (recon + multi-batch inserts +
         # verification) without prematurely truncating action work.
-        MAX_TOOL_ITERATIONS = 30
-        _tool_loop_broke_with_fallback = False
-        _promise_guard_count = 0  # no-silent-stall guard: max 3 re-rolls per session
-        for _tool_iter in range(MAX_TOOL_ITERATIONS):
-            # Tool re-roll: if Claude emitted any NEED_* marker, execute tools and re-call.
-            hit = scan_need_markers(raw)
-            search_q = hit.search_q
-            web_q = hit.web_q
-            fetch_url = hit.fetch_url
-            screenshot_u = hit.screenshot_u
-            gh_q = hit.gh_q
-            mesh_marker = hit.mesh_marker
-            skill_q = hit.skill_q
-            doc_q = hit.doc_q
-            pg_q = hit.pg_q
-            backup_q = hit.backup_q
-            gh_repo_q = hit.gh_repo_q
-            gh_issue_q = hit.gh_issue_q
-            pypi_q = hit.pypi_q
-            npm_q = hit.npm_q
-            docs_url = hit.docs_url
-            dep_q = hit.dep_q
-            git_log_q = hit.git_log_q
-            git_diff_q = hit.git_diff_q
-            sandbox_code = hit.sandbox_code
-            batch_block = hit.batch_block
-            verify_block = hit.verify_block
-            edit_markers = hit.edit_markers
-            _parsed_calls = hit.parsed_calls
-            if _parsed_calls and _tool_iter == 0:
-                log.debug(
-                    "tool_parser: %d markers at positions %s",
-                    len(_parsed_calls),
-                    [c.name for c in _parsed_calls[:8]],
-                )
-            endpoints_q = hit.endpoints_q
-            modules_q = hit.modules_q
-            db_schema_q = hit.db_schema_q
-            if db_schema_q:
-                _tables = [t.strip() for t in re.split(r"[,\s]+", db_schema_q) if t.strip()]
-                try:
-                    mark_schema_read(session_id, _tables)
-                except Exception:
-                    pass
-            code_search_q = hit.code_search_q
-            capability_q = hit.capability_q
-            ai_digest_q = hit.ai_digest_q
-            skill_catalog_q = hit.skill_catalog_q
-            lint_q = hit.lint_q
-            tdd_m = hit.tdd_m
-            pg_new_m = hit.pg_new_m
-            pg_write_matches = hit.pg_write_matches
-            pg_write_m = hit.pg_write_m
-            pg_run_q = hit.pg_run_q
-            pg_pub_m = hit.pg_pub_m
-            pg_clone_m = hit.pg_clone_m
-            pg_push_m = hit.pg_push_m
-            pg_read_m = hit.pg_read_m
-            pg_edit_matches = hit.pg_edit_matches
-            pg_db_m = hit.pg_db_m
-            pg_manifest_m = hit.pg_manifest_m
-            drp_law_q = hit.drp_law_q
-            drp_cases_q = hit.drp_cases_q
-            drp_search_q = hit.drp_search_q
-            inbox_msg_m = hit.inbox_msg_m
-            project_plan_m = hit.project_plan_m
-            data_prop_m = hit.data_prop_m
-            _data_prop_truncated = hit.data_prop_truncated
-            progress_m = hit.progress_m
-            journal_m = hit.journal_m
-            task_state_m = hit.task_state_m
-            playbook_m = hit.playbook_m
-            plan_lock_m = hit.plan_lock_m
-            check_perm_m = hit.check_perm_m
-            blocked_m = hit.blocked_m
-            plan_step_m = hit.plan_step_m
-            read_file_m = hit.read_file_m
-            read_file_path = hit.read_file_path
-            read_file_start = hit.read_file_start
-            read_file_end = hit.read_file_end
-            logs_m = hit.logs_m
-            logs_n = hit.logs_n
-            logs_grep = hit.logs_grep
-            worker_calls = hit.worker_calls
-            subagent_calls = hit.subagent_calls
-            _bundle_start_title = hit.bundle_start_title
-            _stage_blocks = hit.stage_blocks
-            _bundle_commit = hit.bundle_commit
-            from .tool_dumps import extract_tool_dumps, strip_tool_dumps
-            _json_dumps = extract_tool_dumps(raw)
-            has_markers = bool(propose_result_text) or hit.has_markers or bool(_json_dumps)
-            if not has_markers:
-                # ── Promise-without-marker guard (no-silent-stall) ──
-                # До 3 re-roll-а с нарастваща принуда — моделите да emit-нат
-                # NEED_* маркер вместо да обещаят в проза и да спрат.
-                _clean = re.sub(r"```.*?```", " ", raw, flags=re.DOTALL)
-                _clean = re.sub(r"`[^`\n]*`", " ", _clean)
-                _clean = re.sub(r"(?m)^\s*>.*$", " ", _clean)
-                _clean = re.sub(r'[\u201c\u201d\u00ab\u00bb]', " ", _clean)
-                _promise_re = re.compile(
-                    r"\b("
-                    r"ще\s+(?:провер|потърс|намер|погледн|изчисл|анализир)|"
-                    r"нека\s+(?:намер|провер|видим|потърс)|"
-                    r"мога\s+да\s+(?:провер|намер|потърс|прочет)|"
-                    r"трябва\s+да\s+(?:провер|намер|прочет|използ)|"
-                    r"агентът\s+трябва|"
-                    r"let\s+me\s+(?:check|find|search|look|read)|"
-                    r"i(?:'ll| will)\s+(?:check|search|find|look|read)|"
-                    r"should\s+(?:check|read|use|emit)|"
-                    r"i\s+(?:need|must|have\s+to)\s+(?:check|read|find|look)|"
-                    r"first\s+(?:i\s+(?:need|should|will|must)|let\s+me)|"
-                    r"NEED_BATCH|NEED_VERIFY"
-                    r")",
-                    re.IGNORECASE,
-                )
-                if raw and _promise_guard_count < 3 and _promise_re.search(_clean):
-                    _promise_guard_count += 1
-                    log.info("promise-guard #%d: triggered session=%s iter=%d",
-                             _promise_guard_count, (session_id or "")[:10], _tool_iter)
-                    try:
-                        _set_live(session_id, "reasoning", _tool_iter,
-                                  f"Guard #{_promise_guard_count} — карам модела да emit-не маркер…")
-                    except Exception:
-                        pass
-
-                    if _promise_guard_count == 1:
-                        followup = (
-                            "[GUARD] Обеща да провериш/намериш нещо, но НЕ емитира NEED_* маркер.\n\n"
-                            "СЕГА emit ДИРЕКТНО маркер:\n"
-                            "  • Един файл → <NEED_READ_FILE: path/to/file.py>\n"
-                            "  • PostgreSQL → <NEED_PG: SELECT …>\n"
-                            "  • Уеб → <NEED_WEB: заявка>\n"
-                            "  • Множество неща наведнъж → NEED_BATCH блок:\n"
-                            "<NEED_BATCH>\n"
-                            "read: argos_data_nexus/main.py|1-80\n"
-                            "pg: SELECT count(*) FROM endpoint_registry\n"
-                            "capability: health check\n"
-                            "</NEED_BATCH>\n\n"
-                            "Никога не обещавай без да емитираш маркер."
-                        )
-                    elif _promise_guard_count == 2:
-                        followup = (
-                            "[GUARD #2] Отново без маркер. ПОСЛЕДНО ПРЕДУПРЕЖДЕНИЕ.\n\n"
-                            "Отговори САМО с NEED_BATCH блок — без проза, без обяснение:\n"
-                            "<NEED_BATCH>\n"
-                            "tool: argument\n"
-                            "</NEED_BATCH>\n\n"
-                            "Ако нямаш нужда от инструменти, отговори САМО: DIRECT_ANSWER"
-                        )
-                    else:
-                        followup = (
-                            "[GUARD #3 — FINAL] Отговори с ЕДНО от двете:\n\n"
-                            "Вариант A (ако трябват инструменти):\n"
-                            "<NEED_BATCH>\n"
-                            "read: argos_data_nexus/main.py|1-50\n"
-                            "</NEED_BATCH>\n\n"
-                            "Вариант B (ако можеш да отговориш директно):\n"
-                            "DIRECT_ANSWER\n\n"
-                            "НИЩО ДРУГО. БЕЗ ПРОЗА."
-                        )
-
-                    try:
-                        async with _keepalive(
-                            session_id, "reasoning", _tool_iter,
-                            f"Re-roll #{_promise_guard_count} след promise-guard…",
-                        ):
-                            raw = await _call_claude(
-                                _call_persona,
-                                [
-                                    {"role": "user",      "content": user_content},
-                                    {"role": "assistant", "content": raw},
-                                    {"role": "user",      "content": followup},
-                                ],
-                                use_cache_override=False,
-                            )
-                    except Exception as _g_exc:
-                        log.debug("promise-guard re-roll #%d failed: %s",
-                                  _promise_guard_count, _g_exc)
-                        break
-                    continue
-                break  # no more tools requested; normal reply
-
-            # Live status — кой инструмент се изпълнява в тази итерация
-            try:
-                _active_tool = (
-                    "NEED_PG"            if pg_q else
-                    "NEED_SEARCH"        if search_q else
-                    "NEED_WEB"           if web_q else
-                    "NEED_WEB_FETCH"     if fetch_url else
-                    "NEED_WEB_SCREENSHOT" if screenshot_u else
-                    "NEED_WORKER"        if worker_calls else
-                    "NEED_DATA_PROPOSAL" if data_prop_m else
-                    "NEED_PROPOSE_START" if propose_result_text else
-                    "NEED_PROGRESS"      if progress_m else
-                    "NEED_CHECK_PERM"    if check_perm_m else
-                    "NEED_PROJECT_PLAN"  if project_plan_m else
-                    "NEED_SKILL"         if skill_q else
-                    "NEED_GITHUB"        if gh_q else
-                    "NEED_MESH"          if mesh_marker else
-                    "NEED_READ_FILE"     if endpoints_q or modules_q or db_schema_q else
-                    "NEED_INBOX_MSG"     if inbox_msg_m else
-                    "NEED_LINT"          if lint_q else
-                    "NEED_TDD"           if tdd_m else
-                    "thinking"
-                )
-                _set_live(session_id, _active_tool, _tool_iter,
-                          f"итерация {_tool_iter + 1}/20")
-            except Exception:
-                pass
-
-            tool_results_text_parts: list[str] = []
-            vision_blocks: list[dict] = []   # base64 images for vision injection
-            if _json_dumps:
-                from .native_tools import execute_native_tool as _exec_dump
-                dump_bits: list[str] = []
-                _dump_skip = {"postgres_query", "mcp_call", "spawn_subagent"}
-                for dump in _json_dumps:
-                    if dump.name in _dump_skip:
-                        continue
-                    result_text = await _exec_dump(
-                        dump.name, dump.args,
-                        memory=self.memory, session_id=session_id or "",
-                        read_file_fn=_read_file_tool,
-                    )
-                    blocked = "BLOCKED" in result_text
-                    ok = blocked or ("FAILED" not in result_text and "ERROR" not in result_text)
-                    tool_calls_used.append({
-                        "tool": dump.name,
-                        "ok": ok,
-                        "blocked": blocked,
-                        "source": "dump",
-                    })
-                    dump_bits.append(result_text)
-                if dump_bits:
-                    tool_results_text_parts.append(
-                        "━━━ TOOL RESULTS — DUMPED CALLS ━━━\n" + "\n\n".join(dump_bits)
-                    )
-                raw = strip_tool_dumps(raw, _json_dumps)
-            if propose_result_text:
-                tool_results_text_parts.append(propose_result_text)
-            if search_q:
-                _denied = _perm_gate("web_search", "NEED_SEARCH")
-                if _denied:
-                    tool_results_text_parts.append(_denied)
-                    tool_calls_used.append({"tool": "web_search", "ok": False, "denied": True})
-                else:
-                    # NEED_SEARCH → Perplexity/Sonar (synthesized answer + citations)
-                    try:
-                        from argos_data_nexus.modules.web_search import smart_search as _smart_search
-                        sr = await _smart_search(search_q, mode="sonar")
-                        _mode = sr.get("mode", "sonar")
-                        if _mode in ("sonar", "sonar-pro"):
-                            _answer = sr.get("answer", "")
-                            _cits   = sr.get("citations", [])
-                            _cit_block = ""
-                            if _cits:
-                                _cit_lines = "\n".join(f"  [{i+1}] {u}" for i, u in enumerate(_cits[:8]))
-                                _cit_block = f"\nSources:\n{_cit_lines}"
-                            tool_results_text_parts.append(
-                                f"━━━ TOOL RESULTS — NEED_SEARCH (Sonar) [{search_q!r}] ━━━\n"
-                                f"{_answer}{_cit_block}"
-                            )
-                        else:
-                            # DDG fallback
-                            tool_results_text_parts.append(_format_web_results(search_q, {
-                                "ok": True,
-                                "result_count": sr.get("result_count", 0),
-                                "results": sr.get("results", []),
-                            }))
-                        tool_calls_used.append({
-                            "tool": "smart_search", "query": search_q,
-                            "mode": sr.get("mode"), "source": sr.get("source"),
-                        })
-                        # Запомняме в Дедал discoveries
-                        try:
-                            from argos_data_nexus.modules.web_search import smart_search as _ss
-                            _answer_text = sr.get("answer") or ""
-                            if _answer_text and len(_answer_text) > 40:
-                                self.memory.store_discovery(
-                                    title=f"[Sonar] {search_q[:80]}",
-                                    content=_answer_text[:1200],
-                                    source="sonar",
-                                    tags=["search", "sonar", "live"],
-                                )
-                        except Exception:
-                            pass
-                    except Exception as _se:
-                        log.warning("NEED_SEARCH failed (%s) — falling back to NEED_WEB DDG", _se)
-                        ws = await web_search_tool(self.memory, search_q, limit=5, for_self=for_self)
-                        tool_results_text_parts.append(_format_web_results(search_q, ws))
-                        tool_calls_used.append({"tool": "web_search_fallback", "query": search_q})
-            if web_q:
-                _denied = _perm_gate("web_search", "NEED_WEB")
-                if _denied:
-                    tool_results_text_parts.append(_denied)
-                    tool_calls_used.append({"tool": "web_search", "ok": False, "denied": True})
-                else:
-                    ws = await web_search_tool(self.memory, web_q, limit=5, for_self=for_self)
-                    tool_calls_used.append({"tool": "web_search", "query": web_q,
-                                            "result_count": ws.get("result_count", 0),
-                                            "discoveries_recorded": ws.get("discoveries_recorded", 0),
-                                            "for_self": for_self})
-                    tool_results_text_parts.append(_format_web_results(web_q, ws))
-            if fetch_url:
-                from .playground_agent_guards import should_block_web_fetch
-                _pg_ctx = ""
-                try:
-                    from .kv import db as _rdb_wf
-                    _pg_ctx = str(_rdb_wf.get(f"adn:daedalus_pg_context:{session_id}") or "")
-                except Exception:
-                    pass
-                _wf_block = should_block_web_fetch(
-                    session_id=session_id or "",
-                    kind=_pg_ctx.split("|")[0] if "|" in _pg_ctx else "static",
-                    project_text=_pg_ctx,
-                )
-                if _wf_block:
-                    tool_results_text_parts.append(
-                        f"━━━ TOOL RESULTS — WEB FETCH BLOCKED ━━━\n{_wf_block}"
-                    )
-                    tool_calls_used.append({"tool": "web_fetch", "url": fetch_url, "ok": False, "blocked": True})
-                else:
-                    _denied = _perm_gate("web_search", "NEED_FETCH")
-                    if _denied:
-                        tool_results_text_parts.append(_denied)
-                        tool_calls_used.append({"tool": "web_fetch", "ok": False, "denied": True})
-                    else:
-                        fr = await web_fetch_tool(fetch_url)
-                        trunc_note = (f"\n[...truncated — {fr.get('chars_total',0)} total chars]"
-                                      if fr.get("truncated") else "")
-                        if fr.get("ok"):
-                            tool_results_text_parts.append(
-                                f"━━━ TOOL RESULTS — WEB FETCH [{fetch_url}] ━━━\n"
-                                f"{fr['text']}{trunc_note}"
-                            )
-                        else:
-                            tool_results_text_parts.append(
-                                f"[web_fetch {fetch_url!r}] FAILED: {fr.get('error')}"
-                            )
-                        tool_calls_used.append({"tool": "web_fetch", "url": fetch_url,
-                                                "ok": fr.get("ok", False)})
-            if screenshot_u:
-                _denied = _perm_gate("web_search", "NEED_SCREENSHOT")
-                if _denied:
-                    tool_results_text_parts.append(_denied)
-                    tool_calls_used.append({"tool": "web_screenshot", "ok": False, "denied": True})
-                else:
-                    sr = await web_screenshot_tool(screenshot_u)
-                    if sr.get("ok"):
-                        vision_blocks.append({
-                            "type": "image",
-                            "source": {"type": "base64",
-                                       "media_type": sr["media_type"],
-                                       "data": sr["image_b64"]},
-                        })
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — SCREENSHOT [{screenshot_u}] ━━━\n"
-                            f"Страницата е заснета ({sr.get('size_kb', 0)} KB). "
-                            f"Виж прикачения визуален блок за дизайн вдъхновение."
-                        )
-                    else:
-                        tool_results_text_parts.append(
-                            f"[web_screenshot {screenshot_u!r}] FAILED: {sr.get('error')}"
-                        )
-                    tool_calls_used.append({"tool": "web_screenshot", "url": screenshot_u,
-                                            "ok": sr.get("ok", False)})
-            if gh_q:
-                _denied = _perm_gate("github_access", "NEED_GITHUB")
-                if _denied:
-                    tool_results_text_parts.append(_denied)
-                    tool_calls_used.append({"tool": "github_search", "ok": False, "denied": True})
-                else:
-                    gs = await github_search_tool(self.memory, gh_q, limit=5, for_self=for_self)
-                    tool_calls_used.append({"tool": "github_search", "query": gh_q,
-                                            "result_count": gs.get("result_count", 0),
-                                            "discoveries_recorded": gs.get("discoveries_recorded", 0),
-                                            "for_self": for_self})
-                    tool_results_text_parts.append(_format_github_results(gh_q, gs))
-            if mesh_marker:
-                _denied = _perm_gate("mesh_call", "NEED_MESH")
-                if _denied:
-                    tool_results_text_parts.append(_denied)
-                    tool_calls_used.append({"tool": "mesh_call", "ok": False, "denied": True})
-                else:
-                    m_target, m_action, m_payload = mesh_marker
-                    mc = await mesh_call_tool(m_target, m_action, m_payload, timeout=30.0)
-                    tool_calls_used.append({
-                        "tool": "mesh_call",
-                        "target": m_target,
-                        "action": m_action,
-                        "ok": mc.get("ok", False),
-                    })
-                    tool_results_text_parts.append(
-                        f"━━━ TOOL RESULTS — MESH CALL ━━━\n"
-                        + _format_mesh_call_result(m_target, m_action, mc)
-                    )
-            if skill_q:
-                try:
-                    from .skill_acquisition import analyze_github_repo, format_skill_analysis_for_prompt, log_skill_interest
-                    loop = asyncio.get_event_loop()
-                    analysis = await loop.run_in_executor(None, analyze_github_repo, skill_q)
-                    log_skill_interest(analysis.get("slug", skill_q), analysis)
-                    tool_results_text_parts.append(
-                        "━━━ TOOL RESULTS — SKILL ANALYSIS ━━━\n"
-                        + format_skill_analysis_for_prompt(analysis)
-                    )
-                    tool_calls_used.append({"tool": "skill_analyze", "query": skill_q, "ok": analysis.get("ok", False)})
-                except Exception as exc:
-                    log.warning("skill_analyze failed: %s", exc)
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — SKILL ANALYSIS ━━━\nFAILED: {exc}")
-                    tool_calls_used.append({"tool": "skill_analyze", "query": skill_q, "ok": False})
-            if doc_q:
-                try:
-                    from .document_generator import generate_document
-                    loop = asyncio.get_event_loop()
-                    doc_result = await loop.run_in_executor(None, generate_document, doc_q)
-                    if doc_result.get("ok"):
-                        result_text = (
-                            f"━━━ TOOL RESULTS — DOCUMENT GENERATED ━━━\n"
-                            f"Format  : {doc_result['format'].upper()}\n"
-                            f"Title   : {doc_result['title']}\n"
-                            f"File    : {doc_result['filename']}\n"
-                            f"Size    : {doc_result['size_bytes']:,} bytes\n"
-                            f"Download: {doc_result['download_url']}\n\n"
-                            f"Tell Nikolai the document is ready with a clear download link. "
-                            f"Use the exact download_url above as a markdown link."
-                        )
-                    else:
-                        result_text = (
-                            f"━━━ TOOL RESULTS — DOCUMENT GENERATION FAILED ━━━\n"
-                            f"Error: {doc_result.get('error', 'unknown')}"
-                        )
-                    tool_results_text_parts.append(result_text)
-                    tool_calls_used.append({"tool": "generate_document", "format": doc_q.split("|")[0].strip(), "ok": doc_result.get("ok", False)})
-                except Exception as exc:
-                    log.warning("generate_document failed: %s", exc)
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — DOCUMENT GENERATION FAILED ━━━\nError: {exc}")
-                    tool_calls_used.append({"tool": "generate_document", "ok": False})
-
-            if pg_q and is_playground_work_session(session_id, user_message):
-                tool_results_text_parts.append(
-                    "━━━ TOOL RESULTS — PostgreSQL SKIPPED ━━━\n"
-                    "Playground session — write the game with playground_new / write_file. No SQL."
-                )
-                tool_calls_used.append({
-                    "tool": "postgres_query", "ok": True, "blocked": True, "reason": "playground",
-                })
-            elif pg_q:
-                try:
-                    pg_res = await postgres_query_tool(pg_q, session_id=session_id)
-                    if pg_res.get("ok"):
-                        rows_text = "\n".join(str(r) for r in (pg_res.get("rows") or [])[:20])
-                        result_text = (
-                            f"━━━ TOOL RESULTS — PostgreSQL QUERY ━━━\n"
-                            f"Query: {pg_q}\n"
-                            f"Rows returned: {pg_res['row_count']}\n\n"
-                            f"{rows_text}"
-                        )
-                    else:
-                        result_text = f"━━━ TOOL RESULTS — PostgreSQL QUERY FAILED ━━━\nError: {pg_res.get('error')}"
-                    tool_results_text_parts.append(result_text)
-                    tool_calls_used.append({"tool": "postgres_query", "ok": pg_res.get("ok", False), "rows": pg_res.get("row_count", 0), "query": (pg_q or "")[:160]})
-                except Exception as exc:
-                    log.warning("postgres_query failed: %s", exc)
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — PostgreSQL QUERY FAILED ━━━\nError: {exc}")
-                    tool_calls_used.append({"tool": "postgres_query", "ok": False})
-
-            if backup_q and "chromadb" in backup_q.lower():
-                try:
-                    bk_res = await backup_chromadb_tool(trigger="daedalus")
-                    if bk_res.get("ok"):
-                        result_text = (
-                            f"━━━ TOOL RESULTS — CHROMADB BACKUP ━━━\n"
-                            f"Path    : {bk_res['object_path']}\n"
-                            f"Size    : {bk_res['size_bytes']:,} bytes\n"
-                            f"Files   : {bk_res.get('file_count', '?')}\n"
-                            f"Trigger : {bk_res['trigger']}"
-                        )
-                    else:
-                        result_text = f"━━━ TOOL RESULTS — CHROMADB BACKUP FAILED ━━━\nError: {bk_res.get('error')}"
-                    tool_results_text_parts.append(result_text)
-                    tool_calls_used.append({"tool": "backup_chromadb", "ok": bk_res.get("ok", False)})
-                except Exception as exc:
-                    log.warning("backup_chromadb failed: %s", exc)
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — CHROMADB BACKUP FAILED ━━━\nError: {exc}")
-                    tool_calls_used.append({"tool": "backup_chromadb", "ok": False})
-
-            if gh_repo_q:
-                _denied = _perm_gate("github_access", "NEED_GITHUB_REPO")
-                if _denied:
-                    tool_results_text_parts.append(_denied)
-                    tool_calls_used.append({"tool": "github_repo_search", "ok": False, "denied": True})
-                else:
-                    try:
-                        repo_res = await github_search_repos_tool(gh_repo_q, limit=5)
-                        if repo_res.get("ok"):
-                            repos_text = "\n".join(
-                                f"  • {r['full_name']} ({'★'+str(r['stars'])+' ' if r.get('stars') else ''}{r.get('language','')}) — {r.get('description','')[:100]}\n    {r['url']}"
-                                for r in (repo_res.get("repos") or [])
-                            )
-                            result_text = (
-                                f"━━━ TOOL RESULTS — GITHUB REPO SEARCH ━━━\n"
-                                f"Query: {gh_repo_q}\n\n{repos_text or 'No results.'}"
-                            )
-                        else:
-                            result_text = f"━━━ TOOL RESULTS — GITHUB REPO SEARCH FAILED ━━━\nError: {repo_res.get('error')}"
-                        tool_results_text_parts.append(result_text)
-                        tool_calls_used.append({"tool": "github_repo_search", "ok": repo_res.get("ok", False)})
-                    except Exception as exc:
-                        log.warning("github_repo_search failed: %s", exc)
-                        tool_results_text_parts.append(f"━━━ TOOL RESULTS — GITHUB REPO SEARCH FAILED ━━━\nError: {exc}")
-                        tool_calls_used.append({"tool": "github_repo_search", "ok": False})
-
-            if gh_issue_q:
-                try:
-                    parts_issue = [p.strip() for p in gh_issue_q.split("|", 2)]
-                    if len(parts_issue) >= 2:
-                        repo_full = parts_issue[0]
-                        issue_title = parts_issue[1]
-                        issue_body = parts_issue[2] if len(parts_issue) > 2 else ""
-                        owner_r, repo_r = (repo_full.split("/", 1) + [""])[:2]
-                        issue_res = await github_create_issue_tool(owner_r, repo_r, issue_title, body=issue_body)
-                        if issue_res.get("ok"):
-                            result_text = (
-                                f"━━━ TOOL RESULTS — GITHUB ISSUE CREATED ━━━\n"
-                                f"Issue #{issue_res['issue_number']}: {issue_res['title']}\n"
-                                f"URL: {issue_res['url']}"
-                            )
-                        else:
-                            result_text = f"━━━ TOOL RESULTS — GITHUB ISSUE FAILED ━━━\nError: {issue_res.get('error')}"
-                    else:
-                        result_text = "━━━ TOOL RESULTS — GITHUB ISSUE FAILED ━━━\nInvalid format. Use: owner/repo | Title | Body"
-                    tool_results_text_parts.append(result_text)
-                    tool_calls_used.append({"tool": "github_create_issue", "ok": "ok" in gh_issue_q})
-                except Exception as exc:
-                    log.warning("github_create_issue failed: %s", exc)
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — GITHUB ISSUE FAILED ━━━\nError: {exc}")
-                    tool_calls_used.append({"tool": "github_create_issue", "ok": False})
-
-            # --- PyPI search ---
-            if pypi_q:
-                try:
-                    pr = await pypi_search_tool(pypi_q)
-                    if pr.get("ok"):
-                        lines = [f"━━━ TOOL RESULTS — PyPI SEARCH ━━━\nQuery: {pypi_q}\n"]
-                        for p in pr.get("results", []):
-                            lines.append(f"  • {p['name']} {p['version']} — {p.get('summary','')[:100]}\n    {p['install']}")
-                        tool_results_text_parts.append("\n".join(lines))
-                    else:
-                        tool_results_text_parts.append(f"━━━ TOOL RESULTS — PyPI SEARCH FAILED ━━━\n{pr.get('error')}")
-                    tool_calls_used.append({"tool": "pypi_search", "query": pypi_q, "ok": pr.get("ok", False)})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — PyPI SEARCH FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "pypi_search", "ok": False})
-
-            # --- npm search ---
-            if npm_q:
-                try:
-                    nr = await npm_search_tool(npm_q)
-                    if nr.get("ok"):
-                        lines = [f"━━━ TOOL RESULTS — npm SEARCH ━━━\nQuery: {npm_q}\n"]
-                        for p in nr.get("results", []):
-                            lines.append(f"  • {p['name']} {p['version']} — {p.get('description','')[:100]}\n    {p['install']}")
-                        tool_results_text_parts.append("\n".join(lines))
-                    else:
-                        tool_results_text_parts.append(f"━━━ TOOL RESULTS — npm SEARCH FAILED ━━━\n{nr.get('error')}")
-                    tool_calls_used.append({"tool": "npm_search", "query": npm_q, "ok": nr.get("ok", False)})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — npm SEARCH FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "npm_search", "ok": False})
-
-            # --- Docs fetch ---
-            if docs_url:
-                try:
-                    dr = await docs_fetch_tool(docs_url)
-                    if dr.get("ok"):
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — DOCS FETCH ━━━\nURL: {docs_url}\nChars: {dr['chars']}\n\n{dr['content']}"
-                        )
-                    else:
-                        tool_results_text_parts.append(f"━━━ TOOL RESULTS — DOCS FETCH FAILED ━━━\n{dr.get('error')}")
-                    tool_calls_used.append({"tool": "docs_fetch", "url": docs_url, "ok": dr.get("ok", False)})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — DOCS FETCH FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "docs_fetch", "ok": False})
-
-            # --- Dependency analyzer ---
-            if dep_q:
-                try:
-                    parts_dep = [p.strip() for p in dep_q.split("|", 1)]
-                    pkg_name = parts_dep[0]
-                    eco = parts_dep[1] if len(parts_dep) > 1 else "auto"
-                    dr = await dependency_analyze_tool(pkg_name, eco)
-                    if dr.get("ok"):
-                        vuln_lines = ""
-                        if dr.get("vulnerabilities"):
-                            vuln_lines = "\nVULNERABILITIES:\n" + "\n".join(
-                                f"  [{v['severity']}] {v['id']}: {v['summary'][:120]}"
-                                + (f" (fixed in {v['fixed_in']})" if v.get('fixed_in') else "")
-                                for v in dr["vulnerabilities"]
-                            )
-                        else:
-                            vuln_lines = "\nNo known CVEs found."
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — DEPENDENCY ANALYSIS ━━━\n"
-                            f"Package  : {dr['package']} ({dr['ecosystem']})\n"
-                            f"Latest   : {dr['latest_version']} (released {dr.get('released','?')})\n"
-                            f"Summary  : {dr.get('summary','')[:200]}\n"
-                            f"Home     : {dr.get('home_url','')}\n"
-                            f"CVE count: {dr['vuln_count']}"
-                            f"{vuln_lines}"
-                        )
-                    else:
-                        tool_results_text_parts.append(f"━━━ TOOL RESULTS — DEPENDENCY ANALYSIS FAILED ━━━\n{dr.get('error')}")
-                    tool_calls_used.append({"tool": "dependency_analyze", "package": pkg_name, "ok": dr.get("ok", False)})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — DEPENDENCY ANALYSIS FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "dependency_analyze", "ok": False})
-
-            # --- Git log ---
-            if git_log_q:
-                try:
-                    parts_gl = [p.strip() for p in git_log_q.split("|", 1)]
-                    gl_n = int(parts_gl[0]) if parts_gl[0].isdigit() else 15
-                    gl_path = parts_gl[1] if len(parts_gl) > 1 else None
-                    glr = await git_log_tool(gl_n, gl_path)
-                    if glr.get("ok"):
-                        lines = [f"━━━ TOOL RESULTS — GIT LOG ━━━\nLast {glr['count']} commits:\n"]
-                        for c in glr.get("commits", []):
-                            lines.append(f"  {c['date']} [{c['hash']}] {c['author']}: {c['subject']}")
-                        tool_results_text_parts.append("\n".join(lines))
-                    else:
-                        tool_results_text_parts.append(f"━━━ TOOL RESULTS — GIT LOG FAILED ━━━\n{glr.get('error')}")
-                    tool_calls_used.append({"tool": "git_log", "ok": glr.get("ok", False)})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — GIT LOG FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "git_log", "ok": False})
-
-            # --- Git diff ---
-            if git_diff_q:
-                try:
-                    parts_gd = [p.strip() for p in git_diff_q.split("|", 1)]
-                    gd_path = parts_gd[0] if parts_gd[0] else None
-                    gd_ref = parts_gd[1] if len(parts_gd) > 1 else "HEAD"
-                    gdr = await git_diff_tool(gd_path, gd_ref)
-                    if gdr.get("ok"):
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — GIT DIFF ━━━\nPath: {gdr['path']} vs {gdr['ref']}\n\n{gdr['diff']}"
-                        )
-                    else:
-                        tool_results_text_parts.append(f"━━━ TOOL RESULTS — GIT DIFF FAILED ━━━\n{gdr.get('error')}")
-                    tool_calls_used.append({"tool": "git_diff", "ok": gdr.get("ok", False)})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — GIT DIFF FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "git_diff", "ok": False})
-
-            # --- Code sandbox ---
-            if sandbox_code:
-                try:
-                    sbr = await code_sandbox_tool(sandbox_code)
-                    if sbr.get("ok"):
-                        stdout = sbr.get("stdout", "") or "(no output)"
-                        stderr = sbr.get("stderr", "")
-                        result_text = (
-                            f"━━━ TOOL RESULTS — CODE SANDBOX ━━━\n"
-                            f"Return code: {sbr.get('returncode', '?')}\n"
-                            f"STDOUT:\n{stdout}"
-                        )
-                        if stderr:
-                            result_text += f"\nSTDERR:\n{stderr}"
-                    else:
-                        result_text = f"━━━ TOOL RESULTS — CODE SANDBOX FAILED ━━━\n{sbr.get('error')}"
-                        if sbr.get("timed_out"):
-                            result_text += "\n(Execution timed out)"
-                    tool_results_text_parts.append(result_text)
-                    tool_calls_used.append({"tool": "code_sandbox", "ok": sbr.get("ok", False)})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — CODE SANDBOX FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "code_sandbox", "ok": False})
-
-            # --- NEED_READ_FILE ---
-            if read_file_path:
-                try:
-                    loop = asyncio.get_event_loop()
-                    rfr = await loop.run_in_executor(
-                        None, _read_file_tool, read_file_path, read_file_start, read_file_end
-                    )
-                    if rfr.get("ok"):
-                        try:
-                            track_files_from_text(session_id or "", rfr.get("path", read_file_path))
-                        except Exception:
-                            pass
-                        if rfr.get("truncated"):
-                            trunc_at = rfr.get("truncated_at_line")
-                            total = rfr.get("total_lines", "?")
-                            trunc_note = (
-                                f" [TRUNCATED at line ~{trunc_at} of {total} "
-                                f"— use <NEED_READ_FILE: {rfr['path']} | {trunc_at}-{min((trunc_at or 0)+100, total if isinstance(total,int) else 9999)}> "
-                                f"to read more]"
-                            )
-                        else:
-                            trunc_note = ""
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — READ FILE: {rfr['path']}{trunc_note} ━━━\n"
-                            f"{rfr['content']}"
-                        )
-                    else:
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — READ FILE FAILED ━━━\n{rfr.get('error')}"
-                        )
-                    tool_calls_used.append({"tool": "read_file", "path": read_file_path, "ok": rfr.get("ok", False)})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — READ FILE FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "read_file", "ok": False})
-
-            # --- NEED_LOGS ---
-            if logs_n:
-                try:
-                    loop = asyncio.get_event_loop()
-                    lgr = await loop.run_in_executor(
-                        None, _logs_tool, logs_n, logs_grep
-                    )
-                    if lgr.get("ok"):
-                        lines_text = "\n".join(lgr.get("lines", []))
-                        grep_note = f" | grep={logs_grep!r}" if logs_grep else ""
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — LOGS (last {logs_n}{grep_note}) ━━━\n"
-                            f"Source: {lgr.get('source', '?')}\n"
-                            f"{lines_text}"
-                        )
-                    else:
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — LOGS FAILED ━━━\n{lgr.get('error')}"
-                        )
-                    tool_calls_used.append({"tool": "logs", "n": logs_n, "ok": lgr.get("ok", False)})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — LOGS FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "logs", "ok": False})
-
-            # --- NEED_EDIT (Phase 1 — surgical diff → propose loop) ---
-            if edit_markers:
-                try:
-                    _set_live(session_id, "NEED_EDIT", _tool_iter, "Surgical edit…")
-                except Exception:
-                    pass
-                try:
-                    _edit_results, _edit_blocks = await process_need_edit(
-                        raw, _read_file_tool, session_id=session_id or "",
-                    )
-                    for _ert in _edit_results:
-                        tool_results_text_parts.append(_ert)
-                    for _eb in _edit_blocks:
-                        _edit_propose_text, _ = await _run_propose_loop(
-                            initial_raw=raw,
-                            initial_block=_eb,
-                            user_content=user_content,
-                            persona=self.persona,
-                            max_retries=_propose_max_retries(),
-                        )
-                        tool_results_text_parts.append(_edit_propose_text)
-                        tool_calls_used.append({
-                            "tool": "need_edit",
-                            "file": _eb.get("file_path"),
-                            "ok": "FAILED" not in _edit_propose_text,
-                        })
-                except Exception as exc:
-                    log.warning("need_edit failed: %s", exc)
-                    tool_results_text_parts.append(f"━━━ NEED_EDIT FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "need_edit", "ok": False})
-
-            # --- NEED_BATCH (Phase A — parallel multi-tool in 1 iteration) ---
-            if batch_block:
-                try:
-                    _set_live(session_id, "NEED_BATCH", _tool_iter, "Паралелно изпълнение…")
-                except Exception:
-                    pass
-                try:
-                    batch_result = await execute_batch(
-                        batch_block, self.memory, session_id or "",
-                        read_file_fn=_read_file_tool,
-                        logs_fn=_logs_tool,
-                    )
-                    tool_results_text_parts.append(batch_result)
-                    tool_calls_used.append({"tool": "need_batch", "ok": True})
-                except Exception as exc:
-                    log.warning("need_batch failed: %s", exc)
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — NEED_BATCH FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "need_batch", "ok": False})
-
-            # --- NEED_VERIFY (Phase A — HTTP smoke test + log tail) ---
-            if verify_block:
-                try:
-                    _set_live(session_id, "NEED_VERIFY", _tool_iter, "Проверка на endpoint…")
-                except Exception:
-                    pass
-                try:
-                    verify_result = await execute_verify(
-                        verify_block,
-                        logs_fn=_logs_tool,
-                    )
-                    tool_results_text_parts.append(verify_result)
-                    tool_calls_used.append({"tool": "need_verify", "ok": True})
-                except Exception as exc:
-                    log.warning("need_verify failed: %s", exc)
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — NEED_VERIFY FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "need_verify", "ok": False})
-
-            # --- NEED_PROJECT_PLAN (Дедал → auto-plan голяма задача в planner) ---
-            # Recursion guard: auto_plan_from_goal() and planner step runs call
-            # daedalus.chat() recursively. Those nested sessions must NEVER be
-            # allowed to spawn more plans (infinite loop + token burn).
-            _is_nested_planner_session = bool(
-                session_id and (
-                    session_id.startswith("autoplan_")
-                    or session_id.startswith("planner_")
-                    or session_id.startswith("selfrepair_")
-                )
-            )
-            if project_plan_m and _is_nested_planner_session:
-                tool_results_text_parts.append(
-                    "━━━ TOOL RESULTS — PROJECT PLAN BLOCKED ━━━\n"
-                    "Recursion guard: вече си в planner/autoplan/selfrepair сесия. "
-                    "НЕ можеш да създадеш нов план оттук. Завърши текущата стъпка."
-                )
-                tool_calls_used.append({"tool": "project_plan", "ok": False, "reason": "recursion_guard"})
-                project_plan_m = None  # disarm to skip the real handler below
-            if project_plan_m:
-                try:
-                    pp_goal = project_plan_m.group(1).strip()
-                    from .planner import auto_plan_from_goal, update_plan_status
-                    from .outbox import check_permission, push_outbox
-                    pp_result = await auto_plan_from_goal(pp_goal)
-                    if pp_result.get("ok"):
-                        pp_plan_id = pp_result["plan_id"]
-                        pp_steps = pp_result.get("steps", []) or []
-                        # Auto-activate if owner pre-granted planner_auto_run
-                        if check_permission("planner_auto_run"):
-                            await update_plan_status(pp_plan_id, "active")
-                            activation_note = (
-                                "Permission 'planner_auto_run' is GRANTED — план е АКТИВИРАН.\n"
-                                "Background scheduler ще изпълнява стъпките една по една "
-                                "(всяка в нова Дедал сесия с пълни 20 итерации)."
-                            )
-                        else:
-                            # Notify owner via outbox to approve
-                            push_outbox(
-                                type="message",
-                                title=f"🗂  План за одобрение: {pp_result.get('title','?')[:60]}",
-                                body=(
-                                    f"Дедал генерира план с {len(pp_steps)} стъпки.\n\n"
-                                    f"**Цел:** {pp_goal[:300]}\n"
-                                    f"**Plan ID:** {pp_plan_id}\n\n"
-                                    f"Approve: POST /admin/daedalus/planner/plans/{pp_plan_id}/approve\n"
-                                    f"Или дай пермишън веднъж завинаги: "
-                                    f"`planner_auto_run` → плановете тръгват автоматично."
-                                ),
-                                session_id=session_id,
-                            )
-                            activation_note = (
-                                "Планът е в DRAFT — чака approve от Николай в admin UI "
-                                "(/admin/daedalus → План режим). За auto-activate в бъдеще "
-                                "Николай може да grant-не `planner_auto_run` permission."
-                            )
-                        steps_summary = "\n".join(
-                            f"  {i+1}. {s.get('title','?')[:80]}"
-                            for i, s in enumerate(pp_steps[:10])
-                        )
-                        result_text = (
-                            f"━━━ TOOL RESULTS — PROJECT PLAN CREATED ━━━\n"
-                            f"Plan ID  : {pp_plan_id}\n"
-                            f"Title    : {pp_result.get('title','?')}\n"
-                            f"Steps    : {len(pp_steps)}\n\n"
-                            f"{steps_summary}\n\n"
-                            f"{activation_note}\n\n"
-                            f"Tell Nikolai: Планът е създаден с {len(pp_steps)} стъпки. "
-                            f"Всяка стъпка ще се изпълни автономно в собствена сесия — "
-                            f"никакво tool loop ограничение."
-                        )
-                        tool_calls_used.append({"tool": "project_plan", "plan_id": pp_plan_id, "steps": len(pp_steps)})
-                    else:
-                        result_text = (
-                            f"━━━ TOOL RESULTS — PROJECT PLAN FAILED ━━━\n"
-                            f"Error: {pp_result.get('error','?')}\n"
-                            f"Опитай отново с по-конкретна цел или раздели сам ръчно."
-                        )
-                        tool_calls_used.append({"tool": "project_plan", "ok": False})
-                    tool_results_text_parts.append(result_text)
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — PROJECT PLAN ERROR ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "project_plan", "ok": False})
-
-            # --- NEED_DATA_PROPOSAL (Дедал → outbox data batch, no code sandbox) ---
-            if data_prop_m:
-                try:
-                    dp_category = data_prop_m.group(1).strip()
-                    dp_title    = data_prop_m.group(2).strip()
-                    dp_raw_json = data_prop_m.group(3).strip()
-                    from .outbox import push_outbox, has_insert_permission, _do_apply
-                    import json as _json
-                    try:
-                        dp_payload = _json.loads(dp_raw_json)
-                    except Exception:
-                        dp_payload = dp_raw_json
-                    # If Николай has pre-granted insert permission → apply immediately
-                    perm_cls = f"insert_{dp_category}"
-                    if has_insert_permission(dp_category):
-                        try:
-                            apply_result = await _do_apply(dp_category, dp_payload)
-                            inserted = apply_result.get("inserted", 0)
-                            skipped  = apply_result.get("skipped", 0)
-                            result_text = (
-                                f"━━━ TOOL RESULTS — DATA PROPOSAL AUTO-APPLIED ━━━\n"
-                                f"Category : {dp_category}\n"
-                                f"Title    : {dp_title}\n"
-                                f"Inserted : {inserted}  Skipped: {skipped}\n"
-                                f"Permission '{perm_cls}' is pre-granted — applied immediately.\n"
-                                f"Tell Nikolai: '{inserted} new records written to {dp_category}.'"
-                            )
-                            tool_calls_used.append({"tool": "data_proposal_auto", "category": dp_category, "inserted": inserted})
-                        except Exception as exc:
-                            result_text = (
-                                f"━━━ TOOL RESULTS — DATA PROPOSAL AUTO-APPLY FAILED ━━━\n"
-                                f"Category : {dp_category}\n"
-                                f"Error    : {exc}\n"
-                                f"Propose was queued in outbox as fallback."
-                            )
-                            push_outbox(type="data_batch", title=dp_title,
-                                        category=dp_category, payload=dp_payload,
-                                        session_id=session_id)
-                            tool_calls_used.append({"tool": "data_proposal_queued", "category": dp_category, "ok": False})
-                    else:
-                        item = push_outbox(type="data_batch", title=dp_title,
-                                           category=dp_category, payload=dp_payload,
-                                           session_id=session_id)
-                        result_text = (
-                            f"━━━ TOOL RESULTS — DATA PROPOSAL QUEUED ━━━\n"
-                            f"Outbox ID: {item['id']}\n"
-                            f"Category : {dp_category}\n"
-                            f"Title    : {dp_title}\n"
-                            f"Records  : {len(dp_payload) if isinstance(dp_payload, list) else 1}\n\n"
-                            f"Предложението е в outbox и чака едно кликване от Николай.\n"
-                            f"Tell Nikolai: '{dp_title}' is in the outbox at /admin/daedalus — "
-                            f"click Apply to insert {len(dp_payload) if isinstance(dp_payload, list) else 1} record(s) into {dp_category}.\n"
-                            f"If he wants to skip confirming next time, he can grant permission '{perm_cls}'."
-                        )
-                        tool_calls_used.append({"tool": "data_proposal_queued", "category": dp_category, "id": item["id"]})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — DATA PROPOSAL FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "data_proposal", "ok": False})
-                else:
-                    tool_results_text_parts.append(result_text)
-
-            # --- NEED_PROGRESS (Дедал reports live progress to admin UI) ---
-            if progress_m:
-                try:
-                    from .outbox import set_progress
-                    prog_task = progress_m.group(1).strip()
-                    prog_pct  = float(progress_m.group(2).strip())
-                    prog_msg  = progress_m.group(3).strip()
-                    set_progress(prog_task, prog_pct, prog_msg, session_id=session_id or "")
-                    tool_results_text_parts.append(
-                        f"━━━ TOOL RESULTS — PROGRESS UPDATED ━━━\n"
-                        f"Task: {prog_task}  {int(prog_pct * 100)}%  {prog_msg}\n"
-                        f"Progress bar in admin panel updated."
-                    )
-                    tool_calls_used.append({"tool": "progress", "task": prog_task, "pct": prog_pct, "msg": prog_msg})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — PROGRESS FAILED ━━━\n{exc}")
-
-            # --- NEED_JOURNAL_WRITE (Дедал записва частичен резултат в scratch journal) ---
-            if journal_m:
-                try:
-                    j_step = journal_m.group(1).strip()
-                    j_summary = (journal_m.group(2) or "").strip()
-                    j_data = (journal_m.group(3) or "").strip()
-                    # Task name за първи запис — от briefing.intent или съобщението
-                    _task_name = ""
-                    try:
-                        if briefing_dict:
-                            _task_name = str(briefing_dict.get("intent") or "")[:60]
-                    except Exception:
-                        pass
-                    step = _journal.write_step(
-                        session_id or "", j_step, j_summary, j_data,
-                        task_name=_task_name,
-                    )
-                    j_now = _journal.get_journal(session_id or "") or {}
-                    tokens = int(j_now.get("tokens_est", 0))
-                    pct = round(tokens / _journal.TOKEN_BUDGET_PER_SESSION * 100, 1)
-                    tool_results_text_parts.append(
-                        f"━━━ TOOL RESULTS — JOURNAL WRITE ━━━\n"
-                        f"Step: {step.get('step', j_step)}\n"
-                        f"Tokens: {step.get('tokens_est', 0)} (общо {tokens}, {pct}% от budget)\n"
-                        f"Стъпки: {len(j_now.get('steps') or [])}\n"
-                        f"Журналът се запази — owner може да види прогреса в admin panel."
-                    )
-                    tool_calls_used.append({
-                        "tool": "journal_write", "ok": True,
-                        "step": j_step, "tokens": tokens, "pct": pct,
-                    })
-                except Exception as exc:
-                    tool_results_text_parts.append(
-                        f"━━━ TOOL RESULTS — JOURNAL WRITE FAILED ━━━\n{exc}"
-                    )
-                    tool_calls_used.append({"tool": "journal_write", "ok": False})
-
-            # --- NEED_TASK_STATE (Phase 17B — cross-session task tracking) ---
-            if task_state_m:
-                try:
-                    ts_goal      = task_state_m.group(1).strip()
-                    ts_phase     = task_state_m.group(2).strip()
-                    ts_remaining = (task_state_m.group(3) or "").strip()
-                    ts_result = _task_state.save(
-                        goal=ts_goal,
-                        phase=ts_phase,
-                        remaining_steps=ts_remaining,
-                    )
-                    if ts_result.get("status") == "cleared":
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — TASK STATE CLEARED ━━━\n"
-                            f"Задачата '{ts_goal}' е маркирана като завършена.\n"
-                            f"task-state.json е изчистен."
-                        )
-                    else:
-                        remaining_list = ts_result.get("remaining_steps", [])
-                        completed_list = ts_result.get("completed_steps", [])
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — TASK STATE SAVED ━━━\n"
-                            f"Цел    : {ts_result.get('goal', ts_goal)}\n"
-                            f"Фаза   : {ts_result.get('phase', ts_phase)}\n"
-                            f"Завършено : {len(completed_list)} стъпки\n"
-                            f"Остава : {len(remaining_list)} стъпки: {', '.join(remaining_list[:3])}\n"
-                            f"Task state е запазен на диск — ще се зареди автоматично в следващата сесия."
-                        )
-                    tool_calls_used.append({"tool": "task_state_write", "ok": True,
-                                            "phase": ts_phase})
-                except Exception as exc:
-                    tool_results_text_parts.append(
-                        f"━━━ TOOL RESULTS — TASK STATE FAILED ━━━\n{exc}"
-                    )
-                    tool_calls_used.append({"tool": "task_state_write", "ok": False})
-
-            # --- NEED_PLAYBOOK (Phase 17C — процедурен наръчник за задачата) ---
-            if playbook_m:
-                try:
-                    pb_query = playbook_m.group(1).strip()
-                    pb_results = _playbooks.search(pb_query, top_k=2)
-                    pb_text = _playbooks.format_for_prompt(pb_results)
-                    tool_results_text_parts.append(
-                        f"━━━ TOOL RESULTS — PLAYBOOK: {pb_query} ━━━\n"
-                        f"{pb_text}\n\n"
-                        f"Следвай стъпките по ред. Не прескачай."
-                    )
-                    tool_calls_used.append({
-                        "tool": "playbook", "ok": True,
-                        "query": pb_query,
-                        "matched": [pb.get("name") for pb in pb_results],
-                    })
-                except Exception as exc:
-                    tool_results_text_parts.append(
-                        f"━━━ TOOL RESULTS — PLAYBOOK FAILED ━━━\n{exc}"
-                    )
-                    tool_calls_used.append({"tool": "playbook", "ok": False})
-
-            # --- NEED_PLAN_LOCK (Phase 17C — заключване на активен план) ---
-            if plan_lock_m:
-                try:
-                    pl_id     = plan_lock_m.group(1).strip()
-                    pl_action = plan_lock_m.group(2).strip().lower()
-                    if pl_action == "acquire":
-                        pl_result = _plan_lock.acquire(pl_id)
-                    elif pl_action == "release":
-                        pl_result = _plan_lock.release(pl_id)
-                    elif pl_action == "extend":
-                        pl_result = _plan_lock.extend(pl_id)
-                    else:  # check (default)
-                        pl_result = _plan_lock.check(pl_id)
-                    tool_results_text_parts.append(
-                        _plan_lock.format_for_prompt(pl_action, pl_result)
-                    )
-                    tool_calls_used.append({
-                        "tool": "plan_lock", "ok": pl_result.get("ok", True),
-                        "action": pl_action, "plan_id": pl_id,
-                    })
-                except Exception as exc:
-                    tool_results_text_parts.append(
-                        f"━━━ TOOL RESULTS — PLAN LOCK FAILED ━━━\n{exc}"
-                    )
-                    tool_calls_used.append({"tool": "plan_lock", "ok": False})
-
-            # --- NEED_CHECK_PERM (Дедал checks pre-granted permission before asking) ---
-            if check_perm_m:
-                try:
-                    from .outbox import check_permission, list_permissions
-                    cp_class = check_perm_m.group(1).strip()
-                    granted = check_permission(cp_class)
-                    if granted:
-                        active = [p for p in list_permissions() if p["perm_class"] == cp_class]
-                        rem = active[0]["remaining_min"] if active else 0
-                        result_text = (
-                            f"━━━ TOOL RESULTS — PERMISSION CHECK ━━━\n"
-                            f"Permission : {cp_class}\n"
-                            f"Status     : GRANTED (expires in {rem} min)\n\n"
-                            f"You are AUTHORIZED to proceed with {cp_class} without asking Nikolai again."
-                        )
-                    else:
-                        result_text = (
-                            f"━━━ TOOL RESULTS — PERMISSION CHECK ━━━\n"
-                            f"Permission : {cp_class}\n"
-                            f"Status     : NOT GRANTED\n\n"
-                            f"You must use NEED_DATA_PROPOSAL to queue the action for Nikolai's approval. "
-                            f"He can grant '{cp_class}' from the Permissions panel in admin to skip "
-                            f"asking next time."
-                        )
-                    tool_results_text_parts.append(result_text)
-                    tool_calls_used.append({"tool": "check_perm", "class": cp_class, "granted": granted})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — PERMISSION CHECK FAILED ━━━\n{exc}")
-
-            # --- [P4] NEED_BLOCKED (Дедал записва блокер + спира loop) ---
-            if blocked_m:
-                try:
-                    from .blockers import push_blocker
-                    _blk_reason   = blocked_m.group(1).strip()
-                    _blk_tried    = blocked_m.group(2).strip()
-                    _blk_next     = blocked_m.group(3).strip()
-                    _blk_file     = block.get("file_path", "") if "block" in dir() else ""
-                    _blk_id = push_blocker(
-                        reason=_blk_reason,
-                        tried=_blk_tried,
-                        next_steps=_blk_next,
-                        file_path=_blk_file,
-                        session_id=session_id or "",
-                    )
-                    tool_results_text_parts.append(
-                        f"━━━ TOOL RESULTS — BLOCKER RECORDED 🚧 ━━━\n"
-                        f"Blocker ID : {_blk_id}\n"
-                        f"Reason     : {_blk_reason[:200]}\n"
-                        f"Tried      : {_blk_tried[:200]}\n"
-                        f"Next steps : {_blk_next[:200]}\n\n"
-                        f"Blocker е записан. Николай ще го види в 🚧 Blockers панела.\n"
-                        f"Обясни му ясно какво ти трябва, за да продължиш."
-                    )
-                    tool_calls_used.append({"tool": "need_blocked", "id": _blk_id, "reason": _blk_reason[:80]})
-                except Exception as _blk_exc:
-                    tool_results_text_parts.append(
-                        f"━━━ TOOL RESULTS — BLOCKER RECORD FAILED ━━━\n{_blk_exc}\n"
-                        f"Въпреки грешката — обясни на Николай какво те блокира."
-                    )
-
-            # --- NEED_INBOX_MSG (Дедал → Replit Agent inbox) ---
-            if inbox_msg_m:
-                try:
-                    subj = inbox_msg_m.group(1).strip()
-                    body_ = inbox_msg_m.group(2).strip()
-                    prio = int(inbox_msg_m.group(3)) if inbox_msg_m.group(3) else 2
-                    from .planner import write_inbox
-                    imr = await write_inbox(subject=subj, body=body_, from_who="daedalus", priority=prio)
-                    tool_results_text_parts.append(
-                        f"━━━ TOOL RESULTS — INBOX MSG SENT ━━━\n"
-                        f"Message ID: {imr.get('message_id')}\n"
-                        f"Subject: {subj}\n"
-                        f"Replit Agent ще го прочете при следващата сесия."
-                    )
-                    tool_calls_used.append({"tool": "inbox_msg", "subject": subj, "ok": imr.get("ok", False)})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — INBOX MSG FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "inbox_msg", "ok": False})
-
-            # --- NEED_PLAN_STEP (Дедал добавя стъпка към план) ---
-            if plan_step_m:
-                try:
-                    ps_plan_id = plan_step_m.group(1).strip()
-                    ps_title   = plan_step_m.group(2).strip()
-                    ps_desc    = (plan_step_m.group(3) or "").strip()
-                    from .planner import add_step
-                    psr = await add_step(ps_plan_id, ps_title, ps_desc)
-                    tool_results_text_parts.append(
-                        f"━━━ TOOL RESULTS — PLAN STEP ADDED ━━━\n"
-                        f"Plan: {ps_plan_id}\n"
-                        f"Step ID: {psr.get('step_id')}\n"
-                        f"Title: {ps_title}\n"
-                        f"Scheduler ще я изпълни автоматично."
-                    )
-                    tool_calls_used.append({"tool": "plan_step", "plan": ps_plan_id, "ok": psr.get("ok", False)})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — PLAN STEP FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "plan_step", "ok": False})
-
-            # ── Lint Gate ────────────────────────────────────────────
-            if lint_q:
-                try:
-                    from .lint_gate import lint_file, format_for_daedalus as _fmt_lint
-                    _lr = lint_file(lint_q.strip())
-                    tool_results_text_parts.append(
-                        f"━━━ TOOL RESULTS — NEED_LINT ━━━\n{_fmt_lint(_lr)}"
-                    )
-                    tool_calls_used.append({"tool": "lint", "path": lint_q, "ok": _lr.ok,
-                                            "blockers": len(_lr.blockers), "warnings": len(_lr.warnings)})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — NEED_LINT FAILED ━━━\n{exc}")
-
-            # ── TDD Loop — autonomous test-driven fix cycle ──────────
-            if tdd_m:
-                try:
-                    from .tdd_loop import tdd_loop as _tdd_loop
-                    _tdd_file     = tdd_m["file_path"]
-                    _tdd_test     = tdd_m["test_code"]
-                    _tdd_initial  = tdd_m.get("initial_code", "")
-                    _set_live(session_id, "NEED_TDD", _tool_iter,
-                              f"TDD loop → {_tdd_file} — стартиран…")
-                    _tdd_r = await _tdd_loop(
-                        file_path=_tdd_file,
-                        test_code=_tdd_test,
-                        initial_code=_tdd_initial,
-                        reason="Дедал TDD auto-loop",
-                        proposed_by="daedalus-tdd",
-                    )
-                    tool_results_text_parts.append(
-                        f"━━━ TOOL RESULTS — TDD LOOP ━━━\n"
-                        f"{_tdd_r.format_for_daedalus()}"
-                    )
-                    tool_calls_used.append({
-                        "tool": "tdd_loop",
-                        "file": _tdd_file,
-                        "ok": _tdd_r.ok,
-                        "iterations": _tdd_r.iterations_used,
-                        "proposal_id": _tdd_r.proposal_id,
-                    })
-                except Exception as exc:
-                    tool_results_text_parts.append(
-                        f"━━━ TOOL RESULTS — TDD LOOP FAILED ━━━\n{exc}"
-                    )
-                    tool_calls_used.append({"tool": "tdd_loop", "ok": False})
-
-            # ── Self-awareness tools ─────────────────────────────────
-            if capability_q:
-                try:
-                    from argos_data_nexus.modules.capability_search import search_capabilities
-                    cr = search_capabilities(capability_q, limit=8)
-                    matches = cr.get("matches", []) or []
-                    if matches:
-                        rows = "\n".join(
-                            f"  [{m.get('score', 0):.2f}] {m['method']:<6} {m['path']}\n"
-                            f"        → {m.get('summary', '')[:120]}"
-                            for m in matches
-                        )
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — CAPABILITY MATCHES ━━━\n"
-                            f"Query: {capability_q}\nMatches: {len(matches)}\n{rows}\n"
-                            f"(Извикай конкретен endpoint директно вместо да предлагаш нов.)"
-                        )
-                    else:
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — CAPABILITY MATCHES ━━━\n"
-                            f"Query: {capability_q}\nНяма match. Може да липсва — "
-                            f"предложи NEED_PROPOSE_START за нов endpoint."
-                        )
-                    tool_calls_used.append({"tool": "capability_search", "ok": True, "count": len(matches)})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — CAPABILITY FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "capability_search", "ok": False})
-
-            if skill_catalog_q:
-                try:
-                    from .skill_catalog import search_skills as _sc_search, catalog_status as _sc_status
-                    _hits = _sc_search(skill_catalog_q, top_k=5)
-                    if _hits:
-                        _rows = "\n\n".join(
-                            f"  [{h['score']:.2f}] **{h['title']}** ({h['category']})\n"
-                            f"  {h['text'][:400]}"
-                            for h in _hits
-                        )
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — SKILL CATALOG ━━━\n"
-                            f"Query: {skill_catalog_q}\nMatches: {len(_hits)}\n\n{_rows}\n\n"
-                            f"(Приложи тези техники директно — не предлагай нов код ако решението е тук.)"
-                        )
-                    else:
-                        _st = _sc_status()
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — SKILL CATALOG ━━━\n"
-                            f"Query: {skill_catalog_q}\n"
-                            f"Няма match в каталога ({_st.get('total_skills', 0)} умения индексирани).\n"
-                            f"Продължи с NEED_WEB или NEED_AI_DIGEST за търсене на решение."
-                        )
-                    tool_calls_used.append({"tool": "skill_catalog", "query": skill_catalog_q, "ok": True, "hits": len(_hits)})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — SKILL CATALOG FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "skill_catalog", "ok": False})
-
-            if ai_digest_q:
-                try:
-                    from argos_data_nexus.modules.ai_digest import get_ai_digest
-                    _refresh = "refresh" in (ai_digest_q or "").lower()
-                    _d = await get_ai_digest(force_refresh=_refresh)
-                    _papers = _d.get("papers", [])[:5]
-                    _news   = _d.get("news",   [])[:4]
-                    _repos  = _d.get("repos",  [])[:3]
-                    _lines  = [
-                        f"━━━ TOOL RESULTS — AI DIGEST ({_d.get('fetched_at_iso','')}) ━━━",
-                        f"Papers: {len(_papers)} | News: {len(_news)} | Repos: {len(_repos)}",
-                    ]
-                    if _papers:
-                        _lines.append("\n📄 LATEST PAPERS (arXiv):")
-                        for p in _papers:
-                            _lines.append(f"  • [{p.get('published','')}] {p['title'][:100]}\n    {p['url']}\n    {p.get('summary','')[:150]}")
-                    if _news:
-                        _lines.append("\n📰 COMMUNITY NEWS (Hacker News):")
-                        for n in _news:
-                            _lines.append(f"  • [{n.get('score',0)}pts] {n['title'][:100]}\n    {n['url']}")
-                    if _repos:
-                        _lines.append("\n⭐ TRENDING REPOS (GitHub):")
-                        for r in _repos:
-                            _lines.append(f"  • [{r.get('score',0)}⭐] {r['title']}\n    {r.get('summary','')[:120]}")
-                    tool_results_text_parts.append("\n".join(_lines))
-                    tool_calls_used.append({"tool": "ai_digest", "ok": True,
-                                            "papers": len(_papers), "news": len(_news), "repos": len(_repos)})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — AI DIGEST FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "ai_digest", "ok": False})
-
-            # ── Playground tools (build → test → publish standalone apps) ──
-            if pg_new_m:
-                # Guard: 1 session = 1 playground project.
-                # Check BOTH the current-turn list AND Replit DB (persists across turns).
-                _existing_pg_slug = next(
-                    (t.get("slug") for t in tool_calls_used
-                     if t.get("tool") == "playground_new" and t.get("ok")),
-                    None,
-                )
-                # Cross-turn check: look up session slug in Replit DB
-                if not _existing_pg_slug and session_id:
-                    try:
-                        from .kv import db as _rdb_pg
-                        _db_pg_key = f"adn:daedalus_pg_slug:{session_id}"
-                        _existing_pg_slug = _rdb_pg.get(_db_pg_key) or None
-                    except Exception:
-                        pass
-
-                if _existing_pg_slug:
-                    tool_results_text_parts.append(
-                        f"━━━ TOOL RESULTS — PLAYGROUND NEW BLOCKED ━━━\n"
-                        f"⛔ Вече имаш проект за тази сесия: slug={_existing_pg_slug}\n"
-                        f"ПРАВИЛО: 1 задача = 1 проект — важи за ВСИЧКИ turn-ове.\n"
-                        f"ЗАДЪЛЖИТЕЛНО: Поправи съществуващия проект:\n"
-                        f"  1. <NEED_PLAYGROUND_READ: {_existing_pg_slug}>\n"
-                        f"  2. <NEED_PLAYGROUND_WRITE: {_existing_pg_slug} | <файл> | <fixed code> >>>\n"
-                        f"НЕ СЪЗДАВАЙ НОВ ПРОЕКТ. НЕ ИЗБИРАЙ РАЗЛИЧЕН KIND."
-                    )
-                    tool_calls_used.append({"tool": "playground_new", "ok": False, "blocked": True})
-                else:
-                    try:
-                        from . import playground as _pg
-                        from .playground_agent_guards import resolve_existing_project_slug
-                        _name = pg_new_m.group(1).strip()
-                        _kind = (pg_new_m.group(2) or "").strip()
-                        _desc = (pg_new_m.group(3) or "").strip()
-                        _existing_proj = await resolve_existing_project_slug(_name)
-                        if _existing_proj:
-                            _proj = _existing_proj
-                            if session_id:
-                                try:
-                                    from .kv import db as _rdb_pg2
-                                    _rdb_pg2[f"adn:daedalus_pg_slug:{session_id}"] = _proj["slug"]
-                                    _rdb_pg2[f"adn:daedalus_pg_context:{session_id}"] = (
-                                        f"{_proj.get('kind', 'static')}|{_proj.get('name', '')} {_desc}"
-                                    )
-                                except Exception:
-                                    pass
-                            tool_results_text_parts.append(
-                                f"━━━ TOOL RESULTS — PLAYGROUND NEW (EXISTING) ━━━\n"
-                                f"Проектът вече съществува: slug={_proj['slug']} kind={_proj['kind']}\n"
-                                f"НЕ създавай нов. Ползвай NEED_PLAYGROUND_WRITE за поправки.\n"
-                                f"Slug фиксиран: '{_proj['slug']}'."
-                            )
-                            tool_calls_used.append({"tool": "playground_new", "ok": True, "slug": _proj["slug"], "reused": True})
-                        else:
-                            _proj = await _pg.create_project(_name, kind=_kind, source="built",
-                                                             description=_desc)
-                            # Persist slug to Replit DB for cross-turn guard
-                            if session_id:
-                                try:
-                                    from .kv import db as _rdb_pg2
-                                    _rdb_pg2[f"adn:daedalus_pg_slug:{session_id}"] = _proj["slug"]
-                                    _rdb_pg2[f"adn:daedalus_pg_context:{session_id}"] = (
-                                        f"{_proj.get('kind', 'static')}|{_name} {_desc}"
-                                    )
-                                except Exception:
-                                    pass
-                            tool_results_text_parts.append(
-                                f"━━━ TOOL RESULTS — PLAYGROUND NEW ━━━\n"
-                                f"Създаден проект: slug={_proj['slug']} kind={_proj['kind']}\n"
-                                f"Папка: playground/projects/{_proj['slug']}/\n"
-                                f"⚠️ ЗАПОМНИ: Slug-ът е '{_proj['slug']}' — ползвай САМО него за ВСИЧКИ следващи операции.\n"
-                                f"СЛЕДВАЩА ТИ СТЪПКА: запиши реален код с NEED_PLAYGROUND_WRITE (НЕ READ първо).\n"
-                                f"ЗАДЪЛЖИТЕЛНО използвай >>> като край (не >):\n"
-                                f"<NEED_PLAYGROUND_WRITE: {_proj['slug']} | index.html |\n"
-                                f"<!DOCTYPE html>...ЦЯЛ КОД...\n"
-                                f">>>\n"
-                                f"Пиши ПЪЛЕН работещ код — без TODO, без placeholder."
-                            )
-                            tool_calls_used.append({"tool": "playground_new", "ok": True, "slug": _proj["slug"]})
-                    except Exception as exc:
-                        tool_results_text_parts.append(f"━━━ TOOL RESULTS — PLAYGROUND NEW FAILED ━━━\n{exc}")
-                        tool_calls_used.append({"tool": "playground_new", "ok": False})
-
-            if pg_manifest_m:
-                _man_slug = pg_manifest_m.group(1).strip()
-                _man_raw = (pg_manifest_m.group(2) or "").strip()
-                try:
-                    import json as _json
-                    _man_obj = _json.loads(_man_raw)
-                    from .kv import db as _rdb_man
-                    _rdb_man[f"adn:daedalus_pg_manifest:{_man_slug}"] = _man_raw
-                    _mods = _man_obj.get("modules") or _man_obj.get("files") or []
-                    _forb = _man_obj.get("forbidden") or _man_obj.get("forbidden_files") or []
-                    tool_results_text_parts.append(
-                        f"━━━ TOOL RESULTS — PLAYGROUND MANIFEST SAVED ━━━\n"
-                        f"Договор записан за slug={_man_slug}.\n"
-                        f"Модули/файлове: {len(_mods)} · Forbidden: {len(_forb)}\n"
-                        f"От сега WRITE се валидира спрямо този договор (forbidden файлове = блок)."
-                    )
-                    tool_calls_used.append({"tool": "playground_manifest", "ok": True, "slug": _man_slug})
-                except Exception as exc:
-                    tool_results_text_parts.append(
-                        f"━━━ TOOL RESULTS — PLAYGROUND MANIFEST FAILED ━━━\n"
-                        f"Невалиден JSON: {exc}\n"
-                        f"Формат: <NEED_PLAYGROUND_MANIFEST: slug | {{\"files\": [...], \"forbidden\": [...], \"rules\": [...]}}>>>"
-                    )
-                    tool_calls_used.append({"tool": "playground_manifest", "ok": False})
-
-            if pg_write_matches:
-                from . import playground as _pg
-                from .lint_gate import lint_content as _lint_content
-                written_summary = []
-                all_ok = True
-                for _slug_r, _path_r, _content_r in pg_write_matches:
-                    _slug_r = _slug_r.strip()
-                    _path_r = _path_r.strip()
-                    # ── Contract validation: block forbidden files (fail-closed) ──
-                    _blocked, _reason = _pg_manifest_forbidden_check(_slug_r, _path_r)
-                    if _blocked:
-                        written_summary.append(
-                            f"  ⛔ {_slug_r}/{_path_r} БЛОКИРАН — {_reason}"
-                        )
-                        tool_calls_used.append({"tool": "playground_write", "ok": False, "slug": _slug_r, "blocked": "forbidden"})
-                        all_ok = False
-                        continue
-                    try:
-                        n = _pg.write_files(_slug_r, {_path_r: _content_r})
-                        # ── Auto-lint Python files (soft gate — warn, don't block) ──
-                        _lint_note = ""
-                        try:
-                            if _path_r.endswith(".py"):
-                                _lr = _lint_content(_path_r, _content_r)
-                                if _lr.blockers:
-                                    _lint_note = (
-                                        f" ⚠️ LINT: {len(_lr.blockers)} blocker(s) — "
-                                        + "; ".join(f"{b.code} L{b.row}: {b.message}" for b in _lr.blockers[:3])
-                                    )
-                        except Exception:
-                            pass
-                        written_summary.append(f"  ✅ {_slug_r}/{_path_r} ({len(_content_r)} байта){_lint_note}")
-                        tool_calls_used.append({"tool": "playground_write", "ok": True, "slug": _slug_r, "path": _path_r})
-                    except Exception as exc:
-                        written_summary.append(f"  ❌ {_slug_r}/{_path_r} FAILED: {exc}")
-                        tool_calls_used.append({"tool": "playground_write", "ok": False, "slug": _slug_r})
-                        all_ok = False
-                tool_results_text_parts.append(
-                    f"━━━ TOOL RESULTS — PLAYGROUND WRITE ({'OK' if all_ok else 'PARTIAL'}) ━━━\n"
-                    + "\n".join(written_summary)
-                )
-
-            if pg_edit_matches:
-                from . import playground as _pg
-                edit_summary = []
-                all_ok = True
-                for _slug_e, _path_e, _search_e, _replace_e in pg_edit_matches:
-                    _slug_e = _slug_e.strip()
-                    _path_e = _path_e.strip()
-                    # ── Contract validation: block forbidden files (fail-closed) ──
-                    _blocked_e, _reason_e = _pg_manifest_forbidden_check(_slug_e, _path_e)
-                    if _blocked_e:
-                        edit_summary.append(
-                            f"  ⛔ {_slug_e}/{_path_e} БЛОКИРАН — {_reason_e}"
-                        )
-                        tool_calls_used.append({"tool": "playground_edit", "ok": False, "slug": _slug_e, "blocked": "forbidden"})
-                        all_ok = False
-                        continue
-                    try:
-                        res = _pg.edit_file(_slug_e, _path_e, _search_e, _replace_e)
-                        if res.get("ok"):
-                            edit_summary.append(
-                                f"  ✅ {_slug_e}/{_path_e} ({res.get('old_size')}→{res.get('new_size')} байта)"
-                            )
-                            tool_calls_used.append({"tool": "playground_edit", "ok": True, "slug": _slug_e, "path": _path_e})
-                        else:
-                            edit_summary.append(f"  ❌ {_slug_e}/{_path_e}: {res.get('error')}")
-                            tool_calls_used.append({"tool": "playground_edit", "ok": False, "slug": _slug_e})
-                            all_ok = False
-                    except Exception as exc:
-                        edit_summary.append(f"  ❌ {_slug_e}/{_path_e} FAILED: {exc}")
-                        tool_calls_used.append({"tool": "playground_edit", "ok": False, "slug": _slug_e})
-                        all_ok = False
-                tool_results_text_parts.append(
-                    f"━━━ TOOL RESULTS — PLAYGROUND EDIT ({'OK' if all_ok else 'PARTIAL'}) ━━━\n"
-                    + "\n".join(edit_summary)
-                    + ("" if all_ok else
-                       "\nЗа неуспелите: прочети файла (NEED_PLAYGROUND_READ), копирай ТОЧНИЯ текст "
-                       "(вкл. интервали) и опитай пак, или ползвай NEED_PLAYGROUND_WRITE за цял файл.")
-                )
-
-            if pg_run_q:
-                try:
-                    from . import playground as _pg_run
-                    from . import playground_runner as _runner
-                    from .playground_runtime import is_local_only_kind, local_only_kind_message
-                    from .playground_agent_guards import playground_run_block_reason
-                    _slug = pg_run_q.strip()
-                    _proj = await _pg_run.get_project(_slug)
-                    _kind = (_proj or {}).get("kind", "static")
-                    _static_block = playground_run_block_reason(_kind)
-                    if _static_block:
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — PLAYGROUND RUN (static preview) ━━━\n"
-                            f"{_static_block.replace('{slug}', _slug)}"
-                        )
-                        tool_calls_used.append({
-                            "tool": "playground_run",
-                            "ok": True,
-                            "blocked": True,
-                            "reason": "static_preview",
-                        })
-                    elif _proj and is_local_only_kind(_kind):
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — PLAYGROUND RUN BLOCKED ━━━\n"
-                            f"{local_only_kind_message(_proj.get('kind', ''))}\n"
-                            f"За Unity: <NEED_PLAYGROUND_PUSH: {_slug}> или <NEED_PLAYGROUND_PUSH: {_slug} | | gitlab> "
-                            f"— после отвори repo в Unity Hub."
-                        )
-                        tool_calls_used.append({"tool": "playground_run", "ok": False})
-                    else:
-                        rec = await _runner.start(_slug, install_deps=True)
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — PLAYGROUND RUN ━━━\n"
-                            f"Стартиран {_slug}: status={rec.get('status')} port={rec.get('port')}\n"
-                            f"Preview: /admin/daedalus/playground/preview/{_slug}/\n"
-                            f"Логове ще видиш в Playground UI."
-                        )
-                        tool_calls_used.append({"tool": "playground_run", "ok": True})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — PLAYGROUND RUN FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "playground_run", "ok": False})
-
-            if pg_clone_m:
-                try:
-                    from . import playground_github as _gh
-                    _url = pg_clone_m.group(1).strip()
-                    _nm = (pg_clone_m.group(2) or "").strip()
-                    _proj = await _gh.clone_repo(_url, name=_nm)
-                    tool_results_text_parts.append(
-                        f"━━━ TOOL RESULTS — PLAYGROUND CLONE ━━━\n"
-                        f"Clone-нат {_url} → slug={_proj['slug']} kind={_proj['kind']}\n"
-                        f"Съживи проекта: чети файлове, run, поправи."
-                    )
-                    tool_calls_used.append({"tool": "playground_clone", "ok": True, "slug": _proj["slug"]})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — PLAYGROUND CLONE FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "playground_clone", "ok": False})
-
-            if pg_read_m:
-                try:
-                    from . import playground as _pg
-                    from .playground_agent_guards import entrypoint_read_warning, read_file_guard
-                    _slug = pg_read_m.group(1).strip()
-                    _path = (pg_read_m.group(2) or "").strip()
-                    _proj = await _pg.get_project(_slug)
-                    _kind = (_proj or {}).get("kind", "static")
-                    if _path:
-                        _guard = read_file_guard(_slug, _path)
-                        if _guard:
-                            tool_results_text_parts.append(
-                                f"━━━ TOOL RESULTS — PLAYGROUND READ BLOCKED ━━━\n{_guard}"
-                            )
-                            tool_calls_used.append({"tool": "playground_read", "ok": False, "slug": _slug})
-                        else:
-                            _hint = entrypoint_read_warning(_kind, _path)
-                            _content = _pg.read_file(_slug, _path, max_bytes=80_000)
-                            tool_results_text_parts.append(
-                                f"━━━ TOOL RESULTS — PLAYGROUND READ ━━━\n"
-                                f"{_hint + chr(10) if _hint else ''}"
-                                f"Файл: {_slug}/{_path} ({len(_content)} байта)\n"
-                                f"```\n{_content[:12000]}\n```"
-                            )
-                            tool_calls_used.append({"tool": "playground_read", "ok": True, "slug": _slug})
-                    else:
-                        _tree = _pg.read_tree(_slug)
-                        lines = "\n".join(f"  {f['path']} ({f['size']}B)" for f in _tree)
-                        from .playground_agent_guards import expo_web_kind_mismatch
-                        _mismatch = expo_web_kind_mismatch(_kind, [f["path"] for f in _tree])
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — PLAYGROUND READ (TREE) ━━━\n"
-                            f"{(_mismatch + chr(10)) if _mismatch else ''}"
-                            f"Проект: {_slug} ({len(_tree)} файла)\n{lines}"
-                        )
-                        tool_calls_used.append({"tool": "playground_read", "ok": True, "slug": _slug})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — PLAYGROUND READ FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "playground_read", "ok": False})
-
-            if pg_push_m:
-                try:
-                    from .playground_git_push import push_project_remote
-                    _slug = pg_push_m.group(1).strip()
-                    _repo = (pg_push_m.group(2) or "").strip()
-                    _prov_raw = (pg_push_m.group(3) or "").strip().lower()
-                    _provider = _prov_raw if _prov_raw in ("gitlab", "github", "auto") else "auto"
-                    # If second segment is provider keyword, not repo path
-                    if _repo in ("gitlab", "github") and not _prov_raw:
-                        _provider = _repo
-                        _repo = ""
-                    res = await push_project_remote(
-                        _slug,
-                        provider=_provider,
-                        repo_full_name=_repo,
-                        create_if_missing=not bool(_repo),
-                        private=True,
-                    )
-                    _prov = res.get("provider") or "git"
-                    tool_results_text_parts.append(
-                        f"━━━ TOOL RESULTS — PLAYGROUND PUSH ({_prov}) ━━━\n"
-                        f"Push-нат {_slug} → {res.get('html_url')}\n"
-                        f"Repo: {res.get('repo')} | Branch: {res.get('branch')}\n"
-                        f"{'(Нов repo създаден)' if res.get('created') else '(Съществуващ repo актуализиран)'}"
-                    )
-                    tool_calls_used.append({"tool": "playground_push", "ok": True, "slug": _slug})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — PLAYGROUND PUSH FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "playground_push", "ok": False})
-
-            if pg_pub_m:
-                try:
-                    from .playground_agent_guards import publish_with_repair
-                    _slug = pg_pub_m.group(1).strip()
-                    _icon = (pg_pub_m.group(2) or "🎮").strip()
-                    res = await publish_with_repair(_slug, icon=_icon)
-                    if res.get("ok"):
-                        _extra = ""
-                        if res.get("repaired_files"):
-                            _extra = f"\n🔧 Поправени: {', '.join(res['repaired_files'][:8])}"
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — PLAYGROUND PUBLISH ━━━\n"
-                            f"Публикуван {_slug} → {res.get('url')}{_extra}\n"
-                            f"Durable (object storage): {res.get('durable')}. "
-                            f"Вече е в менюто на /apps/."
-                        )
-                    else:
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — PLAYGROUND PUBLISH ━━━\n{res.get('error')}"
-                        )
-                    tool_calls_used.append({"tool": "playground_publish", "ok": res.get("ok", False)})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — PLAYGROUND PUBLISH FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "playground_publish", "ok": False})
-
-            if pg_db_m:
-                try:
-                    from .kv import db as _rdb
-                    from . import playground as _pg
-                    import json as _j
-                    _slug = pg_db_m.group(1).strip()
-                    _action = (pg_db_m.group(2) or "list").strip().lower()
-                    _key = (pg_db_m.group(3) or "").strip()
-                    _value_raw = (pg_db_m.group(4) or "").strip()
-                    _ns = f"playground:db:{_pg.slugify(_slug)}:"
-
-                    if _action == "list":
-                        _keys = [k[len(_ns):] for k in _rdb.prefix(_ns)]
-                        _lines = []
-                        for _k in _keys[:20]:
-                            _v = _rdb.get(_ns + _k)
-                            _lines.append(f"  • {_k} = {_j.dumps(_v, ensure_ascii=False)[:80]}")
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — PLAYGROUND DB LIST ━━━\n"
-                            f"App: {_slug} | {len(_keys)} ключа\n"
-                            + ("\n".join(_lines) or "(пусто)")
-                        )
-                    elif _action == "get":
-                        if not _key:
-                            raise ValueError("get изисква ключ")
-                        _val = _rdb.get(_ns + _key)
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — PLAYGROUND DB GET ━━━\n"
-                            f"{_slug}/{_key} = {_j.dumps(_val, ensure_ascii=False)[:2000]}"
-                        )
-                    elif _action == "set":
-                        if not _key:
-                            raise ValueError("set изисква ключ")
-                        try:
-                            _val = _j.loads(_value_raw) if _value_raw else ""
-                        except Exception:
-                            _val = _value_raw
-                        _rdb[_ns + _key] = _val
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — PLAYGROUND DB SET ━━━\n"
-                            f"✅ {_slug}/{_key} записан ({len(str(_val))} chars)"
-                        )
-                    elif _action == "del":
-                        if not _key:
-                            raise ValueError("del изисква ключ")
-                        _all_k = list(_rdb.prefix(_ns))
-                        if _ns + _key in _all_k:
-                            del _rdb[_ns + _key]
-                            tool_results_text_parts.append(
-                                f"━━━ TOOL RESULTS — PLAYGROUND DB DEL ━━━\n"
-                                f"✅ {_slug}/{_key} изтрит"
-                            )
-                        else:
-                            tool_results_text_parts.append(
-                                f"━━━ TOOL RESULTS — PLAYGROUND DB DEL ━━━\n"
-                                f"⚠ {_slug}/{_key} не е намерен"
-                            )
-                    elif _action == "clear":
-                        _all_k = list(_rdb.prefix(_ns))
-                        for _k in _all_k:
-                            del _rdb[_k]
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — PLAYGROUND DB CLEAR ━━━\n"
-                            f"✅ Изтрити {len(_all_k)} ключа от {_slug}"
-                        )
-                    else:
-                        raise ValueError(
-                            f"Непознато действие: {_action!r}. "
-                            f"Позволени: list / get / set / del / clear"
-                        )
-                    tool_calls_used.append({"tool": "playground_db", "ok": True, "action": _action})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — PLAYGROUND DB FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "playground_db", "ok": False})
-
-            if endpoints_q:
-                try:
-                    er = await list_endpoints_tool(endpoints_q if endpoints_q != "*" else None)
-                    if er.get("ok"):
-                        rows = "\n".join(
-                            f"  {','.join(r['methods']):<12} {r['path']}  ({r.get('name','')})"
-                            for r in er.get("routes", [])[:80]
-                        )
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — FASTAPI ENDPOINTS ━━━\n"
-                            f"Filter: {endpoints_q} | Total: {er['count']}\n{rows}"
-                        )
-                    else:
-                        tool_results_text_parts.append(f"━━━ TOOL RESULTS — ENDPOINTS FAILED ━━━\n{er.get('error')}")
-                    tool_calls_used.append({"tool": "list_endpoints", "ok": er.get("ok", False), "count": er.get("count", 0)})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — ENDPOINTS FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "list_endpoints", "ok": False})
-
-            if modules_q:
-                try:
-                    mr = await list_modules_tool(modules_q if modules_q != "*" else None)
-                    if mr.get("ok"):
-                        rows = "\n".join(
-                            f"  {m['path']:<60} ({m['lines']}L) — {m.get('doc','')[:80]}"
-                            for m in mr.get("modules", [])[:60]
-                        )
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — ADN MODULES ━━━\n"
-                            f"Filter: {modules_q} | Total: {mr['count']}\n{rows}"
-                        )
-                    else:
-                        tool_results_text_parts.append(f"━━━ TOOL RESULTS — MODULES FAILED ━━━\n{mr.get('error')}")
-                    tool_calls_used.append({"tool": "list_modules", "ok": mr.get("ok", False), "count": mr.get("count", 0)})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — MODULES FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "list_modules", "ok": False})
-
-            if db_schema_q:
-                try:
-                    tbl = db_schema_q if db_schema_q != "*" else None
-                    dr = await describe_db_tool(tbl)
-                    if dr.get("ok"):
-                        if dr.get("table"):
-                            cols = "\n".join(
-                                f"  {c['column_name']:<28} {c['data_type']:<20} "
-                                f"{'NULL' if c['is_nullable']=='YES' else 'NOT NULL'}"
-                                f"{' DEFAULT '+str(c['column_default']) if c.get('column_default') else ''}"
-                                for c in dr.get("columns", [])
-                            )
-                            body = f"Table: {dr['table']} ({dr.get('row_count','?')} rows)\n{cols}"
-                        else:
-                            body = "\n".join(
-                                f"  {t['table']:<40} cols={t['columns']:<4} rows={t.get('rows','?')}"
-                                for t in dr.get("tables", [])
-                            )
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — DB SCHEMA ━━━\n{body}"
-                        )
-                    else:
-                        tool_results_text_parts.append(f"━━━ TOOL RESULTS — DB SCHEMA FAILED ━━━\n{dr.get('error')}")
-                    tool_calls_used.append({"tool": "describe_db", "ok": dr.get("ok", False)})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — DB SCHEMA FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "describe_db", "ok": False})
-
-            if code_search_q:
-                try:
-                    csr = await search_code_tool(code_search_q)
-                    if csr.get("ok"):
-                        sem_hits = csr.get("semantic_matches", []) or []
-                        kw_hits = csr.get("keyword_matches", []) or []
-                        sem_count = int(csr.get("semantic_count", len(sem_hits)))
-                        kw_count = int(csr.get("keyword_count", len(kw_hits)))
-                        sem_lines: list[str] = []
-                        for h in sem_hits[:15]:
-                            if isinstance(h, dict):
-                                fp = h.get("filepath", h.get("file", "?"))
-                                qn = h.get("qualified_name", h.get("name", ""))
-                                sig = h.get("signature", "")
-                                doc = (h.get("docstring") or "").strip().splitlines()[:1]
-                                doc_line = f"  # {doc[0][:120]}" if doc else ""
-                                sem_lines.append(f"• {fp} :: {qn} {sig}{doc_line}".strip())
-                            else:
-                                sem_lines.append(f"• {h}")
-                        kw_lines = [f"  {ln}" for ln in kw_hits[:20]]
-                        body_parts = []
-                        if sem_lines:
-                            body_parts.append("Semantic:\n" + "\n".join(sem_lines))
-                        if kw_lines:
-                            body_parts.append("Keyword (rg):\n" + "\n".join(kw_lines))
-                        body = "\n\n".join(body_parts) if body_parts else "(no matches)"
-                        total = sem_count + kw_count
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — CODE SEARCH ━━━\n"
-                            f"Query: {code_search_q} | Type: {csr.get('search_type', '?')} | "
-                            f"Matches: {total} (semantic={sem_count}, keyword={kw_count})\n"
-                            f"{body}"
-                        )
-                    else:
-                        tool_results_text_parts.append(f"━━━ TOOL RESULTS — CODE SEARCH FAILED ━━━\n{csr.get('error')}")
-                    tool_calls_used.append({"tool": "search_code", "query": code_search_q, "ok": csr.get("ok", False)})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — CODE SEARCH FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "search_code", "ok": False})
-
-            # ── DeutschesRechtsPortal tools ───────────────────────────────────
-            # NEED_DRP_LAW: <NEED_DRP_LAW: BGB | 823>  or  <NEED_DRP_LAW: GG | 5 | dejure>
-            if drp_law_q:
-                try:
-                    parts_dl = [p.strip() for p in drp_law_q.split("|")]
-                    dl_abbr  = parts_dl[0] if len(parts_dl) > 0 else ""
-                    dl_para  = parts_dl[1] if len(parts_dl) > 1 else ""
-                    dl_src   = parts_dl[2] if len(parts_dl) > 2 else "auto"
-                    dlr = await drp_law_tool(dl_abbr, dl_para, dl_src)
-                    if dlr.get("ok"):
-                        linked = dlr.get("linked_decisions") or []
-                        linked_note = (
-                            f"\nLinked decisions ({len(linked)}): "
-                            + "; ".join(
-                                f"{d.get('court','')} {d.get('date','')}".strip()
-                                for d in linked[:5]
-                            )
-                        ) if linked else ""
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — DRP LAW: {dl_abbr} §{dl_para} ━━━\n"
-                            f"Source : {dlr.get('source')}\n"
-                            f"Title  : {dlr.get('title','')}\n"
-                            f"Text   :\n{dlr.get('text','')}"
-                            + linked_note
-                        )
-                    else:
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — DRP LAW FAILED ━━━\n{dlr.get('error')}"
-                        )
-                    tool_calls_used.append({"tool": "drp_law", "abbr": dl_abbr, "paragraph": dl_para, "ok": dlr.get("ok", False)})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — DRP LAW FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "drp_law", "ok": False})
-
-            # NEED_DRP_CASES: <NEED_DRP_CASES: § 823 BGB Schadensersatz>
-            # or <NEED_DRP_CASES: Meinungsfreiheit | bverfg | 10>
-            if drp_cases_q:
-                try:
-                    parts_dc = [p.strip() for p in drp_cases_q.split("|")]
-                    dc_query = parts_dc[0]
-                    dc_src   = parts_dc[1] if len(parts_dc) > 1 else "dejure"
-                    dc_limit = int(parts_dc[2]) if len(parts_dc) > 2 and parts_dc[2].isdigit() else 8
-                    dcr = await drp_cases_tool(dc_query, dc_src, dc_limit)
-                    if dcr.get("ok"):
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — DRP CASES: «{dc_query}» ━━━\n"
-                            f"Source : {dc_src}  |  Total: {dcr.get('total',0)}\n"
-                            f"{dcr.get('summary','(keine Ergebnisse)')}"
-                        )
-                    else:
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — DRP CASES FAILED ━━━\n{dcr.get('error')}"
-                        )
-                    tool_calls_used.append({"tool": "drp_cases", "query": dc_query, "ok": dcr.get("ok", False), "total": dcr.get("total", 0)})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — DRP CASES FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "drp_cases", "ok": False})
-
-            # NEED_DRP_SEARCH: <NEED_DRP_SEARCH: fristlose Kündigung>
-            # or <NEED_DRP_SEARCH: Datenschutz DSGVO | datenschutzrecht | 6>
-            if drp_search_q:
-                try:
-                    parts_ds = [p.strip() for p in drp_search_q.split("|")]
-                    ds_query  = parts_ds[0]
-                    ds_gebiet = parts_ds[1] if len(parts_ds) > 1 else ""
-                    ds_limit  = int(parts_ds[2]) if len(parts_ds) > 2 and parts_ds[2].isdigit() else 5
-                    dsr = await drp_search_tool(ds_query, ds_gebiet, ds_limit)
-                    if dsr.get("ok"):
-                        dork_hint = (
-                            f"\n\nFür tiefere Recherche: {dsr['google_dorking_queries'][0]}"
-                            if dsr.get("google_dorking_queries") else ""
-                        )
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — DRP UNIFIED SEARCH: «{ds_query}» ━━━\n"
-                            f"Rechtsgebiet: {ds_gebiet or 'alle'}  |  Total: {dsr.get('total',0)}\n"
-                            f"{dsr.get('summary','(keine Ergebnisse)')}"
-                            + dork_hint
-                        )
-                    else:
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — DRP SEARCH FAILED ━━━\n{dsr.get('error')}"
-                        )
-                    tool_calls_used.append({"tool": "drp_search", "query": ds_query, "rechtsgebiet": ds_gebiet, "ok": dsr.get("ok", False), "total": dsr.get("total", 0)})
-                except Exception as exc:
-                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — DRP SEARCH FAILED ━━━\n{exc}")
-                    tool_calls_used.append({"tool": "drp_search", "ok": False})
-
-            # ── NEED_BUNDLE_START / NEED_STAGE / NEED_BUNDLE_COMMIT ────────────
-            if _bundle_start_title or _stage_blocks or _bundle_commit:
-                try:
-                    from .bundle import (
-                        create_bundle, stage_file, commit_bundle,
-                    )
-                    try:
-                        from .kv import db as _rdb_bundle
-                        _rdb_bundle_available = True
-                    except Exception:
-                        _rdb_bundle = None
-                        _rdb_bundle_available = False
-
-                    _bnd_session_key = f"adn:daedalus_bundle_active:{session_id or 'default'}"
-
-                    def _get_active_bid():
-                        if _rdb_bundle_available and _rdb_bundle is not None:
-                            return _rdb_bundle.get(_bnd_session_key)
-                        return None
-
-                    def _set_active_bid(bid):
-                        if _rdb_bundle_available and _rdb_bundle is not None:
-                            _rdb_bundle[_bnd_session_key] = bid
-
-                    def _clear_active_bid():
-                        if _rdb_bundle_available and _rdb_bundle is not None:
-                            try:
-                                del _rdb_bundle[_bnd_session_key]
-                            except Exception:
-                                pass
-
-                    # NEED_BUNDLE_START — create new bundle for this session
-                    if _bundle_start_title:
-                        _new_bid = await create_bundle(_bundle_start_title, session_id or "")
-                        _set_active_bid(_new_bid)
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — BUNDLE STARTED 🎁 ━━━\n"
-                            f"Bundle ID : {_new_bid}\n"
-                            f"Title     : {_bundle_start_title}\n\n"
-                            f"Bundle e отворен. Сега емитирай NEED_STAGE блокове за всеки файл.\n"
-                            f"Накрая: <NEED_BUNDLE_COMMIT: {_bundle_start_title} | summary>"
-                        )
-                        tool_calls_used.append({"tool": "bundle_start", "id": _new_bid, "title": _bundle_start_title})
-
-                    # NEED_STAGE — add files to active bundle
-                    if _stage_blocks:
-                        _active_bid = _get_active_bid()
-                        if not _active_bid:
-                            _auto_title = "Auto-bundle"
-                            _active_bid = await create_bundle(_auto_title, session_id or "")
-                            _set_active_bid(_active_bid)
-                            tool_results_text_parts.append(
-                                f"━━━ AUTO BUNDLE CREATED ━━━\n"
-                                f"Bundle {_active_bid} auto-created (no active bundle found)."
-                            )
-                        _staged_summary = []
-                        for _sb in _stage_blocks:
-                            _sr = await stage_file(
-                                bundle_id=_active_bid,
-                                file_path=_sb["file_path"],
-                                action=_sb["action"],
-                                reason=_sb["reason"],
-                                new_content=_sb["content"],
-                            )
-                            if _sr.get("ok"):
-                                _staged_summary.append(
-                                    f"  ✅ {_sb['action'].upper()} {_sb['file_path']} "
-                                    f"(+{_sr.get('lines_new',0)} реда)"
-                                )
-                            else:
-                                _staged_summary.append(f"  ❌ {_sb['file_path']}: {_sr.get('error','unknown error')}")
-                        tool_results_text_parts.append(
-                            f"━━━ TOOL RESULTS — FILES STAGED 📁 ━━━\n"
-                            f"Bundle ID : {_active_bid}\n"
-                            f"Staged files ({len(_stage_blocks)}):\n"
-                            + "\n".join(_staged_summary)
-                            + f"\n\nФайловете са в staging — НЕ са приложени към проекта.\n"
-                            f"Продължи с повече NEED_STAGE или финализирай с NEED_BUNDLE_COMMIT."
-                        )
-                        tool_calls_used.append({
-                            "tool": "bundle_stage",
-                            "bundle_id": _active_bid,
-                            "files": len(_stage_blocks),
-                        })
-
-                    # NEED_BUNDLE_COMMIT — finalize bundle, notify owner
-                    if _bundle_commit:
-                        _active_bid = _get_active_bid()
-                        if not _active_bid:
-                            tool_results_text_parts.append(
-                                f"━━━ TOOL RESULTS — BUNDLE COMMIT FAILED ━━━\n"
-                                f"Няма активен bundle за тази сесия.\n"
-                                f"Емитирай първо NEED_BUNDLE_START или NEED_STAGE."
-                            )
-                        else:
-                            _cr = await commit_bundle(
-                                bundle_id=_active_bid,
-                                title=_bundle_commit["title"],
-                                summary=_bundle_commit["summary"],
-                            )
-                            _clear_active_bid()
-                            if _cr.get("ok"):
-                                _flist = "\n".join(
-                                    f"  • {f['file_path']} [{f['action']}]"
-                                    for f in _cr.get("files", [])
-                                )
-                                tool_results_text_parts.append(
-                                    f"━━━ TOOL RESULTS — BUNDLE COMMITTED ✅ ━━━\n"
-                                    f"Bundle ID  : {_active_bid}\n"
-                                    f"Title      : {_cr['title']}\n"
-                                    f"Files      : {_cr['files_count']}\n"
-                                    f"{_flist}\n\n"
-                                    f"Bundle е готов за преглед от Николай → /admin/daedalus/bundles\n"
-                                    f"Той може да приложи всичко с един клик или да го отхвърли."
-                                )
-                                tool_calls_used.append({
-                                    "tool": "bundle_commit",
-                                    "bundle_id": _active_bid,
-                                    "files": _cr["files_count"],
-                                })
-                            else:
-                                tool_results_text_parts.append(
-                                    f"━━━ TOOL RESULTS — BUNDLE COMMIT FAILED ━━━\n"
-                                    f"{_cr.get('error','unknown error')}"
-                                )
-                except Exception as _bnd_exc:
-                    log.warning("Bundle handler failed: %s", _bnd_exc)
-                    tool_results_text_parts.append(
-                        f"━━━ BUNDLE SYSTEM ERROR ━━━\n{_bnd_exc}\n"
-                        f"Пробвай с NEED_PROPOSE_START за единичен файл."
-                    )
-
-            # ── NEED_WORKER: parallel stateless sub-agents ─────────────────────
-            if worker_calls:
-                try:
-                    worker_results = await call_workers_parallel(worker_calls)
-                    tool_results_text_parts.append(
-                        f"━━━ WORKER RESULTS ({len(worker_results)} агент{'а' if len(worker_results)>1 else ''}) ━━━\n"
-                        + format_worker_results(worker_results)
-                    )
-                    tool_calls_used.append({
-                        "tool": "workers",
-                        "count": len(worker_calls),
-                        "slots": [c["slot"] for c in worker_calls],
-                        "ok": all(r.get("ok") for r in worker_results),
-                    })
-                except Exception as exc:
-                    log.warning("NEED_WORKER parallel call failed: %s", exc)
-                    tool_results_text_parts.append(f"━━━ WORKER RESULTS — FAILED ━━━\n{exc}")
-
-            if subagent_calls:
-                try:
-                    from .subagents import format_subagent_results, run_subagents_parallel
-                    sub_results = await run_subagents_parallel(
-                        subagent_calls,
-                        memory=self.memory,
-                        session_id=session_id or "",
-                        read_file_fn=_read_file_tool,
-                    )
-                    tool_results_text_parts.append(
-                        "━━━ SUBAGENT RESULTS ━━━\n" + format_subagent_results(sub_results)
-                    )
-                    tool_calls_used.append({
-                        "tool": "subagent",
-                        "count": len(subagent_calls),
-                        "ok": all(r.get("ok") for r in sub_results),
-                        "roles": [str(r.get("role") or "coder") for r in sub_results],
-                    })
-                except Exception as exc:
-                    log.warning("NEED_SUBAGENT failed: %s", exc)
-                    tool_results_text_parts.append(f"━━━ SUBAGENT RESULTS — FAILED ━━━\n{exc}")
-
-            tool_block = "\n\n".join(tool_results_text_parts)
-
-            # ── Repeated-failure breaker (improvements.ErrorTracker) ──────────
-            # Hash the failed sections of tool_block. If the same failure
-            # fingerprint appears in 2 consecutive iterations → break the loop
-            # instead of letting Дедал repeat the same broken query 4+ times.
-            try:
-                _err_tracker = get_error_tracker()
-                # Track ALL tool calls (success or fail) for budget enforcement
-                for _tc in tool_calls_used[-len(tool_results_text_parts):]:
-                    _err_tracker.track_call(session_id, _tc.get("tool", "unknown"))
-                _failed_now: list[tuple[str, str]] = []
-                for _tc in tool_calls_used[-len(tool_results_text_parts):]:
-                    if _tc.get("ok") is False:
-                        _tool_name = _tc.get("tool", "unknown")
-                        # Extract first FAILED line from tool_block as error sample
-                        _err_sample = ""
-                        for _ln in tool_block.split("\n"):
-                            if "FAILED" in _ln or "Error" in _ln or "error" in _ln:
-                                _err_sample = _ln[:200]
-                                break
-                        _failed_now.append((_tool_name, _err_sample))
-                        # Persistent cross-session lesson promotion
-                        try:
-                            record_tool_error_for_promotion(
-                                self.memory, _tool_name, _err_sample,
-                                query=str(_tc.get("query", ""))[:200],
-                            )
-                        except Exception:
-                            pass
-                _should_break_repeat = False
-                _repeat_tool = ""
-                for _tn, _es in _failed_now:
-                    if _err_tracker.should_break(session_id, _tn, _es, threshold=2):
-                        _should_break_repeat = True
-                        _repeat_tool = _tn
-                        break
-                # Per-tool budget: max 4 NEED_PG calls per session
-                if _err_tracker.tool_call_count(session_id, "postgres_query") > 4:
-                    _should_break_repeat = True
-                    _repeat_tool = "postgres_query (budget exceeded)"
-                if _should_break_repeat:
-                    log.warning("repeated-error breaker: session=%s tool=%s — breaking loop",
-                                session_id, _repeat_tool)
-                    tool_block += (
-                        f"\n\n━━━ BREAKER ENGAGED ━━━\n"
-                        f"Същата грешка от [{_repeat_tool}] се появи повторно. "
-                        f"Спирам опитите. Премини към NEED_BLOCKED или различен подход — "
-                        f"НЕ повтаряй същия маркер."
-                    )
-                    # Force-exit the tool reroll loop — append synthesis directive
-                    # to messages and break out so we don't keep burning iterations.
-                    messages.append({"role": "user", "content": tool_block})
-                    raw = (
-                        f"Спирам да опитвам — същата грешка от [{_repeat_tool}] "
-                        f"се повтори. Премини към друг подход или ми кажи конкретно "
-                        f"какво искаш да направя."
-                    )
-                    break
-            except Exception as _bk_exc:
-                log.debug("breaker check failed (non-fatal): %s", _bk_exc)
-
-            # ── Fix 3: Action-forcing detector ────────────────────────────────
-            # If Дедал expressed intent ("ще подготвя", "сега ще" etc.) without
-            # emitting ANY action marker → inject a forcing nudge so the next
-            # re-roll actually DOES something instead of describing what it will do.
-            _INTENT_PHRASES = (
-                "ще подготвя", "сега ще", "следващата стъпка", "ще създам",
-                "ще генерирам", "ще вмъкна", "ще добавя", "next i'll", "i will now",
-                "now i'll", "i'll now", "let me now", "i'll prepare", "i'll generate",
-                "i'll create", "i'll insert", "i'll add", "i'll write",
-                "preparing", "will prepare", "will generate", "will create",
-            )
-            _ACTION_MARKERS = (
-                "NEED_DATA_PROPOSAL", "NEED_PG", "NEED_PROPOSE_START",
-                "NEED_INBOX_MSG", "NEED_BLOCKED", "NEED_WORKER",
-                "NEED_STAGE", "NEED_BUNDLE_START", "NEED_BUNDLE_COMMIT",
-            )
-            _raw_lower = (raw or "").lower()
-            _has_intent  = any(p in _raw_lower for p in _INTENT_PHRASES)
-            _has_action  = any(m in (raw or "") for m in _ACTION_MARKERS)
-            _force_action_nudge = _has_intent and not _has_action
-
-            # ── Cut-off recovery: truncated NEED_DATA_PROPOSAL ────────────────
-            # If the previous response opened a NEED_DATA_PROPOSAL but the JSON
-            # was cut off by max_tokens, instruct Дедал to split into smaller
-            # batches. This takes priority over other followup tails.
-            _is_final_iter = (_tool_iter == MAX_TOOL_ITERATIONS - 1)
-            if _data_prop_truncated and not _is_final_iter:
-                _cutoff_notice = (
-                    "━━━ CUT-OFF DETECTED ━━━\n"
-                    "Твоето NEED_DATA_PROPOSAL беше прекъснато на средата на JSON-а "
-                    "(max_tokens лимит). Никакъв запис не е извършен.\n\n"
-                    "ДЕЙСТВАЙ СЕГА — раздели на ПО-МАЛКИ batches:\n"
-                    "  • Максимум 3 концепта/criteria в ЕДИН marker\n"
-                    "  • Емитирай НЯКОЛКО NEED_DATA_PROPOSAL marker-а в един отговор\n"
-                    "  • Всеки batch е независим — ако един фейлне, другите минават\n\n"
-                    "Пример (3 batch-а в един отговор):\n"
-                    "  <NEED_DATA_PROPOSAL: trading_concepts | Batch 1/3 | [{...},{...},{...}]>\n"
-                    "  <NEED_DATA_PROPOSAL: trading_concepts | Batch 2/3 | [{...},{...},{...}]>\n"
-                    "  <NEED_DATA_PROPOSAL: trading_concepts | Batch 3/3 | [{...},{...}]>\n\n"
-                    "НЕ описвай отново структурата — направо емитирай marker-ите."
-                )
-                log.info("data_proposal cut-off detected at iter=%d, injecting split prompt", _tool_iter)
-            # ── Fix 2: Final-iter prompt ───────────────────────────────────────
-            if _is_final_iter:
-                _followup_tail = (
-                    "⚠️  ФИНАЛНА ИТЕРАЦИЯ — НЕ ОЩЕ ЕДИН ROUND OF TOOLS.\n"
-                    "Трябва да ДЕЙСТВАШ сега — избери ЕДНО от следните:\n\n"
-                    "• За trading данни (concepts/criteria/patterns): емитирай\n"
-                    "  <NEED_DATA_PROPOSAL: category | Title | [json_array]>\n"
-                    "  Може да емитираш МНОГО такива маркера в един отговор.\n\n"
-                    "• За код: емитирай <NEED_PROPOSE_START> ... </NEED_PROPOSE_START>\n\n"
-                    "• За блокер: емитирай <NEED_BLOCKED: причина | опитано | следващи стъпки>\n\n"
-                    "• Ако вече свърши: пиши финалния отговор БЕЗ маркери.\n\n"
-                    "ЗАБРАНЕНО: описания на това, което 'ще направиш'. Само действие."
-                )
-            elif _force_action_nudge:
-                # Non-final iter but detected "intent without action" pattern.
-                _followup_tail = (
-                    "⚠️  ЗАСЕЧЕН INTENT БЕЗ ДЕЙСТВИЕ — спри да описваш, ДЕЙСТВАЙ.\n"
-                    "Написа какво 'ще направиш', но не емитира никакъв маркер.\n\n"
-                    "Емитирай СЕГА (в същия отговор — много маркера са ОК):\n"
-                    "  <NEED_DATA_PROPOSAL: category | Title | [json_array]>  — за trading данни\n"
-                    "  <NEED_PG: INSERT INTO ...>                              — за директен SQL (ако perms granted)\n"
-                    "  <NEED_PROPOSE_START> ... </NEED_PROPOSE_START>          — за код\n"
-                    "  <NEED_CHECK_PERM: insert_trading_concepts>              — за проверка на права\n\n"
-                    "Оставащи итерации: "
-                    f"{MAX_TOOL_ITERATIONS - _tool_iter - 1}. "
-                    "Използвай ги за ДЕЙСТВИЕ, не за повече reconnaissance.\n\n"
-                    "DATA CURATION: <NEED_DATA_PROPOSAL: trading_concepts | SMC Batch 1 | [{...},{...}]>\n"
-                    "Можеш да пратиш всички концепти в ЕДИН маркер (json array). "
-                    "Report progress: <NEED_PROGRESS: task | pct | msg>"
-                )
-                log.debug("action-forcing nudge injected at iter=%d", _tool_iter)
-            else:
-                _followup_tail = (
-                    "You MAY emit more NEED_* markers (NEED_READ_FILE, NEED_CODE_SEARCH, "
-                    "NEED_PG, NEED_DB_SCHEMA, NEED_PROPOSE_START, NEED_DATA_PROPOSAL, "
-                    "NEED_PROGRESS, NEED_CHECK_PERM, NEED_WORKER etc.) if you need more "
-                    "info or to write code now that you have it. When you have everything "
-                    "needed to fully complete the task, reply with your final answer "
-                    "WITHOUT any more markers.\n\n"
-                    "PROJECT MODE: If the task is too big for this loop (10+ DB records, "
-                "multi-domain analysis, multi-module refactor), emit:\n"
-                "  <NEED_PROJECT_PLAN: detailed goal description>\n"
-                "Дедал ще разбие целта на стъпки, всяка ще се изпълни в собствена сесия "
-                "с пълни 20 итерации. Не се опитвай да побереш всичко в текущия loop.\n\n"
-                "WORKER DELEGATION: To parallelize work, emit one or more NEED_WORKER markers:\n"
-                    "  <NEED_WORKER: fast | task description>   — cheap/fast model (Haiku/Groq)\n"
-                    "  <NEED_WORKER: balanced | task>           — same model as master\n"
-                    "  <NEED_WORKER: deep | task>               — powerful model (Opus)\n"
-                    "Multiple NEED_WORKER markers in one response run in parallel.\n"
-                    "For a bounded file slice WITH tools, emit:\n"
-                    "  <NEED_SUBAGENT: slug | task>\n"
-                    "  <NEED_SUBAGENT: slug | task | explorer>  — read-only map/verify.\n"
-                    "Explorer cannot write. Pass one slice, not the whole chat.\n"
-                    "Workers are stateless — pass full context in the task description. "
-                    "Wait for their results in the next tool iteration before synthesizing.\n\n"
-                    "DATA CURATION REMINDER: For inserting trading_concepts / signal_criteria / "
-                    "asset_behavior_patterns into the database, ALWAYS use NEED_DATA_PROPOSAL "
-                    "instead of NEED_PROPOSE_START (code sandbox). "
-                    "Format: <NEED_DATA_PROPOSAL: category | Title | [json_array]>\n"
-                    "First check permission with NEED_CHECK_PERM: insert_<category> — "
-                    "if GRANTED you can insert directly with NEED_PG; if DENIED use NEED_DATA_PROPOSAL. "
-                    "Report progress with NEED_PROGRESS: task_name | pct | message (pct 0.0-1.0).\n\n"
-                    f"Remaining tool iterations: {MAX_TOOL_ITERATIONS - _tool_iter - 1}. "
-                    "Reconnaissance should be DONE by now — move to ACTION (emit markers)."
-                )
-            _cutoff_prefix = (
-                f"{_cutoff_notice}\n\n" if _data_prop_truncated and not _is_final_iter else ""
-            )
-            followup = (
-                _cutoff_prefix
-                + f"━━━ TOOL RESULTS (your request) ━━━\n{tool_block}\n\n"
-                + _followup_tail
-            )
-            # When a screenshot was taken, promote the followup to a content
-            # array so the vision image is delivered alongside the text.
-            # The Anthropic-compatible API accepts list[content_block] or str.
-            if vision_blocks:
-                followup_content: object = [{"type": "text", "text": followup}] + vision_blocks
-            else:
-                followup_content = followup
-            try:
-                # Iterations 2+ skip the heavy user_content (memory dump already seen).
-                # Only the assistant's prior reply + tool results are needed.
-                # Also skip prompt caching on re-roll calls — system prompt is already
-                # cached from the first call in this 5-min window.
-                if _tool_iter == 0:
-                    reroll_messages = [
-                        {"role": "user",      "content": user_content},
-                        {"role": "assistant", "content": raw},
-                        {"role": "user",      "content": followup_content},
-                    ]
-                else:
-                    # Compact: only the previous assistant turn + new tool results.
-                    # Saves ~60-80% of input tokens on chained tool calls.
-                    reroll_messages = [
-                        {"role": "user",      "content": "(context already provided in prior turns)"},
-                        {"role": "assistant", "content": raw},
-                        {"role": "user",      "content": followup_content},
-                    ]
-                # Live status — при LLM re-call показваме "generating" с
-                # keepalive heartbeat за да не стои UI замръзнал докато Claude
-                # мисли (30-60s между tool iteration-и)
-                try:
-                    async with _keepalive(
-                        session_id, "generating", _tool_iter,
-                        f"Генерирам следващ отговор… (итер. {_tool_iter + 1}/{MAX_TOOL_ITERATIONS})",
-                    ):
-                        raw = await _call_claude(_call_persona, reroll_messages,
-                                                 use_cache_override=False)
-                except NameError:
-                    raw = await _call_claude(_call_persona, reroll_messages,
-                                             use_cache_override=False)
-                # Phase 16 — auto-pause check (token budget OR owner pause flag)
-                try:
-                    _extra = _journal.estimate_tokens(raw) + _journal.estimate_tokens(followup)
-                    _do_pause, _pr = _journal.should_pause(session_id or "", _extra)
-                    if _do_pause:
-                        _journal.write_step(
-                            session_id or "",
-                            "auto_pause",
-                            f"Paused след итер. {_tool_iter + 1}/{MAX_TOOL_ITERATIONS} "
-                            f"({_pr}). Дедал ще resume-не при 'продължи'.",
-                            data=(raw or "")[:4000],
-                        )
-                        _journal.mark_paused(session_id or "", _pr)
-                        log.info("journal: auto-pause session=%s reason=%s iter=%d",
-                                 (session_id or "")[:10], _pr, _tool_iter + 1)
-                        _stripped_pause = re.sub(r"<NEED_[A-Z_]+(?:[^>]*)>", "", raw or "").strip()
-                        raw = (
-                            f"{_stripped_pause}\n\n"
-                            f"⏸ ПАУЗА — стигнах ~{int(_journal.PAUSE_THRESHOLD*100)}% от token budget "
-                            f"({_pr}). Запазих прогреса в journal-а (стъпки: "
-                            f"{len((_journal.get_journal(session_id or '') or {}).get('steps', []))}). "
-                            f"Напиши 'продължи' за да възстановя от където спрях."
-                        ).strip()
-                        _tool_loop_broke_with_fallback = True
-                        break
-                except Exception as _pe:
-                    log.debug("auto-pause check skipped: %s", _pe)
-            except Exception as exc:
-                log.warning("tool re-roll failed: %s", exc)
-                # Strip any leaked marker(s) so the owner never sees them, and
-                # provide a deterministic fallback. For JSON-contract calls
-                # (generate) we emit a valid minimal JSON envelope.
-                # Strip ALL NEED_* markers (inline + block) so none leak to user-facing text.
-                stripped = re.sub(r"<NEED_[A-Z_]+(?:[^>]*)>", "", raw or "")
-                stripped = re.sub(
-                    r"<NEED_(?:PROPOSE_START|SANDBOX)>.*?</NEED_(?:PROPOSE_START|SANDBOX)>",
-                    "", stripped, flags=re.DOTALL,
-                ).strip()
-                tool_summary = "; ".join(
-                    f"{c['tool']}({c['query']!r}): {c['result_count']} results"
-                    for c in tool_calls_used
-                )
-                if expect_json:
-                    raw = json.dumps({
-                        "language": "text",
-                        "filename": "fallback.txt",
-                        "requirements": [],
-                        "install_command": "",
-                        "run_command": "",
-                        "code": "",
-                        "explanation": (
-                            f"Tool re-roll failed ({exc}). Tools attempted: {tool_summary}. "
-                            "Owner — please retry the request."
-                        ),
-                        "key_decisions": [],
-                        "usage_example": "",
-                        "warnings": ["LLM re-roll failure after tool call"],
-                        "memory_notes": "tool re-roll failed; do not store as success"
-                    })
-                else:
-                    raw = (
-                        f"{stripped}\n\n"
-                        f"(I needed to consult external sources [{tool_summary}] but the "
-                        f"follow-up call failed: {exc}. Please retry.)"
-                    ).strip()
-                _tool_loop_broke_with_fallback = True
-                break
-
-            # After successful re-roll: check for new NEED_PROPOSE_START in new raw
-            # so chained "read file → write code" works in a single turn.
-            propose_result_text = ""  # consumed; reset for next iteration
-            _new_pb = _extract_propose_block(raw)
-            if _new_pb:
-                propose_result_text, raw = await _run_propose_loop(
-                    initial_raw=raw,
-                    initial_block=_new_pb,
-                    user_content=user_content,
-                    persona=self.persona,
-                    max_retries=_propose_max_retries(),
-                )
-                tool_calls_used.append({"tool": "propose_patch", "file": _new_pb["file_path"]})
+        leftover = await ToolLoop().run_leftover(
+            LeftoverRoundRequest(
+                raw=raw,
+                user_content=user_content,
+                persona=_call_persona,
+                session_id=session_id,
+                user_message=user_message,
+                expect_json=expect_json,
+                propose_result_text=propose_result_text,
+                complete_fn=_call_claude,
+                execute_leftover_fn=self._execute_leftover_markers,
+                keepalive=_keepalive,
+                set_live=_set_live,
+                memory=self.memory,
+                read_file_fn=_read_file_tool,
+                tool_calls=tool_calls_used,
+                for_self=for_self,
+                after_reroll_fn=lambda new_raw: self._after_leftover_reroll(new_raw, user_content),
+            ),
+        )
+        raw = leftover.raw
+        tool_calls_used = leftover.tool_calls
+        _tool_iter = leftover.iterations
+        _tool_loop_broke_with_fallback = leftover.broke_with_fallback
 
         # ── Empty reply guard (T05) — Haiku wrap-up if loop consumed everything
         # When Дедал's last response was 100% tool markers (now stripped to empty)
@@ -3962,6 +1584,1985 @@ class Daedalus:
             "browser_ok": _loop.browser_ok_for_dod() if _loop is not None else None,
         }
         return raw, summary
+
+    async def _execute_leftover_markers(
+        self,
+        raw: str,
+        hit: Any,
+        *,
+        session_id: str,
+        user_message: str,
+        user_content: str,
+        for_self: bool,
+        tool_iter: int,
+        set_live: Any,
+    ) -> "LeftoverExecResult":
+        """Leftover NEED_* if-arms. Driver (parse / dumps / reroll) lives in ToolLoop."""
+        from .tool_loop import LeftoverExecResult
+
+        _tool_iter = tool_iter
+        _set_live = set_live
+        search_q = hit.search_q
+        web_q = hit.web_q
+        fetch_url = hit.fetch_url
+        screenshot_u = hit.screenshot_u
+        gh_q = hit.gh_q
+        mesh_marker = hit.mesh_marker
+        skill_q = hit.skill_q
+        doc_q = hit.doc_q
+        pg_q = hit.pg_q
+        backup_q = hit.backup_q
+        gh_repo_q = hit.gh_repo_q
+        gh_issue_q = hit.gh_issue_q
+        pypi_q = hit.pypi_q
+        npm_q = hit.npm_q
+        docs_url = hit.docs_url
+        dep_q = hit.dep_q
+        git_log_q = hit.git_log_q
+        git_diff_q = hit.git_diff_q
+        sandbox_code = hit.sandbox_code
+        batch_block = hit.batch_block
+        verify_block = hit.verify_block
+        edit_markers = hit.edit_markers
+        endpoints_q = hit.endpoints_q
+        modules_q = hit.modules_q
+        db_schema_q = hit.db_schema_q
+        code_search_q = hit.code_search_q
+        capability_q = hit.capability_q
+        ai_digest_q = hit.ai_digest_q
+        skill_catalog_q = hit.skill_catalog_q
+        lint_q = hit.lint_q
+        tdd_m = hit.tdd_m
+        pg_new_m = hit.pg_new_m
+        pg_write_matches = hit.pg_write_matches
+        pg_write_m = hit.pg_write_m
+        pg_run_q = hit.pg_run_q
+        pg_pub_m = hit.pg_pub_m
+        pg_clone_m = hit.pg_clone_m
+        pg_push_m = hit.pg_push_m
+        pg_read_m = hit.pg_read_m
+        pg_edit_matches = hit.pg_edit_matches
+        pg_db_m = hit.pg_db_m
+        pg_manifest_m = hit.pg_manifest_m
+        drp_law_q = hit.drp_law_q
+        drp_cases_q = hit.drp_cases_q
+        drp_search_q = hit.drp_search_q
+        inbox_msg_m = hit.inbox_msg_m
+        project_plan_m = hit.project_plan_m
+        data_prop_m = hit.data_prop_m
+        progress_m = hit.progress_m
+        journal_m = hit.journal_m
+        task_state_m = hit.task_state_m
+        playbook_m = hit.playbook_m
+        plan_lock_m = hit.plan_lock_m
+        check_perm_m = hit.check_perm_m
+        blocked_m = hit.blocked_m
+        plan_step_m = hit.plan_step_m
+        read_file_m = hit.read_file_m
+        read_file_path = hit.read_file_path
+        read_file_start = hit.read_file_start
+        read_file_end = hit.read_file_end
+        logs_m = hit.logs_m
+        logs_n = hit.logs_n
+        logs_grep = hit.logs_grep
+        worker_calls = hit.worker_calls
+        subagent_calls = hit.subagent_calls
+        _bundle_start_title = hit.bundle_start_title
+        _stage_blocks = hit.stage_blocks
+        _bundle_commit = hit.bundle_commit
+
+        tool_results_text_parts: list[str] = []
+        tool_calls_used: list[dict[str, Any]] = []
+        vision_blocks: list[dict] = []
+
+        if search_q:
+            _denied = _perm_gate("web_search", "NEED_SEARCH")
+            if _denied:
+                tool_results_text_parts.append(_denied)
+                tool_calls_used.append({"tool": "web_search", "ok": False, "denied": True})
+            else:
+                # NEED_SEARCH → Perplexity/Sonar (synthesized answer + citations)
+                try:
+                    from argos_data_nexus.modules.web_search import smart_search as _smart_search
+                    sr = await _smart_search(search_q, mode="sonar")
+                    _mode = sr.get("mode", "sonar")
+                    if _mode in ("sonar", "sonar-pro"):
+                        _answer = sr.get("answer", "")
+                        _cits   = sr.get("citations", [])
+                        _cit_block = ""
+                        if _cits:
+                            _cit_lines = "\n".join(f"  [{i+1}] {u}" for i, u in enumerate(_cits[:8]))
+                            _cit_block = f"\nSources:\n{_cit_lines}"
+                        tool_results_text_parts.append(
+                            f"━━━ TOOL RESULTS — NEED_SEARCH (Sonar) [{search_q!r}] ━━━\n"
+                            f"{_answer}{_cit_block}"
+                        )
+                    else:
+                        # DDG fallback
+                        tool_results_text_parts.append(_format_web_results(search_q, {
+                            "ok": True,
+                            "result_count": sr.get("result_count", 0),
+                            "results": sr.get("results", []),
+                        }))
+                    tool_calls_used.append({
+                        "tool": "smart_search", "query": search_q,
+                        "mode": sr.get("mode"), "source": sr.get("source"),
+                    })
+                    # Запомняме в Дедал discoveries
+                    try:
+                        from argos_data_nexus.modules.web_search import smart_search as _ss
+                        _answer_text = sr.get("answer") or ""
+                        if _answer_text and len(_answer_text) > 40:
+                            self.memory.store_discovery(
+                                title=f"[Sonar] {search_q[:80]}",
+                                content=_answer_text[:1200],
+                                source="sonar",
+                                tags=["search", "sonar", "live"],
+                            )
+                    except Exception:
+                        pass
+                except Exception as _se:
+                    log.warning("NEED_SEARCH failed (%s) — falling back to NEED_WEB DDG", _se)
+                    ws = await web_search_tool(self.memory, search_q, limit=5, for_self=for_self)
+                    tool_results_text_parts.append(_format_web_results(search_q, ws))
+                    tool_calls_used.append({"tool": "web_search_fallback", "query": search_q})
+        if web_q:
+            _denied = _perm_gate("web_search", "NEED_WEB")
+            if _denied:
+                tool_results_text_parts.append(_denied)
+                tool_calls_used.append({"tool": "web_search", "ok": False, "denied": True})
+            else:
+                ws = await web_search_tool(self.memory, web_q, limit=5, for_self=for_self)
+                tool_calls_used.append({"tool": "web_search", "query": web_q,
+                                        "result_count": ws.get("result_count", 0),
+                                        "discoveries_recorded": ws.get("discoveries_recorded", 0),
+                                        "for_self": for_self})
+                tool_results_text_parts.append(_format_web_results(web_q, ws))
+        if fetch_url:
+            from .playground_agent_guards import should_block_web_fetch
+            _pg_ctx = ""
+            try:
+                from .kv import db as _rdb_wf
+                _pg_ctx = str(_rdb_wf.get(f"adn:daedalus_pg_context:{session_id}") or "")
+            except Exception:
+                pass
+            _wf_block = should_block_web_fetch(
+                session_id=session_id or "",
+                kind=_pg_ctx.split("|")[0] if "|" in _pg_ctx else "static",
+                project_text=_pg_ctx,
+            )
+            if _wf_block:
+                tool_results_text_parts.append(
+                    f"━━━ TOOL RESULTS — WEB FETCH BLOCKED ━━━\n{_wf_block}"
+                )
+                tool_calls_used.append({"tool": "web_fetch", "url": fetch_url, "ok": False, "blocked": True})
+            else:
+                _denied = _perm_gate("web_search", "NEED_FETCH")
+                if _denied:
+                    tool_results_text_parts.append(_denied)
+                    tool_calls_used.append({"tool": "web_fetch", "ok": False, "denied": True})
+                else:
+                    fr = await web_fetch_tool(fetch_url)
+                    trunc_note = (f"\n[...truncated — {fr.get('chars_total',0)} total chars]"
+                                  if fr.get("truncated") else "")
+                    if fr.get("ok"):
+                        tool_results_text_parts.append(
+                            f"━━━ TOOL RESULTS — WEB FETCH [{fetch_url}] ━━━\n"
+                            f"{fr['text']}{trunc_note}"
+                        )
+                    else:
+                        tool_results_text_parts.append(
+                            f"[web_fetch {fetch_url!r}] FAILED: {fr.get('error')}"
+                        )
+                    tool_calls_used.append({"tool": "web_fetch", "url": fetch_url,
+                                            "ok": fr.get("ok", False)})
+        if screenshot_u:
+            _denied = _perm_gate("web_search", "NEED_SCREENSHOT")
+            if _denied:
+                tool_results_text_parts.append(_denied)
+                tool_calls_used.append({"tool": "web_screenshot", "ok": False, "denied": True})
+            else:
+                sr = await web_screenshot_tool(screenshot_u)
+                if sr.get("ok"):
+                    vision_blocks.append({
+                        "type": "image",
+                        "source": {"type": "base64",
+                                   "media_type": sr["media_type"],
+                                   "data": sr["image_b64"]},
+                    })
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — SCREENSHOT [{screenshot_u}] ━━━\n"
+                        f"Страницата е заснета ({sr.get('size_kb', 0)} KB). "
+                        f"Виж прикачения визуален блок за дизайн вдъхновение."
+                    )
+                else:
+                    tool_results_text_parts.append(
+                        f"[web_screenshot {screenshot_u!r}] FAILED: {sr.get('error')}"
+                    )
+                tool_calls_used.append({"tool": "web_screenshot", "url": screenshot_u,
+                                        "ok": sr.get("ok", False)})
+        if gh_q:
+            _denied = _perm_gate("github_access", "NEED_GITHUB")
+            if _denied:
+                tool_results_text_parts.append(_denied)
+                tool_calls_used.append({"tool": "github_search", "ok": False, "denied": True})
+            else:
+                gs = await github_search_tool(self.memory, gh_q, limit=5, for_self=for_self)
+                tool_calls_used.append({"tool": "github_search", "query": gh_q,
+                                        "result_count": gs.get("result_count", 0),
+                                        "discoveries_recorded": gs.get("discoveries_recorded", 0),
+                                        "for_self": for_self})
+                tool_results_text_parts.append(_format_github_results(gh_q, gs))
+        if mesh_marker:
+            _denied = _perm_gate("mesh_call", "NEED_MESH")
+            if _denied:
+                tool_results_text_parts.append(_denied)
+                tool_calls_used.append({"tool": "mesh_call", "ok": False, "denied": True})
+            else:
+                m_target, m_action, m_payload = mesh_marker
+                mc = await mesh_call_tool(m_target, m_action, m_payload, timeout=30.0)
+                tool_calls_used.append({
+                    "tool": "mesh_call",
+                    "target": m_target,
+                    "action": m_action,
+                    "ok": mc.get("ok", False),
+                })
+                tool_results_text_parts.append(
+                    f"━━━ TOOL RESULTS — MESH CALL ━━━\n"
+                    + _format_mesh_call_result(m_target, m_action, mc)
+                )
+        if skill_q:
+            try:
+                from .skill_acquisition import analyze_github_repo, format_skill_analysis_for_prompt, log_skill_interest
+                loop = asyncio.get_event_loop()
+                analysis = await loop.run_in_executor(None, analyze_github_repo, skill_q)
+                log_skill_interest(analysis.get("slug", skill_q), analysis)
+                tool_results_text_parts.append(
+                    "━━━ TOOL RESULTS — SKILL ANALYSIS ━━━\n"
+                    + format_skill_analysis_for_prompt(analysis)
+                )
+                tool_calls_used.append({"tool": "skill_analyze", "query": skill_q, "ok": analysis.get("ok", False)})
+            except Exception as exc:
+                log.warning("skill_analyze failed: %s", exc)
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — SKILL ANALYSIS ━━━\nFAILED: {exc}")
+                tool_calls_used.append({"tool": "skill_analyze", "query": skill_q, "ok": False})
+        if doc_q:
+            try:
+                from .document_generator import generate_document
+                loop = asyncio.get_event_loop()
+                doc_result = await loop.run_in_executor(None, generate_document, doc_q)
+                if doc_result.get("ok"):
+                    result_text = (
+                        f"━━━ TOOL RESULTS — DOCUMENT GENERATED ━━━\n"
+                        f"Format  : {doc_result['format'].upper()}\n"
+                        f"Title   : {doc_result['title']}\n"
+                        f"File    : {doc_result['filename']}\n"
+                        f"Size    : {doc_result['size_bytes']:,} bytes\n"
+                        f"Download: {doc_result['download_url']}\n\n"
+                        f"Tell Nikolai the document is ready with a clear download link. "
+                        f"Use the exact download_url above as a markdown link."
+                    )
+                else:
+                    result_text = (
+                        f"━━━ TOOL RESULTS — DOCUMENT GENERATION FAILED ━━━\n"
+                        f"Error: {doc_result.get('error', 'unknown')}"
+                    )
+                tool_results_text_parts.append(result_text)
+                tool_calls_used.append({"tool": "generate_document", "format": doc_q.split("|")[0].strip(), "ok": doc_result.get("ok", False)})
+            except Exception as exc:
+                log.warning("generate_document failed: %s", exc)
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — DOCUMENT GENERATION FAILED ━━━\nError: {exc}")
+                tool_calls_used.append({"tool": "generate_document", "ok": False})
+
+        if pg_q and is_playground_work_session(session_id, user_message):
+            tool_results_text_parts.append(
+                "━━━ TOOL RESULTS — PostgreSQL SKIPPED ━━━\n"
+                "Playground session — write the game with playground_new / write_file. No SQL."
+            )
+            tool_calls_used.append({
+                "tool": "postgres_query", "ok": True, "blocked": True, "reason": "playground",
+            })
+        elif pg_q:
+            try:
+                pg_res = await postgres_query_tool(pg_q, session_id=session_id)
+                if pg_res.get("ok"):
+                    rows_text = "\n".join(str(r) for r in (pg_res.get("rows") or [])[:20])
+                    result_text = (
+                        f"━━━ TOOL RESULTS — PostgreSQL QUERY ━━━\n"
+                        f"Query: {pg_q}\n"
+                        f"Rows returned: {pg_res['row_count']}\n\n"
+                        f"{rows_text}"
+                    )
+                else:
+                    result_text = f"━━━ TOOL RESULTS — PostgreSQL QUERY FAILED ━━━\nError: {pg_res.get('error')}"
+                tool_results_text_parts.append(result_text)
+                tool_calls_used.append({"tool": "postgres_query", "ok": pg_res.get("ok", False), "rows": pg_res.get("row_count", 0), "query": (pg_q or "")[:160]})
+            except Exception as exc:
+                log.warning("postgres_query failed: %s", exc)
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — PostgreSQL QUERY FAILED ━━━\nError: {exc}")
+                tool_calls_used.append({"tool": "postgres_query", "ok": False})
+
+        if backup_q and "chromadb" in backup_q.lower():
+            try:
+                bk_res = await backup_chromadb_tool(trigger="daedalus")
+                if bk_res.get("ok"):
+                    result_text = (
+                        f"━━━ TOOL RESULTS — CHROMADB BACKUP ━━━\n"
+                        f"Path    : {bk_res['object_path']}\n"
+                        f"Size    : {bk_res['size_bytes']:,} bytes\n"
+                        f"Files   : {bk_res.get('file_count', '?')}\n"
+                        f"Trigger : {bk_res['trigger']}"
+                    )
+                else:
+                    result_text = f"━━━ TOOL RESULTS — CHROMADB BACKUP FAILED ━━━\nError: {bk_res.get('error')}"
+                tool_results_text_parts.append(result_text)
+                tool_calls_used.append({"tool": "backup_chromadb", "ok": bk_res.get("ok", False)})
+            except Exception as exc:
+                log.warning("backup_chromadb failed: %s", exc)
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — CHROMADB BACKUP FAILED ━━━\nError: {exc}")
+                tool_calls_used.append({"tool": "backup_chromadb", "ok": False})
+
+        if gh_repo_q:
+            _denied = _perm_gate("github_access", "NEED_GITHUB_REPO")
+            if _denied:
+                tool_results_text_parts.append(_denied)
+                tool_calls_used.append({"tool": "github_repo_search", "ok": False, "denied": True})
+            else:
+                try:
+                    repo_res = await github_search_repos_tool(gh_repo_q, limit=5)
+                    if repo_res.get("ok"):
+                        repos_text = "\n".join(
+                            f"  • {r['full_name']} ({'★'+str(r['stars'])+' ' if r.get('stars') else ''}{r.get('language','')}) — {r.get('description','')[:100]}\n    {r['url']}"
+                            for r in (repo_res.get("repos") or [])
+                        )
+                        result_text = (
+                            f"━━━ TOOL RESULTS — GITHUB REPO SEARCH ━━━\n"
+                            f"Query: {gh_repo_q}\n\n{repos_text or 'No results.'}"
+                        )
+                    else:
+                        result_text = f"━━━ TOOL RESULTS — GITHUB REPO SEARCH FAILED ━━━\nError: {repo_res.get('error')}"
+                    tool_results_text_parts.append(result_text)
+                    tool_calls_used.append({"tool": "github_repo_search", "ok": repo_res.get("ok", False)})
+                except Exception as exc:
+                    log.warning("github_repo_search failed: %s", exc)
+                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — GITHUB REPO SEARCH FAILED ━━━\nError: {exc}")
+                    tool_calls_used.append({"tool": "github_repo_search", "ok": False})
+
+        if gh_issue_q:
+            try:
+                parts_issue = [p.strip() for p in gh_issue_q.split("|", 2)]
+                if len(parts_issue) >= 2:
+                    repo_full = parts_issue[0]
+                    issue_title = parts_issue[1]
+                    issue_body = parts_issue[2] if len(parts_issue) > 2 else ""
+                    owner_r, repo_r = (repo_full.split("/", 1) + [""])[:2]
+                    issue_res = await github_create_issue_tool(owner_r, repo_r, issue_title, body=issue_body)
+                    if issue_res.get("ok"):
+                        result_text = (
+                            f"━━━ TOOL RESULTS — GITHUB ISSUE CREATED ━━━\n"
+                            f"Issue #{issue_res['issue_number']}: {issue_res['title']}\n"
+                            f"URL: {issue_res['url']}"
+                        )
+                    else:
+                        result_text = f"━━━ TOOL RESULTS — GITHUB ISSUE FAILED ━━━\nError: {issue_res.get('error')}"
+                else:
+                    result_text = "━━━ TOOL RESULTS — GITHUB ISSUE FAILED ━━━\nInvalid format. Use: owner/repo | Title | Body"
+                tool_results_text_parts.append(result_text)
+                tool_calls_used.append({"tool": "github_create_issue", "ok": "ok" in gh_issue_q})
+            except Exception as exc:
+                log.warning("github_create_issue failed: %s", exc)
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — GITHUB ISSUE FAILED ━━━\nError: {exc}")
+                tool_calls_used.append({"tool": "github_create_issue", "ok": False})
+
+        # --- PyPI search ---
+        if pypi_q:
+            try:
+                pr = await pypi_search_tool(pypi_q)
+                if pr.get("ok"):
+                    lines = [f"━━━ TOOL RESULTS — PyPI SEARCH ━━━\nQuery: {pypi_q}\n"]
+                    for p in pr.get("results", []):
+                        lines.append(f"  • {p['name']} {p['version']} — {p.get('summary','')[:100]}\n    {p['install']}")
+                    tool_results_text_parts.append("\n".join(lines))
+                else:
+                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — PyPI SEARCH FAILED ━━━\n{pr.get('error')}")
+                tool_calls_used.append({"tool": "pypi_search", "query": pypi_q, "ok": pr.get("ok", False)})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — PyPI SEARCH FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "pypi_search", "ok": False})
+
+        # --- npm search ---
+        if npm_q:
+            try:
+                nr = await npm_search_tool(npm_q)
+                if nr.get("ok"):
+                    lines = [f"━━━ TOOL RESULTS — npm SEARCH ━━━\nQuery: {npm_q}\n"]
+                    for p in nr.get("results", []):
+                        lines.append(f"  • {p['name']} {p['version']} — {p.get('description','')[:100]}\n    {p['install']}")
+                    tool_results_text_parts.append("\n".join(lines))
+                else:
+                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — npm SEARCH FAILED ━━━\n{nr.get('error')}")
+                tool_calls_used.append({"tool": "npm_search", "query": npm_q, "ok": nr.get("ok", False)})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — npm SEARCH FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "npm_search", "ok": False})
+
+        # --- Docs fetch ---
+        if docs_url:
+            try:
+                dr = await docs_fetch_tool(docs_url)
+                if dr.get("ok"):
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — DOCS FETCH ━━━\nURL: {docs_url}\nChars: {dr['chars']}\n\n{dr['content']}"
+                    )
+                else:
+                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — DOCS FETCH FAILED ━━━\n{dr.get('error')}")
+                tool_calls_used.append({"tool": "docs_fetch", "url": docs_url, "ok": dr.get("ok", False)})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — DOCS FETCH FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "docs_fetch", "ok": False})
+
+        # --- Dependency analyzer ---
+        if dep_q:
+            try:
+                parts_dep = [p.strip() for p in dep_q.split("|", 1)]
+                pkg_name = parts_dep[0]
+                eco = parts_dep[1] if len(parts_dep) > 1 else "auto"
+                dr = await dependency_analyze_tool(pkg_name, eco)
+                if dr.get("ok"):
+                    vuln_lines = ""
+                    if dr.get("vulnerabilities"):
+                        vuln_lines = "\nVULNERABILITIES:\n" + "\n".join(
+                            f"  [{v['severity']}] {v['id']}: {v['summary'][:120]}"
+                            + (f" (fixed in {v['fixed_in']})" if v.get('fixed_in') else "")
+                            for v in dr["vulnerabilities"]
+                        )
+                    else:
+                        vuln_lines = "\nNo known CVEs found."
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — DEPENDENCY ANALYSIS ━━━\n"
+                        f"Package  : {dr['package']} ({dr['ecosystem']})\n"
+                        f"Latest   : {dr['latest_version']} (released {dr.get('released','?')})\n"
+                        f"Summary  : {dr.get('summary','')[:200]}\n"
+                        f"Home     : {dr.get('home_url','')}\n"
+                        f"CVE count: {dr['vuln_count']}"
+                        f"{vuln_lines}"
+                    )
+                else:
+                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — DEPENDENCY ANALYSIS FAILED ━━━\n{dr.get('error')}")
+                tool_calls_used.append({"tool": "dependency_analyze", "package": pkg_name, "ok": dr.get("ok", False)})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — DEPENDENCY ANALYSIS FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "dependency_analyze", "ok": False})
+
+        # --- Git log ---
+        if git_log_q:
+            try:
+                parts_gl = [p.strip() for p in git_log_q.split("|", 1)]
+                gl_n = int(parts_gl[0]) if parts_gl[0].isdigit() else 15
+                gl_path = parts_gl[1] if len(parts_gl) > 1 else None
+                glr = await git_log_tool(gl_n, gl_path)
+                if glr.get("ok"):
+                    lines = [f"━━━ TOOL RESULTS — GIT LOG ━━━\nLast {glr['count']} commits:\n"]
+                    for c in glr.get("commits", []):
+                        lines.append(f"  {c['date']} [{c['hash']}] {c['author']}: {c['subject']}")
+                    tool_results_text_parts.append("\n".join(lines))
+                else:
+                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — GIT LOG FAILED ━━━\n{glr.get('error')}")
+                tool_calls_used.append({"tool": "git_log", "ok": glr.get("ok", False)})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — GIT LOG FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "git_log", "ok": False})
+
+        # --- Git diff ---
+        if git_diff_q:
+            try:
+                parts_gd = [p.strip() for p in git_diff_q.split("|", 1)]
+                gd_path = parts_gd[0] if parts_gd[0] else None
+                gd_ref = parts_gd[1] if len(parts_gd) > 1 else "HEAD"
+                gdr = await git_diff_tool(gd_path, gd_ref)
+                if gdr.get("ok"):
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — GIT DIFF ━━━\nPath: {gdr['path']} vs {gdr['ref']}\n\n{gdr['diff']}"
+                    )
+                else:
+                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — GIT DIFF FAILED ━━━\n{gdr.get('error')}")
+                tool_calls_used.append({"tool": "git_diff", "ok": gdr.get("ok", False)})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — GIT DIFF FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "git_diff", "ok": False})
+
+        # --- Code sandbox ---
+        if sandbox_code:
+            try:
+                sbr = await code_sandbox_tool(sandbox_code)
+                if sbr.get("ok"):
+                    stdout = sbr.get("stdout", "") or "(no output)"
+                    stderr = sbr.get("stderr", "")
+                    result_text = (
+                        f"━━━ TOOL RESULTS — CODE SANDBOX ━━━\n"
+                        f"Return code: {sbr.get('returncode', '?')}\n"
+                        f"STDOUT:\n{stdout}"
+                    )
+                    if stderr:
+                        result_text += f"\nSTDERR:\n{stderr}"
+                else:
+                    result_text = f"━━━ TOOL RESULTS — CODE SANDBOX FAILED ━━━\n{sbr.get('error')}"
+                    if sbr.get("timed_out"):
+                        result_text += "\n(Execution timed out)"
+                tool_results_text_parts.append(result_text)
+                tool_calls_used.append({"tool": "code_sandbox", "ok": sbr.get("ok", False)})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — CODE SANDBOX FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "code_sandbox", "ok": False})
+
+        # --- NEED_READ_FILE ---
+        if read_file_path:
+            try:
+                loop = asyncio.get_event_loop()
+                rfr = await loop.run_in_executor(
+                    None, _read_file_tool, read_file_path, read_file_start, read_file_end
+                )
+                if rfr.get("ok"):
+                    try:
+                        track_files_from_text(session_id or "", rfr.get("path", read_file_path))
+                    except Exception:
+                        pass
+                    if rfr.get("truncated"):
+                        trunc_at = rfr.get("truncated_at_line")
+                        total = rfr.get("total_lines", "?")
+                        trunc_note = (
+                            f" [TRUNCATED at line ~{trunc_at} of {total} "
+                            f"— use <NEED_READ_FILE: {rfr['path']} | {trunc_at}-{min((trunc_at or 0)+100, total if isinstance(total,int) else 9999)}> "
+                            f"to read more]"
+                        )
+                    else:
+                        trunc_note = ""
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — READ FILE: {rfr['path']}{trunc_note} ━━━\n"
+                        f"{rfr['content']}"
+                    )
+                else:
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — READ FILE FAILED ━━━\n{rfr.get('error')}"
+                    )
+                tool_calls_used.append({"tool": "read_file", "path": read_file_path, "ok": rfr.get("ok", False)})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — READ FILE FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "read_file", "ok": False})
+
+        # --- NEED_LOGS ---
+        if logs_n:
+            try:
+                loop = asyncio.get_event_loop()
+                lgr = await loop.run_in_executor(
+                    None, _logs_tool, logs_n, logs_grep
+                )
+                if lgr.get("ok"):
+                    lines_text = "\n".join(lgr.get("lines", []))
+                    grep_note = f" | grep={logs_grep!r}" if logs_grep else ""
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — LOGS (last {logs_n}{grep_note}) ━━━\n"
+                        f"Source: {lgr.get('source', '?')}\n"
+                        f"{lines_text}"
+                    )
+                else:
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — LOGS FAILED ━━━\n{lgr.get('error')}"
+                    )
+                tool_calls_used.append({"tool": "logs", "n": logs_n, "ok": lgr.get("ok", False)})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — LOGS FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "logs", "ok": False})
+
+        # --- NEED_EDIT (Phase 1 — surgical diff → propose loop) ---
+        if edit_markers:
+            try:
+                _set_live(session_id, "NEED_EDIT", _tool_iter, "Surgical edit…")
+            except Exception:
+                pass
+            try:
+                _edit_results, _edit_blocks = await process_need_edit(
+                    raw, _read_file_tool, session_id=session_id or "",
+                )
+                for _ert in _edit_results:
+                    tool_results_text_parts.append(_ert)
+                for _eb in _edit_blocks:
+                    _edit_propose_text, _ = await _run_propose_loop(
+                        initial_raw=raw,
+                        initial_block=_eb,
+                        user_content=user_content,
+                        persona=self.persona,
+                        max_retries=_propose_max_retries(),
+                    )
+                    tool_results_text_parts.append(_edit_propose_text)
+                    tool_calls_used.append({
+                        "tool": "need_edit",
+                        "file": _eb.get("file_path"),
+                        "ok": "FAILED" not in _edit_propose_text,
+                    })
+            except Exception as exc:
+                log.warning("need_edit failed: %s", exc)
+                tool_results_text_parts.append(f"━━━ NEED_EDIT FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "need_edit", "ok": False})
+
+        # --- NEED_BATCH (Phase A — parallel multi-tool in 1 iteration) ---
+        if batch_block:
+            try:
+                _set_live(session_id, "NEED_BATCH", _tool_iter, "Паралелно изпълнение…")
+            except Exception:
+                pass
+            try:
+                batch_result = await execute_batch(
+                    batch_block, self.memory, session_id or "",
+                    read_file_fn=_read_file_tool,
+                    logs_fn=_logs_tool,
+                )
+                tool_results_text_parts.append(batch_result)
+                tool_calls_used.append({"tool": "need_batch", "ok": True})
+            except Exception as exc:
+                log.warning("need_batch failed: %s", exc)
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — NEED_BATCH FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "need_batch", "ok": False})
+
+        # --- NEED_VERIFY (Phase A — HTTP smoke test + log tail) ---
+        if verify_block:
+            try:
+                _set_live(session_id, "NEED_VERIFY", _tool_iter, "Проверка на endpoint…")
+            except Exception:
+                pass
+            try:
+                verify_result = await execute_verify(
+                    verify_block,
+                    logs_fn=_logs_tool,
+                )
+                tool_results_text_parts.append(verify_result)
+                tool_calls_used.append({"tool": "need_verify", "ok": True})
+            except Exception as exc:
+                log.warning("need_verify failed: %s", exc)
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — NEED_VERIFY FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "need_verify", "ok": False})
+
+        # --- NEED_PROJECT_PLAN (Дедал → auto-plan голяма задача в planner) ---
+        # Recursion guard: auto_plan_from_goal() and planner step runs call
+        # daedalus.chat() recursively. Those nested sessions must NEVER be
+        # allowed to spawn more plans (infinite loop + token burn).
+        _is_nested_planner_session = bool(
+            session_id and (
+                session_id.startswith("autoplan_")
+                or session_id.startswith("planner_")
+                or session_id.startswith("selfrepair_")
+            )
+        )
+        if project_plan_m and _is_nested_planner_session:
+            tool_results_text_parts.append(
+                "━━━ TOOL RESULTS — PROJECT PLAN BLOCKED ━━━\n"
+                "Recursion guard: вече си в planner/autoplan/selfrepair сесия. "
+                "НЕ можеш да създадеш нов план оттук. Завърши текущата стъпка."
+            )
+            tool_calls_used.append({"tool": "project_plan", "ok": False, "reason": "recursion_guard"})
+            project_plan_m = None  # disarm to skip the real handler below
+        if project_plan_m:
+            try:
+                pp_goal = project_plan_m.group(1).strip()
+                from .planner import auto_plan_from_goal, update_plan_status
+                from .outbox import check_permission, push_outbox
+                pp_result = await auto_plan_from_goal(pp_goal)
+                if pp_result.get("ok"):
+                    pp_plan_id = pp_result["plan_id"]
+                    pp_steps = pp_result.get("steps", []) or []
+                    # Auto-activate if owner pre-granted planner_auto_run
+                    if check_permission("planner_auto_run"):
+                        await update_plan_status(pp_plan_id, "active")
+                        activation_note = (
+                            "Permission 'planner_auto_run' is GRANTED — план е АКТИВИРАН.\n"
+                            "Background scheduler ще изпълнява стъпките една по една "
+                            "(всяка в нова Дедал сесия с пълни 20 итерации)."
+                        )
+                    else:
+                        # Notify owner via outbox to approve
+                        push_outbox(
+                            type="message",
+                            title=f"🗂  План за одобрение: {pp_result.get('title','?')[:60]}",
+                            body=(
+                                f"Дедал генерира план с {len(pp_steps)} стъпки.\n\n"
+                                f"**Цел:** {pp_goal[:300]}\n"
+                                f"**Plan ID:** {pp_plan_id}\n\n"
+                                f"Approve: POST /admin/daedalus/planner/plans/{pp_plan_id}/approve\n"
+                                f"Или дай пермишън веднъж завинаги: "
+                                f"`planner_auto_run` → плановете тръгват автоматично."
+                            ),
+                            session_id=session_id,
+                        )
+                        activation_note = (
+                            "Планът е в DRAFT — чака approve от Николай в admin UI "
+                            "(/admin/daedalus → План режим). За auto-activate в бъдеще "
+                            "Николай може да grant-не `planner_auto_run` permission."
+                        )
+                    steps_summary = "\n".join(
+                        f"  {i+1}. {s.get('title','?')[:80]}"
+                        for i, s in enumerate(pp_steps[:10])
+                    )
+                    result_text = (
+                        f"━━━ TOOL RESULTS — PROJECT PLAN CREATED ━━━\n"
+                        f"Plan ID  : {pp_plan_id}\n"
+                        f"Title    : {pp_result.get('title','?')}\n"
+                        f"Steps    : {len(pp_steps)}\n\n"
+                        f"{steps_summary}\n\n"
+                        f"{activation_note}\n\n"
+                        f"Tell Nikolai: Планът е създаден с {len(pp_steps)} стъпки. "
+                        f"Всяка стъпка ще се изпълни автономно в собствена сесия — "
+                        f"никакво tool loop ограничение."
+                    )
+                    tool_calls_used.append({"tool": "project_plan", "plan_id": pp_plan_id, "steps": len(pp_steps)})
+                else:
+                    result_text = (
+                        f"━━━ TOOL RESULTS — PROJECT PLAN FAILED ━━━\n"
+                        f"Error: {pp_result.get('error','?')}\n"
+                        f"Опитай отново с по-конкретна цел или раздели сам ръчно."
+                    )
+                    tool_calls_used.append({"tool": "project_plan", "ok": False})
+                tool_results_text_parts.append(result_text)
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — PROJECT PLAN ERROR ━━━\n{exc}")
+                tool_calls_used.append({"tool": "project_plan", "ok": False})
+
+        # --- NEED_DATA_PROPOSAL (Дедал → outbox data batch, no code sandbox) ---
+        if data_prop_m:
+            try:
+                dp_category = data_prop_m.group(1).strip()
+                dp_title    = data_prop_m.group(2).strip()
+                dp_raw_json = data_prop_m.group(3).strip()
+                from .outbox import push_outbox, has_insert_permission, _do_apply
+                import json as _json
+                try:
+                    dp_payload = _json.loads(dp_raw_json)
+                except Exception:
+                    dp_payload = dp_raw_json
+                # If Николай has pre-granted insert permission → apply immediately
+                perm_cls = f"insert_{dp_category}"
+                if has_insert_permission(dp_category):
+                    try:
+                        apply_result = await _do_apply(dp_category, dp_payload)
+                        inserted = apply_result.get("inserted", 0)
+                        skipped  = apply_result.get("skipped", 0)
+                        result_text = (
+                            f"━━━ TOOL RESULTS — DATA PROPOSAL AUTO-APPLIED ━━━\n"
+                            f"Category : {dp_category}\n"
+                            f"Title    : {dp_title}\n"
+                            f"Inserted : {inserted}  Skipped: {skipped}\n"
+                            f"Permission '{perm_cls}' is pre-granted — applied immediately.\n"
+                            f"Tell Nikolai: '{inserted} new records written to {dp_category}.'"
+                        )
+                        tool_calls_used.append({"tool": "data_proposal_auto", "category": dp_category, "inserted": inserted})
+                    except Exception as exc:
+                        result_text = (
+                            f"━━━ TOOL RESULTS — DATA PROPOSAL AUTO-APPLY FAILED ━━━\n"
+                            f"Category : {dp_category}\n"
+                            f"Error    : {exc}\n"
+                            f"Propose was queued in outbox as fallback."
+                        )
+                        push_outbox(type="data_batch", title=dp_title,
+                                    category=dp_category, payload=dp_payload,
+                                    session_id=session_id)
+                        tool_calls_used.append({"tool": "data_proposal_queued", "category": dp_category, "ok": False})
+                else:
+                    item = push_outbox(type="data_batch", title=dp_title,
+                                       category=dp_category, payload=dp_payload,
+                                       session_id=session_id)
+                    result_text = (
+                        f"━━━ TOOL RESULTS — DATA PROPOSAL QUEUED ━━━\n"
+                        f"Outbox ID: {item['id']}\n"
+                        f"Category : {dp_category}\n"
+                        f"Title    : {dp_title}\n"
+                        f"Records  : {len(dp_payload) if isinstance(dp_payload, list) else 1}\n\n"
+                        f"Предложението е в outbox и чака едно кликване от Николай.\n"
+                        f"Tell Nikolai: '{dp_title}' is in the outbox at /admin/daedalus — "
+                        f"click Apply to insert {len(dp_payload) if isinstance(dp_payload, list) else 1} record(s) into {dp_category}.\n"
+                        f"If he wants to skip confirming next time, he can grant permission '{perm_cls}'."
+                    )
+                    tool_calls_used.append({"tool": "data_proposal_queued", "category": dp_category, "id": item["id"]})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — DATA PROPOSAL FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "data_proposal", "ok": False})
+            else:
+                tool_results_text_parts.append(result_text)
+
+        # --- NEED_PROGRESS (Дедал reports live progress to admin UI) ---
+        if progress_m:
+            try:
+                from .outbox import set_progress
+                prog_task = progress_m.group(1).strip()
+                prog_pct  = float(progress_m.group(2).strip())
+                prog_msg  = progress_m.group(3).strip()
+                set_progress(prog_task, prog_pct, prog_msg, session_id=session_id or "")
+                tool_results_text_parts.append(
+                    f"━━━ TOOL RESULTS — PROGRESS UPDATED ━━━\n"
+                    f"Task: {prog_task}  {int(prog_pct * 100)}%  {prog_msg}\n"
+                    f"Progress bar in admin panel updated."
+                )
+                tool_calls_used.append({"tool": "progress", "task": prog_task, "pct": prog_pct, "msg": prog_msg})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — PROGRESS FAILED ━━━\n{exc}")
+
+        # --- NEED_JOURNAL_WRITE (Дедал записва частичен резултат в scratch journal) ---
+        if journal_m:
+            try:
+                j_step = journal_m.group(1).strip()
+                j_summary = (journal_m.group(2) or "").strip()
+                j_data = (journal_m.group(3) or "").strip()
+                # Task name за първи запис — от briefing.intent или съобщението
+                _task_name = ""
+                try:
+                    if briefing_dict:
+                        _task_name = str(briefing_dict.get("intent") or "")[:60]
+                except Exception:
+                    pass
+                step = _journal.write_step(
+                    session_id or "", j_step, j_summary, j_data,
+                    task_name=_task_name,
+                )
+                j_now = _journal.get_journal(session_id or "") or {}
+                tokens = int(j_now.get("tokens_est", 0))
+                pct = round(tokens / _journal.TOKEN_BUDGET_PER_SESSION * 100, 1)
+                tool_results_text_parts.append(
+                    f"━━━ TOOL RESULTS — JOURNAL WRITE ━━━\n"
+                    f"Step: {step.get('step', j_step)}\n"
+                    f"Tokens: {step.get('tokens_est', 0)} (общо {tokens}, {pct}% от budget)\n"
+                    f"Стъпки: {len(j_now.get('steps') or [])}\n"
+                    f"Журналът се запази — owner може да види прогреса в admin panel."
+                )
+                tool_calls_used.append({
+                    "tool": "journal_write", "ok": True,
+                    "step": j_step, "tokens": tokens, "pct": pct,
+                })
+            except Exception as exc:
+                tool_results_text_parts.append(
+                    f"━━━ TOOL RESULTS — JOURNAL WRITE FAILED ━━━\n{exc}"
+                )
+                tool_calls_used.append({"tool": "journal_write", "ok": False})
+
+        # --- NEED_TASK_STATE (Phase 17B — cross-session task tracking) ---
+        if task_state_m:
+            try:
+                ts_goal      = task_state_m.group(1).strip()
+                ts_phase     = task_state_m.group(2).strip()
+                ts_remaining = (task_state_m.group(3) or "").strip()
+                ts_result = _task_state.save(
+                    goal=ts_goal,
+                    phase=ts_phase,
+                    remaining_steps=ts_remaining,
+                )
+                if ts_result.get("status") == "cleared":
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — TASK STATE CLEARED ━━━\n"
+                        f"Задачата '{ts_goal}' е маркирана като завършена.\n"
+                        f"task-state.json е изчистен."
+                    )
+                else:
+                    remaining_list = ts_result.get("remaining_steps", [])
+                    completed_list = ts_result.get("completed_steps", [])
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — TASK STATE SAVED ━━━\n"
+                        f"Цел    : {ts_result.get('goal', ts_goal)}\n"
+                        f"Фаза   : {ts_result.get('phase', ts_phase)}\n"
+                        f"Завършено : {len(completed_list)} стъпки\n"
+                        f"Остава : {len(remaining_list)} стъпки: {', '.join(remaining_list[:3])}\n"
+                        f"Task state е запазен на диск — ще се зареди автоматично в следващата сесия."
+                    )
+                tool_calls_used.append({"tool": "task_state_write", "ok": True,
+                                        "phase": ts_phase})
+            except Exception as exc:
+                tool_results_text_parts.append(
+                    f"━━━ TOOL RESULTS — TASK STATE FAILED ━━━\n{exc}"
+                )
+                tool_calls_used.append({"tool": "task_state_write", "ok": False})
+
+        # --- NEED_PLAYBOOK (Phase 17C — процедурен наръчник за задачата) ---
+        if playbook_m:
+            try:
+                pb_query = playbook_m.group(1).strip()
+                pb_results = _playbooks.search(pb_query, top_k=2)
+                pb_text = _playbooks.format_for_prompt(pb_results)
+                tool_results_text_parts.append(
+                    f"━━━ TOOL RESULTS — PLAYBOOK: {pb_query} ━━━\n"
+                    f"{pb_text}\n\n"
+                    f"Следвай стъпките по ред. Не прескачай."
+                )
+                tool_calls_used.append({
+                    "tool": "playbook", "ok": True,
+                    "query": pb_query,
+                    "matched": [pb.get("name") for pb in pb_results],
+                })
+            except Exception as exc:
+                tool_results_text_parts.append(
+                    f"━━━ TOOL RESULTS — PLAYBOOK FAILED ━━━\n{exc}"
+                )
+                tool_calls_used.append({"tool": "playbook", "ok": False})
+
+        # --- NEED_PLAN_LOCK (Phase 17C — заключване на активен план) ---
+        if plan_lock_m:
+            try:
+                pl_id     = plan_lock_m.group(1).strip()
+                pl_action = plan_lock_m.group(2).strip().lower()
+                if pl_action == "acquire":
+                    pl_result = _plan_lock.acquire(pl_id)
+                elif pl_action == "release":
+                    pl_result = _plan_lock.release(pl_id)
+                elif pl_action == "extend":
+                    pl_result = _plan_lock.extend(pl_id)
+                else:  # check (default)
+                    pl_result = _plan_lock.check(pl_id)
+                tool_results_text_parts.append(
+                    _plan_lock.format_for_prompt(pl_action, pl_result)
+                )
+                tool_calls_used.append({
+                    "tool": "plan_lock", "ok": pl_result.get("ok", True),
+                    "action": pl_action, "plan_id": pl_id,
+                })
+            except Exception as exc:
+                tool_results_text_parts.append(
+                    f"━━━ TOOL RESULTS — PLAN LOCK FAILED ━━━\n{exc}"
+                )
+                tool_calls_used.append({"tool": "plan_lock", "ok": False})
+
+        # --- NEED_CHECK_PERM (Дедал checks pre-granted permission before asking) ---
+        if check_perm_m:
+            try:
+                from .outbox import check_permission, list_permissions
+                cp_class = check_perm_m.group(1).strip()
+                granted = check_permission(cp_class)
+                if granted:
+                    active = [p for p in list_permissions() if p["perm_class"] == cp_class]
+                    rem = active[0]["remaining_min"] if active else 0
+                    result_text = (
+                        f"━━━ TOOL RESULTS — PERMISSION CHECK ━━━\n"
+                        f"Permission : {cp_class}\n"
+                        f"Status     : GRANTED (expires in {rem} min)\n\n"
+                        f"You are AUTHORIZED to proceed with {cp_class} without asking Nikolai again."
+                    )
+                else:
+                    result_text = (
+                        f"━━━ TOOL RESULTS — PERMISSION CHECK ━━━\n"
+                        f"Permission : {cp_class}\n"
+                        f"Status     : NOT GRANTED\n\n"
+                        f"You must use NEED_DATA_PROPOSAL to queue the action for Nikolai's approval. "
+                        f"He can grant '{cp_class}' from the Permissions panel in admin to skip "
+                        f"asking next time."
+                    )
+                tool_results_text_parts.append(result_text)
+                tool_calls_used.append({"tool": "check_perm", "class": cp_class, "granted": granted})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — PERMISSION CHECK FAILED ━━━\n{exc}")
+
+        # --- [P4] NEED_BLOCKED (Дедал записва блокер + спира loop) ---
+        if blocked_m:
+            try:
+                from .blockers import push_blocker
+                _blk_reason   = blocked_m.group(1).strip()
+                _blk_tried    = blocked_m.group(2).strip()
+                _blk_next     = blocked_m.group(3).strip()
+                _blk_file     = block.get("file_path", "") if "block" in dir() else ""
+                _blk_id = push_blocker(
+                    reason=_blk_reason,
+                    tried=_blk_tried,
+                    next_steps=_blk_next,
+                    file_path=_blk_file,
+                    session_id=session_id or "",
+                )
+                tool_results_text_parts.append(
+                    f"━━━ TOOL RESULTS — BLOCKER RECORDED 🚧 ━━━\n"
+                    f"Blocker ID : {_blk_id}\n"
+                    f"Reason     : {_blk_reason[:200]}\n"
+                    f"Tried      : {_blk_tried[:200]}\n"
+                    f"Next steps : {_blk_next[:200]}\n\n"
+                    f"Blocker е записан. Николай ще го види в 🚧 Blockers панела.\n"
+                    f"Обясни му ясно какво ти трябва, за да продължиш."
+                )
+                tool_calls_used.append({"tool": "need_blocked", "id": _blk_id, "reason": _blk_reason[:80]})
+            except Exception as _blk_exc:
+                tool_results_text_parts.append(
+                    f"━━━ TOOL RESULTS — BLOCKER RECORD FAILED ━━━\n{_blk_exc}\n"
+                    f"Въпреки грешката — обясни на Николай какво те блокира."
+                )
+
+        # --- NEED_INBOX_MSG (Дедал → Replit Agent inbox) ---
+        if inbox_msg_m:
+            try:
+                subj = inbox_msg_m.group(1).strip()
+                body_ = inbox_msg_m.group(2).strip()
+                prio = int(inbox_msg_m.group(3)) if inbox_msg_m.group(3) else 2
+                from .planner import write_inbox
+                imr = await write_inbox(subject=subj, body=body_, from_who="daedalus", priority=prio)
+                tool_results_text_parts.append(
+                    f"━━━ TOOL RESULTS — INBOX MSG SENT ━━━\n"
+                    f"Message ID: {imr.get('message_id')}\n"
+                    f"Subject: {subj}\n"
+                    f"Replit Agent ще го прочете при следващата сесия."
+                )
+                tool_calls_used.append({"tool": "inbox_msg", "subject": subj, "ok": imr.get("ok", False)})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — INBOX MSG FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "inbox_msg", "ok": False})
+
+        # --- NEED_PLAN_STEP (Дедал добавя стъпка към план) ---
+        if plan_step_m:
+            try:
+                ps_plan_id = plan_step_m.group(1).strip()
+                ps_title   = plan_step_m.group(2).strip()
+                ps_desc    = (plan_step_m.group(3) or "").strip()
+                from .planner import add_step
+                psr = await add_step(ps_plan_id, ps_title, ps_desc)
+                tool_results_text_parts.append(
+                    f"━━━ TOOL RESULTS — PLAN STEP ADDED ━━━\n"
+                    f"Plan: {ps_plan_id}\n"
+                    f"Step ID: {psr.get('step_id')}\n"
+                    f"Title: {ps_title}\n"
+                    f"Scheduler ще я изпълни автоматично."
+                )
+                tool_calls_used.append({"tool": "plan_step", "plan": ps_plan_id, "ok": psr.get("ok", False)})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — PLAN STEP FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "plan_step", "ok": False})
+
+        # ── Lint Gate ────────────────────────────────────────────
+        if lint_q:
+            try:
+                from .lint_gate import lint_file, format_for_daedalus as _fmt_lint
+                _lr = lint_file(lint_q.strip())
+                tool_results_text_parts.append(
+                    f"━━━ TOOL RESULTS — NEED_LINT ━━━\n{_fmt_lint(_lr)}"
+                )
+                tool_calls_used.append({"tool": "lint", "path": lint_q, "ok": _lr.ok,
+                                        "blockers": len(_lr.blockers), "warnings": len(_lr.warnings)})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — NEED_LINT FAILED ━━━\n{exc}")
+
+        # ── TDD Loop — autonomous test-driven fix cycle ──────────
+        if tdd_m:
+            try:
+                from .tdd_loop import tdd_loop as _tdd_loop
+                _tdd_file     = tdd_m["file_path"]
+                _tdd_test     = tdd_m["test_code"]
+                _tdd_initial  = tdd_m.get("initial_code", "")
+                _set_live(session_id, "NEED_TDD", _tool_iter,
+                          f"TDD loop → {_tdd_file} — стартиран…")
+                _tdd_r = await _tdd_loop(
+                    file_path=_tdd_file,
+                    test_code=_tdd_test,
+                    initial_code=_tdd_initial,
+                    reason="Дедал TDD auto-loop",
+                    proposed_by="daedalus-tdd",
+                )
+                tool_results_text_parts.append(
+                    f"━━━ TOOL RESULTS — TDD LOOP ━━━\n"
+                    f"{_tdd_r.format_for_daedalus()}"
+                )
+                tool_calls_used.append({
+                    "tool": "tdd_loop",
+                    "file": _tdd_file,
+                    "ok": _tdd_r.ok,
+                    "iterations": _tdd_r.iterations_used,
+                    "proposal_id": _tdd_r.proposal_id,
+                })
+            except Exception as exc:
+                tool_results_text_parts.append(
+                    f"━━━ TOOL RESULTS — TDD LOOP FAILED ━━━\n{exc}"
+                )
+                tool_calls_used.append({"tool": "tdd_loop", "ok": False})
+
+        # ── Self-awareness tools ─────────────────────────────────
+        if capability_q:
+            try:
+                from argos_data_nexus.modules.capability_search import search_capabilities
+                cr = search_capabilities(capability_q, limit=8)
+                matches = cr.get("matches", []) or []
+                if matches:
+                    rows = "\n".join(
+                        f"  [{m.get('score', 0):.2f}] {m['method']:<6} {m['path']}\n"
+                        f"        → {m.get('summary', '')[:120]}"
+                        for m in matches
+                    )
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — CAPABILITY MATCHES ━━━\n"
+                        f"Query: {capability_q}\nMatches: {len(matches)}\n{rows}\n"
+                        f"(Извикай конкретен endpoint директно вместо да предлагаш нов.)"
+                    )
+                else:
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — CAPABILITY MATCHES ━━━\n"
+                        f"Query: {capability_q}\nНяма match. Може да липсва — "
+                        f"предложи NEED_PROPOSE_START за нов endpoint."
+                    )
+                tool_calls_used.append({"tool": "capability_search", "ok": True, "count": len(matches)})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — CAPABILITY FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "capability_search", "ok": False})
+
+        if skill_catalog_q:
+            try:
+                from .skill_catalog import search_skills as _sc_search, catalog_status as _sc_status
+                _hits = _sc_search(skill_catalog_q, top_k=5)
+                if _hits:
+                    _rows = "\n\n".join(
+                        f"  [{h['score']:.2f}] **{h['title']}** ({h['category']})\n"
+                        f"  {h['text'][:400]}"
+                        for h in _hits
+                    )
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — SKILL CATALOG ━━━\n"
+                        f"Query: {skill_catalog_q}\nMatches: {len(_hits)}\n\n{_rows}\n\n"
+                        f"(Приложи тези техники директно — не предлагай нов код ако решението е тук.)"
+                    )
+                else:
+                    _st = _sc_status()
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — SKILL CATALOG ━━━\n"
+                        f"Query: {skill_catalog_q}\n"
+                        f"Няма match в каталога ({_st.get('total_skills', 0)} умения индексирани).\n"
+                        f"Продължи с NEED_WEB или NEED_AI_DIGEST за търсене на решение."
+                    )
+                tool_calls_used.append({"tool": "skill_catalog", "query": skill_catalog_q, "ok": True, "hits": len(_hits)})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — SKILL CATALOG FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "skill_catalog", "ok": False})
+
+        if ai_digest_q:
+            try:
+                from argos_data_nexus.modules.ai_digest import get_ai_digest
+                _refresh = "refresh" in (ai_digest_q or "").lower()
+                _d = await get_ai_digest(force_refresh=_refresh)
+                _papers = _d.get("papers", [])[:5]
+                _news   = _d.get("news",   [])[:4]
+                _repos  = _d.get("repos",  [])[:3]
+                _lines  = [
+                    f"━━━ TOOL RESULTS — AI DIGEST ({_d.get('fetched_at_iso','')}) ━━━",
+                    f"Papers: {len(_papers)} | News: {len(_news)} | Repos: {len(_repos)}",
+                ]
+                if _papers:
+                    _lines.append("\n📄 LATEST PAPERS (arXiv):")
+                    for p in _papers:
+                        _lines.append(f"  • [{p.get('published','')}] {p['title'][:100]}\n    {p['url']}\n    {p.get('summary','')[:150]}")
+                if _news:
+                    _lines.append("\n📰 COMMUNITY NEWS (Hacker News):")
+                    for n in _news:
+                        _lines.append(f"  • [{n.get('score',0)}pts] {n['title'][:100]}\n    {n['url']}")
+                if _repos:
+                    _lines.append("\n⭐ TRENDING REPOS (GitHub):")
+                    for r in _repos:
+                        _lines.append(f"  • [{r.get('score',0)}⭐] {r['title']}\n    {r.get('summary','')[:120]}")
+                tool_results_text_parts.append("\n".join(_lines))
+                tool_calls_used.append({"tool": "ai_digest", "ok": True,
+                                        "papers": len(_papers), "news": len(_news), "repos": len(_repos)})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — AI DIGEST FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "ai_digest", "ok": False})
+
+        # ── Playground tools (build → test → publish standalone apps) ──
+        if pg_new_m:
+            # Guard: 1 session = 1 playground project.
+            # Check BOTH the current-turn list AND Replit DB (persists across turns).
+            _existing_pg_slug = next(
+                (t.get("slug") for t in tool_calls_used
+                 if t.get("tool") == "playground_new" and t.get("ok")),
+                None,
+            )
+            # Cross-turn check: look up session slug in Replit DB
+            if not _existing_pg_slug and session_id:
+                try:
+                    from .kv import db as _rdb_pg
+                    _db_pg_key = f"adn:daedalus_pg_slug:{session_id}"
+                    _existing_pg_slug = _rdb_pg.get(_db_pg_key) or None
+                except Exception:
+                    pass
+
+            if _existing_pg_slug:
+                tool_results_text_parts.append(
+                    f"━━━ TOOL RESULTS — PLAYGROUND NEW BLOCKED ━━━\n"
+                    f"⛔ Вече имаш проект за тази сесия: slug={_existing_pg_slug}\n"
+                    f"ПРАВИЛО: 1 задача = 1 проект — важи за ВСИЧКИ turn-ове.\n"
+                    f"ЗАДЪЛЖИТЕЛНО: Поправи съществуващия проект:\n"
+                    f"  1. <NEED_PLAYGROUND_READ: {_existing_pg_slug}>\n"
+                    f"  2. <NEED_PLAYGROUND_WRITE: {_existing_pg_slug} | <файл> | <fixed code> >>>\n"
+                    f"НЕ СЪЗДАВАЙ НОВ ПРОЕКТ. НЕ ИЗБИРАЙ РАЗЛИЧЕН KIND."
+                )
+                tool_calls_used.append({"tool": "playground_new", "ok": False, "blocked": True})
+            else:
+                try:
+                    from . import playground as _pg
+                    from .playground_agent_guards import resolve_existing_project_slug
+                    _name = pg_new_m.group(1).strip()
+                    _kind = (pg_new_m.group(2) or "").strip()
+                    _desc = (pg_new_m.group(3) or "").strip()
+                    _existing_proj = await resolve_existing_project_slug(_name)
+                    if _existing_proj:
+                        _proj = _existing_proj
+                        if session_id:
+                            try:
+                                from .kv import db as _rdb_pg2
+                                _rdb_pg2[f"adn:daedalus_pg_slug:{session_id}"] = _proj["slug"]
+                                _rdb_pg2[f"adn:daedalus_pg_context:{session_id}"] = (
+                                    f"{_proj.get('kind', 'static')}|{_proj.get('name', '')} {_desc}"
+                                )
+                            except Exception:
+                                pass
+                        tool_results_text_parts.append(
+                            f"━━━ TOOL RESULTS — PLAYGROUND NEW (EXISTING) ━━━\n"
+                            f"Проектът вече съществува: slug={_proj['slug']} kind={_proj['kind']}\n"
+                            f"НЕ създавай нов. Ползвай NEED_PLAYGROUND_WRITE за поправки.\n"
+                            f"Slug фиксиран: '{_proj['slug']}'."
+                        )
+                        tool_calls_used.append({"tool": "playground_new", "ok": True, "slug": _proj["slug"], "reused": True})
+                    else:
+                        _proj = await _pg.create_project(_name, kind=_kind, source="built",
+                                                         description=_desc)
+                        # Persist slug to Replit DB for cross-turn guard
+                        if session_id:
+                            try:
+                                from .kv import db as _rdb_pg2
+                                _rdb_pg2[f"adn:daedalus_pg_slug:{session_id}"] = _proj["slug"]
+                                _rdb_pg2[f"adn:daedalus_pg_context:{session_id}"] = (
+                                    f"{_proj.get('kind', 'static')}|{_name} {_desc}"
+                                )
+                            except Exception:
+                                pass
+                        tool_results_text_parts.append(
+                            f"━━━ TOOL RESULTS — PLAYGROUND NEW ━━━\n"
+                            f"Създаден проект: slug={_proj['slug']} kind={_proj['kind']}\n"
+                            f"Папка: playground/projects/{_proj['slug']}/\n"
+                            f"⚠️ ЗАПОМНИ: Slug-ът е '{_proj['slug']}' — ползвай САМО него за ВСИЧКИ следващи операции.\n"
+                            f"СЛЕДВАЩА ТИ СТЪПКА: запиши реален код с NEED_PLAYGROUND_WRITE (НЕ READ първо).\n"
+                            f"ЗАДЪЛЖИТЕЛНО използвай >>> като край (не >):\n"
+                            f"<NEED_PLAYGROUND_WRITE: {_proj['slug']} | index.html |\n"
+                            f"<!DOCTYPE html>...ЦЯЛ КОД...\n"
+                            f">>>\n"
+                            f"Пиши ПЪЛЕН работещ код — без TODO, без placeholder."
+                        )
+                        tool_calls_used.append({"tool": "playground_new", "ok": True, "slug": _proj["slug"]})
+                except Exception as exc:
+                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — PLAYGROUND NEW FAILED ━━━\n{exc}")
+                    tool_calls_used.append({"tool": "playground_new", "ok": False})
+
+        if pg_manifest_m:
+            _man_slug = pg_manifest_m.group(1).strip()
+            _man_raw = (pg_manifest_m.group(2) or "").strip()
+            try:
+                import json as _json
+                _man_obj = _json.loads(_man_raw)
+                from .kv import db as _rdb_man
+                _rdb_man[f"adn:daedalus_pg_manifest:{_man_slug}"] = _man_raw
+                _mods = _man_obj.get("modules") or _man_obj.get("files") or []
+                _forb = _man_obj.get("forbidden") or _man_obj.get("forbidden_files") or []
+                tool_results_text_parts.append(
+                    f"━━━ TOOL RESULTS — PLAYGROUND MANIFEST SAVED ━━━\n"
+                    f"Договор записан за slug={_man_slug}.\n"
+                    f"Модули/файлове: {len(_mods)} · Forbidden: {len(_forb)}\n"
+                    f"От сега WRITE се валидира спрямо този договор (forbidden файлове = блок)."
+                )
+                tool_calls_used.append({"tool": "playground_manifest", "ok": True, "slug": _man_slug})
+            except Exception as exc:
+                tool_results_text_parts.append(
+                    f"━━━ TOOL RESULTS — PLAYGROUND MANIFEST FAILED ━━━\n"
+                    f"Невалиден JSON: {exc}\n"
+                    f"Формат: <NEED_PLAYGROUND_MANIFEST: slug | {{\"files\": [...], \"forbidden\": [...], \"rules\": [...]}}>>>"
+                )
+                tool_calls_used.append({"tool": "playground_manifest", "ok": False})
+
+        if pg_write_matches:
+            from . import playground as _pg
+            from .lint_gate import lint_content as _lint_content
+            written_summary = []
+            all_ok = True
+            for _slug_r, _path_r, _content_r in pg_write_matches:
+                _slug_r = _slug_r.strip()
+                _path_r = _path_r.strip()
+                # ── Contract validation: block forbidden files (fail-closed) ──
+                _blocked, _reason = _pg_manifest_forbidden_check(_slug_r, _path_r)
+                if _blocked:
+                    written_summary.append(
+                        f"  ⛔ {_slug_r}/{_path_r} БЛОКИРАН — {_reason}"
+                    )
+                    tool_calls_used.append({"tool": "playground_write", "ok": False, "slug": _slug_r, "blocked": "forbidden"})
+                    all_ok = False
+                    continue
+                try:
+                    n = _pg.write_files(_slug_r, {_path_r: _content_r})
+                    # ── Auto-lint Python files (soft gate — warn, don't block) ──
+                    _lint_note = ""
+                    try:
+                        if _path_r.endswith(".py"):
+                            _lr = _lint_content(_path_r, _content_r)
+                            if _lr.blockers:
+                                _lint_note = (
+                                    f" ⚠️ LINT: {len(_lr.blockers)} blocker(s) — "
+                                    + "; ".join(f"{b.code} L{b.row}: {b.message}" for b in _lr.blockers[:3])
+                                )
+                    except Exception:
+                        pass
+                    written_summary.append(f"  ✅ {_slug_r}/{_path_r} ({len(_content_r)} байта){_lint_note}")
+                    tool_calls_used.append({"tool": "playground_write", "ok": True, "slug": _slug_r, "path": _path_r})
+                except Exception as exc:
+                    written_summary.append(f"  ❌ {_slug_r}/{_path_r} FAILED: {exc}")
+                    tool_calls_used.append({"tool": "playground_write", "ok": False, "slug": _slug_r})
+                    all_ok = False
+            tool_results_text_parts.append(
+                f"━━━ TOOL RESULTS — PLAYGROUND WRITE ({'OK' if all_ok else 'PARTIAL'}) ━━━\n"
+                + "\n".join(written_summary)
+            )
+
+        if pg_edit_matches:
+            from . import playground as _pg
+            edit_summary = []
+            all_ok = True
+            for _slug_e, _path_e, _search_e, _replace_e in pg_edit_matches:
+                _slug_e = _slug_e.strip()
+                _path_e = _path_e.strip()
+                # ── Contract validation: block forbidden files (fail-closed) ──
+                _blocked_e, _reason_e = _pg_manifest_forbidden_check(_slug_e, _path_e)
+                if _blocked_e:
+                    edit_summary.append(
+                        f"  ⛔ {_slug_e}/{_path_e} БЛОКИРАН — {_reason_e}"
+                    )
+                    tool_calls_used.append({"tool": "playground_edit", "ok": False, "slug": _slug_e, "blocked": "forbidden"})
+                    all_ok = False
+                    continue
+                try:
+                    res = _pg.edit_file(_slug_e, _path_e, _search_e, _replace_e)
+                    if res.get("ok"):
+                        edit_summary.append(
+                            f"  ✅ {_slug_e}/{_path_e} ({res.get('old_size')}→{res.get('new_size')} байта)"
+                        )
+                        tool_calls_used.append({"tool": "playground_edit", "ok": True, "slug": _slug_e, "path": _path_e})
+                    else:
+                        edit_summary.append(f"  ❌ {_slug_e}/{_path_e}: {res.get('error')}")
+                        tool_calls_used.append({"tool": "playground_edit", "ok": False, "slug": _slug_e})
+                        all_ok = False
+                except Exception as exc:
+                    edit_summary.append(f"  ❌ {_slug_e}/{_path_e} FAILED: {exc}")
+                    tool_calls_used.append({"tool": "playground_edit", "ok": False, "slug": _slug_e})
+                    all_ok = False
+            tool_results_text_parts.append(
+                f"━━━ TOOL RESULTS — PLAYGROUND EDIT ({'OK' if all_ok else 'PARTIAL'}) ━━━\n"
+                + "\n".join(edit_summary)
+                + ("" if all_ok else
+                   "\nЗа неуспелите: прочети файла (NEED_PLAYGROUND_READ), копирай ТОЧНИЯ текст "
+                   "(вкл. интервали) и опитай пак, или ползвай NEED_PLAYGROUND_WRITE за цял файл.")
+            )
+
+        if pg_run_q:
+            try:
+                from . import playground as _pg_run
+                from . import playground_runner as _runner
+                from .playground_runtime import is_local_only_kind, local_only_kind_message
+                from .playground_agent_guards import playground_run_block_reason
+                _slug = pg_run_q.strip()
+                _proj = await _pg_run.get_project(_slug)
+                _kind = (_proj or {}).get("kind", "static")
+                _static_block = playground_run_block_reason(_kind)
+                if _static_block:
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — PLAYGROUND RUN (static preview) ━━━\n"
+                        f"{_static_block.replace('{slug}', _slug)}"
+                    )
+                    tool_calls_used.append({
+                        "tool": "playground_run",
+                        "ok": True,
+                        "blocked": True,
+                        "reason": "static_preview",
+                    })
+                elif _proj and is_local_only_kind(_kind):
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — PLAYGROUND RUN BLOCKED ━━━\n"
+                        f"{local_only_kind_message(_proj.get('kind', ''))}\n"
+                        f"За Unity: <NEED_PLAYGROUND_PUSH: {_slug}> или <NEED_PLAYGROUND_PUSH: {_slug} | | gitlab> "
+                        f"— после отвори repo в Unity Hub."
+                    )
+                    tool_calls_used.append({"tool": "playground_run", "ok": False})
+                else:
+                    rec = await _runner.start(_slug, install_deps=True)
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — PLAYGROUND RUN ━━━\n"
+                        f"Стартиран {_slug}: status={rec.get('status')} port={rec.get('port')}\n"
+                        f"Preview: /admin/daedalus/playground/preview/{_slug}/\n"
+                        f"Логове ще видиш в Playground UI."
+                    )
+                    tool_calls_used.append({"tool": "playground_run", "ok": True})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — PLAYGROUND RUN FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "playground_run", "ok": False})
+
+        if pg_clone_m:
+            try:
+                from . import playground_github as _gh
+                _url = pg_clone_m.group(1).strip()
+                _nm = (pg_clone_m.group(2) or "").strip()
+                _proj = await _gh.clone_repo(_url, name=_nm)
+                tool_results_text_parts.append(
+                    f"━━━ TOOL RESULTS — PLAYGROUND CLONE ━━━\n"
+                    f"Clone-нат {_url} → slug={_proj['slug']} kind={_proj['kind']}\n"
+                    f"Съживи проекта: чети файлове, run, поправи."
+                )
+                tool_calls_used.append({"tool": "playground_clone", "ok": True, "slug": _proj["slug"]})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — PLAYGROUND CLONE FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "playground_clone", "ok": False})
+
+        if pg_read_m:
+            try:
+                from . import playground as _pg
+                from .playground_agent_guards import entrypoint_read_warning, read_file_guard
+                _slug = pg_read_m.group(1).strip()
+                _path = (pg_read_m.group(2) or "").strip()
+                _proj = await _pg.get_project(_slug)
+                _kind = (_proj or {}).get("kind", "static")
+                if _path:
+                    _guard = read_file_guard(_slug, _path)
+                    if _guard:
+                        tool_results_text_parts.append(
+                            f"━━━ TOOL RESULTS — PLAYGROUND READ BLOCKED ━━━\n{_guard}"
+                        )
+                        tool_calls_used.append({"tool": "playground_read", "ok": False, "slug": _slug})
+                    else:
+                        _hint = entrypoint_read_warning(_kind, _path)
+                        _content = _pg.read_file(_slug, _path, max_bytes=80_000)
+                        tool_results_text_parts.append(
+                            f"━━━ TOOL RESULTS — PLAYGROUND READ ━━━\n"
+                            f"{_hint + chr(10) if _hint else ''}"
+                            f"Файл: {_slug}/{_path} ({len(_content)} байта)\n"
+                            f"```\n{_content[:12000]}\n```"
+                        )
+                        tool_calls_used.append({"tool": "playground_read", "ok": True, "slug": _slug})
+                else:
+                    _tree = _pg.read_tree(_slug)
+                    lines = "\n".join(f"  {f['path']} ({f['size']}B)" for f in _tree)
+                    from .playground_agent_guards import expo_web_kind_mismatch
+                    _mismatch = expo_web_kind_mismatch(_kind, [f["path"] for f in _tree])
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — PLAYGROUND READ (TREE) ━━━\n"
+                        f"{(_mismatch + chr(10)) if _mismatch else ''}"
+                        f"Проект: {_slug} ({len(_tree)} файла)\n{lines}"
+                    )
+                    tool_calls_used.append({"tool": "playground_read", "ok": True, "slug": _slug})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — PLAYGROUND READ FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "playground_read", "ok": False})
+
+        if pg_push_m:
+            try:
+                from .playground_git_push import push_project_remote
+                _slug = pg_push_m.group(1).strip()
+                _repo = (pg_push_m.group(2) or "").strip()
+                _prov_raw = (pg_push_m.group(3) or "").strip().lower()
+                _provider = _prov_raw if _prov_raw in ("gitlab", "github", "auto") else "auto"
+                # If second segment is provider keyword, not repo path
+                if _repo in ("gitlab", "github") and not _prov_raw:
+                    _provider = _repo
+                    _repo = ""
+                res = await push_project_remote(
+                    _slug,
+                    provider=_provider,
+                    repo_full_name=_repo,
+                    create_if_missing=not bool(_repo),
+                    private=True,
+                )
+                _prov = res.get("provider") or "git"
+                tool_results_text_parts.append(
+                    f"━━━ TOOL RESULTS — PLAYGROUND PUSH ({_prov}) ━━━\n"
+                    f"Push-нат {_slug} → {res.get('html_url')}\n"
+                    f"Repo: {res.get('repo')} | Branch: {res.get('branch')}\n"
+                    f"{'(Нов repo създаден)' if res.get('created') else '(Съществуващ repo актуализиран)'}"
+                )
+                tool_calls_used.append({"tool": "playground_push", "ok": True, "slug": _slug})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — PLAYGROUND PUSH FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "playground_push", "ok": False})
+
+        if pg_pub_m:
+            try:
+                from .playground_agent_guards import publish_with_repair
+                _slug = pg_pub_m.group(1).strip()
+                _icon = (pg_pub_m.group(2) or "🎮").strip()
+                res = await publish_with_repair(_slug, icon=_icon)
+                if res.get("ok"):
+                    _extra = ""
+                    if res.get("repaired_files"):
+                        _extra = f"\n🔧 Поправени: {', '.join(res['repaired_files'][:8])}"
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — PLAYGROUND PUBLISH ━━━\n"
+                        f"Публикуван {_slug} → {res.get('url')}{_extra}\n"
+                        f"Durable (object storage): {res.get('durable')}. "
+                        f"Вече е в менюто на /apps/."
+                    )
+                else:
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — PLAYGROUND PUBLISH ━━━\n{res.get('error')}"
+                    )
+                tool_calls_used.append({"tool": "playground_publish", "ok": res.get("ok", False)})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — PLAYGROUND PUBLISH FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "playground_publish", "ok": False})
+
+        if pg_db_m:
+            try:
+                from .kv import db as _rdb
+                from . import playground as _pg
+                import json as _j
+                _slug = pg_db_m.group(1).strip()
+                _action = (pg_db_m.group(2) or "list").strip().lower()
+                _key = (pg_db_m.group(3) or "").strip()
+                _value_raw = (pg_db_m.group(4) or "").strip()
+                _ns = f"playground:db:{_pg.slugify(_slug)}:"
+
+                if _action == "list":
+                    _keys = [k[len(_ns):] for k in _rdb.prefix(_ns)]
+                    _lines = []
+                    for _k in _keys[:20]:
+                        _v = _rdb.get(_ns + _k)
+                        _lines.append(f"  • {_k} = {_j.dumps(_v, ensure_ascii=False)[:80]}")
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — PLAYGROUND DB LIST ━━━\n"
+                        f"App: {_slug} | {len(_keys)} ключа\n"
+                        + ("\n".join(_lines) or "(пусто)")
+                    )
+                elif _action == "get":
+                    if not _key:
+                        raise ValueError("get изисква ключ")
+                    _val = _rdb.get(_ns + _key)
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — PLAYGROUND DB GET ━━━\n"
+                        f"{_slug}/{_key} = {_j.dumps(_val, ensure_ascii=False)[:2000]}"
+                    )
+                elif _action == "set":
+                    if not _key:
+                        raise ValueError("set изисква ключ")
+                    try:
+                        _val = _j.loads(_value_raw) if _value_raw else ""
+                    except Exception:
+                        _val = _value_raw
+                    _rdb[_ns + _key] = _val
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — PLAYGROUND DB SET ━━━\n"
+                        f"✅ {_slug}/{_key} записан ({len(str(_val))} chars)"
+                    )
+                elif _action == "del":
+                    if not _key:
+                        raise ValueError("del изисква ключ")
+                    _all_k = list(_rdb.prefix(_ns))
+                    if _ns + _key in _all_k:
+                        del _rdb[_ns + _key]
+                        tool_results_text_parts.append(
+                            f"━━━ TOOL RESULTS — PLAYGROUND DB DEL ━━━\n"
+                            f"✅ {_slug}/{_key} изтрит"
+                        )
+                    else:
+                        tool_results_text_parts.append(
+                            f"━━━ TOOL RESULTS — PLAYGROUND DB DEL ━━━\n"
+                            f"⚠ {_slug}/{_key} не е намерен"
+                        )
+                elif _action == "clear":
+                    _all_k = list(_rdb.prefix(_ns))
+                    for _k in _all_k:
+                        del _rdb[_k]
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — PLAYGROUND DB CLEAR ━━━\n"
+                        f"✅ Изтрити {len(_all_k)} ключа от {_slug}"
+                    )
+                else:
+                    raise ValueError(
+                        f"Непознато действие: {_action!r}. "
+                        f"Позволени: list / get / set / del / clear"
+                    )
+                tool_calls_used.append({"tool": "playground_db", "ok": True, "action": _action})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — PLAYGROUND DB FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "playground_db", "ok": False})
+
+        if endpoints_q:
+            try:
+                er = await list_endpoints_tool(endpoints_q if endpoints_q != "*" else None)
+                if er.get("ok"):
+                    rows = "\n".join(
+                        f"  {','.join(r['methods']):<12} {r['path']}  ({r.get('name','')})"
+                        for r in er.get("routes", [])[:80]
+                    )
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — FASTAPI ENDPOINTS ━━━\n"
+                        f"Filter: {endpoints_q} | Total: {er['count']}\n{rows}"
+                    )
+                else:
+                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — ENDPOINTS FAILED ━━━\n{er.get('error')}")
+                tool_calls_used.append({"tool": "list_endpoints", "ok": er.get("ok", False), "count": er.get("count", 0)})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — ENDPOINTS FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "list_endpoints", "ok": False})
+
+        if modules_q:
+            try:
+                mr = await list_modules_tool(modules_q if modules_q != "*" else None)
+                if mr.get("ok"):
+                    rows = "\n".join(
+                        f"  {m['path']:<60} ({m['lines']}L) — {m.get('doc','')[:80]}"
+                        for m in mr.get("modules", [])[:60]
+                    )
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — ADN MODULES ━━━\n"
+                        f"Filter: {modules_q} | Total: {mr['count']}\n{rows}"
+                    )
+                else:
+                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — MODULES FAILED ━━━\n{mr.get('error')}")
+                tool_calls_used.append({"tool": "list_modules", "ok": mr.get("ok", False), "count": mr.get("count", 0)})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — MODULES FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "list_modules", "ok": False})
+
+        if db_schema_q:
+            try:
+                tbl = db_schema_q if db_schema_q != "*" else None
+                dr = await describe_db_tool(tbl)
+                if dr.get("ok"):
+                    if dr.get("table"):
+                        cols = "\n".join(
+                            f"  {c['column_name']:<28} {c['data_type']:<20} "
+                            f"{'NULL' if c['is_nullable']=='YES' else 'NOT NULL'}"
+                            f"{' DEFAULT '+str(c['column_default']) if c.get('column_default') else ''}"
+                            for c in dr.get("columns", [])
+                        )
+                        body = f"Table: {dr['table']} ({dr.get('row_count','?')} rows)\n{cols}"
+                    else:
+                        body = "\n".join(
+                            f"  {t['table']:<40} cols={t['columns']:<4} rows={t.get('rows','?')}"
+                            for t in dr.get("tables", [])
+                        )
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — DB SCHEMA ━━━\n{body}"
+                    )
+                else:
+                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — DB SCHEMA FAILED ━━━\n{dr.get('error')}")
+                tool_calls_used.append({"tool": "describe_db", "ok": dr.get("ok", False)})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — DB SCHEMA FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "describe_db", "ok": False})
+
+        if code_search_q:
+            try:
+                csr = await search_code_tool(code_search_q)
+                if csr.get("ok"):
+                    sem_hits = csr.get("semantic_matches", []) or []
+                    kw_hits = csr.get("keyword_matches", []) or []
+                    sem_count = int(csr.get("semantic_count", len(sem_hits)))
+                    kw_count = int(csr.get("keyword_count", len(kw_hits)))
+                    sem_lines: list[str] = []
+                    for h in sem_hits[:15]:
+                        if isinstance(h, dict):
+                            fp = h.get("filepath", h.get("file", "?"))
+                            qn = h.get("qualified_name", h.get("name", ""))
+                            sig = h.get("signature", "")
+                            doc = (h.get("docstring") or "").strip().splitlines()[:1]
+                            doc_line = f"  # {doc[0][:120]}" if doc else ""
+                            sem_lines.append(f"• {fp} :: {qn} {sig}{doc_line}".strip())
+                        else:
+                            sem_lines.append(f"• {h}")
+                    kw_lines = [f"  {ln}" for ln in kw_hits[:20]]
+                    body_parts = []
+                    if sem_lines:
+                        body_parts.append("Semantic:\n" + "\n".join(sem_lines))
+                    if kw_lines:
+                        body_parts.append("Keyword (rg):\n" + "\n".join(kw_lines))
+                    body = "\n\n".join(body_parts) if body_parts else "(no matches)"
+                    total = sem_count + kw_count
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — CODE SEARCH ━━━\n"
+                        f"Query: {code_search_q} | Type: {csr.get('search_type', '?')} | "
+                        f"Matches: {total} (semantic={sem_count}, keyword={kw_count})\n"
+                        f"{body}"
+                    )
+                else:
+                    tool_results_text_parts.append(f"━━━ TOOL RESULTS — CODE SEARCH FAILED ━━━\n{csr.get('error')}")
+                tool_calls_used.append({"tool": "search_code", "query": code_search_q, "ok": csr.get("ok", False)})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — CODE SEARCH FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "search_code", "ok": False})
+
+        # ── DeutschesRechtsPortal tools ───────────────────────────────────
+        # NEED_DRP_LAW: <NEED_DRP_LAW: BGB | 823>  or  <NEED_DRP_LAW: GG | 5 | dejure>
+        if drp_law_q:
+            try:
+                parts_dl = [p.strip() for p in drp_law_q.split("|")]
+                dl_abbr  = parts_dl[0] if len(parts_dl) > 0 else ""
+                dl_para  = parts_dl[1] if len(parts_dl) > 1 else ""
+                dl_src   = parts_dl[2] if len(parts_dl) > 2 else "auto"
+                dlr = await drp_law_tool(dl_abbr, dl_para, dl_src)
+                if dlr.get("ok"):
+                    linked = dlr.get("linked_decisions") or []
+                    linked_note = (
+                        f"\nLinked decisions ({len(linked)}): "
+                        + "; ".join(
+                            f"{d.get('court','')} {d.get('date','')}".strip()
+                            for d in linked[:5]
+                        )
+                    ) if linked else ""
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — DRP LAW: {dl_abbr} §{dl_para} ━━━\n"
+                        f"Source : {dlr.get('source')}\n"
+                        f"Title  : {dlr.get('title','')}\n"
+                        f"Text   :\n{dlr.get('text','')}"
+                        + linked_note
+                    )
+                else:
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — DRP LAW FAILED ━━━\n{dlr.get('error')}"
+                    )
+                tool_calls_used.append({"tool": "drp_law", "abbr": dl_abbr, "paragraph": dl_para, "ok": dlr.get("ok", False)})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — DRP LAW FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "drp_law", "ok": False})
+
+        # NEED_DRP_CASES: <NEED_DRP_CASES: § 823 BGB Schadensersatz>
+        # or <NEED_DRP_CASES: Meinungsfreiheit | bverfg | 10>
+        if drp_cases_q:
+            try:
+                parts_dc = [p.strip() for p in drp_cases_q.split("|")]
+                dc_query = parts_dc[0]
+                dc_src   = parts_dc[1] if len(parts_dc) > 1 else "dejure"
+                dc_limit = int(parts_dc[2]) if len(parts_dc) > 2 and parts_dc[2].isdigit() else 8
+                dcr = await drp_cases_tool(dc_query, dc_src, dc_limit)
+                if dcr.get("ok"):
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — DRP CASES: «{dc_query}» ━━━\n"
+                        f"Source : {dc_src}  |  Total: {dcr.get('total',0)}\n"
+                        f"{dcr.get('summary','(keine Ergebnisse)')}"
+                    )
+                else:
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — DRP CASES FAILED ━━━\n{dcr.get('error')}"
+                    )
+                tool_calls_used.append({"tool": "drp_cases", "query": dc_query, "ok": dcr.get("ok", False), "total": dcr.get("total", 0)})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — DRP CASES FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "drp_cases", "ok": False})
+
+        # NEED_DRP_SEARCH: <NEED_DRP_SEARCH: fristlose Kündigung>
+        # or <NEED_DRP_SEARCH: Datenschutz DSGVO | datenschutzrecht | 6>
+        if drp_search_q:
+            try:
+                parts_ds = [p.strip() for p in drp_search_q.split("|")]
+                ds_query  = parts_ds[0]
+                ds_gebiet = parts_ds[1] if len(parts_ds) > 1 else ""
+                ds_limit  = int(parts_ds[2]) if len(parts_ds) > 2 and parts_ds[2].isdigit() else 5
+                dsr = await drp_search_tool(ds_query, ds_gebiet, ds_limit)
+                if dsr.get("ok"):
+                    dork_hint = (
+                        f"\n\nFür tiefere Recherche: {dsr['google_dorking_queries'][0]}"
+                        if dsr.get("google_dorking_queries") else ""
+                    )
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — DRP UNIFIED SEARCH: «{ds_query}» ━━━\n"
+                        f"Rechtsgebiet: {ds_gebiet or 'alle'}  |  Total: {dsr.get('total',0)}\n"
+                        f"{dsr.get('summary','(keine Ergebnisse)')}"
+                        + dork_hint
+                    )
+                else:
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — DRP SEARCH FAILED ━━━\n{dsr.get('error')}"
+                    )
+                tool_calls_used.append({"tool": "drp_search", "query": ds_query, "rechtsgebiet": ds_gebiet, "ok": dsr.get("ok", False), "total": dsr.get("total", 0)})
+            except Exception as exc:
+                tool_results_text_parts.append(f"━━━ TOOL RESULTS — DRP SEARCH FAILED ━━━\n{exc}")
+                tool_calls_used.append({"tool": "drp_search", "ok": False})
+
+        # ── NEED_BUNDLE_START / NEED_STAGE / NEED_BUNDLE_COMMIT ────────────
+        if _bundle_start_title or _stage_blocks or _bundle_commit:
+            try:
+                from .bundle import (
+                    create_bundle, stage_file, commit_bundle,
+                )
+                try:
+                    from .kv import db as _rdb_bundle
+                    _rdb_bundle_available = True
+                except Exception:
+                    _rdb_bundle = None
+                    _rdb_bundle_available = False
+
+                _bnd_session_key = f"adn:daedalus_bundle_active:{session_id or 'default'}"
+
+                def _get_active_bid():
+                    if _rdb_bundle_available and _rdb_bundle is not None:
+                        return _rdb_bundle.get(_bnd_session_key)
+                    return None
+
+                def _set_active_bid(bid):
+                    if _rdb_bundle_available and _rdb_bundle is not None:
+                        _rdb_bundle[_bnd_session_key] = bid
+
+                def _clear_active_bid():
+                    if _rdb_bundle_available and _rdb_bundle is not None:
+                        try:
+                            del _rdb_bundle[_bnd_session_key]
+                        except Exception:
+                            pass
+
+                # NEED_BUNDLE_START — create new bundle for this session
+                if _bundle_start_title:
+                    _new_bid = await create_bundle(_bundle_start_title, session_id or "")
+                    _set_active_bid(_new_bid)
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — BUNDLE STARTED 🎁 ━━━\n"
+                        f"Bundle ID : {_new_bid}\n"
+                        f"Title     : {_bundle_start_title}\n\n"
+                        f"Bundle e отворен. Сега емитирай NEED_STAGE блокове за всеки файл.\n"
+                        f"Накрая: <NEED_BUNDLE_COMMIT: {_bundle_start_title} | summary>"
+                    )
+                    tool_calls_used.append({"tool": "bundle_start", "id": _new_bid, "title": _bundle_start_title})
+
+                # NEED_STAGE — add files to active bundle
+                if _stage_blocks:
+                    _active_bid = _get_active_bid()
+                    if not _active_bid:
+                        _auto_title = "Auto-bundle"
+                        _active_bid = await create_bundle(_auto_title, session_id or "")
+                        _set_active_bid(_active_bid)
+                        tool_results_text_parts.append(
+                            f"━━━ AUTO BUNDLE CREATED ━━━\n"
+                            f"Bundle {_active_bid} auto-created (no active bundle found)."
+                        )
+                    _staged_summary = []
+                    for _sb in _stage_blocks:
+                        _sr = await stage_file(
+                            bundle_id=_active_bid,
+                            file_path=_sb["file_path"],
+                            action=_sb["action"],
+                            reason=_sb["reason"],
+                            new_content=_sb["content"],
+                        )
+                        if _sr.get("ok"):
+                            _staged_summary.append(
+                                f"  ✅ {_sb['action'].upper()} {_sb['file_path']} "
+                                f"(+{_sr.get('lines_new',0)} реда)"
+                            )
+                        else:
+                            _staged_summary.append(f"  ❌ {_sb['file_path']}: {_sr.get('error','unknown error')}")
+                    tool_results_text_parts.append(
+                        f"━━━ TOOL RESULTS — FILES STAGED 📁 ━━━\n"
+                        f"Bundle ID : {_active_bid}\n"
+                        f"Staged files ({len(_stage_blocks)}):\n"
+                        + "\n".join(_staged_summary)
+                        + f"\n\nФайловете са в staging — НЕ са приложени към проекта.\n"
+                        f"Продължи с повече NEED_STAGE или финализирай с NEED_BUNDLE_COMMIT."
+                    )
+                    tool_calls_used.append({
+                        "tool": "bundle_stage",
+                        "bundle_id": _active_bid,
+                        "files": len(_stage_blocks),
+                    })
+
+                # NEED_BUNDLE_COMMIT — finalize bundle, notify owner
+                if _bundle_commit:
+                    _active_bid = _get_active_bid()
+                    if not _active_bid:
+                        tool_results_text_parts.append(
+                            f"━━━ TOOL RESULTS — BUNDLE COMMIT FAILED ━━━\n"
+                            f"Няма активен bundle за тази сесия.\n"
+                            f"Емитирай първо NEED_BUNDLE_START или NEED_STAGE."
+                        )
+                    else:
+                        _cr = await commit_bundle(
+                            bundle_id=_active_bid,
+                            title=_bundle_commit["title"],
+                            summary=_bundle_commit["summary"],
+                        )
+                        _clear_active_bid()
+                        if _cr.get("ok"):
+                            _flist = "\n".join(
+                                f"  • {f['file_path']} [{f['action']}]"
+                                for f in _cr.get("files", [])
+                            )
+                            tool_results_text_parts.append(
+                                f"━━━ TOOL RESULTS — BUNDLE COMMITTED ✅ ━━━\n"
+                                f"Bundle ID  : {_active_bid}\n"
+                                f"Title      : {_cr['title']}\n"
+                                f"Files      : {_cr['files_count']}\n"
+                                f"{_flist}\n\n"
+                                f"Bundle е готов за преглед от Николай → /admin/daedalus/bundles\n"
+                                f"Той може да приложи всичко с един клик или да го отхвърли."
+                            )
+                            tool_calls_used.append({
+                                "tool": "bundle_commit",
+                                "bundle_id": _active_bid,
+                                "files": _cr["files_count"],
+                            })
+                        else:
+                            tool_results_text_parts.append(
+                                f"━━━ TOOL RESULTS — BUNDLE COMMIT FAILED ━━━\n"
+                                f"{_cr.get('error','unknown error')}"
+                            )
+            except Exception as _bnd_exc:
+                log.warning("Bundle handler failed: %s", _bnd_exc)
+                tool_results_text_parts.append(
+                    f"━━━ BUNDLE SYSTEM ERROR ━━━\n{_bnd_exc}\n"
+                    f"Пробвай с NEED_PROPOSE_START за единичен файл."
+                )
+
+        # ── NEED_WORKER: parallel stateless sub-agents ─────────────────────
+        if worker_calls:
+            try:
+                worker_results = await call_workers_parallel(worker_calls)
+                tool_results_text_parts.append(
+                    f"━━━ WORKER RESULTS ({len(worker_results)} агент{'а' if len(worker_results)>1 else ''}) ━━━\n"
+                    + format_worker_results(worker_results)
+                )
+                tool_calls_used.append({
+                    "tool": "workers",
+                    "count": len(worker_calls),
+                    "slots": [c["slot"] for c in worker_calls],
+                    "ok": all(r.get("ok") for r in worker_results),
+                })
+            except Exception as exc:
+                log.warning("NEED_WORKER parallel call failed: %s", exc)
+                tool_results_text_parts.append(f"━━━ WORKER RESULTS — FAILED ━━━\n{exc}")
+
+        if subagent_calls:
+            try:
+                from .subagents import format_subagent_results, run_subagents_parallel
+                sub_results = await run_subagents_parallel(
+                    subagent_calls,
+                    memory=self.memory,
+                    session_id=session_id or "",
+                    read_file_fn=_read_file_tool,
+                )
+                tool_results_text_parts.append(
+                    "━━━ SUBAGENT RESULTS ━━━\n" + format_subagent_results(sub_results)
+                )
+                tool_calls_used.append({
+                    "tool": "subagent",
+                    "count": len(subagent_calls),
+                    "ok": all(r.get("ok") for r in sub_results),
+                    "roles": [str(r.get("role") or "coder") for r in sub_results],
+                })
+            except Exception as exc:
+                log.warning("NEED_SUBAGENT failed: %s", exc)
+                tool_results_text_parts.append(f"━━━ SUBAGENT RESULTS — FAILED ━━━\n{exc}")
+
+
+        return LeftoverExecResult(
+            parts=tool_results_text_parts,
+            calls=tool_calls_used,
+            vision_blocks=vision_blocks,
+            data_prop_truncated=bool(getattr(hit, "data_prop_truncated", False)),
+        )
+
+    async def _after_leftover_reroll(self, raw: str, user_content: str) -> tuple[str, str, dict[str, Any] | None]:
+        propose_result_text = ""
+        extra = None
+        _new_pb = _extract_propose_block(raw)
+        if _new_pb:
+            propose_result_text, raw = await _run_propose_loop(
+                initial_raw=raw,
+                initial_block=_new_pb,
+                user_content=user_content,
+                persona=self.persona,
+                max_retries=_propose_max_retries(),
+            )
+            extra = {"tool": "propose_patch", "file": _new_pb["file_path"]}
+        return raw, propose_result_text, extra
 
     # ------------------------------------------------------------------
     # External-world tools (direct callable, also used by mesh actions)
