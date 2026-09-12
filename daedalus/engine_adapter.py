@@ -11,8 +11,8 @@ capability-pipeline label). This leaf's Protocol is also named
 
 Discover and preflight are observational (binary lookup / ``--version``).
 ``run(live=False)`` is ``live_gated``. Godot ``run(live=True)`` wraps
-``godot_first.runtime_verify``. Unity ``run(live=True)`` is
-``adapter_run_deferred`` (P1.05). skip ≠ ok. Run schema v1 is unchanged.
+``godot_first.runtime_verify``. Unity ``run(live=True)`` wraps
+``unity_runtime.runtime_verify``. skip ≠ ok. Run schema v1 is unchanged.
 """
 from __future__ import annotations
 
@@ -34,7 +34,6 @@ from daedalus.contracts.engine import (
 VERSION_TIMEOUT_S = 12
 _UNSUPPORTED = "unsupported_engine"
 _LIVE_GATED = "live_gated"
-_RUN_DEFERRED = "adapter_run_deferred"
 _GODOT_MISSING = "godot_missing"
 _UNITY_GAP = "unity_local"
 _CAP_NAMES = (
@@ -133,7 +132,7 @@ class GodotEngineAdapter:
 
 
 class UnityEngineAdapter:
-    """Thin Unity stub. Live MCP / batchmode / Play is P1.05."""
+    """Unity host. Live run wraps ``unity_runtime.runtime_verify`` (batchmode)."""
 
     kind = EngineKind.UNITY.value
 
@@ -199,7 +198,11 @@ class UnityEngineAdapter:
         )
 
     def run(self, req: EngineRequest) -> EngineRunResult:
-        return _gated_run(self.kind, live=req.live)
+        if not req.live:
+            return _gated_run(self.kind, live=False)
+        from daedalus.unity_runtime import runtime_verify
+
+        return _unity_run_from_verify(self.kind, runtime_verify(_root_of(req)))
 
 
 def adapters() -> dict[str, EngineAdapter]:
@@ -373,6 +376,39 @@ def _godot_run_from_verify(kind: str, row: dict) -> EngineRunResult:
     )
 
 
+def _unity_run_from_verify(kind: str, row: dict) -> EngineRunResult:
+    skipped = bool(row.get("skipped"))
+    ran = bool(row.get("ran"))
+    ok = bool(row.get("ok")) and not skipped
+    blockers = _uniq_str(row.get("blockers"))
+    error = str(row.get("error") or "")
+    pre = row.get("preflight")
+    if isinstance(pre, dict):
+        for item in pre.get("blockers") or []:
+            text = str(item)
+            if text and text not in blockers:
+                blockers.append(text)
+        if skipped and not ran and not pre.get("binary"):
+            if _UNITY_GAP not in blockers:
+                blockers.append(_UNITY_GAP)
+            error = error or str(pre.get("error") or "") or _UNITY_GAP
+    elif skipped and not ran:
+        if _UNITY_GAP not in blockers:
+            blockers.append(_UNITY_GAP)
+        error = error or _UNITY_GAP
+    return EngineRunResult(
+        kind=kind,
+        ok=ok,
+        skipped=skipped,
+        ran=ran,
+        play=False,
+        live=True,
+        via="batchmode" if ran else "none",
+        blockers=blockers,
+        error=error,
+    )
+
+
 def _uniq_str(items: object) -> list[str]:
     if not isinstance(items, (list, tuple)):
         return []
@@ -385,7 +421,6 @@ def _uniq_str(items: object) -> list[str]:
 
 
 def _gated_run(kind: str, *, live: bool) -> EngineRunResult:
-    blocker = _RUN_DEFERRED if live else _LIVE_GATED
     return EngineRunResult(
         kind=kind,
         ok=False,
@@ -394,8 +429,8 @@ def _gated_run(kind: str, *, live: bool) -> EngineRunResult:
         play=False,
         live=live,
         via="none",
-        blockers=[blocker],
-        error=blocker,
+        blockers=[_LIVE_GATED],
+        error=_LIVE_GATED,
     )
 
 
