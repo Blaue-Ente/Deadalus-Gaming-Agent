@@ -117,27 +117,40 @@ def _as_openai_response(text: str, *, provider: str, model: str) -> dict[str, An
     }
 
 
-async def complete(
-    *,
-    system: str = "",
-    user: str = "",
-    intent: str = "chat",
-    client_id: str = "daedalus/standalone",
-    max_tokens: int = 4096,
-    temperature: float | None = None,
-    model: str | None = None,
-    use_cache: bool = True,
-    json_mode: bool = False,
-) -> dict[str, Any]:
-    """Call the configured OpenAI-compatible (or Anthropic) provider directly."""
-    from .llm_config import get_config, openai_compat_extra_body, openai_compat_headers
+def _is_recoverable_llm_error(text: str) -> bool:
+    """True when failing the primary call might succeed on another backend (credits, auth, missing model)."""
+    t = (text or "").lower()
+    return any(
+        phrase in t
+        for phrase in (
+            "401", "403", "429", "rate", "limit", "unauthorized", "permission",
+            "insufficient", "credit", "quota", "timeout", "timed out", "connection",
+            "unavailable", "503", "502", "invalid_api_key", "does not exist",
+            "not found", "incorrect api key", "no such model",
+        )
+    )
 
-    cfg = get_config()
+
+async def _complete_with_cfg(
+    cfg: dict[str, Any],
+    *,
+    system: str,
+    user: str,
+    intent: str,
+    client_id: str,
+    max_tokens: int,
+    temperature: float | None,
+    json_mode: bool,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """One completion attempt with a fully-resolved cfg dict. Returns (openai-shaped dict, billed)."""
+    from .llm_config import openai_compat_extra_body, openai_compat_headers
+
     provider = cfg.get("provider") or "openai"
     api_key = cfg.get("api_key") or ""
     base_url = cfg.get("base_url") or ""
     sdk = cfg.get("sdk") or "openai"
-    used_model = model or cfg.get("model") or ""
+    used_model = str(cfg.get("model") or "")
+
     if not api_key:
         from .llm_config import is_loopback_gateway
         from .local_llm import dummy_api_key, is_local_provider
@@ -152,7 +165,7 @@ async def complete(
 
     from . import run_budget
     if run_budget.would_block(provider):
-        return _budget_stop_complete(provider=provider, model=used_model)
+        return _budget_stop_complete(provider=provider, model=used_model), {}
 
     messages: list[dict[str, str]] = []
     if system:
@@ -216,7 +229,89 @@ async def complete(
         "completion_tokens": int(billed.get("completion_tokens") or 0),
         "cost_usd": billed.get("cost_usd"),
     }
-    return out
+    return out, billed
+
+
+async def complete(
+    *,
+    system: str = "",
+    user: str = "",
+    intent: str = "chat",
+    client_id: str = "daedalus/standalone",
+    max_tokens: int = 4096,
+    temperature: float | None = None,
+    model: str | None = None,
+    use_cache: bool = True,
+    json_mode: bool = False,
+) -> dict[str, Any]:
+    """Call the configured OpenAI-compatible (or Anthropic) provider directly."""
+    from .llm_config import get_config
+    from .local_llm import is_local_provider, resolve_local_config
+    from .model_router import config_for_explicit_model
+
+    base = get_config()
+    cfg = config_for_explicit_model(base, model, source="llm_client.complete")
+    err_note = str(cfg.get("routing_error") or "").strip()
+    if err_note:
+        log.warning("LLM routing: %s", err_note)
+        nouser = (
+            "Cannot use the requested model: " + err_note + " "
+            "Fix credentials or use a local model (wardrobe / DAEDALUS_PROVIDER=ollama)."
+        )
+        out = _as_openai_response(
+            nouser, provider=str(base.get("provider") or ""), model=str(model or ""),
+        )
+        out["ok"] = False
+        out["routing_failed"] = True
+        out["routing_error"] = err_note
+        return out
+
+    first_err: str | None = None
+    try:
+        out, _billed = await _complete_with_cfg(
+            cfg, system=system, user=user, intent=intent, client_id=client_id,
+            max_tokens=max_tokens, temperature=temperature, json_mode=json_mode,
+        )
+        return out
+    except Exception as exc:
+        first_err = str(exc)[:500]
+        log.warning("LLM primary call failed: %s", first_err)
+
+    # Fallback: explicit non-local request failed → try active local Ollama once (explicit only)
+    if model and str(model).strip():
+        try:
+            prov_explicit, _mid_explicit = str(model).split(":", 1) if ":" in str(model) else ("", "")
+            prov_explicit = prov_explicit.strip().lower()
+            local_cfg = resolve_local_config("ollama")
+            if (
+                local_cfg
+                and prov_explicit
+                and not is_local_provider(prov_explicit)
+                and _is_recoverable_llm_error(first_err or "")
+            ):
+                fb = dict(local_cfg)
+                log.warning(
+                    "LLM fallback to local Ollama after failure on %s (explicit request)",
+                    model,
+                )
+                out, _b = await _complete_with_cfg(
+                    fb, system=system, user=user, intent=intent, client_id=client_id + "/fallback-local",
+                    max_tokens=max_tokens, temperature=temperature, json_mode=json_mode,
+                )
+                out["routing_fallback"] = "local_ollama"
+                out["routing_fallback_reason"] = first_err or "primary_failed"
+                out["requested_model"] = model
+                return out
+        except Exception as exc2:
+            log.warning("LLM local fallback failed: %s", exc2)
+
+    if first_err:
+        raise RuntimeError(
+            "LLM call failed for "
+            f"{cfg.get('provider')}/{cfg.get('model')}: {first_err}. "
+            "If this is a missing API key or credits, set the key or switch to a local model."
+        ) from None
+    raise RuntimeError("LLM call failed without detail")
 
 
 async def call_with_tools(

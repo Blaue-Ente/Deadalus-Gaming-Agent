@@ -197,6 +197,8 @@ async def complete(
             log.warning("mesh_router unavailable (%s); standalone LLM", exc)
 
     from . import llm_client
+    # Pass through full ``provider:model`` tags so standalone resolves the same gateway + key
+    # as mesh_router (bare_model strips only for legacy id-only call sites).
     return await llm_client.complete(
         system=system,
         user=user,
@@ -204,7 +206,7 @@ async def complete(
         client_id=client_id,
         max_tokens=max_tokens,
         temperature=temperature,
-        model=bare_model(model),
+        model=model,
         use_cache=use_cache,
         json_mode=json_mode,
     )
