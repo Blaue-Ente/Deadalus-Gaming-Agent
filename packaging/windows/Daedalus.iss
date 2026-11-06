@@ -3,7 +3,7 @@
 ;   (or: iscc packaging\windows\Daedalus.iss)
 ;
 ; Per-user, no Administrator. After files are extracted, install.ps1
-; -InPlace -BundlePython installs a private CPython + venv + Daedalus.exe.
+; -InPlace -BundlePython installs a private CPython + venv; shortcuts use Daedalus.vbs.
 
 #define MyAppName "Daedalus"
 #define MyAppNameEn "Daedalus"
@@ -45,7 +45,7 @@ Source: "redist\*"; DestDir: "{app}\packaging\windows\redist"; Flags: ignorevers
 [Run]
 Filename: "powershell.exe"; \
   Parameters: "-NoProfile -ExecutionPolicy Bypass -File ""{app}\packaging\windows\install.ps1"" -InPlace -BundlePython"; \
-  StatusMsg: "Installing private Python, venv, and Daedalus.exe..."; Flags: waituntilterminated
+  StatusMsg: "Installing private Python, venv, and Start Menu shortcuts..."; Flags: waituntilterminated
 
 [UninstallRun]
 Filename: "powershell.exe"; \
@@ -53,5 +53,5 @@ Filename: "powershell.exe"; \
   RunOnceId: "DaedalusUninstall"; Flags: waituntilterminated
 
 [Icons]
-; App shortcut is created by install.ps1 after Daedalus.exe is compiled.
+; App shortcut is created by install.ps1 (Daedalus.vbs primary launch path).
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"

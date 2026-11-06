@@ -8,14 +8,16 @@ pick an install path. Studio UI copy may still be Bulgarian; these docs are Engl
 | Path | Best for | Needs |
 |---|---|---|
 | **Windows `Install-Daedalus.bat`** | ZIP → unzip → double-click (no terminal) | 64-bit Windows 10/11, internet for `pip` the first time |
-| **Windows Setup.exe** | Wizard installer + Start Menu `Daedalus.exe` | Same |
+| **Windows Setup.exe** | Wizard installer + Start Menu `Daedalus.vbs` | Same |
 | **Windows `install.ps1`** | Same app, from PowerShell / git | Same; Python on PATH is optional |
 | **venv + `daedalus serve`** | Linux, macOS, Windows developers | Python 3.11+ |
 | **Docker** | VPS / “I already use Compose” | Docker |
 
 There is **no** PyInstaller one-file game-style `.exe`. The extra Windows
-option is a **small `Daedalus.exe` launcher** plus a **private CPython**
-inside `%LOCALAPPDATA%\Programs\Daedalus` (not on PATH).
+install is a **Start Menu shortcut** to **`Daedalus.vbs`** plus a **private CPython**
+inside `%LOCALAPPDATA%\Programs\Daedalus` (not on PATH). The installer may still
+build an optional unsigned **`Daedalus.exe`**; use Start Menu / `.vbs` / `.cmd` so
+Defender does not block the default launch path.
 
 Node, Godot, Blender, and Ollama stay separate if you use those features.
 
@@ -56,7 +58,7 @@ The `.bat` file calls `packaging\windows\install.ps1` with `-ExecutionPolicy Byp
 
 ---
 
-## Windows — extra `.exe` option
+## Windows — Start Menu app (ZIP / `install.ps1`)
 
 Full detail: [packaging/windows/README.md](../packaging/windows/README.md).
 

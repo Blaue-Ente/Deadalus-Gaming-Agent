@@ -5,7 +5,7 @@
 
 .DESCRIPTION
   Copies the product to %LOCALAPPDATA%\Programs\Daedalus, creates a venv,
-  pip-installs, writes Daedalus.exe + .cmd/.vbs fallbacks, and a Start Menu shortcut.
+  pip-installs, writes .cmd/.vbs launchers (optional Daedalus.exe), and Start Menu shortcuts.
 
   If Python 3.11+ is not on PATH, a private CPython (NuGet python package) is
   downloaded into the install folder. It is never added to PATH.
@@ -46,6 +46,37 @@ $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path
 
 . (Join-Path $PSScriptRoot "Get-BundledPython.ps1")
 
+function Test-DaedalusPython311 {
+    <#
+      PS 5.1: probing with "& py ... 2>$null" can fault on stderr from the launcher.
+      Use Start-Process with stdout/stderr redirects instead (no native PowerShell stderr pipe).
+    #>
+    param(
+        [Parameter(Mandatory = $true)]
+        [string] $ExePath,
+        [string[]] $PrefixArgs = @()
+    )
+    $code = 'import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)'
+    $argList = [System.Collections.ArrayList]::new()
+    foreach ($a in $PrefixArgs) { [void]$argList.Add($a) }
+    [void]$argList.Add('-c')
+    [void]$argList.Add($code)
+    $stdout = Join-Path ([IO.Path]::GetTempPath()) ('daedalus-py-out-' + [Guid]::NewGuid().ToString('n'))
+    $stderr = Join-Path ([IO.Path]::GetTempPath()) ('daedalus-py-err-' + [Guid]::NewGuid().ToString('n'))
+    try {
+        $p = Start-Process -FilePath $ExePath -ArgumentList @($argList.ToArray()) `
+            -NoNewWindow -PassThru -Wait -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+        if (-not $p) { return $false }
+        return ($p.ExitCode -eq 0)
+    }
+    catch {
+        return $false
+    }
+    finally {
+        Remove-Item -Force $stdout, $stderr -ErrorAction SilentlyContinue
+    }
+}
+
 function Find-SystemPython {
     $candidates = @(
         @{ Exe = "py"; Args = @("-3.12") },
@@ -57,9 +88,9 @@ function Find-SystemPython {
     foreach ($c in $candidates) {
         $cmd = Get-Command $c.Exe -ErrorAction SilentlyContinue
         if (-not $cmd) { continue }
-        $probe = @($c.Args) + @("-c", "import sys; raise SystemExit(0 if sys.version_info >= (3, 11) else 1)")
-        & $c.Exe @probe 2>$null
-        if ($LASTEXITCODE -eq 0) {
+        $exePath = $cmd.Source
+        if (-not $exePath) { continue }
+        if (Test-DaedalusPython311 -ExePath $exePath -PrefixArgs $c.Args) {
             return @{ Exe = $c.Exe; Args = @($c.Args) }
         }
     }
@@ -224,11 +255,14 @@ if ((Resolve-Path $srcUn).Path -ne $(if (Test-Path $dstUn) { (Resolve-Path $dstU
     Copy-Item -Force $srcUn $dstUn
 }
 
-$exeOk = Write-DaedalusExe -Root $InstallRoot
-$launch = Join-Path $InstallRoot "Daedalus.exe"
-if (-not $exeOk) {
-    $launch = Join-Path $InstallRoot "Daedalus.vbs"
-    Write-Host "Daedalus.exe was not built - shortcuts point at Daedalus.vbs." -ForegroundColor Yellow
+$null = Write-DaedalusExe -Root $InstallRoot
+# Shortcuts must not target unsigned Daedalus.exe — SmartScreen/Defender may flag it.
+# Preferred: Daedalus.vbs (pythonw, no console). Fallback: Daedalus.cmd.
+$vbsLaunch = Join-Path $InstallRoot "Daedalus.vbs"
+$cmdLaunch = Join-Path $InstallRoot "Daedalus.cmd"
+$launch = if (Test-Path $vbsLaunch) { $vbsLaunch } else { $cmdLaunch }
+if (-not (Test-Path $launch)) {
+    throw "Launch script missing: expected $vbsLaunch or $cmdLaunch"
 }
 
 $startMenu = Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs"
@@ -254,9 +288,9 @@ New-ItemProperty -Path $reg -Name "UninstallString" -Value $uninst -Force | Out-
 New-ItemProperty -Path $reg -Name "DisplayIcon" -Value $launch -Force | Out-Null
 
 Write-Host ""
-Write-Host "Done. Start: Start Menu -> $DisplayName"
+Write-Host "Done. Start: Start Menu -> $DisplayName (shortcut -> $(Split-Path -Leaf $launch))"
 if (Test-Path (Join-Path $InstallRoot "Daedalus.exe")) {
-    Write-Host "Launcher: $InstallRoot\Daedalus.exe"
+    Write-Host "Optional unsigned launcher (may be flagged by Defender if run directly): $InstallRoot\Daedalus.exe"
 }
 Write-Host "Console logs: $InstallRoot\Daedalus.cmd"
 if ($guiOk) {

@@ -1,6 +1,6 @@
 ---
 name: windows
-description: Install and run Daedalus as a per-user Windows Start Menu app with Daedalus.exe.
+description: Install and run Daedalus as a per-user Windows Start Menu app (Daedalus.vbs).
 ---
 
 # SKILL: Windows desktop
@@ -11,7 +11,7 @@ description: Install and run Daedalus as a per-user Windows Start Menu app with 
 1. Extra option (no Python on PATH): `packaging\windows\install.ps1` downloads a private CPython (NuGet `python` 3.12.10, SHA-512 checked) into `%LOCALAPPDATA%\Programs\Daedalus\runtime`.
 2. From the repo: `packaging\windows\install.ps1 -DesktopShortcut` (optional `-BundlePython` / `-UseSystemPython` / `-Startup`).
 3. Wizard installer: on Windows, `packaging\windows\build-setup.ps1` → `dist\Daedalus-Setup.exe` (Inno Setup 6). Setup runs `-InPlace -BundlePython`.
-4. Launch: `Daedalus.exe` (compiled at install from `DaedalusLauncher.cs`) → `pythonw -m app.cli desktop`. Fallback: `Daedalus.vbs` / `Daedalus.cmd`.
+4. Launch: Start Menu → `Daedalus.vbs` → `pythonw -m app.cli desktop`. Console: `Daedalus.cmd`. Optional unsigned `Daedalus.exe` may exist but shortcuts use `.vbs` so Defender does not block the default path.
 5. Data is `%LOCALAPPDATA%\Daedalus`. Code + venv + runtime are `%LOCALAPPDATA%\Programs\Daedalus`.
 6. Bind loopback only (`127.0.0.1:8787`).
 7. Window: pywebview + Edge WebView2 when `pip install -e ".[gui]"` succeeded; otherwise Tk; last resort the browser.
