@@ -4,9 +4,9 @@ This file records current behavior. It is not permission to delete, skip, or wea
 
 ## Environment
 
-- Generated at: 2026-11-06T16:02:19.666280+00:00
-- Git commit: `d0e137ede8046b199fb4195df2886cbfa6ff7e4a`
-- Git branch: `main`
+- Generated at: 2026-11-06T17:16:06.095152+00:00
+- Git commit: `b03aa6d78bf1a5c34d5c67d4a29921022703a918`
+- Git branch: `cursor/p1-harness-6-7-9-6daf`
 - Python: 3.12.3
 - Extras installed: `dev` only (no playwright / computer / gui)
 - `DAEDALUS_STANDALONE=1`
@@ -14,23 +14,23 @@ This file records current behavior. It is not permission to delete, skip, or wea
 
 ## Pytest summary
 
-- Collected / reported tests: 590
-- Passed: 589
+- Collected / reported tests: 599
+- Passed: 599
 - Failed: 0
 - Errors: 0
-- Skipped: 1
-- Duration (s): 24.046
+- Skipped: 0
+- Duration (s): 37.362
 - Pytest exit code: 0
-- Coverage line-rate (`daedalus`, observational): 41.97%
+- Coverage line-rate (`daedalus`, observational): 42.64%
 
-- Pytest last line: `589 passed, 1 skipped in 24.05s`
+- Pytest last line: `599 passed in 37.42s`
 
 ## Failed or errored tests
 
 No product test failures or errors were recorded.
 ## Skipped tests
 
-- `tests/test_gameplay_bot.py::test_chromium_tiny_canvas_bot` — could not import 'playwright': No module named 'playwright'
+No skipped tests were recorded.
 
 ## Honesty suite (`game_agent_bench`)
 

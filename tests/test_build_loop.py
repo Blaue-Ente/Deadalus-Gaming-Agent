@@ -171,6 +171,20 @@ def test_fix_rounds_zero_keeps_old_behaviour(fake_tools):
     assert len(model.seen) == 1
 
 
+def test_write_step_not_done_for_readme_only(fake_tools):
+    rt = route(SNAKE)
+    loop = BuildLoop(rt, SNAKE, fix_rounds=2)
+    loop.observe(
+        "write_file",
+        {"slug": "snake-game", "path": "README.md", "content": "# Status\n"},
+        "── write_file OK snake-game/README.md ──",
+        ok=True,
+    )
+    rows = {r.step.id: r for r in loop.progress()}
+    assert rows["write"].status == "failed"
+    assert "README" in (rows["write"].detail or "")
+
+
 def test_slerp_nudge_names_the_missing_math3d_step(fake_tools):
     rt = route(SLERP)
     consult_log, _ = run_consult(rt)

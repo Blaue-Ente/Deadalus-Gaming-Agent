@@ -329,6 +329,7 @@ def visual_quality(root: Path, *, slug: str = "") -> dict[str, Any]:
             path = root / name
             try:
                 from .frame_geometry import frame_shows_scene
+
                 if frame_shows_scene(path):
                     shot_ok = True
                     break

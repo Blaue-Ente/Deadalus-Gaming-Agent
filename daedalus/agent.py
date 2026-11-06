@@ -1695,6 +1695,24 @@ class Daedalus:
                             max_native = 16
                     except Exception:
                         pass
+                    raw_nr = (os.environ.get("DAEDALUS_NATIVE_ROUNDS") or "").strip()
+                    if raw_nr:
+                        try:
+                            max_native = max(1, min(64, int(raw_nr)))
+                        except ValueError:
+                            pass
+                    else:
+                        try:
+                            from .task_effort import current as _eff_cur
+
+                            _ed = _eff_cur()
+                            _tier = str((_ed or {}).get("tier") or "").strip().lower()
+                            if _tier == "whisper":
+                                max_native = min(max_native, 8)
+                            elif _tier == "epic":
+                                max_native = max(max_native, 20)
+                        except Exception:
+                            pass
                 else:
                     _nt_sys = (
                         "You are Daedalus tool-discovery. Use tools to gather context. "
@@ -2028,8 +2046,9 @@ class Daedalus:
                         memory=self.memory, session_id=session_id or "",
                         read_file_fn=_read_file_tool,
                     )
-                    blocked = "BLOCKED" in result_text
-                    ok = blocked or ("FAILED" not in result_text and "ERROR" not in result_text)
+                    from .tool_status import native_tool_result_ok
+
+                    ok = native_tool_result_ok(result_text)
                     tool_calls_used.append({
                         "tool": dump.name,
                         "ok": ok,

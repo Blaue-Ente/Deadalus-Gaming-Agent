@@ -2122,8 +2122,10 @@ async def run_native_discovery_pass(
                 read_file_fn=read_file_fn,
             )
             all_results.append(result_text)
+            from .tool_status import native_tool_result_ok
+
+            ok = native_tool_result_ok(result_text)
             blocked = "BLOCKED" in result_text
-            ok = blocked or ("FAILED" not in result_text and "ERROR" not in result_text)
             tool_log.append({
                 "tool": tname,
                 "input": {k: v for k, v in tinput.items() if k != "content"} if isinstance(tinput, dict) else {},
