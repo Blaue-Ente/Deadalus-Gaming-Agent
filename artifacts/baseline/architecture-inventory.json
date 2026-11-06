@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-06T20:07:25.561814+00:00",
+  "generated_at": "2026-11-06T22:43:26.379311+00:00",
   "package_version": "0.3.8",
-  "git_commit": "6c14e4a24afd40bc043782ab161581fe7328b0b1",
+  "git_commit": "ffa9c72673b5414cebb4a6032cca4c0a9be9474a",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -131,7 +131,7 @@
   },
   "tests": {
     "modules": 62,
-    "functions": 629
+    "functions": 631
   },
   "modules": {
     "daedalus": [
@@ -351,6 +351,7 @@
       "daedalus/skill_catalog.py",
       "daedalus/spatial.py",
       "daedalus/standalone_boot.py",
+      "daedalus/stdio_utf8.py",
       "daedalus/steering_queue.py",
       "daedalus/store.py",
       "daedalus/stream.py",

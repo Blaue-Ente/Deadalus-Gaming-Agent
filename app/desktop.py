@@ -92,10 +92,10 @@ def run_desktop(
         )
 
     if instance_healthy(host, port):
-        log.info("Дедал вече работи на %s", url)
+        log.info("Studio already running at %s", url)
         shown = _surface()
         if shown != UI_NONE:
-            safe_print(f"Дедал · Studio {url}  (вече работи)")
+            safe_print(f"Daedalus Studio {url}  (already running)")
         return 0
 
     if not serve:
@@ -119,17 +119,17 @@ def run_desktop(
     thread = threading.Thread(target=server.run, name="daedalus-studio", daemon=True)
     thread.start()
     if not wait_until_up(host, port):
-        safe_print(f"Дедал не стартира на {url}", file=sys.stderr)
+        safe_print(f"Daedalus did not start at {url}", file=sys.stderr)
         server.should_exit = True
         return 1
 
     def _stop() -> None:
         server.should_exit = True
 
-    safe_print(f"Дедал · Studio {url}")
+    safe_print(f"Daedalus Studio {url}")
     shown = _surface(on_close=_stop)
     if shown in {UI_BROWSER, UI_NONE}:
-        safe_print("  (Ctrl+C спира)")
+        safe_print("  (Ctrl+C to stop)")
         try:
             while thread.is_alive():
                 thread.join(0.4)

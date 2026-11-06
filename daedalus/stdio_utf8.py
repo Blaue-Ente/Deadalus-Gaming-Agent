@@ -19,7 +19,14 @@ def configure_stdio_utf8_best_effort() -> None:
     No-op on non-Windows. If re-wrap fails, leaves streams unchanged; callers
     should use :func:`safe_print` for user-facing lines that may contain
     non-ASCII text.
+
+    ``pythonw`` may leave both streams as ``None``; those are reopened as UTF-8
+    text writes to ``os.devnull`` so logging and uvicorn can start.
     """
+    if sys.stdout is None:
+        sys.stdout = open(os.devnull, "w", encoding="utf-8", errors="replace")
+    if sys.stderr is None:
+        sys.stderr = open(os.devnull, "w", encoding="utf-8", errors="replace")
     if os.name != "nt":
         return
     for name in ("stdout", "stderr"):

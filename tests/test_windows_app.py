@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import sys
 from pathlib import Path
 
 import pytest
@@ -163,15 +164,47 @@ def test_cli_desktop_flag_resolution():
 
 
 def test_stdio_utf8_safe_print_narrow_encoding():
-    """Mimic Windows cp1252 TextIOWrapper: Cyrillic must not crash desktop logs."""
+    """Mimic Windows cp1252 TextIOWrapper: Unicode user content must not crash prints."""
     buf = io.BytesIO()
     wrapper = io.TextIOWrapper(buf, encoding="cp1252", errors="strict", line_buffering=True)
     from daedalus.stdio_utf8 import safe_print
 
-    safe_print("Дедал · Studio http://127.0.0.1:8787/", file=wrapper)
+    # Startup banner is ASCII English; safe_print still covers LLM/user text with non-ASCII.
+    safe_print("Log: \u0414\u0435\u0434\u0430\u043b http://127.0.0.1:8787/", file=wrapper)
     wrapper.flush()
     out = buf.getvalue().decode("cp1252", errors="replace")
     assert "8787" in out
+
+
+def test_desktop_banner_no_crash_absent_stdio(win_tmp, monkeypatch):
+    """pythonw may leave sys.stdout/sys.stderr as None; startup must not raise."""
+    from app.desktop import run_desktop
+    from app.windows_gui import UI_BROWSER
+
+    monkeypatch.setattr("app.desktop.instance_healthy", lambda *a, **k: False)
+    monkeypatch.setattr("app.desktop.wait_until_up", lambda *a, **k: True)
+    monkeypatch.setattr(
+        "app.desktop.present_ui",
+        lambda url, **kw: UI_BROWSER,
+    )
+
+    class _ThreadNoRun:
+        def __init__(self, target=None, **kwargs):
+            self._target = target
+
+        def start(self) -> None:
+            return
+
+        def is_alive(self) -> bool:
+            return False
+
+        def join(self, *_a, **_k) -> None:
+            return
+
+    monkeypatch.setattr("app.desktop.threading.Thread", _ThreadNoRun)
+    monkeypatch.setattr(sys, "stdout", None)
+    monkeypatch.setattr(sys, "stderr", None)
+    assert run_desktop(host="127.0.0.1", port=8787, open_browser=True, ui="browser", serve=True) == 0
 
 
 def test_installer_scripts_exist():
