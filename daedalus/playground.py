@@ -616,9 +616,13 @@ def write_files(slug: str, files: dict[str, str]) -> int:
     root.mkdir(parents=True, exist_ok=True)
     n = 0
     for rel, content in files.items():
+        if content is None or not str(content).strip():
+            raise ValueError(
+                f"write_files refused empty content for {rel!r} (would truncate or create a zero-byte file)"
+            )
         target = _safe_join(root, rel)
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(content, encoding="utf-8")
+        target.write_text(str(content), encoding="utf-8")
         n += 1
     return n
 

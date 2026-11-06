@@ -15,7 +15,6 @@ import os
 import re
 import shlex
 import shutil
-import signal
 import socket
 import time
 import urllib.parse
@@ -25,6 +24,7 @@ from typing import Any
 
 from . import playground as pg
 from .playground_runtime import PlaygroundRuntime, is_local_only_kind, local_only_kind_message
+from .proc import argv_for_command, argv_from_resolved_shlex, terminate_process_tree
 
 log = logging.getLogger(__name__)
 
@@ -107,8 +107,11 @@ async def start(slug: str, *, install_deps: bool = False, tunnel: bool = False) 
         install_result = await _install_deps(proj, root)
 
     env = _child_env(port)
+    argv = argv_from_resolved_shlex(cmd, env=env)
+    if not argv:
+        raise ValueError("empty run command after resolution")
     proc = await asyncio.create_subprocess_exec(
-        *shlex.split(cmd), cwd=str(root), env=env,
+        *argv, cwd=str(root), env=env,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
         start_new_session=True,
     )
@@ -151,10 +154,13 @@ async def _install_deps(proj: dict[str, Any], root: Path) -> dict[str, Any]:
         from .playground_expo_scaffold import repair_expo_package_json
         repair_expo_package_json(root)
         # --legacy-peer-deps needed — expo/react-native peer dep conflicts
-        cmd = ["npm", "install", "--no-audit", "--no-fund", "--legacy-peer-deps"]
+        cmd = argv_for_command(
+            "npm", "install", "--no-audit", "--no-fund", "--legacy-peer-deps",
+            env=_child_env(0),
+        )
         timeout = 600  # expo is heavy
     elif kind in ("vite", "vite-react", "node") and (root / "package.json").exists():
-        cmd = ["npm", "install", "--no-audit", "--no-fund"]
+        cmd = argv_for_command("npm", "install", "--no-audit", "--no-fund", env=_child_env(0))
     elif kind in ("fastapi", "streamlit") and (root / "requirements.txt").exists():
         cmd = ["pip", "install", "-q", "-r", "requirements.txt"]
     if not cmd:
@@ -167,7 +173,12 @@ async def _install_deps(proj: dict[str, Any], root: Path) -> dict[str, Any]:
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
             start_new_session=True,
         )
-        out, _ = await asyncio.wait_for(p.communicate(), timeout=timeout)
+        try:
+            out, _ = await asyncio.wait_for(p.communicate(), timeout=timeout)
+        except asyncio.TimeoutError:
+            await terminate_process_tree(p, timeout=12.0)
+            log.warning("Playground: dep install for %s timed out", proj["slug"])
+            return {"ran": True, "ok": False, "output": "dependency install timed out"}
         text = (out or b"").decode("utf-8", errors="replace")
         ok = p.returncode == 0
         if not ok:
@@ -181,9 +192,6 @@ async def _install_deps(proj: dict[str, Any], root: Path) -> dict[str, Any]:
             if not any(ln.strip().lower().startswith(p.lower()) for p in _warn_prefixes)
         )
         return {"ran": True, "ok": ok, "output": filtered[-4000:]}
-    except asyncio.TimeoutError:
-        log.warning("Playground: dep install for %s timed out", proj["slug"])
-        return {"ran": True, "ok": False, "output": "dependency install timed out"}
     except Exception as exc:
         log.warning("Playground: dep install for %s failed: %s", proj["slug"], exc)
         return {"ran": True, "ok": False, "output": str(exc)}
@@ -207,14 +215,7 @@ async def stop(slug: str) -> bool:
         return False
     proc = rec.get("_proc")
     if proc and proc.returncode is None:
-        try:
-            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-            await asyncio.wait_for(proc.wait(), timeout=6)
-        except (asyncio.TimeoutError, ProcessLookupError, Exception):
-            try:
-                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-            except Exception:
-                pass
+        await terminate_process_tree(proc, timeout=6.0)
     await pg.update_project(slug, status="idle")
     log.info("Playground: stopped %s", slug)
     return True
@@ -336,18 +337,24 @@ async def _expo_export_check(root: Path) -> tuple[bool, str]:
     out_dir = root / ".playground-verify-export"
     shutil.rmtree(out_dir, ignore_errors=True)
     try:
-        p = await asyncio.create_subprocess_exec(
+        cmd = argv_for_command(
             "npx", "expo", "export", "--platform", "web",
             "--output-dir", str(out_dir),
+            env=_child_env(0),
+        )
+        p = await asyncio.create_subprocess_exec(
+            *cmd,
             cwd=str(root), env=_child_env(0),
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
             start_new_session=True,
         )
-        out, _ = await asyncio.wait_for(p.communicate(), timeout=180)
+        try:
+            out, _ = await asyncio.wait_for(p.communicate(), timeout=180)
+        except asyncio.TimeoutError:
+            await terminate_process_tree(p, timeout=12.0)
+            return False, "expo export timed out (180s)"
         text = (out or b"").decode("utf-8", errors="replace")
         return p.returncode == 0, text
-    except asyncio.TimeoutError:
-        return False, "expo export timed out (180s)"
     except Exception as exc:
         return False, str(exc)
     finally:
@@ -388,15 +395,18 @@ async def _vite_build_check(root: Path) -> tuple[bool, str]:
     Sanitized env (allowlist) so generated code never sees production secrets.
     """
     try:
+        cmd = argv_for_command("npx", "vite", "build", "--base", "./", env=_child_env(0))
         p = await asyncio.create_subprocess_exec(
-            "npx", "vite", "build", "--base", "./", cwd=str(root), env=_child_env(0),
+            *cmd, cwd=str(root), env=_child_env(0),
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
             start_new_session=True,
         )
-        out, _ = await asyncio.wait_for(p.communicate(), timeout=180)
+        try:
+            out, _ = await asyncio.wait_for(p.communicate(), timeout=180)
+        except asyncio.TimeoutError:
+            await terminate_process_tree(p, timeout=12.0)
+            return False, "vite build timed out (180s)"
         return p.returncode == 0, (out or b"").decode("utf-8", errors="replace")
-    except asyncio.TimeoutError:
-        return False, "vite build timed out (180s)"
     except Exception as exc:
         return False, str(exc)
 

@@ -67,6 +67,12 @@ def _run(argv: list[str], timeout: int = 20) -> dict[str, Any]:
 
 def reach_status() -> dict[str, Any]:
     """Doctor-style probe: which channels are actually available on this machine."""
+    chromium_for_vital = ""
+    try:
+        from .playground_browser import chromium_executable
+        chromium_for_vital = chromium_executable() or ""
+    except Exception:
+        chromium_for_vital = ""
     cli = _which("agent-reach")
     doctor: dict[str, Any] | None = None
     if cli:
@@ -96,6 +102,14 @@ def reach_status() -> dict[str, Any]:
             "backend": cli,
             "ready": bool(cli),
             "note": "optional CLI: https://github.com/Panniantong/Agent-Reach",
+        },
+        "chromium": {
+            "backend": chromium_for_vital or None,
+            "ready": bool(chromium_for_vital),
+            "note": (
+                "Render-and-See / visual proof. Install: pip install -e '.[playwright]' "
+                "then python -m playwright install chromium, or set DAEDALUS_CHROMIUM."
+            ),
         },
     }
     return {

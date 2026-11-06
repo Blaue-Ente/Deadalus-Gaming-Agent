@@ -19,12 +19,14 @@ launch via ``executable_path`` pointing at the Nix ``chromium`` binary.
 from __future__ import annotations
 
 import logging
+import os
 import shutil
 from pathlib import Path
 from typing import Any
 
 from . import playground as pg
 from .playground_runtime import VISUAL_KINDS
+from .visual_integrity import entrypoint_integrity_failures, png_color_stats, screenshot_is_suspect_blank
 
 log = logging.getLogger("argos.daedalus.playground_browser")
 
@@ -38,11 +40,6 @@ CHROME_ARGS = (
     "--enable-webgl",
     "--ignore-gpu-blocklist",
 )
-
-# A 1280×800 PNG of a real Phaser frame is tens of KB. A solid #0b1020
-# compresses to ~4–8 KB — that is a blank screen, not a boutique title.
-_BLANK_SHOT_BYTES = 12_000
-
 
 def paint_summary(
     *,
@@ -96,25 +93,78 @@ _BENIGN_CONSOLE = (
 _CRITICAL_RESOURCE_TYPES = ("script", "stylesheet", "fetch", "xhr", "document", "image")
 
 
-def _find_chrome() -> str | None:
-    """Resolve a runnable Chromium binary (Nix store first — it ships its libs)."""
-    for name in ("chromium", "chromium-browser", "google-chrome", "chrome"):
-        p = shutil.which(name)
-        if p:
-            return p
+def _playwright_chromium_exe() -> Path | None:
+    try:
+        from playwright.sync_api import sync_playwright
+    except Exception:
+        return None
+    try:
+        with sync_playwright() as p:
+            pe = p.chromium.executable_path
+            if pe and Path(pe).is_file():
+                return Path(pe)
+    except Exception:
+        return None
     return None
 
 
+def chromium_executable() -> str | None:
+    """Resolve a Chromium or Chrome-based browser for Playwright.
+
+    Order: ``DAEDALUS_CHROMIUM``, common PATH names, Edge under Program Files*,
+    Playwright's Chromium download.
+    """
+    override = (os.environ.get("DAEDALUS_CHROMIUM") or "").strip()
+    if override:
+        cand = Path(override).expanduser()
+        if cand.is_file():
+            return str(cand.resolve())
+
+    for name in ("chromium", "chromium-browser", "google-chrome-stable", "google-chrome", "chrome"):
+        p = shutil.which(name)
+        if p:
+            return p
+
+    if os.name == "nt":
+        roots = []
+        for key in ("ProgramFiles", "ProgramFiles(x86)", "LocalAppData"):
+            v = os.environ.get(key, "").strip()
+            if v:
+                roots.append(Path(v))
+        for base in roots:
+            for tail in (
+                "Microsoft/Edge/Application/msedge.exe",
+                "Google/Chrome/Application/chrome.exe",
+            ):
+                exe = (base / tail)
+                try:
+                    if exe.is_file():
+                        return str(exe.resolve())
+                except OSError:
+                    continue
+
+    pw = _playwright_chromium_exe()
+    if pw and pw.is_file():
+        return str(pw)
+    return None
+
+
+def _find_chrome() -> str | None:
+    return chromium_executable()
+
+
 def screenshot_looks_blank(path: Path | str | None) -> bool:
-    """True when the PNG is a solid-color / empty frame (highly compressed)."""
+    """True when the PNG is a near-solid raster (decoder + heuristics)."""
     if not path:
         return False
-    p = Path(path)
-    try:
-        n = p.stat().st_size
-    except OSError:
-        return False
-    return n > 0 and n < _BLANK_SHOT_BYTES
+    stats = png_color_stats(path)
+    if stats is None:
+        try:
+            n = Path(path).stat().st_size
+        except OSError:
+            return False
+        return n > 0 and n < 12_000
+    return screenshot_is_suspect_blank(stats)
 
 
 def _is_benign(text: str) -> bool:
@@ -146,12 +196,18 @@ async def browser_verify(
     """
     chrome = _find_chrome()
     if not chrome:
+        doctor = (
+            "Doctor: no Chromium/Edge found for visual proof. Install Playwright browsers: "
+            "`pip install -e \".[playwright]\"` then `python -m playwright install chromium`, "
+            "or set DAEDALUS_CHROMIUM to a chrome/chromium/msedge executable."
+        )
         return {
             "ok": False, "reachable": False, "blank_screen": False,
             "console_errors": [], "page_errors": [], "failed_requests": [],
             "dom_text_len": 0, "has_canvas": False, "screenshot_path": None,
-            "summary": "Chromium binary не е намерен — Render-and-See пропуснат",
+            "summary": "Chromium not found — visual proof skipped. " + doctor,
             "error": "chromium_not_found", "skipped": True,
+            "doctor": doctor,
         }
 
     try:
@@ -161,8 +217,9 @@ async def browser_verify(
             "ok": False, "reachable": False, "blank_screen": False,
             "console_errors": [], "page_errors": [], "failed_requests": [],
             "dom_text_len": 0, "has_canvas": False, "screenshot_path": None,
-            "summary": f"Playwright недостъпен — {exc}",
+            "summary": f"Playwright unavailable — {exc}",
             "error": "playwright_unavailable", "skipped": True,
+            "doctor": "Install optional deps: pip install -e \".[playwright]\"",
         }
 
     console_errors: list[str] = []
@@ -224,6 +281,7 @@ async def browser_verify(
     reachable = False
     dom_text_len = 0
     has_canvas = False
+    dom_text_full = ""
 
     try:
         async with async_playwright() as p:
@@ -250,7 +308,6 @@ async def browser_verify(
                 pass
             await page.wait_for_timeout(settle_ms)
 
-            dom_text_full = ""
             try:
                 dom_text_full = await page.inner_text("body")
                 dom_text_len = len((dom_text_full or "").strip())
@@ -328,10 +385,24 @@ async def browser_verify(
         except Exception:
             shot_abs = None
     dark_frame = screenshot_looks_blank(shot_abs)
-    blank_screen = reachable and (
-        (dom_text_len < 8 and not has_canvas) or dark_frame
+    root = pg.project_dir(slug)
+    try:
+        idx = (root / "index.html").read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        idx = ""
+    integrity_codes = entrypoint_integrity_failures(
+        index_html=idx, root=root, writer_assist_seeded=False,
     )
-    has_fatal = bool(page_errors) or bool(failed_requests) or bool(console_errors)
+    for code in integrity_codes:
+        page_errors.append(f"integrity:{code}")
+    # Dark WebGL without HUD text fails; a dark game with visible UI text passes.
+    blank_screen = reachable and (
+        (dom_text_len < 8 and not has_canvas)
+        or (dark_frame and dom_text_len < 8)
+    )
+    has_fatal = (
+        bool(page_errors) or bool(failed_requests) or bool(console_errors) or bool(integrity_codes)
+    )
     ok = reachable and (not blank_screen) and (not has_fatal)
 
     summary = paint_summary(
@@ -353,6 +424,7 @@ async def browser_verify(
         "has_canvas": has_canvas, "screenshot_path": screenshot_path,
         "dom_text": (dom_text_full or "").strip()[:2500],
         "summary": summary,
+        "integrity_codes": integrity_codes,
     }
 
 

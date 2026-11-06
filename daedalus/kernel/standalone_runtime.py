@@ -3,8 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import shlex
-import signal
 import socket
 import subprocess
 import sys
@@ -12,16 +10,17 @@ from pathlib import Path
 from typing import Any
 
 from .capability_registry import BROWSER_VISUAL_KINDS
+from ..proc import argv_for_command, argv_from_resolved_shlex, child_env_from_allowlist, terminate_process_tree
 
 # Chromium visual kinds. Godot/Expo native are not this tuple.
 VISUAL_KINDS = tuple(sorted(BROWSER_VISUAL_KINDS))
 
-_ENV_ALLOW = {
+_ENV_ALLOW = frozenset({
     "PATH", "HOME", "LANG", "LC_ALL", "TERM", "TZ", "TMPDIR", "USER",
     "PYTHONUNBUFFERED", "PYTHONDONTWRITEBYTECODE",
     "NODE_ENV", "NPM_CONFIG_CACHE",
     "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME",
-}
+})
 
 HTTP_PROBE_CONFIG: dict[str, tuple[list[str], tuple[str, ...]]] = {
     "fastapi": (["/docs", "/openapi.json", "/"], ("swagger", "openapi", "fastapi")),
@@ -32,9 +31,7 @@ HTTP_PROBE_CONFIG: dict[str, tuple[list[str], tuple[str, ...]]] = {
 
 
 def child_env(port: int) -> dict[str, str]:
-    env = {k: v for k, v in os.environ.items() if k in _ENV_ALLOW}
-    env["PORT"] = str(port)
-    env["PYTHONUNBUFFERED"] = "1"
+    env = child_env_from_allowlist(_ENV_ALLOW, port)
     home = env.get("HOME", os.path.expanduser("~"))
     env.setdefault("XDG_CONFIG_HOME", f"{home}/.config")
     env.setdefault("XDG_CACHE_HOME", f"{home}/.cache")
@@ -69,7 +66,7 @@ def resolve_cmd(kind: str, root: Path, port: int) -> str:
             f"--browser.gatherUsageStats false"
         )
     if kind in ("vite", "vite-react"):
-        return f"npx --yes vite --host 127.0.0.1 --port {port} --base ./"
+        return f"npx --yes vite --host 127.0.0.1 --port {port} --base ./ --no-open"
     if kind == "node":
         for cand in ("index.js", "server.js", "app.js", "main.js"):
             if (root / cand).exists():
@@ -112,18 +109,20 @@ def _vite_build(root: Path) -> tuple[bool, list[str]]:
     if not (root / "package.json").exists():
         return False, ["no package.json"]
     if not (root / "node_modules").is_dir():
+        env0 = child_env(0)
         r = subprocess.run(
-            ["npm", "install", "--prefer-offline", "--no-audit"],
+            argv_for_command("npm", "install", "--prefer-offline", "--no-audit", env=env0),
             cwd=root, capture_output=True, text=True, timeout=300,
-            env=child_env(0),
+            env=env0,
         )
         logs.extend((r.stdout or "").splitlines()[-15:])
         if r.returncode != 0:
             return False, logs + ["npm install failed"]
+    env0 = child_env(0)
     r = subprocess.run(
-        ["npx", "vite", "build", "--base", "./"],
+        argv_for_command("npx", "vite", "build", "--base", "./", env=env0),
         cwd=root, capture_output=True, text=True, timeout=180,
-        env=child_env(0),
+        env=env0,
     )
     logs.extend((r.stdout or r.stderr or "").splitlines()[-30:])
     return r.returncode == 0, logs
@@ -149,8 +148,12 @@ async def smoke_test(root: Path, kind: str) -> dict[str, Any]:
         cmd = resolve_cmd(kind, root, port)
         if not cmd:
             return {"ok": False, "error": f"no command for {kind}", "logs": logs}
+        proc_env = child_env(port)
+        argv = argv_from_resolved_shlex(cmd, env=proc_env)
+        if not argv:
+            return {"ok": False, "error": "empty command", "logs": logs}
         proc = await asyncio.create_subprocess_exec(
-            *shlex.split(cmd), cwd=str(root), env=child_env(port),
+            *argv, cwd=str(root), env=proc_env,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
             start_new_session=True,
         )
@@ -168,14 +171,7 @@ async def smoke_test(root: Path, kind: str) -> dict[str, Any]:
                 logs.append(f"[http] OK {hit}")
             return {"ok": http_ok, "error": http_err, "logs": logs, "http_ok": http_ok}
         finally:
-            try:
-                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-            except Exception:
-                proc.kill()
-            try:
-                await asyncio.wait_for(proc.wait(), timeout=5.0)
-            except Exception:
-                pass
+            await terminate_process_tree(proc, timeout=6.0)
 
     if (root / "index.html").exists():
         return {"ok": True, "error": "", "logs": ["static fallback ok"]}

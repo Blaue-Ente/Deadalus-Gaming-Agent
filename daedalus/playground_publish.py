@@ -25,8 +25,9 @@ from pathlib import Path
 from typing import Any
 
 from . import playground as pg
-
 from .paths import data_root, repo_root
+from .playground_runtime import PlaygroundRuntime
+from .proc import argv_for_command, terminate_process_tree
 
 log = logging.getLogger(__name__)
 
@@ -101,15 +102,18 @@ async def _build_vite(root: Path) -> Path:
     on failure.
     """
     async def _run(*cmd: str, timeout: float = 180) -> tuple[int, str]:  # noqa: E301
+        env = PlaygroundRuntime.child_env(0)
+        argv = argv_for_command(cmd[0], *cmd[1:], env=env) if cmd else []
         proc = await asyncio.create_subprocess_exec(
-            *cmd, cwd=str(root),
+            *argv, cwd=str(root), env=env,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
+            start_new_session=True,
         )
         try:
             raw, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         except asyncio.TimeoutError:
-            proc.kill()
+            await terminate_process_tree(proc, timeout=12.0)
             return -1, f"timeout after {timeout}s"
         text = raw.decode("utf-8", errors="replace") if raw else ""
         return (proc.returncode or 0), text
@@ -143,15 +147,18 @@ async def _build_expo(root: Path) -> Path:
     Returns the ``dist/`` Path (Expo web export output). Raises RuntimeError on failure.
     """
     async def _run(*cmd: str, timeout: float = 600) -> tuple[int, str]:
+        env = PlaygroundRuntime.child_env(0)
+        argv = argv_for_command(cmd[0], *cmd[1:], env=env) if cmd else []
         proc = await asyncio.create_subprocess_exec(
-            *cmd, cwd=str(root),
+            *argv, cwd=str(root), env=env,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
+            start_new_session=True,
         )
         try:
             raw, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
         except asyncio.TimeoutError:
-            proc.kill()
+            await terminate_process_tree(proc, timeout=12.0)
             return -1, f"timeout after {timeout}s"
         text = raw.decode("utf-8", errors="replace") if raw else ""
         return (proc.returncode or 0), text
