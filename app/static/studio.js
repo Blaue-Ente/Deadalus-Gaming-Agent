@@ -406,14 +406,21 @@
   async function previewEffort() {
     const q = $("prompt").value.trim();
     try {
-      const data = await api(
-        "/api/v1/daedalus/effort?effort=" + encodeURIComponent(state.effort) +
-        "&q=" + encodeURIComponent(q.slice(0, 500)),
-        { timeoutMs: 8000 }
+      const data = await api("/api/v1/daedalus/effort", {
+        method: "POST",
+        body: JSON.stringify({
+          text: q.slice(0, 8000),
+          effort: state.effort || "auto",
+        }),
+        timeoutMs: 8000,
+      });
+      const resolved = data.tier || "whisper";
+      text(
+        $("effortnote"),
+        t("studio.effort." + state.effort) + " — " + t("studio.effortNote." + resolved),
       );
-      text($("effortnote"), t("studio.effort." + (data.tier || "auto")) + " — " + t("studio.effortNote." + (data.tier || "whisper")));
-    } catch {
-      text($("effortnote"), "");
+    } catch (e) {
+      text($("effortnote"), t("studio.effortPreviewErr") + ": " + errText(e));
     }
   }
 
