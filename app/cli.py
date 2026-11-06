@@ -5,6 +5,8 @@ import argparse
 import os
 import sys
 
+from daedalus.stdio_utf8 import configure_stdio_utf8_best_effort
+
 
 def _desktop_ui(args: argparse.Namespace) -> str:
     ui = str(getattr(args, "ui", "auto") or "auto")
@@ -23,6 +25,7 @@ def _desktop_open_browser(args: argparse.Namespace) -> bool:
 
 
 def main(argv: list[str] | None = None) -> None:
+    configure_stdio_utf8_best_effort()
     from app.envload import load_env_file
 
     load_env_file()
