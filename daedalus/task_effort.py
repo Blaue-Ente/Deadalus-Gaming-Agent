@@ -137,17 +137,36 @@ def _cloud_key_present() -> bool:
     return any((os.environ.get(key) or "").strip() for key in _EPIC_CLOUD_KEYS)
 
 
+def _registry_epic_cloud_entry():
+    from .llm_config import resolve_provider_api_key
+    from .local_llm import is_local_provider
+    from .model_registry import iter_candidates_for_task
+
+    for entry in iter_candidates_for_task(
+        "complex game world plan code",
+        budget_hint="quality",
+        required_caps=["code", "planning", "reasoning"],
+    ):
+        prov = str((entry or {}).get("provider") or "").strip().lower()
+        mid = str((entry or {}).get("model_id") or "").strip()
+        if not prov or not mid:
+            continue
+        if is_local_provider(prov):
+            continue
+        if not resolve_provider_api_key(prov):
+            continue
+        return entry
+    return None
+
+
 def _epic_cloud_pick() -> dict[str, Any] | None:
     """Cloud model for this epic turn. None when no key is configured."""
     if not _cloud_key_present():
         return None
     try:
-        from .model_registry import select_for_task
-        entry = select_for_task(
-            "complex game world plan code",
-            budget_hint="quality",
-            required_caps=["code", "planning", "reasoning"],
-        )
+        entry = _registry_epic_cloud_entry()
+        if not entry:
+            return None
     except Exception:
         return None
     mid = (entry or {}).get("model_id")
@@ -226,12 +245,7 @@ def resolve_model(decision: dict[str, Any]) -> dict[str, Any]:
         return {"model": None, "model_source": "cheap-path", "provider_path": "whisper-local"}
     if tier == "epic":
         try:
-            from .model_registry import select_for_task
-            entry = select_for_task(
-                "complex game world plan code",
-                budget_hint="quality",
-                required_caps=["code", "planning", "reasoning"],
-            )
+            entry = _registry_epic_cloud_entry()
             mid = (entry or {}).get("model_id")
             if mid:
                 out: dict[str, Any] = {

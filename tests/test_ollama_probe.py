@@ -259,8 +259,12 @@ def test_epic_uses_cloud_without_changing_wardrobe_model(tmp_path, monkeypatch):
 
     monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test")
     monkeypatch.setattr(
-        "daedalus.model_registry.select_for_task",
-        lambda *args, **kwargs: {"model_id": "cloud-epic", "provider": "openrouter"},
+        "daedalus.model_registry.iter_candidates_for_task",
+        lambda *args, **kwargs: [{"model_id": "cloud-epic", "provider": "openrouter"}],
+    )
+    monkeypatch.setattr(
+        "daedalus.llm_config.resolve_provider_api_key",
+        lambda p: "k" if (p or "").strip().lower() == "openrouter" else "",
     )
     cloud = resolve_model(decision)
     assert cloud["provider_path"] == "epic-cloud"

@@ -22,7 +22,13 @@
   const msgs = $("msgs");
 
   function t(key, vars) {
-    return (window.DaedalusI18n && DaedalusI18n.t) ? DaedalusI18n.t(key, vars) : key;
+    let s = (window.DaedalusI18n && DaedalusI18n.t) ? DaedalusI18n.t(key, vars) : key;
+    if (vars && typeof s === "string") {
+      Object.keys(vars).forEach((k) => {
+        s = s.split("{" + k + "}").join(String(vars[k] ?? ""));
+      });
+    }
+    return s;
   }
   if (window.DaedalusI18n && DaedalusI18n.apply) DaedalusI18n.apply();
 
@@ -495,8 +501,22 @@
       };
       addPill(h.standalone ? "standalone" : "host");
       if (w.wardrobe && w.wardrobe.offline) addPill("offline", "warn");
-      if (llm.ok) addPill((llm.provider || "?") + " · " + (llm.model || "?"));
-      else addPill(t("studio.noLlm"), "err");
+      const brainP = (llm.brain && llm.brain.provider) || (h.llm && h.llm.brain_provider) || "";
+      const brainM = (llm.brain && llm.brain.model) || (h.llm && h.llm.brain_model) || "";
+      const turnP = llm.provider || "";
+      const turnM = llm.model || "";
+      const ov = llm.overlays || {};
+      const sameTurn =
+        !ov.this_turn ||
+        (ov.this_turn.provider === brainP && ov.this_turn.model === brainM);
+      if (llm.ok && brainP && brainM) {
+        addPill(t("studio.brainPill", { provider: brainP, model: brainM }));
+        if (!sameTurn && turnP && turnM) {
+          addPill(t("studio.thisTurnPill", { provider: turnP, model: turnM }), "warn");
+        }
+      } else if (llm.ok && turnP && turnM) {
+        addPill(turnP + " · " + turnM);
+      } else addPill(t("studio.noLlm"), "err");
       const backends = (local.backends || []).filter((b) => b.ok).map((b) => b.provider);
       if (backends.length) addPill("local " + backends.join("+"));
 
@@ -506,6 +526,18 @@
       if (prof.note) lines.push(prof.note);
       lines.push("ollama: " + (w.ollama ? t("studio.ollamaYes") : t("studio.ollamaNo")));
       const eff = local.effective || {};
+      const locBrain = local.brain || {};
+      lines.push(
+        t("studio.brainLine") +
+          ": " +
+          (locBrain.provider || brainP || "?") +
+          " / " +
+          (locBrain.model || brainM || "?"),
+      );
+      if ((locBrain.provider && eff.provider && locBrain.model && eff.model) &&
+          (locBrain.provider !== eff.provider || locBrain.model !== eff.model)) {
+        lines.push(t("studio.thisTurnLine") + ": " + (eff.provider || "?") + " / " + (eff.model || "?"));
+      }
       lines.push(t("studio.active") + ": " + (eff.provider || "?") + " / " + (eff.model || "?"));
       (local.backends || []).forEach((b) => lines.push((b.ok ? "UP  " : "DOWN") + " " + b.provider));
       text($("llmbox"), lines.join("\n"));

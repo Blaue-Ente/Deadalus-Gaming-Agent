@@ -516,6 +516,30 @@ def _has_llm() -> bool:
 def recommendations() -> list[dict[str, Any]]:
     """Next actions for the owner — highest first."""
     out: list[dict[str, Any]] = []
+    try:
+        from . import llm_routing_watchdog as routing_watchdog
+        fail = routing_watchdog.last_failure()
+        if fail and str(fail.get("error") or "").strip():
+            req = str(fail.get("requested_model") or "").strip()
+            src = str(fail.get("source") or "").strip()
+            detail = str(fail.get("error") or "")[:400]
+            body = detail
+            if req:
+                body = f"{detail} (requested: {req}"
+                if src:
+                    body += f", from {src}"
+                body += ")"
+            elif src:
+                body = f"{detail} (source: {src})"
+            out.append({
+                "id": "llm-routing-error",
+                "level": "high",
+                "title": "LLM routing failed",
+                "body": body,
+                "group": "llm",
+            })
+    except Exception:
+        pass
     if not _has_llm():
         out.append({
             "id": "need-llm",
@@ -614,11 +638,15 @@ def _public_llm(cfg: dict[str, Any]) -> dict[str, Any]:
 
 def brain_overview() -> dict[str, Any]:
     """Sanitized LLM + wardrobe + worker routing for Connectors. Never includes keys."""
-    from .llm_config import get_config
+    from .llm_config import get_brain_config, get_config
     from .llm_wardrobe import status as wardrobe_status
     from .local_llm import default_base_url, local_requested, probe_endpoint
     from .workers import get_worker_config
 
+    try:
+        cfg_brain = get_brain_config()
+    except Exception as extra:
+        cfg_brain = {"warning": str(extra)[:240]}
     try:
         cfg = get_config()
     except Exception as extra:
@@ -666,9 +694,25 @@ def brain_overview() -> dict[str, Any]:
             "installed": row.get("installed"),
             "recommended": row.get("recommended"),
         })
+    overlays: dict[str, Any] = {}
+    if isinstance(cfg, dict) and isinstance(cfg_brain, dict):
+        if cfg.get("model") != cfg_brain.get("model") or cfg.get("provider") != cfg_brain.get("provider"):
+            overlays["this_turn"] = _public_llm(cfg)
+        if cfg.get("run_budget_tier"):
+            overlays["run_budget_tier"] = cfg.get("run_budget_tier")
+        if cfg.get("effort"):
+            overlays["task_effort"] = cfg.get("effort")
+    try:
+        from . import llm_routing_watchdog as routing_watchdog
+        rf = routing_watchdog.last_failure()
+    except Exception:
+        rf = None
     return {
         "mode": "local" if local else "cloud",
+        "brain": _public_llm(cfg_brain if isinstance(cfg_brain, dict) else {}),
         "effective": _public_llm(cfg if isinstance(cfg, dict) else {}),
+        "overlays": overlays,
+        "routing_failure": rf,
         "wardrobe": {
             "backend": wardrobe.get("backend") or "auto",
             "active": wardrobe.get("active"),

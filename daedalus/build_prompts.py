@@ -167,12 +167,12 @@ def _provider_can_call_cloud(provider: str) -> bool:
 
 
 def _tag_from_get_config() -> tuple[str | None, str]:
-    """Use the same provider/model as ``get_config()`` when a key is available (or local)."""
-    from .llm_config import get_config
+    """Use Connectors/wardrobe brain (no whisper/epic/run-budget overlay)."""
+    from .llm_config import get_brain_config
     from .local_llm import is_local_provider
 
     try:
-        cfg = get_config()
+        cfg = get_brain_config()
     except Exception:
         return None, ""
     prov = str(cfg.get("provider") or "").strip().lower()
@@ -270,6 +270,34 @@ def _local_ollama_fallback_tag() -> tuple[str, str]:
     return f"ollama:{m}", f"Game: local Ollama fallback ({m})"
 
 
+def fallback_build_model_tag() -> tuple[str, str]:
+    """Repair/build last resort when ``resolve_*`` returns empty — mirrors brain, not a hardcoded cloud id."""
+    from .llm_config import get_brain_config
+
+    try:
+        cfg = get_brain_config()
+    except Exception as exc:
+        return (
+            "openrouter:anthropic/claude-sonnet-4-5",
+            f"fallback (no brain): {str(exc)[:120]}",
+        )
+    prov = str(cfg.get("provider") or "").strip().lower()
+    mdl = str(cfg.get("model") or "").strip()
+    if not mdl:
+        return (
+            "openrouter:anthropic/claude-sonnet-4-5",
+            "fallback: empty model in brain config",
+        )
+    if prov in _DIRECT_PROVIDERS:
+        return f"{prov}:{mdl}", f"fallback: brain {prov}/{mdl}"
+    if "/" in mdl:
+        return mdl, f"fallback: brain {mdl}"
+    return (
+        "openrouter:anthropic/claude-sonnet-4-5",
+        f"fallback: non-gateway brain ({prov})",
+    )
+
+
 def _first_registry_cloud_with_key(task: str, *, budget_hint: str) -> tuple[str | None, str]:
     from . import model_registry as reg
     from .llm_config import is_loopback_gateway
@@ -299,12 +327,12 @@ def resolve_build_model(prompt: str = "") -> tuple[str | None, str]:
         fn = getattr(admin, "_resolve_build_model", None)
         if fn:
             return fn(prompt)
-    from .llm_config import get_config, is_nvidia_free_only
+    from .llm_config import get_brain_config, is_nvidia_free_only
     from . import model_registry as reg
 
     try:
         if is_nvidia_free_only():
-            cfg = get_config()
+            cfg = get_brain_config()
             prov, mdl = cfg.get("provider", ""), cfg.get("model", "")
             if mdl and prov == "nvidia":
                 return f"nvidia:{mdl}", f"NVIDIA free: {mdl}"
@@ -318,7 +346,7 @@ def resolve_build_model(prompt: str = "") -> tuple[str | None, str]:
                         f"Auto: {best.get('display_name', best['model_id'])}",
                     )
             return None, "Auto: code routing"
-        cfg = get_config()
+        cfg = get_brain_config()
         prov, mdl = cfg.get("provider", ""), cfg.get("model", "")
         if mdl and (prov in _DIRECT_PROVIDERS or "/" in mdl):
             ov = f"{prov}:{mdl}" if prov in _DIRECT_PROVIDERS else mdl
@@ -354,10 +382,10 @@ def resolve_build_model_for_project(
 
     # 2. NVIDIA free-only policy — never auto-route to Poolside or other clouds
     try:
-        from .llm_config import get_config, is_nvidia_free_only
+        from .llm_config import get_brain_config, is_nvidia_free_only
 
         if is_nvidia_free_only():
-            cfg = get_config()
+            cfg = get_brain_config()
             prov, mdl = str(cfg.get("provider") or ""), str(cfg.get("model") or "")
             if prov == "nvidia" and mdl:
                 return f"nvidia:{mdl}", f"Game: NVIDIA free — {mdl}"

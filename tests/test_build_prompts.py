@@ -70,7 +70,7 @@ def test_game_nvidia_free_only_beats_registry(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr("daedalus.build_prompts._adn_admin", lambda: None)
     monkeypatch.setattr("daedalus.llm_config.is_nvidia_free_only", lambda: True)
     monkeypatch.setattr(
-        "daedalus.llm_config.get_config",
+        "daedalus.llm_config.get_brain_config",
         lambda: {"provider": "nvidia", "model": "qwen/qwen3-next-80b-a3b-instruct"},
     )
 

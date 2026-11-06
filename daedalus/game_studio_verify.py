@@ -93,7 +93,7 @@ def verify_summary_for_milestone(config: dict[str, Any] | None, milestone_id: st
 
 
 async def _build_fix_context(slug: str, proj: dict[str, Any], description: str) -> tuple[str, str, str]:
-    from .build_prompts import build_combined_sys, resolve_build_model_for_project
+    from .build_prompts import build_combined_sys, fallback_build_model_tag, resolve_build_model_for_project
     from .game_platform_guide import is_likely_game
 
     kind = proj.get("kind", "static")
@@ -113,7 +113,7 @@ async def _build_fix_context(slug: str, proj: dict[str, Any], description: str) 
         description, is_game=is_game, coding_mode=coding_mode,
     )
     if not build_model:
-        build_model = "anthropic/claude-sonnet-4"
+        build_model, _ = fallback_build_model_tag()
     return combined_sys, build_model, kind
 
 

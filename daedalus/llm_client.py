@@ -143,6 +143,7 @@ async def _complete_with_cfg(
     json_mode: bool,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """One completion attempt with a fully-resolved cfg dict. Returns (openai-shaped dict, billed)."""
+    from . import llm_routing_watchdog as routing_watchdog
     from .llm_config import openai_compat_extra_body, openai_compat_headers
 
     provider = cfg.get("provider") or "openai"
@@ -229,6 +230,10 @@ async def _complete_with_cfg(
         "completion_tokens": int(billed.get("completion_tokens") or 0),
         "cost_usd": billed.get("cost_usd"),
     }
+    try:
+        routing_watchdog.note_success(source="llm_client._complete_with_cfg")
+    except Exception:
+        pass
     return out, billed
 
 
@@ -245,6 +250,7 @@ async def complete(
     json_mode: bool = False,
 ) -> dict[str, Any]:
     """Call the configured OpenAI-compatible (or Anthropic) provider directly."""
+    from . import llm_routing_watchdog as routing_watchdog
     from .llm_config import get_config
     from .local_llm import is_local_provider, resolve_local_config
     from .model_router import config_for_explicit_model
@@ -254,6 +260,14 @@ async def complete(
     err_note = str(cfg.get("routing_error") or "").strip()
     if err_note:
         log.warning("LLM routing: %s", err_note)
+        try:
+            routing_watchdog.note_failure(
+                error=err_note,
+                requested_model=model,
+                source="llm_client.complete",
+            )
+        except Exception:
+            pass
         nouser = (
             "Cannot use the requested model: " + err_note + " "
             "Fix credentials or use a local model (wardrobe / DAEDALUS_PROVIDER=ollama)."
@@ -306,6 +320,14 @@ async def complete(
             log.warning("LLM local fallback failed: %s", exc2)
 
     if first_err:
+        try:
+            routing_watchdog.note_failure(
+                error=first_err,
+                requested_model=model,
+                source="llm_client.complete",
+            )
+        except Exception:
+            pass
         raise RuntimeError(
             "LLM call failed for "
             f"{cfg.get('provider')}/{cfg.get('model')}: {first_err}. "
@@ -326,6 +348,7 @@ async def call_with_tools(
     Returns the unified ``{stop_reason, content}`` shape used by
     ``run_native_discovery_pass`` (text + tool_use blocks).
     """
+    from . import llm_routing_watchdog as routing_watchdog
     from .llm_config import get_config, is_loopback_gateway, openai_compat_extra_body, openai_compat_headers
     from .local_llm import dummy_api_key, is_local_provider, normalize_provider
     from .native_tools import openai_tool_specs, to_anthropic_messages, to_openai_messages
@@ -384,6 +407,10 @@ async def call_with_tools(
                     "input": block.input,
                 })
         billed = _meter(resp, model=model, role="writer")
+        try:
+            routing_watchdog.note_success(source="llm_client.call_with_tools")
+        except Exception:
+            pass
         return {
             "stop_reason": resp.stop_reason,
             "content": content,
@@ -438,12 +465,28 @@ async def call_with_tools(
                 resp = await client.chat.completions.create(**create_kw)
             except Exception as exc2:
                 log.warning("tool LLM %s/%s failed: %s", provider, model, exc2)
+                try:
+                    routing_watchdog.note_failure(
+                        error=str(exc2)[:800],
+                        requested_model=f"{provider}:{model}",
+                        source="llm_client.call_with_tools",
+                    )
+                except Exception:
+                    pass
                 return {
                     "stop_reason": "end_turn",
                     "content": [{"type": "text", "text": f"LLM error: {exc2}"[:800]}],
                 }
         else:
             log.warning("tool LLM %s/%s failed: %s", provider, model, exc)
+            try:
+                routing_watchdog.note_failure(
+                    error=str(exc)[:800],
+                    requested_model=f"{provider}:{model}",
+                    source="llm_client.call_with_tools",
+                )
+            except Exception:
+                pass
             return {
                 "stop_reason": "end_turn",
                 "content": [{"type": "text", "text": f"LLM error: {exc}"[:800]}],
@@ -475,6 +518,10 @@ async def call_with_tools(
         })
     stop = "tool_use" if any(b.get("type") == "tool_use" for b in content) else "end_turn"
     billed = _meter(resp, model=model, role="writer")
+    try:
+        routing_watchdog.note_success(source="llm_client.call_with_tools")
+    except Exception:
+        pass
     try:
         log.info(
             "tool LLM %s/%s stop=%s tools=%d prompt=%s completion=%s cost=%s",

@@ -133,12 +133,15 @@ async def health() -> dict:
     from daedalus.host import adn_available, standalone_mode
     from daedalus.store import db_path
     try:
-        from daedalus.llm_config import get_config
+        from daedalus.llm_config import get_brain_config, get_config
+        brain = get_brain_config()
         cfg = get_config()
         llm = {
             "provider": cfg.get("provider"),
             "model": cfg.get("model"),
             "has_key": bool(cfg.get("api_key")),
+            "brain_provider": brain.get("provider"),
+            "brain_model": brain.get("model"),
         }
     except Exception:
         llm = {"has_key": False}
@@ -187,14 +190,34 @@ async def capabilities() -> dict:
 @app.get("/api/v1/llm/status")
 async def llm_status() -> dict:
     try:
-        from daedalus.llm_config import get_config
+        from daedalus.llm_config import get_brain_config, get_config
+        brain = get_brain_config()
         cfg = get_config()
+        overlays: dict = {}
+        if isinstance(brain, dict) and isinstance(cfg, dict):
+            if cfg.get("model") != brain.get("model") or cfg.get("provider") != brain.get("provider"):
+                overlays["this_turn"] = {
+                    "provider": cfg.get("provider"),
+                    "model": cfg.get("model"),
+                    "source": cfg.get("source"),
+                }
+            if cfg.get("run_budget_tier"):
+                overlays["run_budget_tier"] = cfg.get("run_budget_tier")
+            if cfg.get("effort"):
+                overlays["task_effort"] = cfg.get("effort")
         return {
             "ok": True,
             "provider": cfg.get("provider"),
             "model": cfg.get("model"),
             "source": cfg.get("source"),
             "has_key": bool(cfg.get("api_key")),
+            "brain": {
+                "provider": brain.get("provider"),
+                "model": brain.get("model"),
+                "source": brain.get("source"),
+                "has_key": bool(brain.get("api_key")),
+            },
+            "overlays": overlays,
         }
     except Exception as exc:
         return {"ok": False, "error": str(exc)[:200]}

@@ -368,12 +368,12 @@ def get_worker_config() -> dict:
     """Return resolved worker slot configs: {fast: {...}, balanced: {...}, deep: {...}}"""
     from .llm_config import (
         PROVIDER_DEFAULTS,
-        get_config,
+        get_brain_config,
         is_nvidia_free_only,
         resolve_provider_api_key,
     )
 
-    master = get_config()
+    master = get_brain_config()
     db_cfg = _read_worker_db()
     nv_free = is_nvidia_free_only()
 
@@ -396,16 +396,17 @@ def get_worker_config() -> dict:
             provider, model = _nv_free_slots[slot]
             pd = PROVIDER_DEFAULTS.get(provider, PROVIDER_DEFAULTS["openai"])
             api_key = resolve_provider_api_key(provider)
-            result[slot] = {
-                "model": model,
-                "provider": provider,
-                "api_key": api_key,
-                "base_url": pd["base_url"],
-                "sdk": pd["sdk"],
-                "enabled": saved.get("enabled", True),
-                "source": "nvidia_free_only",
-            }
-            continue
+            if api_key:
+                result[slot] = {
+                    "model": model,
+                    "provider": provider,
+                    "api_key": api_key,
+                    "base_url": pd["base_url"],
+                    "sdk": pd["sdk"],
+                    "enabled": saved.get("enabled", True),
+                    "source": "nvidia_free_only",
+                }
+                continue
         if saved.get("model") and saved.get("provider"):
             provider = saved["provider"]
             pd = PROVIDER_DEFAULTS.get(provider, PROVIDER_DEFAULTS["anthropic"])
@@ -704,13 +705,13 @@ def _resolve_auto_slot_cfg(task: str) -> dict | None:
     """For 'auto' slot: pick best model from registry and build a slot_cfg dict."""
     try:
         from . import model_registry as mr
-        from .llm_config import PROVIDER_DEFAULTS, get_config
+        from .llm_config import PROVIDER_DEFAULTS, get_brain_config
         entry = mr.select_for_task(task)
         if not entry:
             return None
         provider = entry.get("provider", "openrouter")
         pd = PROVIDER_DEFAULTS.get(provider, PROVIDER_DEFAULTS.get("openrouter", {}))
-        master = get_config()
+        master = get_brain_config()
         return {
             "model":        entry.get("model_id", "deepseek/deepseek-v3.2"),
             "provider":     provider,
@@ -732,8 +733,8 @@ def _resolve_slot_cfg(slot: str) -> dict:
     worker_cfg = get_worker_config()
     if slot in worker_cfg:
         return worker_cfg[slot]
-    from .llm_config import get_config
-    master = get_config()
+    from .llm_config import get_brain_config
+    master = get_brain_config()
     return {**master, "model": slot, "enabled": True}
 
 
@@ -780,8 +781,8 @@ async def call_workers_parallel(calls: list[dict]) -> list[dict]:
             slot_cfg = worker_cfg[slot]
             effective_slot = slot
         else:
-            from .llm_config import get_config
-            master = get_config()
+            from .llm_config import get_brain_config
+            master = get_brain_config()
             slot_cfg = {**master, "model": slot, "enabled": True}
             effective_slot = slot
 
