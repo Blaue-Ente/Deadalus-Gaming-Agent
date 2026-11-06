@@ -28,14 +28,14 @@ The GitLab tree **is** the product. Copy the whole repo (ZIP or `git clone`). Gi
 
 | How | Windows | Linux / macOS |
 |---|---|---|
-| Extra `.exe` option | **`Install-Daedalus.bat`** (ZIP, double-click) or `install.ps1` / `Daedalus-Setup.exe` → Start Menu **Daedalus.exe**. Private CPython is fetched if you have none. Not a PyInstaller one-file freeze. | — |
+| Extra Windows app | **`Install-Daedalus.bat`** (ZIP, double-click) or `install.ps1` / `Daedalus-Setup.exe` → Start Menu **`Daedalus.vbs`**. Private CPython is fetched if you have none. Not a PyInstaller one-file freeze. | — |
 | Developer | Python 3.11+ venv (below) | Python 3.11+ venv (below) |
 | Docker | `docker compose up --build` | same |
 
 **ZIP (no git):** [deadalus-agent-0-main.zip](https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/archive/main/deadalus-agent-0-main.zip) or **Code → Download source code**. Unzip, then **double-click `Install-Daedalus.bat`** (Windows — no terminal). Or from PowerShell:
 
 ```powershell
-# Windows — Start Menu + Daedalus.exe (downloads CPython if PATH has no 3.11+)
+# Windows — Start Menu (Daedalus.vbs; downloads CPython if PATH has no 3.11+)
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 .\packaging\windows\install.ps1 -DesktopShortcut
 ```
@@ -200,7 +200,7 @@ If Python 3.11+ is not on PATH, a **private** CPython is installed under the app
 |---|---|
 | `.env` and keys | `%LOCALAPPDATA%\Daedalus\` |
 | Games and memory | `%LOCALAPPDATA%\Daedalus\` |
-| `Daedalus.exe`, venv, private CPython | `%LOCALAPPDATA%\Programs\Daedalus\` |
+| `Daedalus.vbs`, venv, private CPython, optional `Daedalus.exe` | `%LOCALAPPDATA%\Programs\Daedalus\` |
 
 [packaging/windows/README.md](packaging/windows/README.md)
 

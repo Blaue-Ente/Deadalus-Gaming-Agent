@@ -138,11 +138,11 @@ Current product state in this GitLab repository.
 
 - CLI: `daedalus serve | ping | models | desktop`.
 - Docker Compose + GitLab CI image.
-- Windows: `install.ps1` / `Daedalus-Setup.exe` with private CPython and a `Daedalus.exe` launcher (WebView2 / Tk).
+- Windows: `install.ps1` / `Daedalus-Setup.exe` with private CPython; Start Menu uses `Daedalus.vbs` (optional unsigned `Daedalus.exe` still built when compile succeeds).
 - LLM: AllToken, OpenRouter, Novita, NVIDIA, Ollama and other local backends.
 
 ### Documentation and brand
 
 - Public GitLab docs are English and describe only Daedalus.
-- [docs/INSTALL.md](docs/INSTALL.md) — ZIP/git, venv, Docker, Windows `Daedalus.exe` extra option.
+- [docs/INSTALL.md](docs/INSTALL.md) — ZIP/git, venv, Docker, Windows `Daedalus.vbs` Start Menu option.
 - Mark: labyrinth + compass-bird — [assets/logo](assets/logo/README.md).

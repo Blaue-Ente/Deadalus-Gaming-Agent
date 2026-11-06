@@ -175,6 +175,8 @@ def test_installer_scripts_exist():
     assert "[gui]" in install or "pywebview" in install
     assert "BundlePython" in install
     assert "Daedalus.exe" in install
+    assert "Daedalus.vbs" in install
+    assert "Start-Process" in install
     assert "PrivilegesRequired=lowest" in iss
     assert "install.ps1" in iss
     assert "-BundlePython" in iss

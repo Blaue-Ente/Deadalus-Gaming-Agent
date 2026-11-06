@@ -17,7 +17,7 @@ A free custom `.com` is not included. You get a real https subdomain.
 
 ## Windows (Start Menu)
 
-Extra option: `Daedalus.exe` plus a private CPython (Python on PATH is optional). See [docs/INSTALL.md](docs/INSTALL.md).
+Extra option: Start Menu **`Daedalus.vbs`** plus a private CPython (Python on PATH is optional). See [docs/INSTALL.md](docs/INSTALL.md).
 
 ```powershell
 Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
@@ -25,8 +25,9 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 ```
 
 Copies the product to `%LOCALAPPDATA%\Programs\Daedalus`, creates a venv,
-tries `pip install -e ".[gui]"` (pywebview / Edge WebView2), compiles
-`Daedalus.exe`, and a Start Menu shortcut **Daedalus**. Studio binds
+tries `pip install -e ".[gui]"` (pywebview / Edge WebView2), may compile an
+optional unsigned `Daedalus.exe`, and adds Start Menu shortcuts **Daedalus** /
+**Dedal** pointing at **`Daedalus.vbs`**. Studio binds
 **127.0.0.1:8787** only.
 
 Keys: `%LOCALAPPDATA%\Daedalus\.env` (copied from `.env.example` on first

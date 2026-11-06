@@ -7,12 +7,14 @@ binds `127.0.0.1:8787` only. No Administrator.
 
 | Option | What you get | Need Python on PATH? |
 |---|---|---|
-| A. `install.ps1` | Start Menu + **Daedalus.exe** | No — a private CPython is downloaded into the app folder if missing |
+| A. `install.ps1` | Start Menu + **`Daedalus.vbs`** (no console) | No — a private CPython is downloaded into the app folder if missing |
 | B. `Daedalus-Setup.exe` | Same, via an installer wizard | No — Setup bundles the CPython nupkg when built with `build-setup.ps1` |
 | C. Developer | `pip install -e .` in a venv | Yes (3.11+) |
 
 Ollama, Godot, Blender, and Node are still separate apps if you use those features.
 The private CPython build has no Tcl/Tk: the window is WebView2 or the browser.
+
+**Shortcuts:** Start Menu, Desktop, Startup, and “Dedal” use **`Daedalus.vbs`**, with **`Daedalus.cmd`** as fallback. The installer may still build a small **`Daedalus.exe`** (unsigned); Windows Defender / SmartScreen can treat running it directly as unwanted software — use the Start Menu entry or `.cmd` / `.vbs` instead.
 
 ## A. Double-click (ZIP, no terminal)
 
@@ -39,7 +41,7 @@ Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
 
 | What | Where |
 |---|---|
-| `Daedalus.exe` + venv + private CPython | `%LOCALAPPDATA%\Programs\Daedalus\` |
+| venv + optional `Daedalus.exe` + `Daedalus.vbs` / `.cmd` | `%LOCALAPPDATA%\Programs\Daedalus\` |
 | `.env`, memory, games | `%LOCALAPPDATA%\Daedalus\` |
 | Console if the window fails | `%LOCALAPPDATA%\Programs\Daedalus\Daedalus.cmd` |
 
@@ -53,7 +55,7 @@ GitLab CI on Linux cannot compile this binary. On a Windows machine with
 ```
 
 Output: `dist\Daedalus-Setup.exe`. The wizard is per-user. It runs
-`install.ps1 -InPlace -BundlePython` (private CPython + `Daedalus.exe`).
+`install.ps1 -InPlace -BundlePython` (private CPython + venv; shortcuts use `.vbs`).
 First install still needs internet for `pip` (FastAPI, Chroma, …).
 
 Manual compile if Inno is already installed: `iscc packaging\windows\Daedalus.iss`
