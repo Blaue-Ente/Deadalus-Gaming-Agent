@@ -15,6 +15,8 @@ import threading
 from pathlib import Path
 from typing import Any
 
+from daedalus.stdio_utf8 import configure_stdio_utf8_best_effort, safe_print
+
 from app.windows_gui import UI_BROWSER, UI_NONE, choose_ui, present_ui
 
 log = logging.getLogger("app.desktop")
@@ -66,6 +68,7 @@ def run_desktop(
     ui: str = "auto",
     serve: bool = True,
 ) -> int:
+    configure_stdio_utf8_best_effort()
     loc = prepare_desktop_env()
     host = host or str(os.environ.get("HOST") or loc["host"])
     if host in ("0.0.0.0", "::"):
@@ -92,7 +95,7 @@ def run_desktop(
         log.info("Дедал вече работи на %s", url)
         shown = _surface()
         if shown != UI_NONE:
-            print(f"Дедал · Studio {url}  (вече работи)")
+            safe_print(f"Дедал · Studio {url}  (вече работи)")
         return 0
 
     if not serve:
@@ -116,17 +119,17 @@ def run_desktop(
     thread = threading.Thread(target=server.run, name="daedalus-studio", daemon=True)
     thread.start()
     if not wait_until_up(host, port):
-        print(f"Дедал не стартира на {url}", file=sys.stderr)
+        safe_print(f"Дедал не стартира на {url}", file=sys.stderr)
         server.should_exit = True
         return 1
 
     def _stop() -> None:
         server.should_exit = True
 
-    print(f"Дедал · Studio {url}")
+    safe_print(f"Дедал · Studio {url}")
     shown = _surface(on_close=_stop)
     if shown in {UI_BROWSER, UI_NONE}:
-        print("  (Ctrl+C спира)")
+        safe_print("  (Ctrl+C спира)")
         try:
             while thread.is_alive():
                 thread.join(0.4)

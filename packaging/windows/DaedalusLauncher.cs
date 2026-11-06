@@ -42,6 +42,8 @@ internal static class Program
         psi.EnvironmentVariables["DAEDALUS_PLAYGROUND"] = Path.Combine(data, "playground");
         psi.EnvironmentVariables["HOST"] = "127.0.0.1";
         psi.EnvironmentVariables["PORT"] = "8787";
+        psi.EnvironmentVariables["PYTHONUTF8"] = "1";
+        psi.EnvironmentVariables["PYTHONIOENCODING"] = "utf-8";
 
         try
         {

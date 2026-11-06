@@ -1,6 +1,7 @@
 """Windows desktop layout, env loading, installer scripts — no Win32 required."""
 from __future__ import annotations
 
+import io
 from pathlib import Path
 
 import pytest
@@ -161,6 +162,18 @@ def test_cli_desktop_flag_resolution():
     assert _desktop_ui(forced) == "tk"
 
 
+def test_stdio_utf8_safe_print_narrow_encoding():
+    """Mimic Windows cp1252 TextIOWrapper: Cyrillic must not crash desktop logs."""
+    buf = io.BytesIO()
+    wrapper = io.TextIOWrapper(buf, encoding="cp1252", errors="strict", line_buffering=True)
+    from daedalus.stdio_utf8 import safe_print
+
+    safe_print("Дедал · Studio http://127.0.0.1:8787/", file=wrapper)
+    wrapper.flush()
+    out = buf.getvalue().decode("cp1252", errors="replace")
+    assert "8787" in out
+
+
 def test_installer_scripts_exist():
     root = Path(__file__).resolve().parents[1] / "packaging" / "windows"
     install = (root / "install.ps1").read_text(encoding="utf-8")
@@ -185,6 +198,9 @@ def test_installer_scripts_exist():
     assert "DaedalusPythonSha512" in bundled
     assert "-m app.cli desktop" in launcher
     assert "DAEDALUS_WINDOWS_APP" in launcher
+    assert "PYTHONUTF8" in install
+    assert "PYTHONIOENCODING" in install
+    assert "PYTHONUTF8" in launcher
     assert "ISCC" in build or "iscc" in build
     assert (root / "redist" / "README.md").is_file()
 

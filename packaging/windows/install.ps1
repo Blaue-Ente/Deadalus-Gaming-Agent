@@ -108,6 +108,8 @@ function Write-CmdAndVbs([string] $Root) {
         '@echo off'
         'setlocal'
         'cd /d "%~dp0"'
+        'set PYTHONUTF8=1'
+        'set PYTHONIOENCODING=utf-8'
         'set DAEDALUS_STANDALONE=1'
         'set DAEDALUS_WINDOWS_APP=1'
         'set DAEDALUS_DATA=%LOCALAPPDATA%\Daedalus'
@@ -119,6 +121,8 @@ function Write-CmdAndVbs([string] $Root) {
     ($cmdLines -join "`r`n") | Set-Content -Encoding ASCII -Path $cmdPath
     $vbsLines = @(
         'Set sh = CreateObject("WScript.Shell")'
+        'sh.Environment("Process")("PYTHONUTF8") = "1"'
+        'sh.Environment("Process")("PYTHONIOENCODING") = "utf-8"'
         "sh.CurrentDirectory = `"$Root`""
         "sh.Run `"`"`"$pyw`"`" -m app.cli desktop`", 0, False"
     )
