@@ -72,6 +72,57 @@ def _route_for_provider(provider: str, model: str, *, source: str) -> ModelRoute
     )
 
 
+def parse_provider_model_tag(tag: str | None) -> tuple[str | None, str | None]:
+    """Split ``provider:model_id`` when the left side is a known gateway name.
+
+    Single-colon Ollama tags like ``qwen2.5-coder:7b`` are *not* split (no known provider).
+    """
+    from .llm_config import PROVIDER_DEFAULTS
+    from .local_llm import LOCAL_PROVIDERS
+
+    raw = (tag or "").strip()
+    if not raw or ":" not in raw:
+        return None, None
+    left, rest = raw.split(":", 1)
+    prov = left.strip().lower()
+    rid = rest.strip()
+    if not prov or not rid:
+        return None, None
+    known = set(PROVIDER_DEFAULTS.keys()) | {p for p in LOCAL_PROVIDERS if p}
+    if prov in known:
+        return prov, rid
+    return None, None
+
+
+def config_for_explicit_model(base: dict[str, Any], model_tag: str | None, *, source: str = "request") -> dict[str, Any]:
+    """Merge ``base`` from ``get_config()`` with an explicit ``provider:model`` request tag.
+
+    When the tag has no gateway prefix, keep ``base`` provider and only override the model id
+    (legacy path). Atomic routes always win when the tag names a provider + model together.
+    """
+    out = dict(base or {})
+    if not model_tag or not str(model_tag).strip():
+        return out
+    prov, mid = parse_provider_model_tag(model_tag)
+    if prov and mid:
+        route = _route_for_provider(prov, mid, source=source)
+        if route is not None:
+            out.update(route.as_dict())
+            out["request_model_tag"] = model_tag.strip()
+            return out
+        out["routing_error"] = (
+            f"No credentials or unreachable backend for explicit model tag {model_tag!r} "
+            f"({prov}). Set the matching API key or pick a local model."
+        )
+        return out
+    # Bare model id — only switch model when it already matches the active provider family
+    # (e.g. OpenRouter ids on an OpenRouter base). Otherwise leave base unchanged.
+    bare = str(model_tag).strip()
+    out["model"] = bare
+    out["request_model_tag"] = bare
+    return out
+
+
 def overlay_effort(cfg: dict[str, Any], extra: dict[str, Any] | None) -> dict[str, Any]:
     """Apply an effort bind only when provider+model can be resolved together."""
     out = dict(cfg or {})

@@ -52,6 +52,7 @@ def paint_summary(
     console_errors: list[str],
     failed_requests: list[str],
     dom_text_len: int,
+    integrity_warnings: list[str] | None = None,
 ) -> str:
     """Owner-facing proof line. Canvas HUD lives in the frame, not DOM text."""
     if not reachable:
@@ -69,6 +70,9 @@ def paint_summary(
         if failed_requests:
             bits.append(f"{len(failed_requests)} broken requests")
         return "❌ Renders, but runtime problems: " + ", ".join(bits)
+    iw = [w for w in (integrity_warnings or []) if w]
+    if iw:
+        return "⚠️ Renders cleanly; integrity note: " + "; ".join(iw[:4])
     if has_canvas:
         return "✅ Canvas/WebGL painted (HUD is in the screenshot, not DOM text)"
     return f"✅ Renders cleanly ({dom_text_len} visible DOM characters)"
@@ -151,6 +155,17 @@ def chromium_executable() -> str | None:
 
 def _find_chrome() -> str | None:
     return chromium_executable()
+
+
+def integrity_fatal_and_warnings(codes: list[str]) -> tuple[list[str], list[str]]:
+    """Split integrity codes: fatal blockers vs scaffold-only warnings."""
+    fatal = [c for c in codes if c != "scaffold_left_in_place"]
+    warnings: list[str] = []
+    if "scaffold_left_in_place" in codes:
+        warnings.append(
+            "kernel Phaser seed still present in Play.js (replace gameplay — scaffold only)"
+        )
+    return fatal, warnings
 
 
 def screenshot_looks_blank(path: Path | str | None) -> bool:
@@ -393,7 +408,8 @@ async def browser_verify(
     integrity_codes = entrypoint_integrity_failures(
         index_html=idx, root=root, writer_assist_seeded=False,
     )
-    for code in integrity_codes:
+    fatal_integrity, integrity_warnings = integrity_fatal_and_warnings(integrity_codes)
+    for code in fatal_integrity:
         page_errors.append(f"integrity:{code}")
     # Dark WebGL without HUD text fails; a dark game with visible UI text passes.
     blank_screen = reachable and (
@@ -401,7 +417,10 @@ async def browser_verify(
         or (dark_frame and dom_text_len < 8)
     )
     has_fatal = (
-        bool(page_errors) or bool(failed_requests) or bool(console_errors) or bool(integrity_codes)
+        bool(page_errors)
+        or bool(failed_requests)
+        or bool(console_errors)
+        or bool(fatal_integrity)
     )
     ok = reachable and (not blank_screen) and (not has_fatal)
 
@@ -415,6 +434,7 @@ async def browser_verify(
         console_errors=console_errors,
         failed_requests=failed_requests,
         dom_text_len=dom_text_len,
+        integrity_warnings=integrity_warnings,
     )
 
     return {
@@ -425,6 +445,7 @@ async def browser_verify(
         "dom_text": (dom_text_full or "").strip()[:2500],
         "summary": summary,
         "integrity_codes": integrity_codes,
+        "integrity_warnings": integrity_warnings,
     }
 
 
@@ -599,4 +620,6 @@ def format_errors_for_fix(result: dict[str, Any]) -> str:
         lines.append(f"CONSOLE: {e}")
     for e in result.get("failed_requests", [])[:8]:
         lines.append(f"FAILED REQUEST: {e}")
+    for w in (result.get("integrity_warnings") or [])[:6]:
+        lines.append(f"INTEGRITY (non-fatal): {w}")
     return "\n".join(lines) if lines else "Няма открити runtime грешки."

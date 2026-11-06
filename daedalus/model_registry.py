@@ -566,6 +566,27 @@ def select_for_task(
     return best
 
 
+def iter_candidates_for_task(
+    task_desc: str,
+    budget_hint: str = "balanced",
+    required_caps: list[str] | None = None,
+    preferred_tier: str | None = None,
+) -> list[dict]:
+    """Return registry entries scored for this task, best first (for filtered selection)."""
+    caps = required_caps if required_caps is not None else _extract_caps_from_task(task_desc)
+    registry = get_registry()
+    candidates = [e for e in registry if e.get("enabled", True)]
+    if preferred_tier:
+        tier_candidates = [e for e in candidates if e.get("tier") == preferred_tier]
+        if tier_candidates:
+            candidates = tier_candidates
+    if not candidates:
+        return []
+    scored = [(e, _score_model(e, caps, budget_hint)) for e in candidates]
+    scored.sort(key=lambda x: x[1], reverse=True)
+    return [e for e, _ in scored]
+
+
 def explain_selection(task_desc: str, budget_hint: str = "balanced") -> dict:
     """Return selection result + reasoning for admin test UI."""
     caps = _extract_caps_from_task(task_desc)
