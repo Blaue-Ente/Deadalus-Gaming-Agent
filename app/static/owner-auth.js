@@ -70,9 +70,15 @@
         /* remote / offline */
       }
       if (typeof window.prompt === "function") {
-        const typed = window.prompt(
-          "Собственически токен (DAEDALUS_TOKEN). На 127.0.0.1 Studio го взима сам."
-        );
+        const i18n = window.DaedalusI18n;
+        const msg =
+          i18n && typeof i18n.loc === "function"
+            ? i18n.loc(
+                "auth.ownerTokenPrompt",
+                "Owner token (DAEDALUS_TOKEN). On 127.0.0.1 Studio fetches it automatically."
+              )
+            : "Owner token (DAEDALUS_TOKEN). On 127.0.0.1 Studio fetches it automatically.";
+        const typed = window.prompt(msg);
         if (typed && typed.trim()) {
           save(typed.trim());
           return typed.trim();

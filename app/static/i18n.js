@@ -1021,6 +1021,7 @@
       "common.loading": "Loading",
       "common.error": "Error",
       "common.network": "Network error",
+      "auth.ownerTokenPrompt": "Owner token (DAEDALUS_TOKEN). On 127.0.0.1 Studio fetches it automatically.",
     },
     bg: {
       "lang.aria": "Език",
@@ -2039,6 +2040,7 @@
       "common.loading": "Зареждане",
       "common.error": "Грешка",
       "common.network": "Мрежова грешка",
+      "auth.ownerTokenPrompt": "Собственически токен (DAEDALUS_TOKEN). На 127.0.0.1 Studio го взима сам.",
     },
   };
 

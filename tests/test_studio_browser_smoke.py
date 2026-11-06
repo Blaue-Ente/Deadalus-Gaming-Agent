@@ -205,6 +205,55 @@ def test_studio_header_hit_targets_not_obscured_by_main(studio_server):
             browser.close()
 
 
+def test_studio_i18n_default_en_bg_persistence(studio_server):
+    """Fresh profile: default English; BG switch + dx.lang persistence; invalid dx.lang falls back to EN."""
+    from playwright.sync_api import sync_playwright
+
+    base = studio_server["base"]
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
+        context = browser.new_context(viewport={"width": 1400, "height": 900})
+        page = context.new_page()
+        _install_local_route(page, base)
+
+        page.goto(f"{base}/", wait_until="load", timeout=45000)
+        page.wait_for_selector("#prompt", timeout=20000)
+
+        assert page.evaluate("() => localStorage.getItem('dx.lang')") is None
+        assert page.evaluate("() => document.documentElement.lang") == "en"
+        en_greeting = page.evaluate(
+            "() => (window.DaedalusI18n && window.DaedalusI18n.t('studio.greeting')) || ''"
+        )
+        assert "Hello" in en_greeting, en_greeting
+
+        page.locator('[data-lang="bg"]').click()
+        page.wait_for_function("() => document.documentElement.lang === 'bg'", timeout=8000)
+        assert page.evaluate("() => localStorage.getItem('dx.lang')") == "bg"
+        bg_greeting = page.evaluate(
+            "() => (window.DaedalusI18n && window.DaedalusI18n.t('studio.greeting')) || ''"
+        )
+        assert "Hello" not in bg_greeting, bg_greeting
+        assert "Здравей" in bg_greeting, bg_greeting
+
+        page.reload(wait_until="load")
+        page.wait_for_selector("#prompt", timeout=15000)
+        assert page.evaluate("() => document.documentElement.lang") == "bg"
+        assert page.evaluate("() => localStorage.getItem('dx.lang')") == "bg"
+
+        page.evaluate("() => localStorage.setItem('dx.lang', 'xx-invalid')")
+        page.reload(wait_until="load")
+        page.wait_for_selector("#prompt", timeout=15000)
+        assert page.evaluate("() => document.documentElement.lang") == "en"
+
+        page.evaluate("() => localStorage.removeItem('dx.lang')")
+        page.reload(wait_until="load")
+        page.wait_for_selector("#prompt", timeout=15000)
+        assert page.evaluate("() => document.documentElement.lang") == "en"
+
+        browser.close()
+
+
 def test_studio_browser_controls_and_persistence(studio_server):
     """Smoke: effort note, localStorage reload, prefs via UI, fresh context, Flight tab."""
     from playwright.sync_api import sync_playwright
