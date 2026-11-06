@@ -111,11 +111,11 @@ def probe_host() -> dict[str, Any]:
     docker_bin = shutil.which("docker")
     qemu_bin = shutil.which("qemu-system-x86_64") or shutil.which("qemu-system-aarch64")
     wine_bin = shutil.which("wine")
-    chrome = None
-    for name in ("chromium", "chromium-browser", "google-chrome", "chrome"):
-        chrome = shutil.which(name)
-        if chrome:
-            break
+    try:
+        from .playground_browser import chromium_executable
+        chrome = chromium_executable()
+    except Exception:
+        chrome = None
     docker_ready = bool(docker_bin)
     image = os.environ.get("DAEDALUS_LAB_IMAGE", DOCKER_IMAGE_DEFAULT)
     image_present = False

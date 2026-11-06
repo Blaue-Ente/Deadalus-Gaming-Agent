@@ -203,7 +203,7 @@ def seed_note(slug: str) -> str:
         return ""
     return (
         "\nKernel Phaser skeleton is already on disk: index.html #game (a div, not a "
-        "<canvas>), src/main.js Phaser.WEBGL, src/scenes/Boot.js Menu.js Play.js, "
+        "<canvas>), src/boot.js → src/main.js Phaser.WEBGL, src/scenes/Boot.js Menu.js Play.js, "
         "package.json has vite + phaser. Play.js already walks (WASD) and "
         "collects orbs. Keep that playable — do not revert to “fill this scene” "
         "or the Vite Hello / #app counter. Do not replace #game with a <canvas> — "
@@ -281,6 +281,7 @@ def _skeleton_files(*, title: str, slug: str, description: str) -> dict[str, str
         "index.html": _INDEX_HTML.format(title=_html(title)),
         "package.json": _PACKAGE_JSON.format(slug=pkg_name),
         "vite.config.js": _VITE_CONFIG,
+        "src/boot.js": _BOOT_ENTRY,
         "src/main.js": _MAIN_JS,
         "src/scenes/Boot.js": _BOOT_JS,
         "src/scenes/Menu.js": _MENU_JS.format(title_js=title_js, hint_js=hint_js),
@@ -308,7 +309,7 @@ _INDEX_HTML = """\
 </head>
 <body>
   <div id="game"></div>
-  <script type="module" src="/src/main.js"></script>
+  <script type="module" src="/src/boot.js"></script>
 </body>
 </html>
 """
@@ -339,6 +340,10 @@ export default defineConfig({
   base: './',
   build: { outDir: 'dist' },
 });
+"""
+
+_BOOT_ENTRY = """\
+import './main.js';
 """
 
 _MAIN_JS = """\

@@ -134,6 +134,20 @@ def test_write_file_accepts_filename_alias(monkeypatch):
     assert "dungeon-keys/index.html" in text
 
 
+def test_write_file_empty_content_fails(monkeypatch):
+    async def fake_get(slug):
+        return {"slug": slug, "kind": "static"}
+
+    monkeypatch.setattr("daedalus.playground.get_project", fake_get)
+    text = asyncio.run(native_tools.execute_native_tool(
+        "write_file",
+        {"slug": "snake-game", "path": "index.html", "content": ""},
+        memory=None, session_id="", read_file_fn=lambda *a, **k: {},
+    ))
+    assert "FAILED" in text
+    assert "empty" in text.lower()
+
+
 def test_browser_playground_url_runs_visual_proof(monkeypatch, tmp_path):
     from daedalus.visual_proof import ProofResult
 

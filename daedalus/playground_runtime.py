@@ -13,6 +13,7 @@ from typing import Any
 
 from . import playground as pg
 from .capability_registry import BROWSER_VISUAL_KINDS
+from .proc import child_env_from_allowlist
 
 # Chromium visual kinds. Godot uses the engine runner, not this tuple.
 VISUAL_KINDS = tuple(sorted(BROWSER_VISUAL_KINDS))
@@ -33,13 +34,13 @@ GODOT_LOCAL_ONLY_MSG = (
 ADMIN_PREVIEW_PREFIX = "/admin/daedalus/playground/preview"
 APPS_PREFIX = "/apps"
 
-_ENV_ALLOW = {
+_ENV_ALLOW = frozenset({
     "PATH", "HOME", "LANG", "LC_ALL", "TERM", "TZ", "TMPDIR", "USER",
     "PYTHONUNBUFFERED", "PYTHONDONTWRITEBYTECODE",
     "NODE_ENV", "NPM_CONFIG_CACHE", "NIX_PATH",
     "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_DATA_DIRS",
     "npm_config_prefix", "NPM_CONFIG_PREFIX",
-}
+})
 
 # HTTP smoke probe config per process kind: (paths, optional body substrings).
 HTTP_PROBE_CONFIG: dict[str, tuple[list[str], tuple[str, ...]]] = {
@@ -100,9 +101,7 @@ class PlaygroundRuntime:
 
     @staticmethod
     def child_env(port: int) -> dict[str, str]:
-        env = {k: v for k, v in os.environ.items() if k in _ENV_ALLOW}
-        env["PORT"] = str(port)
-        env["PYTHONUNBUFFERED"] = "1"
+        env = child_env_from_allowlist(_ENV_ALLOW, port)
         env.setdefault("CI", "1")
         env.setdefault("EXPO_NO_TELEMETRY", "1")
         home = env.get("HOME", os.path.expanduser("~"))

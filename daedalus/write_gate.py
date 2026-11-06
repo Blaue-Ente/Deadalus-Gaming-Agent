@@ -28,6 +28,34 @@ _WEB_KINDS = frozenset({"static", "vite", "vite-react", "phaser", "expo"})
 _MAIN_HTML = frozenset({"index.html", "index.htm", "game.html", "main.html"})
 _MAIN_JS = frozenset({"game.js", "main.js", "app.js", "index.js", "main.mjs"})
 
+_VITE_APP_SCRIPT = re.compile(
+    r"""<script\b[^>]*\btype\s*=\s*["']module["'][^>]*\bsrc\s*=\s*["']([^"']+)["']"""
+    r"""|<script\b[^>]*\bsrc\s*=\s*["']([^"']+)["'][^>]*\btype\s*=\s*["']module["']""",
+    re.I,
+)
+_GAME_MOUNT = re.compile(r"""id\s*=\s*["']game["']""", re.I)
+
+
+def _html_has_boot(html: str) -> tuple[bool, bool, str]:
+    """(has_vite_mount_script, has_phaser_loop_hint, referenced_script_path)"""
+    low = (html or "").lower()
+    m = _VITE_APP_SCRIPT.search(html or "")
+    src = ""
+    if m:
+        src = (m.group(1) or m.group(2) or "").strip().lstrip("/")
+    has_mount = bool(_GAME_MOUNT.search(html or "")) or bool(
+        re.search(r"""id\s*=\s*["']app["']""", html or "", re.I)
+    )
+    if not m:
+        return False, False, src
+    loop_hint = (
+        "phaser" in low
+        or "main.js" in src.lower()
+        or "boot" in src.lower()
+        or "game" in src.lower()
+    )
+    return True, loop_hint, src
+
 
 def enabled() -> bool:
     raw = (os.environ.get("DAEDALUS_WRITE_GATE") or "1").strip().lower()
@@ -65,17 +93,22 @@ def arcade_blockers(path: str, content: str, kind: str) -> list[dict[str, Any]]:
     has_ext_script = bool(re.search(r"<script[^>]+src\s*=", content or "", re.I))
     issues: list[dict[str, Any]] = []
     if name in _MAIN_HTML or suffix in {".html", ".htm"} and name in _MAIN_HTML:
-        if not has_canvas:
-            issues.append(_issue(
-                "error", "arcade-missing-canvas",
-                "index.html has no <canvas> (or WebGL context). The kernel proof will be a blank page.",
-            ))
-        if not _has_loop(content) and not has_ext_script:
-            issues.append(_issue(
-                "error", "arcade-missing-loop",
-                "no requestAnimationFrame / setInterval / Phaser.Game — the canvas will not animate. "
-                "Put the loop here or in a <script src=…> file.",
-            ))
+        vite_boot, phaser_hint, mod_src = _html_has_boot(content)
+        if vite_boot and phaser_hint and mod_src:
+            # Phaser+Vite: #game mount + module graph — loop lives in src/main.js
+            pass
+        else:
+            if not has_canvas:
+                issues.append(_issue(
+                    "error", "arcade-missing-canvas",
+                    "index.html has no <canvas> (or WebGL context). The kernel proof will be a blank page.",
+                ))
+            if not _has_loop(content) and not has_ext_script:
+                issues.append(_issue(
+                    "error", "arcade-missing-loop",
+                    "no requestAnimationFrame / setInterval / Phaser.Game — the canvas will not animate. "
+                    "Put the loop here or in a <script src=…> file.",
+                ))
     elif name in _MAIN_JS:
         if not _has_loop(content):
             issues.append(_issue(

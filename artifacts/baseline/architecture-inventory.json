@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-09-11T20:23:24.637016+00:00",
+  "generated_at": "2026-11-06T16:02:19.607316+00:00",
   "package_version": "0.3.8",
-  "git_commit": "b24fe61ad717485939bfba90f5bb23644a746b67",
+  "git_commit": "d0e137ede8046b199fb4195df2886cbfa6ff7e4a",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -19,7 +19,7 @@
     },
     {
       "path": "daedalus/native_tools.py",
-      "lines": 2148,
+      "lines": 2161,
       "broad_excepts": 20
     },
     {
@@ -130,8 +130,8 @@
     ]
   },
   "tests": {
-    "modules": 52,
-    "functions": 580
+    "modules": 54,
+    "functions": 590
   },
   "modules": {
     "daedalus": [
@@ -324,6 +324,7 @@
       "daedalus/preferences.py",
       "daedalus/preset_library.py",
       "daedalus/probe.py",
+      "daedalus/proc.py",
       "daedalus/production_layer.py",
       "daedalus/profiler.py",
       "daedalus/project_status.py",
@@ -365,6 +366,7 @@
       "daedalus/unity_platform_guide.py",
       "daedalus/unity_runtime.py",
       "daedalus/upgrade_pool_scanner.py",
+      "daedalus/visual_integrity.py",
       "daedalus/visual_proof.py",
       "daedalus/web_first.py",
       "daedalus/web_search_standalone.py",

@@ -105,6 +105,19 @@ def test_write_gate_vite_scaffold_still_missing_loop():
     assert "arcade-missing-loop" in codes
 
 
+PHASER_VITE_INDEX = """\
+<!DOCTYPE html><html><body>
+<div id="game"></div>
+<script type="module" src="/src/boot.js"></script>
+</body></html>
+"""
+
+
+def test_write_gate_phaser_vite_mount_passes_without_inline_canvas():
+    gate = check_write("index.html", PHASER_VITE_INDEX, kind="vite")
+    assert gate.ok is True
+
+
 def test_write_gate_missing_canvas_and_loop():
     gate = check_write("index.html", "<p>hello</p>", kind="static")
     assert gate.ok is False

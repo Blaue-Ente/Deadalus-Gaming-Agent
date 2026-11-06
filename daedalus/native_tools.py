@@ -1202,6 +1202,12 @@ async def execute_native_tool(
                     f"Got keys={keys or '(none)'}. "
                     "Example: write_file slug=<project> path=index.html content=…"
                 )
+            if content is None or not str(content).strip():
+                return (
+                    "── write_file FAILED: empty or missing content ──\n"
+                    "Refusing to write or truncate to zero bytes. "
+                    "Provide non-empty `content` (or omit write_file)."
+                )
             existing = None
             try:
                 existing = await pg.get_project(slug)
@@ -1216,7 +1222,14 @@ async def execute_native_tool(
                 )
                 existing = {"slug": slug, "kind": kind_new}
             kind = str((existing or {}).get("kind") or "static")
-            pg.write_file(slug, path, content)
+            try:
+                pg.write_file(slug, path, content)
+            except ValueError as exc:
+                return (
+                    f"── write_file FAILED {slug}/{path} ──\n"
+                    f"{exc}\n"
+                    f"NEXT: call write_file with slug={slug} path={path} and non-empty content."
+                )
             from .write_gate import check_write
             gate = check_write(path, content, kind=kind, slug=slug)
             if not gate.ok:
