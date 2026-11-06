@@ -389,61 +389,7 @@ async def expo_compile_gate(slug: str) -> dict[str, Any]:
     }
 
 
-async def _vite_build_check(root: Path) -> tuple[bool, str]:
-    """Compile gate for vite/vite-react: `vite build` fails on import/syntax/TS
-    errors — unlike the dev server, which happily serves a broken module graph.
-    Sanitized env (allowlist) so generated code never sees production secrets.
-    """
-    try:
-        cmd = argv_for_command("npx", "vite", "build", "--base", "./", env=_child_env(0))
-        p = await asyncio.create_subprocess_exec(
-            *cmd, cwd=str(root), env=_child_env(0),
-            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
-            start_new_session=True,
-        )
-        try:
-            out, _ = await asyncio.wait_for(p.communicate(), timeout=180)
-        except asyncio.TimeoutError:
-            await terminate_process_tree(p, timeout=12.0)
-            return False, "vite build timed out (180s)"
-        return p.returncode == 0, (out or b"").decode("utf-8", errors="replace")
-    except Exception as exc:
-        return False, str(exc)
-
-
-_STAGE_ASSET_SUFFIX = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".ogg", ".mp3", ".wav", ".json"}
-
-
-def stage_web_assets(root: Path, dist: Path | None = None) -> int:
-    """Copy playground ``assets/`` into ``dist/assets/`` so Chromium proof can load them.
-
-    Vite hashes only *imported* files. Phaser ``this.load.image('x', 'assets/foo.png')``
-    404s when proof serves ``dist/`` alone — five broken requests, dark frame.
-    Recurse into ``sfx/`` and similar. Skip ``_*`` verify screenshots.
-    Returns how many files were copied.
-    """
-    src = root / "assets"
-    dest = (dist or root / "dist") / "assets"
-    if not src.is_dir() or not (dest.parent).is_dir():
-        return 0
-    dest.mkdir(parents=True, exist_ok=True)
-    n = 0
-    for path in src.rglob("*"):
-        if not path.is_file():
-            continue
-        rel = path.relative_to(src)
-        if any(part.startswith("_") for part in rel.parts):
-            continue
-        if path.suffix.lower() not in _STAGE_ASSET_SUFFIX:
-            continue
-        target = dest / rel
-        try:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(path, target)
-            n += 1
-        except OSError:
-            continue
-    return n
+from .web_build import stage_web_assets
 
 
 async def vite_compile_gate(root: Path, *, slug: str = "", kind: str = "vite") -> dict[str, Any]:
@@ -467,18 +413,34 @@ async def vite_compile_gate(root: Path, *, slug: str = "", kind: str = "vite") -
             "ok": False, "skipped": False, "install_ok": False,
             "logs": log_lines, "error": err,
         }
-    build_ok, build_out = await _vite_build_check(root)
+    try:
+        from .web_build import build_web, scan_absolute_asset_refs
+
+        await build_web(root, skip_npm_install=True)
+        build_ok = True
+        build_out = "build_web ok (after npm install)\n"
+    except Exception as exc:
+        build_ok = False
+        build_out = str(exc)
     log_lines += [f"[build] {l}" for l in build_out.splitlines()[-80:]]
+    bad: list[str] = []
     if build_ok:
-        copied = stage_web_assets(root)
-        if copied:
-            log_lines.append(f"[assets] staged {copied} files into dist/assets/")
+        bad = scan_absolute_asset_refs(root / "dist")
+        if bad:
+            log_lines.append("[assets] absolute /assets/ refs (bad under /apps/):")
+            log_lines.extend(bad[:8])
+            build_ok = False
+    err_tail = _extract_error_from_logs(log_lines) or ""
+    if not build_ok and bad:
+        err_tail = (
+            err_tail + "; " if err_tail else ""
+        ) + "absolute /assets/ URLs in dist/ break under /apps/<slug>/ — use relative ./assets/"
     return {
         "ok": build_ok,
         "skipped": False,
         "install_ok": True,
         "logs": log_lines,
-        "error": "" if build_ok else (_extract_error_from_logs(log_lines) or "vite build failed"),
+        "error": "" if build_ok else (err_tail or "vite build failed"),
     }
 
 
@@ -526,23 +488,16 @@ async def smoke_test(slug: str, *, settle: float = 3.5) -> dict[str, Any]:
         from .engine_runners import run_godot
         return run_godot(slug)
 
-    # ── Vite kinds: compile gate (no long-lived dev server) ──────────────
-    if kind in ("vite", "vite-react"):
-        root = pg.project_dir(slug)
-        install = await _install_deps(proj, root)
-        log_lines: list[str] = []
-        if install.get("output"):
-            log_lines += [f"[install] {l}" for l in install["output"].splitlines()[-50:]]
-        install_ok = bool(install.get("ok", True))
-        if not install_ok:
-            return {"ok": False, "skipped": False, "healthy": False, "exited": True,
-                    "returncode": None, "install_ok": False, "logs": log_lines,
-                    "error": _extract_error_from_logs(log_lines)}
-        build_ok, build_out = await _vite_build_check(root)
-        log_lines += [f"[build] {l}" for l in build_out.splitlines()[-80:]]
-        return {"ok": build_ok, "skipped": False, "healthy": build_ok, "exited": not build_ok,
-                "returncode": 0 if build_ok else 1, "install_ok": True, "logs": log_lines,
-                "error": "" if build_ok else _extract_error_from_logs(log_lines)}
+    # ── Vite kinds: same gate as proof/publish ────────────────────────────
+    if kind in ("vite", "vite-react", "phaser"):
+        gate = await vite_compile_gate(pg.project_dir(slug), slug=slug, kind=kind)
+        ok = bool(gate.get("ok"))
+        return {
+            "ok": ok, "skipped": False, "healthy": ok, "exited": not ok,
+            "returncode": 0 if ok else 1, "install_ok": bool(gate.get("install_ok", True)),
+            "logs": gate.get("logs") or [],
+            "error": gate.get("error") or "",
+        }
 
     # ── Process kinds: start, confirm alive, stop (guaranteed cleanup) ───
     started = False

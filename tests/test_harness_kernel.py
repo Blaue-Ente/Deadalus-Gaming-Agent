@@ -168,6 +168,8 @@ def test_wiring_in_source():
     agent = (ROOT / "daedalus" / "agent.py").read_text(encoding="utf-8")
     assert "scan_need_markers" in agent
     assert "max_rounds=max_native" in agent
+    assert "DAEDALUS_NATIVE_ROUNDS" in agent
+    assert "native_tool_result_ok" in agent
     assert "extract_tool_dumps" in agent
     assert "playground_build_specs" in agent
     assert "tool_router" in agent
@@ -183,6 +185,7 @@ def test_wiring_in_source():
     assert "/api/v1/playground/projects/${slug}/assets/generate" in js
     ci = (ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8")
     assert "ruff check" in ci
+    assert "playwright install chromium" in ci
     jobs = (ROOT / "daedalus" / "autopilot_jobs.py").read_text(encoding="utf-8")
     assert "започни наново" not in jobs
     assert "checkpoint" in jobs

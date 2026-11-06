@@ -36,6 +36,11 @@ _SLUG_TOOLS = frozenset({
 _WRITE_TOOLS = frozenset({"write_file", "need_playground_write", "edit_file", "need_playground_edit"})
 
 
+def _norm_write_path(args: dict[str, Any] | None) -> str:
+    a = args or {}
+    return str(a.get("path") or a.get("file") or "").strip().lstrip("/").lower()
+
+
 def fix_rounds_from_env() -> int:
     raw = (os.environ.get("DAEDALUS_BUILD_FIX_ROUNDS") or "").strip()
     if not raw:
@@ -189,13 +194,51 @@ class BuildLoop:
         return [*self.seed_log, *(o.as_call() for o in self.observations)]
 
     def _has_writes(self) -> bool:
+        return self._has_source_writes()
+
+    def _has_source_writes(self) -> bool:
         for o in self.observations:
-            if canonical(o.tool).lower() in _WRITE_TOOLS and o.ok:
+            if canonical(o.tool).lower() not in _WRITE_TOOLS or not o.ok:
+                continue
+            p = _norm_write_path(o.args)
+            if p and p != "readme.md":
                 return True
         for row in self.seed_log:
-            if canonical(str(row.get("tool") or "")).lower() in _WRITE_TOOLS and row.get("ok"):
-                return True
+            if (
+                canonical(str(row.get("tool") or "")).lower() in _WRITE_TOOLS
+                and row.get("ok")
+            ):
+                inp = row.get("input") if isinstance(row.get("input"), dict) else {}
+                p = _norm_write_path(inp)
+                if p and p != "readme.md":
+                    return True
         return False
+
+    def _readme_only_write_success(self) -> bool:
+        """True when the only successful writes hit README.md (not progress)."""
+        saw_readme_ok = False
+        for o in self.observations:
+            if canonical(o.tool).lower() not in _WRITE_TOOLS or not o.ok:
+                continue
+            p = _norm_write_path(o.args)
+            if not p:
+                continue
+            if p == "readme.md":
+                saw_readme_ok = True
+            else:
+                return False
+        if not saw_readme_ok:
+            return False
+        for row in self.seed_log:
+            if (
+                canonical(str(row.get("tool") or "")).lower() in _WRITE_TOOLS
+                and row.get("ok")
+            ):
+                inp = row.get("input") if isinstance(row.get("input"), dict) else {}
+                p = _norm_write_path(inp)
+                if p and p != "readme.md":
+                    return False
+        return True
 
     def _proof_hits(self) -> list[ToolObservation]:
         return [o for o in self.observations if canonical(o.tool).lower() in PROOF_TOOLS]
@@ -321,6 +364,19 @@ class BuildLoop:
             if not names:
                 rows.append(StepProgress(step, "done"))
                 continue
+            if step.id == "write":
+                if self._has_source_writes():
+                    rows.append(StepProgress(step, "done"))
+                    continue
+                if self._readme_only_write_success():
+                    rows.append(
+                        StepProgress(
+                            step,
+                            "failed",
+                            "README.md only — write a game/source path, not status text alone.",
+                        )
+                    )
+                    continue
             hits = [o for o in self.observations if canonical(o.tool).lower() in names]
             if any(o.ok or o.blocked for o in hits) or (seed_ok & set(names)):
                 rows.append(StepProgress(step, "done"))

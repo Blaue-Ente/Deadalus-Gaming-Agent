@@ -106,26 +106,14 @@ async def http_probe(
 
 def _vite_build(root: Path) -> tuple[bool, list[str]]:
     logs: list[str] = []
-    if not (root / "package.json").exists():
-        return False, ["no package.json"]
-    if not (root / "node_modules").is_dir():
-        env0 = child_env(0)
-        r = subprocess.run(
-            argv_for_command("npm", "install", "--prefer-offline", "--no-audit", env=env0),
-            cwd=root, capture_output=True, text=True, timeout=300,
-            env=env0,
-        )
-        logs.extend((r.stdout or "").splitlines()[-15:])
-        if r.returncode != 0:
-            return False, logs + ["npm install failed"]
-    env0 = child_env(0)
-    r = subprocess.run(
-        argv_for_command("npx", "vite", "build", "--base", "./", env=env0),
-        cwd=root, capture_output=True, text=True, timeout=180,
-        env=env0,
-    )
-    logs.extend((r.stdout or r.stderr or "").splitlines()[-30:])
-    return r.returncode == 0, logs
+    try:
+        from ..web_build import build_web_sync
+
+        build_web_sync(root)
+        logs.append("build_web_sync ok")
+        return True, logs
+    except Exception as exc:
+        return False, logs + [str(exc)]
 
 
 async def smoke_test(root: Path, kind: str) -> dict[str, Any]:

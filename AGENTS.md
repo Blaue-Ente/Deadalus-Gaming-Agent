@@ -7,6 +7,7 @@ Games first. Apps second. Verify is part of building.
 - Playground files: `playground/projects/{slug}/`.
 - LLM: AllToken / OpenRouter / Novita / NVIDIA via `daedalus.llm_config`. Local: Ollama / LM Studio / llama.cpp / vLLM.
 - Effort: `daedalus.task_effort` — whisper / craft / epic. Studio segmented control.
+- Native tool rounds: optional `DAEDALUS_NATIVE_ROUNDS` (1–64) caps writer rounds; otherwise whisper caps at 8 and epic floors at 20 when `task_effort` is bound.
 - Epic games: `world/`, `characters/`, `levels/` (see `daedalus/world_kit.py`).
 - Studio: `app/static/studio.html` + `studio.css` + `studio.js`.
 - Do not silent-edit the harness. Self-improve patches wait for Approve.

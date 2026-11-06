@@ -34,6 +34,8 @@ pytest:
   image: python:3.12-slim
   script:
     - pip install --no-cache-dir -e ".[dev]"
+    - python3 -m playwright install-deps chromium
+    - python3 -m playwright install chromium
     - python3 -m pytest tests -q --cov=daedalus --cov-report=term-missing --cov-fail-under=0
   rules:
     - if: $CI_COMMIT_BRANCH

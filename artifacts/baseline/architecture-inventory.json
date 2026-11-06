@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-06T16:02:19.607316+00:00",
+  "generated_at": "2026-11-06T17:16:06.028251+00:00",
   "package_version": "0.3.8",
-  "git_commit": "d0e137ede8046b199fb4195df2886cbfa6ff7e4a",
+  "git_commit": "b03aa6d78bf1a5c34d5c67d4a29921022703a918",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -9,8 +9,8 @@
   "hotspots": [
     {
       "path": "daedalus/agent.py",
-      "lines": 5023,
-      "broad_excepts": 162
+      "lines": 5042,
+      "broad_excepts": 163
     },
     {
       "path": "app/admin_compat.py",
@@ -19,7 +19,7 @@
     },
     {
       "path": "daedalus/native_tools.py",
-      "lines": 2161,
+      "lines": 2163,
       "broad_excepts": 20
     },
     {
@@ -34,7 +34,7 @@
     },
     {
       "path": "daedalus/build_loop.py",
-      "lines": 589,
+      "lines": 645,
       "broad_excepts": 3
     },
     {
@@ -130,8 +130,8 @@
     ]
   },
   "tests": {
-    "modules": 54,
-    "functions": 596
+    "modules": 57,
+    "functions": 605
   },
   "modules": {
     "daedalus": [
@@ -185,6 +185,7 @@
       "daedalus/error_brain.py",
       "daedalus/evolution.py",
       "daedalus/expo_platform_guide.py",
+      "daedalus/frame_geometry.py",
       "daedalus/game_agent_bench.py",
       "daedalus/game_build_contract.py",
       "daedalus/game_canon.py",
@@ -362,12 +363,14 @@
       "daedalus/tool_parser.py",
       "daedalus/tool_protocol.py",
       "daedalus/tool_router.py",
+      "daedalus/tool_status.py",
       "daedalus/tools.py",
       "daedalus/unity_platform_guide.py",
       "daedalus/unity_runtime.py",
       "daedalus/upgrade_pool_scanner.py",
       "daedalus/visual_integrity.py",
       "daedalus/visual_proof.py",
+      "daedalus/web_build.py",
       "daedalus/web_first.py",
       "daedalus/web_search_standalone.py",
       "daedalus/windows_layout.py",

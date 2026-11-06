@@ -455,6 +455,26 @@ def _serve_static(directory: Path):
     return f"http://127.0.0.1:{port}", stop
 
 
+def _stage_dist_as_published(dist: Path, slug: str) -> tuple[Path, Any]:
+    """Materialize ``dist/`` under ``<tmp>/apps/<slug>/`` like production ADN.
+
+    Absolute ``/assets/...`` then misses (site root has no ``assets/``), matching
+    ``/apps/<slug>/`` hosting.
+    """
+    import shutil
+    import tempfile
+
+    root = Path(tempfile.mkdtemp(prefix="daedalus_appproof_"))
+    dest = root / "apps" / slug
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(dist, dest, dirs_exist_ok=True)
+
+    def cleanup() -> None:
+        shutil.rmtree(root, ignore_errors=True)
+
+    return root, cleanup
+
+
 async def verify_app(slug: str, kind: str) -> dict[str, Any]:
     """High-level Render-and-See: pick the right way to serve ``slug`` for its
     ``kind``, load it in Chromium, and return a browser_verify result.
@@ -486,8 +506,9 @@ async def verify_app(slug: str, kind: str) -> dict[str, Any]:
         finally:
             stop()
 
-    if kind in ("vite", "vite-react"):
+    if kind in ("vite", "vite-react", "phaser"):
         from . import playground_runner as runner
+
         gate = await runner.vite_compile_gate(root, slug=slug, kind=kind)
         if not gate.get("ok") and not gate.get("skipped"):
             err = str(gate.get("error") or "vite compile gate failed")[:400]
@@ -503,12 +524,16 @@ async def verify_app(slug: str, kind: str) -> dict[str, Any]:
                 "compile_logs": logs,
             }
         dist = root / "dist"
-        serve_dir = dist if (dist.exists() and (dist / "index.html").exists()) else root
-        base, stop = _serve_static(serve_dir)
+        serve_from = dist if (dist.exists() and (dist / "index.html").exists()) else root
+        stage_root, cleanup_stage = _stage_dist_as_published(serve_from, slug)
+        base, stop = _serve_static(stage_root)
         try:
-            return await browser_verify(slug, base + "/", kind=kind, settle_ms=4000)
+            return await browser_verify(
+                slug, base + f"/apps/{slug}/", kind=kind, settle_ms=4000,
+            )
         finally:
             stop()
+            cleanup_stage()
 
     if kind == "streamlit":
         from . import playground_runner as runner

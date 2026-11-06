@@ -795,6 +795,21 @@ def check_pack(root: Path) -> list[str]:
     return errors
 
 
+def refresh_inventory_only(root: Path) -> int:
+    """Update dependency snapshot + architecture inventory without pytest/bench."""
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    (OUT_DIR / "dependency-snapshot.txt").write_text(
+        write_dependency_snapshot(root),
+        encoding="utf-8",
+    )
+    (OUT_DIR / "architecture-inventory.json").write_text(
+        json.dumps(build_architecture_inventory(root), indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    print(f"refreshed {OUT_DIR / 'dependency-snapshot.txt'} and architecture-inventory.json")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Record or check the P0.00 golden baseline pack.")
     parser.add_argument(
@@ -802,7 +817,14 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Validate existing artifacts/baseline files (does not re-run the suite).",
     )
+    parser.add_argument(
+        "--refresh-inventory",
+        action="store_true",
+        help="Rewrite dependency-snapshot.txt + architecture-inventory.json from the tree (no pytest).",
+    )
     args = parser.parse_args(argv)
+    if args.refresh_inventory:
+        return refresh_inventory_only(ROOT)
     if args.check:
         errors = check_pack(ROOT)
         if errors:

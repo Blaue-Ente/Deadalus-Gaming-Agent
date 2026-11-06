@@ -96,49 +96,10 @@ def _unzip_to(data: bytes, dest: Path) -> None:
 # ---------------------------------------------------------------------------
 
 async def _build_vite(root: Path) -> Path:
-    """Run npm install + vite build in a project dir.
+    """Same as visual proof / compile gate: ``daedalus.web_build.build_web``."""
+    from .web_build import build_web
 
-    Returns the ``dist/`` Path on success. Raises RuntimeError with log tail
-    on failure.
-    """
-    async def _run(*cmd: str, timeout: float = 180) -> tuple[int, str]:  # noqa: E301
-        env = PlaygroundRuntime.child_env(0)
-        argv = argv_for_command(cmd[0], *cmd[1:], env=env) if cmd else []
-        proc = await asyncio.create_subprocess_exec(
-            *argv, cwd=str(root), env=env,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT,
-            start_new_session=True,
-        )
-        try:
-            raw, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-        except asyncio.TimeoutError:
-            await terminate_process_tree(proc, timeout=12.0)
-            return -1, f"timeout after {timeout}s"
-        text = raw.decode("utf-8", errors="replace") if raw else ""
-        return (proc.returncode or 0), text
-
-    pkg = root / "package.json"
-    if not pkg.exists():
-        raise RuntimeError("no package.json found — is this a vite project?")
-
-    log.info("Playground build: npm install in %s", root)
-    rc, out = await _run("npm", "install", "--no-audit", "--no-fund", timeout=120)
-    if rc != 0:
-        raise RuntimeError(f"npm install failed (rc={rc}):\n{out[-2000:]}")
-
-    log.info("Playground build: vite build in %s", root)
-    rc, out = await _run("npx", "--yes", "vite", "build", timeout=180)
-    if rc != 0:
-        raise RuntimeError(f"vite build failed (rc={rc}):\n{out[-2000:]}")
-
-    dist = root / "dist"
-    if not dist.exists() or not any(dist.iterdir()):
-        raise RuntimeError(
-            f"vite build exited 0 but dist/ is missing/empty.\nOutput:\n{out[-1000:]}"
-        )
-    log.info("Playground build: dist/ ready (%d files)", sum(1 for _ in dist.rglob("*") if _.is_file()))
-    return dist
+    return await build_web(root)
 
 
 async def _build_expo(root: Path) -> Path:
@@ -233,9 +194,9 @@ async def publish(
     except Exception:
         log.debug("capability ADN publish gate skipped", exc_info=True)
 
-    # Vite/vite-react projects: build first, publish the dist/ output as static
+    # Vite / Phaser (Vite+Phaser): build first, publish dist/ as static
     publish_root = root
-    if kind in ("vite", "vite-react"):
+    if kind in ("vite", "vite-react", "phaser"):
         dist = await _build_vite(root)
         publish_root = dist
         kind = "static"
@@ -301,7 +262,7 @@ async def publish(
         "url": f"/apps/{slug}/",
         "built_from": (
             "godot_export" if proj.get("kind") == "godot"
-            else "dist" if proj.get("kind") in ("vite", "vite-react", "expo")
+            else "dist" if proj.get("kind") in ("vite", "vite-react", "phaser", "expo")
             else "workspace"
         ),
     }

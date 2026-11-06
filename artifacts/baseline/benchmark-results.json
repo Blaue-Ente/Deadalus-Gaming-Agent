@@ -8,7 +8,7 @@
       "id": "skip_is_not_ok",
       "ok": true,
       "detail": "skipped browser is not evidence; N/A may still pass",
-      "ms": 13
+      "ms": 12
     },
     {
       "id": "ship_is_not_store",
@@ -26,19 +26,19 @@
       "id": "empty_systems_not_production",
       "ok": true,
       "detail": "empty systems map is not a production layer",
-      "ms": 1
+      "ms": 0
     },
     {
       "id": "unity_without_editor_honest",
       "ok": true,
       "detail": "No Unity Editor in this cloud. Set UNITY_PATH for batchmode or DAEDALUS_UNITY_MCP for a local Editor MCP. Scaffold is not Play. We do not vendor Unity.",
-      "ms": 5
+      "ms": 6
     },
     {
       "id": "explorer_cannot_write",
       "ok": true,
       "detail": "explorer/verify are read-only; coder may write",
-      "ms": 2
+      "ms": 3
     },
     {
       "id": "native_tools_present",
@@ -56,7 +56,7 @@
       "id": "skill_cannot_self_approve",
       "ok": true,
       "detail": "Owner Approve in Studio. The agent cannot approve itself.",
-      "ms": 3
+      "ms": 4
     },
     {
       "id": "racing_gates_not_blocking",
@@ -127,5 +127,5 @@
   },
   "note": "Gates are wired. The suite runs in-process honesty checks against this harness. This repo still does not ship a vendor bake-off. A skipped browser check is not a playtest.",
   "bake_off": false,
-  "at": "2026-11-06T16:02:19.034606+00:00"
+  "at": "2026-11-06T17:16:05.383771+00:00"
 }
