@@ -261,6 +261,8 @@ export DAEDALUS_MODEL=qwen2.5-coder:7b
 
 `python -m app.cli models` prints the machine class and what to pull.
 
+Ollama's `/v1` endpoint ignores `num_ctx`. The daemon default context is 4096 tokens, which is smaller than a tool-bearing build prompt, so Daedalus probes `/api/show` and `/api/ps`. A small window or a model without the `tools` capability is a Connectors warning, and the build turn uses a slim prompt instead of a silently truncated one. Whisper and craft stay on the local model (the wardrobe default stays `qwen2.5-coder:7b`). Epic uses a cloud key for that turn when one is set. To keep the full prompt locally, set `OLLAMA_CONTEXT_LENGTH=32768` on the Ollama process and restart it.
+
 OpenRouter **without** a chosen model still defaults to paid Claude Sonnet. For a $0 run, apply Studio preset **OpenRouter Free** (`or_free`) — models whose ids end in `:free` — or set `DAEDALUS_PROVIDER=openrouter` and `DAEDALUS_MODEL=poolside/laguna-s-2.1:free`. The `:free` pool is rate-limited; some ids return 429 or empty completions.
 
 ---

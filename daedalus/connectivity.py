@@ -545,6 +545,12 @@ def recommendations() -> list[dict[str, Any]]:
                     ),
                     "group": "llm",
                 })
+            else:
+                from .local_llm import active_ollama_model
+                from .local_prompt import doctor_findings
+                findings = doctor_findings(active_ollama_model(), probed.get("base_url") or None)
+                for row in reversed(findings):
+                    out.insert(0, row)
     except Exception:
         pass
     if or_key and not model and provider in ("", "openrouter"):
@@ -626,6 +632,14 @@ def brain_overview() -> dict[str, Any]:
     except Exception:
         workers = {}
     ollama = probe_endpoint(default_base_url("ollama"))
+    ollama_probe: dict[str, Any] = {}
+    if ollama.get("ok"):
+        try:
+            from .local_llm import active_ollama_model
+            from .local_prompt import probe_summary
+            ollama_probe = probe_summary(active_ollama_model(), ollama.get("base_url") or None)
+        except Exception as extra:
+            ollama_probe = {"ok": False, "error": str(extra)[:240]}
     wardrobe = w.get("wardrobe") if isinstance(w.get("wardrobe"), dict) else {}
     profile = w.get("profile") if isinstance(w.get("profile"), dict) else {}
     local = bool(cfg.get("local") or local_requested())
@@ -666,6 +680,7 @@ def brain_overview() -> dict[str, Any]:
             "base_url": ollama.get("base_url") or "",
             "models": (ollama.get("models") or [])[:24],
             "error": ollama.get("error") or "",
+            "probe": ollama_probe,
         },
         "profile": {
             "class": profile.get("class") or "",

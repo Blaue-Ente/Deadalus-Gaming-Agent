@@ -48,6 +48,7 @@ Optional: `OPENROUTER_HTTP_REFERER`, `OPENROUTER_APP_TITLE` (sent on OpenRouter 
 | `DAEDALUS_MODEL` | `qwen2.5-coder:7b` |
 | `DAEDALUS_LOCAL_LLM` | `1` |
 | `OLLAMA_HOST` | `127.0.0.1:11434` |
+| `OLLAMA_CONTEXT_LENGTH` | `32768` on the **Ollama process**, then restart it. `/v1` ignores `num_ctx`. Daedalus reads the loaded window from `/api/ps`. |
 | `DAEDALUS_OFFLINE` | `1` — refuse search / Jina / images |
 | `DAEDALUS_LAB_BACKEND` | `auto` / `local` / `smolvm` / `docker` — computer for Play Lab |
 | `DAEDALUS_SMOLVM` | `0` — never boot SmolVM even if installed |
@@ -59,6 +60,8 @@ Optional: `OPENROUTER_HTTP_REFERER`, `OPENROUTER_APP_TITLE` (sent on OpenRouter 
 Optional loopback sidecar (not vendored): `DAEDALUS_PROVIDER=omniroute` points at `http://127.0.0.1:20128/v1` with model `auto`. Studio preset **omniroute** pins workers to `auto` / `auto/fast` / `auto/coding`. The gateway process must already be running.
 
 Studio → Connectors **Brain** (or Studio → Brain wardrobe) switches models without editing `.env` (`wardrobe.json` under the data dir). That choice is the process-wide brain: chat, workers, autopilot, and CLI all read it. `OLLAMA_HOST` is an advanced Connectors field if the daemon is not on `127.0.0.1:11434`.
+
+Daedalus probes Ollama `POST /api/show` (capabilities, including `tools`) and `GET /api/ps` (loaded context). If the window is too small for the tool-bearing build prompt, Connectors warns and that turn uses a slim prompt. Whisper and craft stay on the wardrobe model. Epic uses a cloud key for that turn when one is set and `DAEDALUS_OFFLINE` is off. The default wardrobe id stays `qwen2.5-coder:7b`.
 
 ## Agent behaviour
 

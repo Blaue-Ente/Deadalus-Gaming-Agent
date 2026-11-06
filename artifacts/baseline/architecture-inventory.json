@@ -130,8 +130,8 @@
     ]
   },
   "tests": {
-    "modules": 57,
-    "functions": 605
+    "modules": 58,
+    "functions": 612
   },
   "modules": {
     "daedalus": [
@@ -235,6 +235,7 @@
       "daedalus/llm_router_config.py",
       "daedalus/llm_wardrobe.py",
       "daedalus/local_llm.py",
+      "daedalus/local_prompt.py",
       "daedalus/local_storage.py",
       "daedalus/machine_profile.py",
       "daedalus/math3d.py",
