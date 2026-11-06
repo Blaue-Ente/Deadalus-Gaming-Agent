@@ -134,7 +134,25 @@
     previewEffort();
   }
 
+  const headerErrors = {};
+  function renderHeaderErrors() {
+    const el = $("header-status");
+    if (!el) return;
+    const lines = Object.keys(headerErrors).map((key) => headerErrors[key]);
+    el.hidden = lines.length === 0;
+    text(el, lines.join("\n"));
+  }
+  function reportHeaderError(key, label, err) {
+    headerErrors[key] = label + ": " + errText(err);
+    renderHeaderErrors();
+  }
+  function clearHeaderError(key) {
+    delete headerErrors[key];
+    renderHeaderErrors();
+  }
+
   function paintMentor(data) {
+    clearHeaderError("mentor");
     const on = !!(data && data.enabled);
     const locked = !!(data && data.env_locked);
     document.querySelectorAll(".mentor button").forEach((btn) => {
@@ -242,12 +260,13 @@
     try {
       const data = await api("/api/v1/daedalus/mentor", { timeoutMs: 8000 });
       paintMentor(data);
-    } catch {
-      paintMentor({ enabled: true, env_locked: false });
+    } catch (e) {
+      reportHeaderError("mentor", t("studio.mentorAria"), e);
     }
   }
 
   function paintAssist(data) {
+    clearHeaderError("assist");
     const mode = String((data && data.mode) || "auto");
     const locked = !!(data && data.env_locked);
     document.querySelectorAll(".assist button").forEach((btn) => {
@@ -264,8 +283,8 @@
     try {
       const data = await api("/api/v1/daedalus/writer-assist", { timeoutMs: 8000 });
       paintAssist(data);
-    } catch {
-      paintAssist({ mode: "auto", env_locked: false });
+    } catch (e) {
+      reportHeaderError("assist", t("studio.assistAria"), e);
     }
   }
 
@@ -290,6 +309,7 @@
   }
 
   function paintBudget(data) {
+    clearHeaderError("budget");
     const usd = String((data && data.usd != null) ? data.usd : 0);
     const locked = !!(data && data.env_locked);
     document.querySelectorAll(".budget button").forEach((btn) => {
@@ -319,8 +339,8 @@
     try {
       const data = await api("/api/v1/daedalus/run-budget", { timeoutMs: 8000 });
       paintBudget(data);
-    } catch {
-      paintBudget({ usd: 0, env_locked: false });
+    } catch (e) {
+      reportHeaderError("budget", t("studio.budgetAria"), e);
     }
   }
 
@@ -406,14 +426,21 @@
   async function previewEffort() {
     const q = $("prompt").value.trim();
     try {
-      const data = await api(
-        "/api/v1/daedalus/effort?effort=" + encodeURIComponent(state.effort) +
-        "&q=" + encodeURIComponent(q.slice(0, 500)),
-        { timeoutMs: 8000 }
+      const data = await api("/api/v1/daedalus/effort", {
+        method: "POST",
+        body: JSON.stringify({
+          text: q.slice(0, 8000),
+          effort: state.effort || "auto",
+        }),
+        timeoutMs: 8000,
+      });
+      const tier = data.tier || "whisper";
+      text(
+        $("effortnote"),
+        t("studio.effort." + (state.effort || "auto")) + " — " + t("studio.effortNote." + tier)
       );
-      text($("effortnote"), t("studio.effort." + (data.tier || "auto")) + " — " + t("studio.effortNote." + (data.tier || "whisper")));
-    } catch {
-      text($("effortnote"), "");
+    } catch (e) {
+      text($("effortnote"), t("studio.effortPreviewErr") + ": " + errText(e));
     }
   }
 

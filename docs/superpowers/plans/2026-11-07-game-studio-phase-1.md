@@ -1,6 +1,6 @@
 # Game Studio Phase 1 Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** On `GET /`, wrapped header controls receive ordinary pointer clicks, Settings stays on screen and opens the existing connectors page, and Mentor, budget, and assist do not paint a fake value when their GET fails.
 
@@ -54,17 +54,17 @@
 - Consumes: existing `.chip`, `.dx-lang`, `/admin/daedalus/connectors`
 - Produces: `#settings-link`, grown header row, `studio.settings`
 
-- [ ] **Step 1: Write the failing source contract and the Playwright hit test**
+- [x] **Step 1: Write the failing source contract and the Playwright hit test**
 
 Create `tests/test_studio_phase1_header.py` with the server fixture and `test_header_css_contract`, `test_settings_string_pair`, and `test_header_hits_at_laptop_viewports` as specified in the test body at the bottom of this plan. Do not add the 500 or persistence tests yet.
 
-- [ ] **Step 2: Run the source tests and confirm they fail**
+- [x] **Step 2: Run the source tests and confirm they fail**
 
 Run: `python3 -m pytest tests/test_studio_phase1_header.py::test_header_css_contract tests/test_studio_phase1_header.py::test_settings_string_pair -q`
 
 Expected: FAIL because `minmax(var(--header), auto)` and `studio.settings` are absent.
 
-- [ ] **Step 3: Implement the CSS, the link, and the strings**
+- [x] **Step 3: Implement the CSS, the link, and the strings**
 
 In `app/static/studio.css`, replace the `.shell` grid row and add header stacking:
 
@@ -126,13 +126,13 @@ Next to the Bulgarian `studio.budgetAria`:
 
 Add only the settings line. Do not add `studio.effortPreviewErr` in this task.
 
-- [ ] **Step 4: Run source tests, then the browser hit test**
+- [x] **Step 4: Run source tests, then the browser hit test**
 
 Run: `python3 -m pytest tests/test_studio_phase1_header.py::test_header_css_contract tests/test_studio_phase1_header.py::test_settings_string_pair tests/test_studio_phase1_header.py::test_header_hits_at_laptop_viewports -q`
 
 Expected: PASS. If Playwright or Chromium is missing, install the existing extra (`pip install -e ".[playwright]"` and `python3 -m playwright install chromium`). Do not add a package to `pyproject.toml`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/static/studio.css app/static/studio.html app/static/i18n.js tests/test_studio_phase1_header.py
@@ -153,17 +153,17 @@ git commit -m "fix(studio): keep wrapped header controls clickable and show Sett
 - Consumes: `api`, `errText`, `t`, `paintMentor`, `paintAssist`, `paintBudget`
 - Produces: `reportHeaderError(key, label, err)`, `clearHeaderError(key)`, `#header-status`
 
-- [ ] **Step 1: Add the failing tests**
+- [x] **Step 1: Add the failing tests**
 
 Add `test_load_catch_does_not_invent_status` and `test_mentor_get_500_shows_error` to the same module. The source test fails while `paintMentor({ enabled: true, env_locked: false })` remains. The browser test fails until `#header-status` shows `mentor down` and the Mentor ON button stays `aria-pressed="false"`.
 
-- [ ] **Step 2: Run the new tests and confirm failure**
+- [x] **Step 2: Run the new tests and confirm failure**
 
 Run: `python3 -m pytest tests/test_studio_phase1_header.py::test_load_catch_does_not_invent_status tests/test_studio_phase1_header.py::test_mentor_get_500_shows_error -q`
 
 Expected: FAIL.
 
-- [ ] **Step 3: Implement honest loads**
+- [x] **Step 3: Implement honest loads**
 
 In `studio.html`, set every Mentor, assist, and budget button to `aria-pressed="false"`. After `#settings-link`:
 
@@ -243,13 +243,13 @@ Replace the three load catches:
 
 Delete the old catches that call `paintMentor({ enabled: true, env_locked: false })`, `paintAssist({ mode: "auto", env_locked: false })`, and `paintBudget({ usd: 0, env_locked: false })`.
 
-- [ ] **Step 4: Re-run Task 2 tests and the Task 1 hit test**
+- [x] **Step 4: Re-run Task 2 tests and the Task 1 hit test**
 
 Run: `python3 -m pytest tests/test_studio_phase1_header.py -q -k "not persistence and not effort"`
 
 Expected: PASS for the tests that exist so far.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/static/studio.css app/static/studio.html app/static/studio.js tests/test_studio_phase1_header.py
@@ -269,17 +269,17 @@ git commit -m "fix(studio): show Mentor, budget, and assist load errors"
 - Consumes: `POST /api/v1/daedalus/effort` body `{text: string, effort: string}` returning `{tier: string, ...}` from `daedalus.task_effort.classify`
 - Produces: `#effortnote` text `t("studio.effortPreviewErr") + ": " + errText(e)` on failure
 
-- [ ] **Step 1: Add failing tests**
+- [x] **Step 1: Add failing tests**
 
 Add `test_effort_preview_posts_and_shows_error` and `test_settings_persist_across_process_and_browser_restart`. The persistence test's second browser context is the new-profile check.
 
-- [ ] **Step 2: Run them and confirm failure**
+- [x] **Step 2: Run them and confirm failure**
 
 Run: `python3 -m pytest tests/test_studio_phase1_header.py::test_effort_preview_posts_and_shows_error tests/test_studio_phase1_header.py::test_settings_persist_across_process_and_browser_restart -q`
 
 Expected: FAIL. The live page still GETs `/api/v1/daedalus/effort`.
 
-- [ ] **Step 3: Implement POST preview and the error string**
+- [x] **Step 3: Implement POST preview and the error string**
 
 Replace `previewEffort` with:
 
@@ -320,13 +320,13 @@ Bulgarian, beside `studio.settings`:
 
 `setEffort` still writes `dx.effort` and updates `aria-pressed` before `previewEffort`. Do not move effort into kv.
 
-- [ ] **Step 4: Run the whole module**
+- [x] **Step 4: Run the whole module**
 
 Run: `python3 -m pytest tests/test_studio_phase1_header.py -q`
 
 Expected: PASS. Screenshots written by the hit test under `/opt/cursor/artifacts/phase1-header-1280.png`, `phase1-header-1366.png`, and `phase1-header-910.png`.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/static/studio.js app/static/i18n.js tests/test_studio_phase1_header.py
@@ -340,13 +340,13 @@ git commit -m "fix(studio): post effort preview and keep header settings"
 **Files:**
 - Modify only if the pack check demands it: `artifacts/baseline/architecture-inventory.json`, `artifacts/baseline/dependency-snapshot.txt` via the sanctioned script.
 
-- [ ] **Step 1: Focused tests**
+- [x] **Step 1: Focused tests**
 
 Run: `python3 -m pytest tests/test_studio_phase1_header.py tests/test_studio_hardening.py tests/test_task_effort.py tests/test_baseline_pack.py -q`
 
 Expected: PASS. If `test_baseline_pack_check_passes` fails only on `tests.modules` or `tests.functions`, run Step 2. Any other failure is a product bug. Do not edit the check.
 
-- [ ] **Step 2: Refresh inventory only when Step 1 names the test count**
+- [x] **Step 2: Refresh inventory only when Step 1 names the test count**
 
 Run: `python3 scripts/record_baseline.py --refresh-inventory`
 
@@ -354,7 +354,7 @@ Then re-run: `python3 -m pytest tests/test_baseline_pack.py -q`
 
 Expected: PASS. Commit the two artifact files with message `chore(baseline): refresh inventory for phase 1 header test`.
 
-- [ ] **Step 3: Full suite**
+- [x] **Step 3: Full suite**
 
 Run: `python3 -m pytest -q`
 

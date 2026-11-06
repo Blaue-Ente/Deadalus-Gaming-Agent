@@ -59,12 +59,14 @@ input, select, textarea { width: 100%; padding: 0.5rem 0.65rem; }
 .shell {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr) 360px;
-  grid-template-rows: var(--header) 1fr;
+  grid-template-rows: minmax(var(--header), auto) 1fr;
   height: 100%;
 }
 
 header.app {
   grid-column: 1 / -1;
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -306,6 +308,24 @@ button.chip {
 .dx-lang button[aria-pressed="true"] {
   background: rgba(201, 162, 39, 0.16);
   color: var(--gold-2);
+}
+a#settings-link {
+  flex: 0 0 auto;
+  color: var(--ink);
+  text-decoration: none;
+  position: relative;
+  z-index: 1;
+}
+.header-status {
+  flex: 1 0 100%;
+  margin: 0;
+  color: var(--err);
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+}
+@media (max-width: 960px) {
+  header.app { gap: 0.35rem 0.45rem; padding: 0.3rem 0.55rem; }
+  header.app .brand h1 { font-size: 1.15rem; }
 }
 
 .pills {
