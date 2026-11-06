@@ -3,10 +3,16 @@
 Whisper stays cheap. Craft keeps the owner's configured model.
 Epic may lift to a stronger coder/reasoner for this call only —
 it never silently ``ollama pull`` and never persists a wardrobe change.
+
+When the wardrobe is local, epic uses a cloud provider for this turn if a
+cloud key is set and offline mode is off. Whisper stays on the local model.
+The default wardrobe model id is not rewritten to "fix" a small context
+window; see ``local_prompt`` for the slim Ollama path.
 """
 from __future__ import annotations
 
 import contextvars
+import os
 import re
 from contextlib import contextmanager
 from typing import Any, Iterator
@@ -99,14 +105,92 @@ def classify(text: str, *, requested: str = "auto") -> dict[str, Any]:
     return decision
 
 
+_EPIC_CLOUD_KEYS = (
+    "OPENROUTER_API_KEY",
+    "ALLTOKEN_API_KEY",
+    "NOVITA_API_KEY",
+    "NVIDIA_API_KEY",
+    "ANTHROPIC_API_KEY",
+    "OPENAI_API_KEY",
+)
+
+EPIC_LOCAL_WARNING = (
+    "Epic is on the local brain for this turn. "
+    "A small Ollama window uses the slim build prompt. "
+    "Set a cloud key for epic, or raise OLLAMA_CONTEXT_LENGTH and restart Ollama. "
+    "The default wardrobe model is unchanged."
+)
+
+
+def _offline_pinned() -> bool:
+    flag = (os.environ.get("DAEDALUS_OFFLINE") or "").strip().lower()
+    if flag in ("1", "true", "yes", "on"):
+        return True
+    try:
+        from .llm_wardrobe import load
+        return bool(load().get("offline"))
+    except Exception:
+        return False
+
+
+def _cloud_key_present() -> bool:
+    return any((os.environ.get(key) or "").strip() for key in _EPIC_CLOUD_KEYS)
+
+
+def _epic_cloud_pick() -> dict[str, Any] | None:
+    """Cloud model for this epic turn. None when no key is configured."""
+    if not _cloud_key_present():
+        return None
+    try:
+        from .model_registry import select_for_task
+        entry = select_for_task(
+            "complex game world plan code",
+            budget_hint="quality",
+            required_caps=["code", "planning", "reasoning"],
+        )
+    except Exception:
+        return None
+    mid = (entry or {}).get("model_id")
+    if not mid:
+        return None
+    out: dict[str, Any] = {
+        "model": mid,
+        "model_source": "epic-cloud",
+        "provider_path": "epic-cloud",
+    }
+    prov = str((entry or {}).get("provider") or "").strip()
+    if prov:
+        out["provider"] = prov
+    return out
+
+
+def _tag_local(out: dict[str, Any], tier: str | None) -> dict[str, Any]:
+    row = dict(out)
+    if tier == "whisper":
+        row["provider_path"] = "whisper-local"
+    elif tier == "epic":
+        row["provider_path"] = "local"
+        row["warning"] = EPIC_LOCAL_WARNING
+    else:
+        row["provider_path"] = "local"
+    return row
+
+
 def resolve_model(decision: dict[str, Any]) -> dict[str, Any]:
     """Pick a model hint. Empty model = keep get_config()."""
     if not decision.get("apply_model"):
-        return {"model": None, "model_source": "owner-default"}
+        return {"model": None, "model_source": "owner-default", "provider_path": "owner"}
     tier = decision.get("tier")
     role = str(decision.get("role") or "code")
     try:
         from .llm_wardrobe import CATALOG, installed_ollama_models, load, wants_local
+
+        # Epic on a local wardrobe lifts to cloud for this call only.
+        # Offline stays local. The catalog model id is not rewritten.
+        if tier == "epic" and wants_local() and not _offline_pinned():
+            cloud = _epic_cloud_pick()
+            if cloud:
+                return cloud
 
         data = load()
         if wants_local():
@@ -114,7 +198,10 @@ def resolve_model(decision: dict[str, Any]) -> dict[str, Any]:
             roles = dict(data.get("roles") or {})
             pinned = roles.get(role)
             if pinned:
-                return {"model": pinned, "provider": "ollama", "model_source": "wardrobe-role"}
+                return _tag_local(
+                    {"model": pinned, "provider": "ollama", "model_source": "wardrobe-role"},
+                    str(tier) if tier else None,
+                )
             picked = None
             for row in CATALOG:
                 if row["role"] != role:
@@ -124,13 +211,19 @@ def resolve_model(decision: dict[str, Any]) -> dict[str, Any]:
                 if have:
                     picked = name
             if picked:
-                return {"model": picked, "provider": "ollama", "model_source": "wardrobe-installed"}
+                return _tag_local(
+                    {"model": picked, "provider": "ollama", "model_source": "wardrobe-installed"},
+                    str(tier) if tier else None,
+                )
             if data.get("active"):
-                return {"model": data["active"], "provider": "ollama", "model_source": "wardrobe-active"}
+                return _tag_local(
+                    {"model": data["active"], "provider": "ollama", "model_source": "wardrobe-active"},
+                    str(tier) if tier else None,
+                )
     except Exception:
         pass
     if tier == "whisper":
-        return {"model": None, "model_source": "cheap-path"}
+        return {"model": None, "model_source": "cheap-path", "provider_path": "whisper-local"}
     if tier == "epic":
         try:
             from .model_registry import select_for_task
@@ -141,14 +234,18 @@ def resolve_model(decision: dict[str, Any]) -> dict[str, Any]:
             )
             mid = (entry or {}).get("model_id")
             if mid:
-                out = {"model": mid, "model_source": "registry"}
+                out: dict[str, Any] = {
+                    "model": mid,
+                    "model_source": "registry",
+                    "provider_path": "epic-cloud",
+                }
                 prov = str((entry or {}).get("provider") or "").strip()
                 if prov:
                     out["provider"] = prov
                 return out
         except Exception:
             pass
-    return {"model": None, "model_source": "owner-default"}
+    return {"model": None, "model_source": "owner-default", "provider_path": "owner"}
 
 
 def current() -> dict[str, Any] | None:

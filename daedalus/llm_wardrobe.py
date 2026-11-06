@@ -45,7 +45,10 @@ CATALOG: list[dict[str, Any]] = [
         "ollama": "qwen2.5-coder:7b",
         "ram_gb": 8,
         "label": "Code (7B)",
-        "blurb": "Default for games on 8–16 GB. Tools + Phaser.",
+        "blurb": (
+            "Default local coder on 8–16 GB. A 4096 Ollama window uses the slim prompt. "
+            "Epic prefers a cloud key for that turn; this id stays put."
+        ),
     },
     {
         "id": "code-14b",

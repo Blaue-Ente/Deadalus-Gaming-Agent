@@ -232,7 +232,7 @@ async def call_with_tools(
     ``run_native_discovery_pass`` (text + tool_use blocks).
     """
     from .llm_config import get_config, is_loopback_gateway, openai_compat_extra_body, openai_compat_headers
-    from .local_llm import dummy_api_key, is_local_provider
+    from .local_llm import dummy_api_key, is_local_provider, normalize_provider
     from .native_tools import openai_tool_specs, to_anthropic_messages, to_openai_messages
 
     cfg = get_config()
@@ -300,6 +300,21 @@ async def call_with_tools(
         from openai import AsyncOpenAI
     except ImportError:
         return {"stop_reason": "end_turn", "content": []}
+    if normalize_provider(provider) == "ollama":
+        from .local_prompt import fit_ollama_turn
+        fitted = fit_ollama_turn(
+            system,
+            tools,
+            messages=messages,
+            model=model,
+            base_url=base_url,
+            max_tokens=max_tokens,
+        )
+        system = fitted["system"]
+        tools = list(fitted["tools"])
+        messages = list(fitted["messages"])
+        max_tokens = int(fitted["max_tokens"])
+
     extra = openai_compat_headers(provider)
     client = AsyncOpenAI(
         api_key=api_key,

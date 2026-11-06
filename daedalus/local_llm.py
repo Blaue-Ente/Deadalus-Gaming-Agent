@@ -252,6 +252,256 @@ def resolve_local_config(provider: str | None = None) -> dict[str, Any] | None:
     }
 
 
+# Ollama's OpenAI `/v1` route ignores `num_ctx`. The server default window is
+# 4096 unless the Modelfile, `/api/ps`, or `OLLAMA_CONTEXT_LENGTH` says otherwise.
+OLLAMA_DEFAULT_NUM_CTX = 4096
+
+_NUM_CTX_RE = re.compile(r"(?i)\bnum_ctx\s+(\d+)")
+_show_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+
+
+def clear_probe_cache() -> None:
+    """Drop cached `/v1/models` and `/api/show` results. Tests and retries."""
+    _probe_cache.clear()
+    _show_cache.clear()
+
+
+def ollama_api_root(base_url: str) -> str:
+    """Native Ollama root (no `/v1`) for `/api/show` and `/api/ps`."""
+    v1 = _ensure_v1(base_url or "")
+    if v1.endswith("/v1"):
+        return v1[: -len("/v1")]
+    return v1.rstrip("/")
+
+
+def active_ollama_model() -> str:
+    """Wardrobe active, then env, then the catalog default. Never a cloud id."""
+    try:
+        from .llm_wardrobe import active_model
+        active = active_model()
+        if active and not _looks_cloud_model_id(str(active)):
+            return str(active)
+    except Exception:
+        pass
+    for env_name in ("OLLAMA_MODEL", "DAEDALUS_MODEL"):
+        raw = (os.environ.get(env_name) or "").strip()
+        if raw and not _looks_cloud_model_id(raw):
+            return raw
+    return _DEFAULTS["ollama"]["default_model"]
+
+
+def _positive_int(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, int) and value > 0:
+        return value
+    if isinstance(value, float) and value > 0 and value == int(value):
+        return int(value)
+    if isinstance(value, str):
+        text = value.strip()
+        if text.isdigit():
+            number = int(text)
+            return number if number > 0 else None
+    return None
+
+
+def context_from_model_info(info: Any) -> int | None:
+    """Training max from `model_info` keys ending in `context_length`."""
+    if not isinstance(info, dict):
+        return None
+    found: list[int] = []
+    for key, val in info.items():
+        name = str(key)
+        if name == "context_length" or name.endswith(".context_length"):
+            number = _positive_int(val)
+            if number:
+                found.append(number)
+    return max(found) if found else None
+
+
+def num_ctx_from_parameters(parameters: Any) -> int | None:
+    """Modelfile `num_ctx`. This is the configured window, not the training max."""
+    if isinstance(parameters, dict):
+        return _positive_int(parameters.get("num_ctx"))
+    if isinstance(parameters, str):
+        match = _NUM_CTX_RE.search(parameters)
+        if match:
+            return _positive_int(match.group(1))
+    return None
+
+
+def parse_ollama_show(payload: Any) -> dict[str, Any]:
+    """Read capabilities and context fields from a `/api/show` body."""
+    data = payload if isinstance(payload, dict) else {}
+    raw_caps = data.get("capabilities")
+    caps: list[str] = []
+    if isinstance(raw_caps, list):
+        for item in raw_caps:
+            if isinstance(item, str) and item.strip():
+                caps.append(item.strip())
+            elif isinstance(item, dict) and item.get("name"):
+                caps.append(str(item["name"]).strip())
+    elif isinstance(raw_caps, str) and raw_caps.strip():
+        caps = [raw_caps.strip()]
+    lowered = {c.lower() for c in caps}
+    return {
+        "capabilities": caps,
+        "tools": "tools" in lowered,
+        "capabilities_reported": isinstance(raw_caps, list),
+        "model_context": context_from_model_info(data.get("model_info")),
+        "parameter_num_ctx": num_ctx_from_parameters(data.get("parameters")),
+        "explicit_context": _positive_int(data.get("context_length")),
+    }
+
+
+def ps_context_length(payload: Any, model: str) -> int | None:
+    """Loaded window from `GET /api/ps` (`ollama ps` CONTEXT column)."""
+    if not isinstance(payload, dict):
+        return None
+    rows = payload.get("models")
+    if not isinstance(rows, list):
+        return None
+    want = (model or "").strip()
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("name") or row.get("model") or "")
+        if want and want != name and want not in name and name not in want:
+            continue
+        number = _positive_int(row.get("context_length"))
+        if number:
+            return number
+    return None
+
+
+def env_context_length() -> int | None:
+    """`OLLAMA_CONTEXT_LENGTH` in this process. The Ollama daemon has its own."""
+    return _positive_int(os.environ.get("OLLAMA_CONTEXT_LENGTH"))
+
+
+def effective_context(
+    show: dict[str, Any],
+    *,
+    ps_context: int | None = None,
+    env_ctx: int | None = None,
+) -> tuple[int, str]:
+    """Runtime window. Loaded `/api/ps` beats Modelfile, env, then the 4096 default.
+
+    `model_info.context_length` is the training max. Ollama does not load that
+    many tokens unless something above sets the window. The default is 4096.
+    """
+    if ps_context:
+        chosen, source = int(ps_context), "loaded window (/api/ps)"
+    elif show.get("parameter_num_ctx"):
+        chosen, source = int(show["parameter_num_ctx"]), "Modelfile num_ctx"
+    elif show.get("explicit_context"):
+        chosen, source = int(show["explicit_context"]), "show context_length"
+    elif env_ctx:
+        chosen, source = int(env_ctx), "OLLAMA_CONTEXT_LENGTH"
+    else:
+        chosen, source = OLLAMA_DEFAULT_NUM_CTX, (
+            "Ollama default 4096 (model not loaded, Modelfile has no num_ctx)"
+        )
+    model_max = show.get("model_context")
+    if isinstance(model_max, int) and model_max > 0 and chosen > model_max:
+        chosen = model_max
+    return chosen, source
+
+
+def tools_capability_warning(model: str, capabilities: list[str], *, reported: bool) -> str:
+    shown = ", ".join(capabilities) if capabilities else "none"
+    if reported:
+        return (
+            f"Ollama model {model} does not advertise the tools capability "
+            f"(capabilities: {shown}). Tool calls will fail or come back as prose. "
+            "Pull a tools-capable tag or use a cloud brain for builds."
+        )
+    return (
+        f"Ollama model {model} did not report a tools capability "
+        f"(capabilities: {shown}). Tool calls may fail silently. "
+        f"Check `ollama show {model}` and use a tools-capable tag or a cloud brain for builds."
+    )
+
+
+def probe_ollama_model(
+    model: str | None = None,
+    base_url: str | None = None,
+    *,
+    timeout: float = 1.6,
+) -> dict[str, Any]:
+    """POST `/api/show` and, when the model is loaded, GET `/api/ps`.
+
+    Never raises. Cached briefly like ``probe_endpoint``. A missing ``tools``
+    capability is logged here so it is not a silent 400 later.
+    """
+    name = (model or active_ollama_model() or "").strip() or _DEFAULTS["ollama"]["default_model"]
+    root = ollama_api_root(base_url or default_base_url("ollama"))
+    cache_key = f"{root}|{name}"
+    now = time.time()
+    hit = _show_cache.get(cache_key)
+    if hit and now - hit[0] < _PROBE_TTL_S:
+        return dict(hit[1])
+
+    result: dict[str, Any] = {
+        "ok": False,
+        "model": name,
+        "base_url": root,
+        "capabilities": [],
+        "tools": False,
+        "capabilities_reported": False,
+        "context_length": None,
+        "model_context": None,
+        "context_source": "",
+        "warning": "",
+        "error": "",
+    }
+    show_payload: Any = None
+    ps_payload: Any = None
+    try:
+        with httpx.Client(timeout=timeout, follow_redirects=True) as client:
+            show_resp = client.post(f"{root}/api/show", json={"model": name, "name": name})
+            show_resp.raise_for_status()
+            show_payload = show_resp.json()
+            try:
+                ps_resp = client.get(f"{root}/api/ps")
+                if ps_resp.status_code == 200:
+                    ps_payload = ps_resp.json()
+            except Exception as exc:
+                log.debug("ollama /api/ps skipped: %s", exc)
+    except Exception as exc:
+        result["error"] = str(exc)[:240]
+        result["warning"] = (
+            f"Could not read Ollama model {name} via /api/show at {root}. {result['error']}"
+        ).strip()
+        _show_cache[cache_key] = (now, result)
+        return dict(result)
+
+    parsed = parse_ollama_show(show_payload)
+    loaded = ps_context_length(ps_payload, name)
+    ctx, source = effective_context(parsed, ps_context=loaded, env_ctx=env_context_length())
+    warning = ""
+    if not parsed["tools"]:
+        warning = tools_capability_warning(
+            name, parsed["capabilities"], reported=bool(parsed["capabilities_reported"]),
+        )
+        log.warning("%s", warning)
+    result = {
+        "ok": True,
+        "model": name,
+        "base_url": root,
+        "capabilities": parsed["capabilities"],
+        "tools": bool(parsed["tools"]),
+        "capabilities_reported": bool(parsed["capabilities_reported"]),
+        "context_length": ctx,
+        "model_context": parsed["model_context"],
+        "context_source": source,
+        "warning": warning,
+        "error": "",
+    }
+    _show_cache[cache_key] = (now, result)
+    return dict(result)
+
+
 def local_requested() -> bool:
     """True when the owner asked for a local brain for the whole process.
 
