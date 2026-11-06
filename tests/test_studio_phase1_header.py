@@ -50,10 +50,12 @@ def test_load_catch_does_not_invent_status():
 def test_effort_preview_posts():
     assert '"studio.effortPreviewErr": "Effort preview failed"' in I18N
     assert '"studio.effortPreviewErr": "Прегледът на усилието не мина"' in I18N
-    start = JS.index("async function previewEffort")
-    body = JS[start:start + 700]
+    start = JS.index("async function previewEffort()")
+    end = JS.index("let effortTimer", start)
+    body = JS[start:end]
     assert 'method: "POST"' in body
-    assert "/api/v1/daedalus/effort?" not in JS
+    assert '"/api/v1/daedalus/effort"' in body
+    assert "/api/v1/daedalus/effort?" not in body
 
 
 def _free_port() -> int:
@@ -144,41 +146,58 @@ def test_header_hits_at_laptop_viewports(studio_server):
                 ".budget button[data-budget='5']",
                 ".dx-lang button[data-lang='en']",
                 ".dx-lang button[data-lang='bg']",
-                "#settings-link",
             ):
-                if sel == "#settings-link":
-                    box = page.locator(sel).bounding_box()
-                    assert box is not None
-                    assert box["y"] + box["height"] <= height
-                    assert page.evaluate("() => window.scrollY") == 0
-                    continue
                 _hit(page, sel)
+            assert page.evaluate("() => window.scrollY") == 0
+            _hit(page, "#settings-link")
+            page.wait_for_url("**/admin/daedalus/connectors")
             context.close()
-        page = browser.new_page(viewport={"width": 1280, "height": 800})
-        page.goto(url, wait_until="domcontentloaded")
-        page.locator("#settings-link").click()
-        page.wait_for_url("**/admin/daedalus/connectors")
         browser.close()
 
 
-def test_mentor_get_500_shows_error(studio_server):
+def _assert_get_500_leaves_group_unpressed(studio_server, path: str, detail: str, group: str):
     from playwright.sync_api import sync_playwright
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": 1280, "height": 800})
+
         def handle(route):
             if route.request.method == "GET":
-                route.fulfill(status=500, content_type="application/json", body='{"detail":"mentor down"}')
+                route.fulfill(
+                    status=500,
+                    content_type="application/json",
+                    body=json.dumps({"detail": detail}),
+                )
             else:
                 route.fallback()
-        page.route("**/api/v1/daedalus/mentor", handle)
+
+        page.route("**" + path, handle)
         page.goto(studio_server["url"] + "/", wait_until="domcontentloaded")
         status = page.locator("#header-status")
         status.wait_for(state="visible")
         text = status.inner_text()
-        assert "500" in text or "mentor down" in text
-        assert page.locator(".mentor button[data-mentor='on']").get_attribute("aria-pressed") == "false"
+        assert detail in text
+        for btn in page.locator(group + " button").all():
+            assert btn.get_attribute("aria-pressed") == "false"
         browser.close()
+
+
+def test_mentor_get_500_shows_error(studio_server):
+    _assert_get_500_leaves_group_unpressed(
+        studio_server, "/api/v1/daedalus/mentor", "mentor down", ".mentor"
+    )
+
+
+def test_writer_assist_get_500_shows_error(studio_server):
+    _assert_get_500_leaves_group_unpressed(
+        studio_server, "/api/v1/daedalus/writer-assist", "assist down", ".assist"
+    )
+
+
+def test_run_budget_get_500_shows_error(studio_server):
+    _assert_get_500_leaves_group_unpressed(
+        studio_server, "/api/v1/daedalus/run-budget", "budget down", ".budget"
+    )
 
 
 def test_effort_preview_posts_and_shows_error(studio_server):
