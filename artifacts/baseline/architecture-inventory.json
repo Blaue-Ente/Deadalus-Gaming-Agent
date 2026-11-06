@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-06T19:50:57.223785+00:00",
+  "generated_at": "2026-11-06T20:07:25.561814+00:00",
   "package_version": "0.3.8",
-  "git_commit": "22f579aabaf123e0ec79dcc54e71c13c78468975",
+  "git_commit": "6c14e4a24afd40bc043782ab161581fe7328b0b1",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -130,8 +130,8 @@
     ]
   },
   "tests": {
-    "modules": 61,
-    "functions": 624
+    "modules": 62,
+    "functions": 629
   },
   "modules": {
     "daedalus": [
@@ -233,6 +233,7 @@
       "daedalus/llm_cost.py",
       "daedalus/llm_presets.py",
       "daedalus/llm_router_config.py",
+      "daedalus/llm_routing_watchdog.py",
       "daedalus/llm_wardrobe.py",
       "daedalus/local_llm.py",
       "daedalus/local_prompt.py",

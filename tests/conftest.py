@@ -41,6 +41,16 @@ def _owner_token_env(monkeypatch):
     monkeypatch.setenv("DAEDALUS_BIND_HOST", "127.0.0.1")
 
 
+@pytest.fixture(autouse=True)
+def _reset_llm_routing_watchdog():
+    try:
+        from daedalus import llm_routing_watchdog as rw
+        rw.clear()
+    except Exception:
+        pass
+    yield
+
+
 @pytest.fixture
 def raw_http():
     """Disable TestClient auto-injection of the owner token."""

@@ -390,13 +390,21 @@ def persona_via_master_enabled() -> bool:
 
 
 def _apply_nvidia_free_policy(cfg: dict) -> dict:
-    """Force NVIDIA master when free-only mode is on."""
+    """Force NVIDIA master when free-only mode is on.
+
+    Does not override an explicit persisted brain choice to another cloud:
+    if the owner saved provider+model in DB and it is not NVIDIA, keep it
+    (they may use OpenRouter free-only or another gateway with a key).
+    """
     if not is_nvidia_free_only():
         return cfg
     nv_key = resolve_provider_api_key("nvidia")
     pd = PROVIDER_DEFAULTS["nvidia"]
     db_cfg = _read_db()
     out = dict(cfg)
+    db_prov = str(db_cfg.get("provider") or "").strip().lower()
+    if db_cfg.get("model") and db_prov and db_prov != "nvidia":
+        return out
     if db_cfg.get("provider") == "nvidia" and db_cfg.get("model"):
         model = db_cfg["model"]
     else:
@@ -419,9 +427,19 @@ def _apply_nvidia_free_policy(cfg: dict) -> dict:
     return out
 
 
+def get_brain_config() -> dict:
+    """Effective Connectors / wardrobe brain — no task_effort or run_budget overlay.
+
+    Use for build model resolution, worker inheritance, and \"what did the owner pick\"
+    diagnostics. Chat/calls use ``get_config()`` which may apply whisper/epic and
+    run-budget writer overlays for that turn only.
+    """
+    return _resolve_llm_config()
+
+
 def get_config() -> dict:
     """Return resolved LLM config: {provider, model, api_key, base_url, sdk, use_cache}."""
-    cfg = _resolve_llm_config()
+    cfg = get_brain_config()
     try:
         from .task_effort import applied_model
         extra = applied_model()

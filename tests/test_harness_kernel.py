@@ -114,8 +114,12 @@ def test_resolve_model_registry_includes_provider(monkeypatch):
 
     monkeypatch.setattr("daedalus.llm_wardrobe.wants_local", lambda: False)
     monkeypatch.setattr(
-        "daedalus.model_registry.select_for_task",
-        lambda *a, **k: {"model_id": "quality-coder", "provider": "openrouter"},
+        "daedalus.model_registry.iter_candidates_for_task",
+        lambda *a, **k: [{"model_id": "quality-coder", "provider": "openrouter"}],
+    )
+    monkeypatch.setattr(
+        "daedalus.llm_config.resolve_provider_api_key",
+        lambda p: "k" if (p or "").strip().lower() == "openrouter" else "",
     )
     out = resolve_model({"apply_model": True, "tier": "epic", "role": "reason"})
     assert out["model"] == "quality-coder"

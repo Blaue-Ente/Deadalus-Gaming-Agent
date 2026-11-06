@@ -141,7 +141,7 @@ async def resolve_existing_project_slug(name: str) -> dict[str, Any] | None:
 
 async def build_repair_context(slug: str, proj: dict[str, Any]) -> tuple[str, str, str]:
     """combined_sys, build_model, kind for LLM repair helpers."""
-    from .build_prompts import build_combined_sys, resolve_build_model_for_project
+    from .build_prompts import build_combined_sys, fallback_build_model_tag, resolve_build_model_for_project
     from .game_platform_guide import is_likely_game
 
     kind = proj.get("kind", "static")
@@ -159,7 +159,7 @@ async def build_repair_context(slug: str, proj: dict[str, Any]) -> tuple[str, st
         coding_mode=coding_mode,
     )
     if not build_model:
-        build_model = "anthropic/claude-sonnet-4"
+        build_model, _ = fallback_build_model_tag()
     return combined_sys, build_model, kind
 
 

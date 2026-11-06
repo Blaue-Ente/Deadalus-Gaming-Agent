@@ -238,7 +238,13 @@ async def onboard_project(
             "Върни САМО променените файлове в ===FILE: path=== формат."
         )
     if not build_model:
-        build_model = os.environ.get("DAEDALUS_BUILD_MODEL", "anthropic/claude-sonnet-4")
+        from .build_prompts import fallback_build_model_tag
+
+        env_bm = (os.environ.get("DAEDALUS_BUILD_MODEL") or "").strip()
+        if env_bm:
+            build_model = env_bm
+        else:
+            build_model, _ = fallback_build_model_tag()
 
     fix_files = await pvf.llm_fix_from_error(
         slug,

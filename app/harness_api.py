@@ -27,15 +27,22 @@ class PrefBody(BaseModel):
 @router.get("/api/v1/llm/local")
 async def llm_local() -> dict[str, Any]:
     from daedalus.local_llm import probe_all, resolve_local_config, local_requested
-    from daedalus.llm_config import get_config
+    from daedalus.llm_config import get_brain_config, get_config
 
     try:
         cfg = get_config()
     except Exception as exc:
         cfg = {"error": str(exc)[:200]}
+    try:
+        brain = get_brain_config()
+    except Exception as exc:
+        brain = {"error": str(exc)[:200]}
     return {
         "ok": True,
         "requested": local_requested(),
+        "brain": {k: v for k, v in brain.items() if k != "api_key"} | {
+            "has_key": bool(brain.get("api_key")),
+        } if isinstance(brain, dict) else brain,
         "effective": {k: v for k, v in cfg.items() if k != "api_key"} | {
             "has_key": bool(cfg.get("api_key")),
         } if isinstance(cfg, dict) else cfg,
