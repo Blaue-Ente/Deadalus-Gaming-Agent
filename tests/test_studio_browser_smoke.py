@@ -1,6 +1,8 @@
 """Studio browser audit: isolated uvicorn (127.0.0.1), Playwright Chromium, no LLM/chat spend.
 
-Blocks non-loopback HTTP(S) so accidental cloud/paid calls fail closed.
+Blocks non-loopback HTTP(S) in the browser so accidental cloud calls fail closed.
+(Outbound inference is not triggered — no chat/send.)
+
 Screenshots: /opt/cursor/artifacts/studio-audit-4549/ when writable.
 """
 from __future__ import annotations
@@ -124,19 +126,6 @@ def _api(base: str, token: str, method: str, path: str, **kwargs):
     raise ValueError(method)
 
 
-def _js_click(page, selector: str) -> None:
-    ok = page.evaluate(
-        """(sel) => {
-            const el = document.querySelector(sel);
-            if (!el) return false;
-            el.click();
-            return true;
-        }""",
-        selector,
-    )
-    assert ok, f"missing {selector}"
-
-
 def _allow_localhost(url: str, server_base: str) -> bool:
     try:
         u = urlparse(url)
@@ -147,6 +136,73 @@ def _allow_localhost(url: str, server_base: str) -> bool:
         return u.netloc == sp.netloc or host == ""
     except Exception:
         return False
+
+
+def _install_local_route(page, base: str) -> None:
+    page.route(
+        "**/*",
+        lambda route: (
+            route.abort()
+            if route.request.resource_type == "websocket"
+            else route.continue_()
+            if _allow_localhost(route.request.url, base)
+            else route.abort()
+        ),
+    )
+
+
+def _hit_test_header_controls(page) -> list[dict]:
+    """Return per-selector {selector, ok, topTag, topId}; ok iff elementFromPoint is control or inside it."""
+    return page.evaluate(
+        """() => {
+      const sels = [
+        '[data-lang="bg"]',
+        '.mentor button[data-mentor="off"]',
+        '.assist button[data-assist="off"]',
+        '.budget button[data-budget="5"]',
+        '#mentor-custom',
+      ];
+      return sels.map((sel) => {
+        const el = document.querySelector(sel);
+        if (!el) return { sel, ok: false, reason: 'missing' };
+        const r = el.getBoundingClientRect();
+        const x = r.left + Math.min(r.width / 2, 40);
+        const y = r.top + Math.min(r.height / 2, 20);
+        const top = document.elementFromPoint(x, y);
+        const ok = top && (el === top || el.contains(top));
+        return {
+          sel,
+          ok: !!ok,
+          topTag: top ? top.tagName : null,
+          topId: top && top.id ? top.id : null,
+          cx: x,
+          cy: y,
+        };
+      });
+    }""",
+    )
+
+
+def test_studio_header_hit_targets_not_obscured_by_main(studio_server):
+    """Regression: center of header chips must hit the control, not <main> (grid row clip)."""
+    from playwright.sync_api import sync_playwright
+
+    base = studio_server["base"]
+    for viewport, label in (
+        ({"width": 1400, "height": 900}, "wide"),
+        ({"width": 900, "height": 700}, "narrow"),
+    ):
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
+            context = browser.new_context(viewport=viewport)
+            page = context.new_page()
+            _install_local_route(page, base)
+            page.goto(f"{base}/", wait_until="load", timeout=45000)
+            page.wait_for_selector("#prompt", timeout=20000)
+            hits = _hit_test_header_controls(page)
+            bad = [h for h in hits if not h.get("ok")]
+            assert not bad, f"{label} viewport hit-test failed: {bad}"
+            browser.close()
 
 
 def test_studio_browser_controls_and_persistence(studio_server):
@@ -164,25 +220,13 @@ def test_studio_browser_controls_and_persistence(studio_server):
         browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
         context = browser.new_context(viewport={"width": 1400, "height": 900})
         page = context.new_page()
-
-        page.route(
-            "**/*",
-            lambda route: (
-                route.abort()
-                if route.request.resource_type == "websocket"
-                else (
-                    route.continue_()
-                    if _allow_localhost(route.request.url, base)
-                    else route.abort()
-                )
-            ),
-        )
+        _install_local_route(page, base)
 
         page.goto(f"{base}/", wait_until="load", timeout=30000)
         page.wait_for_selector("#prompt", timeout=15000)
         page.screenshot(path=str(art / "studio-loaded.png"), full_page=True)
 
-        page.click('[data-effort="epic"]', force=True)
+        page.locator('[data-effort="epic"]').click()
         page.fill("#prompt", "build a small phaser snake")
         page.wait_for_timeout(900)
         note = page.locator("#effortnote")
@@ -197,8 +241,8 @@ def test_studio_browser_controls_and_persistence(studio_server):
 
         mark = f"ui-pref-{time.time_ns()}"
         page.fill("#preftext", mark)
-        page.click("#prefadd", force=True)
-        page.wait_for_timeout(400)
+        page.locator("#prefadd").click()
+        page.wait_for_function("() => !document.getElementById('prefadd').disabled", timeout=15000)
         page.reload(wait_until="load")
         page.wait_for_selector("#preflist", timeout=15000)
         assert mark in page.content()
@@ -213,16 +257,7 @@ def test_studio_browser_controls_and_persistence(studio_server):
         browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
         context2 = browser.new_context(viewport={"width": 1400, "height": 900})
         page2 = context2.new_page()
-        page2.route(
-            "**/*",
-            lambda route: (
-                route.abort()
-                if route.request.resource_type == "websocket"
-                else route.continue_()
-                if _allow_localhost(route.request.url, base)
-                else route.abort()
-            ),
-        )
+        _install_local_route(page2, base)
         page2.goto(f"{base}/", wait_until="load", timeout=30000)
         page2.wait_for_selector("#prompt", timeout=15000)
         ev_fresh = page2.evaluate("() => localStorage.getItem('dx.effort')")
@@ -232,21 +267,12 @@ def test_studio_browser_controls_and_persistence(studio_server):
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage"])
-        ctx = browser.new_context()
+        ctx = browser.new_context(viewport={"width": 1400, "height": 900})
         pg = ctx.new_page()
-        pg.route(
-            "**/*",
-            lambda route: (
-                route.abort()
-                if route.request.resource_type == "websocket"
-                else route.continue_()
-                if _allow_localhost(route.request.url, base)
-                else route.abort()
-            ),
-        )
+        _install_local_route(pg, base)
         pg.goto(f"{base}/", wait_until="load")
         pg.wait_for_selector(".tabs", timeout=15000)
-        pg.click('.tabs button[data-pane="flight"]', force=True)
+        pg.locator('.tabs button[data-pane="flight"]').click()
         pg.wait_for_selector("#pane-flight.on", timeout=5000)
         pg.screenshot(path=str(art / "studio-tab-flight.png"))
         browser.close()
@@ -268,7 +294,6 @@ def test_studio_browser_audit_safe_controls(studio_server):
     def _get(path: str):
         return _api(base, token, "get", path)
 
-    # ── Initial API baselines
     off0 = _get("/api/v1/daedalus/offline").json()
 
     with sync_playwright() as p:
@@ -277,36 +302,25 @@ def test_studio_browser_audit_safe_controls(studio_server):
         page = context.new_page()
         errs: list[str] = []
         page.on("pageerror", lambda e: errs.append(str(e)))
-
-        page.route(
-            "**/*",
-            lambda route: (
-                route.abort()
-                if route.request.resource_type == "websocket"
-                else route.continue_()
-                if _allow_localhost(route.request.url, base)
-                else route.abort()
-            ),
-        )
+        _install_local_route(page, base)
 
         page.goto(f"{base}/", wait_until="load", timeout=45000)
         page.wait_for_selector("#prompt", timeout=20000)
         assert not errs, errs
 
-        # Language BG → EN (documentElement.lang)
-        # Delegated i18n listener: native element.click() (Playwright hit targets can miss tiny header chips)
-        _js_click(page, '[data-lang="bg"]')
+        assert not [h for h in _hit_test_header_controls(page) if not h.get("ok")]
+
+        page.locator('[data-lang="bg"]').click()
         page.wait_for_function("() => document.documentElement.lang === 'bg'", timeout=8000)
         page.screenshot(path=str(art / "studio-lang-bg.png"), full_page=True)
-        _js_click(page, '[data-lang="en"]')
+        page.locator('[data-lang="en"]').click()
         page.wait_for_function("() => document.documentElement.lang === 'en'", timeout=8000)
 
-        # Mentor: OFF → ON; select Rules only (no LLM); custom dialog open + cancel
-        _js_click(page, '.mentor button[data-mentor="off"]')
+        page.locator('.mentor button[data-mentor="off"]').click()
         page.wait_for_timeout(500)
         m1 = _get("/api/v1/daedalus/mentor").json()
         assert m1.get("enabled") is False
-        _js_click(page, '.mentor button[data-mentor="on"]')
+        page.locator('.mentor button[data-mentor="on"]').click()
         page.wait_for_timeout(500)
         m2 = _get("/api/v1/daedalus/mentor").json()
         assert m2.get("enabled") is True
@@ -317,83 +331,62 @@ def test_studio_browser_audit_safe_controls(studio_server):
         m3 = _get("/api/v1/daedalus/mentor").json()
         assert (m3.get("llm") or {}).get("choice", {}).get("id") == "rules"
 
-        _js_click(page, "#mentor-custom")
+        page.locator("#mentor-custom").click()
         page.wait_for_selector("#mentor-custom-dlg[open]", timeout=5000)
         page.screenshot(path=str(art / "studio-mentor-custom-open.png"))
-        _js_click(page, "#mentor-custom-cancel")
+        page.locator("#mentor-custom-cancel").click()
         page.wait_for_timeout(200)
 
-        # Writer assist: Off → Auto
-        _js_click(page, '.assist button[data-assist="off"]')
+        page.locator('.assist button[data-assist="off"]').click()
         page.wait_for_timeout(500)
         wa1 = _get("/api/v1/daedalus/writer-assist").json()
         assert wa1.get("mode") == "off"
-        _js_click(page, '.assist button[data-assist="auto"]')
+        page.locator('.assist button[data-assist="auto"]').click()
         page.wait_for_timeout(500)
         wa2 = _get("/api/v1/daedalus/writer-assist").json()
         assert wa2.get("mode") == "auto"
 
-        # Run budget $5 (then leave — no reset_spend)
-        _js_click(page, '.budget button[data-budget="5"]')
+        page.locator('.budget button[data-budget="5"]').click()
         page.wait_for_timeout(500)
         rb = _get("/api/v1/daedalus/run-budget").json()
         assert rb.get("usd") == 5
 
-        # Preference add + delete via UI (second item for delete click)
         t1 = f"audit-del-a-{time.time_ns()}"
         t2 = f"audit-del-b-{time.time_ns()}"
         page.fill("#preftext", t1)
-        _js_click(page, "#prefadd")
+        page.locator("#prefadd").click()
         page.wait_for_function("() => !document.getElementById('prefadd').disabled", timeout=15000)
         page.fill("#preftext", t2)
-        _js_click(page, "#prefadd")
+        page.locator("#prefadd").click()
         page.wait_for_function("() => !document.getElementById('prefadd').disabled", timeout=15000)
-        page.wait_for_function(
-            """(txt) => {
-            const nodes = document.querySelectorAll('#preflist .item');
-            return [...nodes].some((n) => (n.innerText || '').includes(txt));
-        }""",
-            arg=t2,
-            timeout=15000,
-        )
-        page.evaluate(
-            """(txt) => {
-            const nodes = document.querySelectorAll('#preflist .item');
-            for (const n of nodes) {
-                if ((n.innerText || '').includes(txt)) { n.click(); break; }
-            }
-        }""",
-            t2,
-        )
+        page.locator("#preflist .item").filter(has_text=t2).click()
         page.wait_for_function(
             """(txt) => {
             const box = document.getElementById('preflist');
             return box && !(box.innerText || '').includes(txt);
         }""",
             arg=t2,
+            timeout=15000,
         )
 
-        # New project + select (static — minimal files)
         page.fill("#pname", "Audit Iso")
         page.fill("#pdesc", "browser audit fixture")
         page.select_option("#pkind", "static")
-        page.click("#pcreate", force=True)
+        page.locator("#pcreate").click()
         page.wait_for_timeout(800)
-        page.locator("#plist .item").filter(has_text="Audit Iso").first.click(force=True)
+        page.locator("#plist .item").filter(has_text="Audit Iso").click()
         page.wait_for_timeout(400)
         slug = page.evaluate("() => localStorage.getItem('dx.slug')")
         assert slug
         pj = httpx.get(f"{base}/api/v1/playground/projects", headers={"Authorization": f"Bearer {token}"}).json()
         assert any((x.get("slug") == slug) for x in (pj.get("projects") or []))
 
-        # Context sheet open / close
-        page.click("#ctxplus", force=True)
+        page.locator("#ctxplus").click()
         page.wait_for_function("() => { const s = document.getElementById('ctxsheet'); return s && !s.hidden; }")
         page.screenshot(path=str(art / "studio-ctx-open.png"), full_page=True)
-        page.click("#ctxclose", force=True)
+        page.locator("#ctxclose").click()
         page.wait_for_timeout(200)
 
-        # Nav: Proposals + Hub (same tab; admin shell may 401 JSON — link targets load)
         for href, name in (
             ("/admin/daedalus/proposals", "proposals"),
             ("/admin/daedalus/hub", "hub"),
@@ -401,33 +394,31 @@ def test_studio_browser_audit_safe_controls(studio_server):
             page.goto(f"{base}/", wait_until="load")
             page.wait_for_selector("#prompt", timeout=15000)
             with page.expect_navigation(wait_until="load", timeout=15000):
-                page.click(f'a[href="{href}"]', force=True)
+                page.locator(f'a[href="{href}"]').click()
             assert href in page.url or "/admin/daedalus/" in page.url
             page.screenshot(path=str(art / f"studio-nav-{name}.png"), full_page=True)
 
-        # Offline kit toggle → restore (#offon is on Brain pane only)
         page.goto(f"{base}/", wait_until="load")
         page.wait_for_selector("#prompt", timeout=15000)
-        _js_click(page, '.tabs button[data-pane="llm"]')
+        page.locator('.tabs button[data-pane="llm"]').click()
         page.wait_for_selector("#pane-llm.on", timeout=15000)
         off_before = _get("/api/v1/daedalus/offline").json().get("offline")
-        _js_click(page, "#offon")
+        page.locator("#offon").click()
         page.wait_for_timeout(600)
         off_mid = _get("/api/v1/daedalus/offline").json()
         assert off_mid.get("offline") is not off_before
-        _js_click(page, "#offon")
+        page.locator("#offon").click()
         page.wait_for_timeout(600)
         off_after = _get("/api/v1/daedalus/offline").json()
         assert off_after.get("offline") == off_before
 
-        # Brain tab: read-only refresh (connectors box); skip Ollama/Cloud — network to OpenRouter etc.
-        _js_click(page, '.tabs button[data-pane="llm"]')
+        page.locator('.tabs button[data-pane="llm"]').click()
         page.wait_for_selector("#wardrobe", timeout=10000)
         page.screenshot(path=str(art / "studio-brain-tab.png"), full_page=True)
 
-        _js_click(page, '.tabs button[data-pane="world"]')
+        page.locator('.tabs button[data-pane="world"]').click()
         page.wait_for_selector("#pane-world.on", timeout=10000)
-        _js_click(page, "#cxrefresh")
+        page.locator("#cxrefresh").click()
         page.wait_for_timeout(800)
         wb = page.locator("#worldbox").inner_text(timeout=15000)
         assert "REACH" in wb or "connectors" in wb.lower()
@@ -435,7 +426,6 @@ def test_studio_browser_audit_safe_controls(studio_server):
         page.screenshot(path=str(art / "studio-audit-final.png"), full_page=True)
         browser.close()
 
-    # ── Process restart: KV / mentor / budget / writer should persist on same data dir
     proc.terminate()
     try:
         proc.wait(timeout=12)
@@ -455,7 +445,6 @@ def test_studio_browser_audit_safe_controls(studio_server):
         assert r_b.get("usd") == 5
         r_o = _get("/api/v1/daedalus/offline").json()
         assert r_o.get("offline") == off0.get("offline")
-        # Mentor restored to pre-test if needed: user wanted restoration — off0 was initial offline; mentor state persists
     finally:
         proc2.terminate()
         try:

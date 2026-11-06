@@ -59,12 +59,17 @@ input, select, textarea { width: 100%; padding: 0.5rem 0.65rem; }
 .shell {
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr) 360px;
-  grid-template-rows: var(--header) 1fr;
+  /* Row 1 must grow with wrapped header chips; a fixed --header clips overflow and
+     row 2 (main) stacks above the painted overflow — intercepting clicks on EN/BG, etc. */
+  grid-template-rows: minmax(var(--header), auto) 1fr;
   height: 100%;
 }
 
 header.app {
   grid-column: 1 / -1;
+  /* Above main/rail/aside if any sub-pixel overlap remains */
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -620,7 +625,7 @@ main {
 
 @media (max-width: 1040px) {
   .shell { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr auto; }
-  header.app { flex-wrap: wrap; height: auto; padding: 0.6rem 0.8rem; }
+  header.app { flex-wrap: wrap; padding: 0.6rem 0.8rem; }
   .pills { max-width: 100%; margin-left: 0; }
   aside, .rail { max-height: 34vh; }
 }
