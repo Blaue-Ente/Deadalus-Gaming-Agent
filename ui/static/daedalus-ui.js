@@ -5,6 +5,10 @@
 (function (global) {
   'use strict';
 
+  function t(key, vars) {
+    return (global.DaedalusI18n && DaedalusI18n.t) ? DaedalusI18n.t(key, vars) : key;
+  }
+
   const WIDTHS = ['w-90', 'w-75', 'w-60', 'w-40'];
 
   function skeleton(type, count) {
@@ -39,9 +43,13 @@
 
   function toastType(msg) {
     const s = String(msg || '');
-    if (/^❌|грешка|error/i.test(s)) return 'error';
+    if (/^❌|\berror\b/i.test(s)) return 'error';
+    try {
+      const errWord = t('common.error');
+      if (errWord && errWord !== 'common.error' && s.toLowerCase().includes(String(errWord).toLowerCase())) return 'error';
+    } catch (_) {}
     if (/^⚠|warn/i.test(s)) return 'warn';
-    if (/^✅|✓|успеш/i.test(s)) return 'success';
+    if (/^✅|^✓/.test(s)) return 'success';
     return 'info';
   }
 
@@ -130,10 +138,10 @@
       <div class="dx-diff-modal" role="dialog" aria-modal="true" aria-labelledby="dx-diff-title">
         <div class="dx-diff-modal-head">
           <div>
-            <div class="text-[10px] uppercase tracking-wider text-slate-500" id="dx-diff-eyebrow">Промени</div>
+            <div class="text-[10px] uppercase tracking-wider text-slate-500" id="dx-diff-eyebrow">${escapeHtml(t('shell.diffEyebrow'))}</div>
             <div class="text-sm font-mono text-white" id="dx-diff-title">—</div>
           </div>
-          <button type="button" id="dx-diff-close" class="text-slate-500 hover:text-white text-2xl leading-none px-2" aria-label="Затвори">×</button>
+          <button type="button" id="dx-diff-close" class="text-slate-500 hover:text-white text-2xl leading-none px-2" aria-label="${escapeHtml(t('shell.diffClose'))}">×</button>
         </div>
         <div class="dx-diff-modal-meta" id="dx-diff-meta"></div>
         <div class="dx-diff-modal-body">
@@ -162,12 +170,12 @@
     const foot = backdrop.querySelector('#dx-diff-foot');
     const tabs = backdrop.querySelector('#dx-diff-file-tabs');
 
-    eyebrow.textContent = opts.eyebrow || 'Промени';
+    eyebrow.textContent = opts.eyebrow || t('shell.diffEyebrow');
     title.textContent = opts.title || '—';
     meta.innerHTML = opts.metaHtml || '';
     foot.innerHTML = opts.actionsHtml || `
       <div class="flex-1"></div>
-      <button type="button" class="px-4 py-2 rounded text-xs font-mono border border-slate-600 text-slate-300 hover:text-white" data-dx-diff-dismiss>Затвори</button>`;
+      <button type="button" class="px-4 py-2 rounded text-xs font-mono border border-slate-600 text-slate-300 hover:text-white" data-dx-diff-dismiss>${escapeHtml(t('shell.diffClose'))}</button>`;
     foot.querySelector('[data-dx-diff-dismiss]')?.addEventListener('click', closeDiffModal);
 
     const diffs = opts.diffs || (opts.diff ? [{ path: opts.filePath || 'file', diff: opts.diff }] : []);

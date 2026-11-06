@@ -8,6 +8,7 @@ workspace/
 playground/
 *.sqlite
 .venv/
+scripts/node_modules/
 *.egg-info/
 dist/
 build/

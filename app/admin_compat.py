@@ -26,11 +26,11 @@ templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 router = APIRouter(prefix="/admin", tags=["admin-compat"])
 
 _FALLBACK_SUGGESTIONS = [
-    "Добави high-score таблица с localStorage",
-    "Направи фона анимиран с particle ефект",
-    "Добави звук при победа и загуба",
-    "Подобри мобилния layout и touch controls",
-    "Добави екран с инструкции преди старт",
+    "Add a localStorage high-score table",
+    "Animate the background with light particle effects",
+    "Add win and lose sound effects",
+    "Improve mobile layout and touch controls",
+    "Add an instructions screen before start",
 ]
 
 
@@ -670,9 +670,9 @@ async def playground_suggest(slug: str):
     try:
         from daedalus.llm_client import complete
         prompt = (
-            f"Проект: \"{proj.get('name', slug)}\" · Тип: {proj.get('kind','static')}\n"
-            "Дай точно 5 конкретни предложения за подобрение. "
-            "Отговори САМО с JSON масив от 5 низа на български."
+            f"Project: \"{proj.get('name', slug)}\" · Kind: {proj.get('kind', 'static')}\n"
+            "Return exactly 5 concrete improvement suggestions for this project.\n"
+            "Respond with ONLY a JSON array of 5 strings in English."
         )
         result = await complete(user=prompt, intent="json", max_tokens=400, temperature=0.8)
         text = (result.get("reply") or "") if isinstance(result, dict) else str(result)

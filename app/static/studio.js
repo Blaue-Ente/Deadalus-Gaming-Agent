@@ -1214,7 +1214,7 @@
       $("pname").value = "";
       $("pdesc").value = "";
       await refreshProjects();
-      if (state.effort === "epic" || /кампани|необят|персонаж|сюжет/i.test(description)) {
+      if (state.effort === "epic" || new RegExp(t("studio.epicHintRegex"), "i").test(description)) {
         add("bot", t("studio.epicCreated"));
       }
     } catch (e) {
@@ -1380,7 +1380,7 @@
     }
     chatBusy(false);
     const last = msgs.querySelector(".msg.bot:last-child");
-    if (last && /thinking|мисля|Анализирам|Дедал мисли/i.test(last.textContent || "")) {
+    if (last && new RegExp(t("studio.thinkingBubbleStripRegex"), "i").test(last.textContent || "")) {
       text(last, t("studio.stopped"));
     }
   }
@@ -1899,12 +1899,14 @@
     loadAssist();
     loadBudget();
     const shout = $("shout");
-    if (shout && !state.lastCwd && (shout.textContent === "Ready." || shout.textContent === "Готов." || shout.textContent === t("studio.ready"))) {
-      text(shout, t("studio.ready"));
+    if (shout && !state.lastCwd) {
+      const readyLegacy = ["Ready.", t("studio.legacyReadyBg")];
+      if (readyLegacy.includes(shout.textContent)) text(shout, t("studio.ready"));
     }
     const log = $("log");
-    if (log && (log.textContent === "No active autopilot." || log.textContent === "Няма активен autopilot." || log.textContent === t("studio.noAutopilot"))) {
-      text(log, t("studio.noAutopilot"));
+    if (log) {
+      const autoLegacy = ["No active autopilot.", t("studio.legacyNoAutopilotBg")];
+      if (autoLegacy.includes(log.textContent)) text(log, t("studio.noAutopilot"));
     }
   }
   document.addEventListener("daedalus:langchange", relabelChrome);

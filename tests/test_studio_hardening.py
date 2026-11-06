@@ -171,8 +171,8 @@ def test_cc_escapes_skill_fields():
     assert "onclick=\"toggle('${s.name}')\"" not in skills
     proposals = (ROOT / "ui" / "templates" / "proposals.html").read_text(encoding="utf-8")
     assert "escHtml(p.file_path)" in proposals
-    daedalus = (ROOT / "ui" / "templates" / "daedalus.html").read_text(encoding="utf-8")
-    assert "https?:" in daedalus
+    classic_chat_js = (ROOT / "ui" / "static" / "classic_chat.js").read_text(encoding="utf-8")
+    assert "https?:" in classic_chat_js
     hub = (ROOT / "ui" / "templates" / "daedalus_hub.html").read_text(encoding="utf-8")
     assert "ArgosDataNexus" not in hub
     assert "cdn.tailwindcss.com" not in (ROOT / "ui" / "templates" / "base.html").read_text(encoding="utf-8")

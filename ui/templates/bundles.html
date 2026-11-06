@@ -1,23 +1,26 @@
 {% extends "_shell.html" %}
 {% set page = 'bundles' %}
 {% set daedalus_tab = 'bundles' %}
-{% block eyebrow %}Daedalus · Bundles{% endblock %}
-{% block heading %}Staged Bundles{% endblock %}
+{% block eyebrow %}<span data-i18n="bun.pageEyebrow">Daedalus · Bundles</span>{% endblock %}
+{% block heading %}<span data-i18n="bun.pageHeading">Staged Bundles</span>{% endblock %}
 {% block mob_title %}Bundles{% endblock %}
-{% block eyebrow_mob %}Daedalus{% endblock %}
-{% block heading_mob %}Bundles{% endblock %}
+{% block eyebrow_mob %}<span data-i18n="shell.brand">Daedalus</span>{% endblock %}
+{% block heading_mob %}<span data-i18n="nav.bundles">Bundles</span>{% endblock %}
 
 {% block content %}
 {% include "_daedalus_nav.html" %}
 <div class="max-w-6xl mx-auto">
+  <p class="text-sm text-gray-400 mb-4 max-w-3xl" data-i18n="bun.intro">
+    Multi-file bundles staged for review — apply or reject as a unit.
+  </p>
 
   <!-- Status tabs -->
   <div class="flex gap-2 mb-6" id="tabs">
-    <button onclick="loadBundles('ready')"    id="tab-ready"   class="tab-btn tab-active px-4 py-2 rounded-lg text-sm font-medium">Ready for review</button>
-    <button onclick="loadBundles('staging')"  id="tab-staging" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white">Building</button>
-    <button onclick="loadBundles('applied')"  id="tab-applied" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white">Applied</button>
-    <button onclick="loadBundles('rejected')" id="tab-rejected" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white">Rejected</button>
-    <button onclick="loadBundles(null)"       id="tab-all"     class="tab-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white">All</button>
+    <button onclick="loadBundles('ready')"    id="tab-ready"   class="tab-btn tab-active px-4 py-2 rounded-lg text-sm font-medium" data-i18n="bun.tabReady">Ready for review</button>
+    <button onclick="loadBundles('staging')"  id="tab-staging" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white" data-i18n="bun.tabStaging">Building</button>
+    <button onclick="loadBundles('applied')"  id="tab-applied" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white" data-i18n="bun.tabApplied">Applied</button>
+    <button onclick="loadBundles('rejected')" id="tab-rejected" class="tab-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white" data-i18n="bun.tabRejected">Rejected</button>
+    <button onclick="loadBundles(null)"       id="tab-all"     class="tab-btn px-4 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-white" data-i18n="bun.tabAll">All</button>
   </div>
 
   <!-- Bundle list -->
@@ -245,8 +248,16 @@ document.getElementById('bundle-modal').addEventListener('click', e => {
   if (e.target === document.getElementById('bundle-modal')) closeModal();
 });
 
+function relabelBundleTabs() {
+  [['tab-ready', 'bun.tabReady'], ['tab-staging', 'bun.tabStaging'], ['tab-applied', 'bun.tabApplied'],
+   ['tab-rejected', 'bun.tabRejected'], ['tab-all', 'bun.tabAll']].forEach(([id, key]) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = t(key);
+  });
+}
+relabelBundleTabs();
 loadBundles('ready');
-document.addEventListener('daedalus:langchange', () => loadBundles(currentStatus));
+document.addEventListener('daedalus:langchange', () => { relabelBundleTabs(); loadBundles(currentStatus); });
 </script>
 
 <style>

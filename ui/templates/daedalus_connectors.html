@@ -25,7 +25,7 @@
         class="px-3 py-1.5 rounded-lg text-xs bg-argos-accent/20 hover:bg-argos-accent/30 text-argos-accent2">Ollama</button>
       <button type="button" id="btn-brain-cloud" onclick="brainCloud()"
         class="px-3 py-1.5 rounded-lg text-xs bg-gray-800 hover:bg-gray-700 text-gray-200" data-i18n="studio.cloud">Cloud</button>
-      <button type="button" id="btn-brain-off" onclick="brainOffline()"
+      <button type="button" id="btn-brain-off" onclick="brainOffline()" data-offline-toggle="1"
         class="px-3 py-1.5 rounded-lg text-xs bg-amber-900/80 hover:bg-amber-800 text-amber-100" data-i18n="studio.offlineKit">Offline kit</button>
     </div>
     <div id="brain-catalog" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
@@ -383,7 +383,11 @@ function renderBrain(d) {
     lines.push(`<p class="text-[11px] text-gray-500 mt-1">${t('conn.slots')}: ${slotBits.join(' · ')}</p>`);
   }
   $('brain-status').innerHTML = lines.join('');
-  $('btn-brain-off').textContent = w.offline ? t('conn.offlineOn') : t('studio.offlineKit');
+  const ob = $('btn-brain-off');
+  if (ob) {
+    ob.textContent = w.offline ? t('conn.offlineOn') : t('studio.offlineKit');
+    ob.setAttribute('data-offline', w.offline ? '1' : '0');
+  }
 
   const box = $('brain-catalog');
   const catalog = b.catalog || [];
@@ -414,7 +418,8 @@ async function brainCloud() {
   await loadOverview();
 }
 async function brainOffline() {
-  const on = ($('btn-brain-off').textContent || '').indexOf(t('conn.offlineOn')) >= 0 || ($('btn-brain-off').textContent || '').indexOf('ВКЛ') >= 0;
+  const btn = $('btn-brain-off');
+  const on = btn && btn.getAttribute('data-offline') === '1';
   await api('/api/v1/daedalus/offline', {method:'POST', body: JSON.stringify({offline: !on})});
   await loadOverview();
 }

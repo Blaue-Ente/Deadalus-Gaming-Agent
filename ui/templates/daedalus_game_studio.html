@@ -1100,7 +1100,7 @@ async function gsCreatePlan() {
   try {
     const gdd = (_gsWorkspaceCtx && _gsWorkspaceCtx.gdd) || '';
     const desc = gdd
-      ? 'Прочети design/gdd-lite.md и следвай Studio milestones.\n\n' + gdd.slice(0, 4000)
+      ? t('gs.planDescReadGdd') + gdd.slice(0, 4000)
       : 'Game Studio project';
     const preset = (_gsWorkspaceCtx && _gsWorkspaceCtx.studio_preset) || 'custom';
     const r = await api('/admin/daedalus/playground/api/projects/' + encodeURIComponent(_gsWorkspaceSlug) + '/plan/create', {
@@ -1167,7 +1167,7 @@ async function gsRunGates(silent) {
 function gsBuildDescription(ctx) {
   const gdd = (ctx && ctx.gdd) || '';
   const mid = (ctx && ctx.current_milestone) || 'M0';
-  return `[Game Studio · milestone ${mid}]\nСтрой САМО етапите за ${mid}. Не преписвай завършени milestone-и.\n\n` + gdd.slice(0, 1500);
+  return t('gs.buildDescMilestones', { mid }) + gdd.slice(0, 1500);
 }
 
 function gsPersistGuided(o) {
@@ -1276,7 +1276,7 @@ function gsShowCheckpoint(d) {
         `[${b.stage_id}] ${b.title}: ${b.ok ? '✅' : '⚠️'} ${(b.review || '').slice(0, 120)}`
       ).join('\n');
     } else {
-      review.textContent = (d.review || '').replace(/РЕЗУЛТАТ:[^\n]*/g, '').trim().slice(0, 800);
+      review.textContent = (d.review || '').replace(new RegExp('(?:' + t('pg.reviewResultStrip') + '):[^\\n]*', 'gi'), '').trim().slice(0, 800);
     }
   }
   let filesLine = d.files && d.files.length ? '📁 ' + d.files.join(', ') : '';

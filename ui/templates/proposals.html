@@ -1,55 +1,58 @@
 {% extends "_shell.html" %}
 {% set page = 'proposals' %}
 {% set daedalus_tab = 'proposals' %}
-{% block eyebrow %}Daedalus · Self-Improve{% endblock %}
-{% block heading %}Code Proposals{% endblock %}
+{% block eyebrow %}<span data-i18n="prop.pageEyebrow">Daedalus · Self-Improve</span>{% endblock %}
+{% block heading %}<span data-i18n="prop.pageHeading">Code Proposals</span>{% endblock %}
 {% block mob_title %}Proposals{% endblock %}
-{% block eyebrow_mob %}Daedalus{% endblock %}
-{% block heading_mob %}Proposals{% endblock %}
+{% block eyebrow_mob %}<span data-i18n="shell.brand">Daedalus</span>{% endblock %}
+{% block heading_mob %}<span data-i18n="nav.proposals">Proposals</span>{% endblock %}
 
 {% block content %}
 {% include "_daedalus_nav.html" %}
 <div class="space-y-6">
+  <p class="text-sm text-argos-dim max-w-3xl" data-i18n="prop.intro">
+    Review pending patches before they touch the tree. Approve writes the file and restarts when needed.
+  </p>
 
   <!-- Stats bar -->
   <div class="grid grid-cols-2 md:grid-cols-5 gap-3" id="stats-bar">
     <div class="bg-argos-panel border border-argos-border rounded-lg p-4">
-      <div class="text-[10px] uppercase tracking-wider text-argos-dim">Pending</div>
+      <div class="text-[10px] uppercase tracking-wider text-argos-dim" data-i18n="prop.statPending">Pending</div>
       <div class="text-2xl font-semibold text-yellow-300 mt-1" id="stat-pending">—</div>
     </div>
     <div class="bg-argos-panel border border-argos-border rounded-lg p-4">
-      <div class="text-[10px] uppercase tracking-wider text-argos-dim">Applied</div>
+      <div class="text-[10px] uppercase tracking-wider text-argos-dim" data-i18n="prop.statApplied">Applied</div>
       <div class="text-2xl font-semibold text-emerald-300 mt-1" id="stat-applied">—</div>
     </div>
     <div class="bg-argos-panel border border-argos-border rounded-lg p-4">
-      <div class="text-[10px] uppercase tracking-wider text-argos-dim">Rejected</div>
+      <div class="text-[10px] uppercase tracking-wider text-argos-dim" data-i18n="prop.statRejected">Rejected</div>
       <div class="text-2xl font-semibold text-red-300 mt-1" id="stat-rejected">—</div>
     </div>
     <div class="bg-argos-panel border border-argos-border rounded-lg p-4">
-      <div class="text-[10px] uppercase tracking-wider text-argos-dim">Rolled Back</div>
+      <div class="text-[10px] uppercase tracking-wider text-argos-dim" data-i18n="prop.statRolledBack">Rolled Back</div>
       <div class="text-2xl font-semibold text-slate-300 mt-1" id="stat-rolled_back">—</div>
     </div>
     <div class="bg-argos-panel border border-argos-border rounded-lg p-4">
-      <div class="text-[10px] uppercase tracking-wider text-argos-dim">Total</div>
+      <div class="text-[10px] uppercase tracking-wider text-argos-dim" data-i18n="prop.statTotal">Total</div>
       <div class="text-2xl font-semibold text-white mt-1" id="stat-total">—</div>
     </div>
   </div>
 
   <!-- Filters -->
   <div class="flex flex-wrap items-center gap-2">
-    <button data-filter="" class="filter-btn px-3 py-1.5 rounded text-xs font-mono border border-argos-accent/40 bg-argos-accent/10 text-argos-accent">All</button>
-    <button data-filter="pending" class="filter-btn px-3 py-1.5 rounded text-xs font-mono border border-argos-border bg-argos-panel text-slate-300 hover:border-yellow-400/40">Pending</button>
-    <button data-filter="applied" class="filter-btn px-3 py-1.5 rounded text-xs font-mono border border-argos-border bg-argos-panel text-slate-300 hover:border-emerald-400/40">Applied</button>
-    <button data-filter="rejected" class="filter-btn px-3 py-1.5 rounded text-xs font-mono border border-argos-border bg-argos-panel text-slate-300 hover:border-red-400/40">Rejected</button>
-    <button data-filter="rolled_back" class="filter-btn px-3 py-1.5 rounded text-xs font-mono border border-argos-border bg-argos-panel text-slate-300 hover:border-slate-400/40">Rolled Back</button>
+    <button data-filter="" class="filter-btn px-3 py-1.5 rounded text-xs font-mono border border-argos-accent/40 bg-argos-accent/10 text-argos-accent" data-i18n="prop.filterAll">All</button>
+    <button data-filter="pending" class="filter-btn px-3 py-1.5 rounded text-xs font-mono border border-argos-border bg-argos-panel text-slate-300 hover:border-yellow-400/40" data-i18n="prop.filterPending">Pending</button>
+    <button data-filter="applied" class="filter-btn px-3 py-1.5 rounded text-xs font-mono border border-argos-border bg-argos-panel text-slate-300 hover:border-emerald-400/40" data-i18n="prop.filterApplied">Applied</button>
+    <button data-filter="rejected" class="filter-btn px-3 py-1.5 rounded text-xs font-mono border border-argos-border bg-argos-panel text-slate-300 hover:border-red-400/40" data-i18n="prop.filterRejected">Rejected</button>
+    <button data-filter="rolled_back" class="filter-btn px-3 py-1.5 rounded text-xs font-mono border border-argos-border bg-argos-panel text-slate-300 hover:border-slate-400/40" data-i18n="prop.filterRolledBack">Rolled Back</button>
     <div class="flex-1"></div>
-    <a href="/admin/daedalus/skills" class="px-3 py-1.5 rounded text-xs font-mono border border-purple-500/40 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 transition">⚙ Manage Skills</a>
-    <button onclick="loadProposals()" class="px-3 py-1.5 rounded text-xs font-mono border border-argos-border bg-argos-panel text-slate-300 hover:border-argos-accent/40">⟳ Refresh</button>
+    <a href="/admin/daedalus/skills" class="px-3 py-1.5 rounded text-xs font-mono border border-purple-500/40 bg-purple-500/10 text-purple-300 hover:bg-purple-500/20 transition" data-i18n="prop.manageSkills">⚙ Manage Skills</a>
+    <button onclick="loadProposals()" class="px-3 py-1.5 rounded text-xs font-mono border border-argos-border bg-argos-panel text-slate-300 hover:border-argos-accent/40" data-i18n="prop.refresh">⟳ Refresh</button>
   </div>
 
   <!-- Proposals list -->
   <div id="proposals-list" class="space-y-2">
-    <div class="text-center text-argos-dim py-12 text-sm">Loading proposals…</div>
+    <div class="text-center text-argos-dim py-12 text-sm" data-i18n="prop.loadingList">Loading proposals…</div>
   </div>
 </div>
 
@@ -58,15 +61,15 @@
   <div class="bg-argos-bg border border-argos-border rounded-lg max-w-5xl w-full max-h-[90vh] flex flex-col">
     <div class="flex items-center justify-between px-5 py-3 border-b border-argos-border shrink-0">
       <div>
-        <div class="text-[10px] uppercase tracking-wider text-argos-dim">Proposal</div>
+        <div class="text-[10px] uppercase tracking-wider text-argos-dim" data-i18n="prop.diffEyebrow">Proposal</div>
         <div class="text-sm font-mono text-white" id="diff-title">—</div>
       </div>
       <button onclick="closeDiff()" class="text-argos-dim hover:text-white text-2xl leading-none px-2">×</button>
     </div>
     <div class="px-5 py-3 border-b border-argos-border bg-argos-panel shrink-0 text-[12px] space-y-1.5">
-      <div><span class="text-argos-dim">File:</span> <span class="font-mono text-purple-300" id="diff-file">—</span></div>
-      <div><span class="text-argos-dim">Skill:</span> <span class="font-mono text-yellow-300" id="diff-skill">—</span> <span class="text-argos-dim ml-3">By:</span> <span class="font-mono text-blue-300" id="diff-by">—</span></div>
-      <div><span class="text-argos-dim">Reason:</span> <span class="text-slate-200" id="diff-reason">—</span></div>
+      <div><span class="text-argos-dim" data-i18n="prop.diffFile">File:</span> <span class="font-mono text-purple-300" id="diff-file">—</span></div>
+      <div><span class="text-argos-dim" data-i18n="prop.diffSkill">Skill:</span> <span class="font-mono text-yellow-300" id="diff-skill">—</span> <span class="text-argos-dim ml-3" data-i18n="prop.diffBy">By:</span> <span class="font-mono text-blue-300" id="diff-by">—</span></div>
+      <div><span class="text-argos-dim" data-i18n="prop.diffReason">Reason:</span> <span class="text-slate-200" id="diff-reason">—</span></div>
       <div id="diff-stats" class="text-argos-dim font-mono text-[11px]">—</div>
       <div id="sandbox-badge" class="hidden"></div>
     </div>
@@ -116,7 +119,7 @@ async function loadStats() {
     for (const k of ['pending','applied','rejected','rolled_back','total']) {
       document.getElementById('stat-' + k).textContent = s[k] ?? 0;
     }
-  } catch (e) { /* silent — stats не са критични */ }
+  } catch (e) { /* silent — stats are non-critical */ }
 }
 
 async function loadProposals() {

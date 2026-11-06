@@ -2073,7 +2073,7 @@ function _showCheckpoint(d) {
       `[${b.stage_id}] ${b.title}: ${b.ok ? '✅' : '⚠️'} ${(b.review||'').slice(0,120)}`
     ).join('\n');
   } else {
-    $('plan-cp-review').textContent = (d.review || '').replace(/РЕЗУЛТАТ:[^\n]*/g, '').trim().slice(0, 800);
+    $('plan-cp-review').textContent = (d.review || '').replace(new RegExp('(?:' + t('pg.reviewResultStrip') + '):[^\\n]*', 'gi'), '').trim().slice(0, 800);
   }
   let filesLine = d.files && d.files.length ? '📁 ' + d.files.join(', ') : '';
   if (d.merged && d.merged.length) filesLine += (filesLine ? ' | ' : '') + '🔀 merged: ' + d.merged.join(', ');
@@ -4143,7 +4143,7 @@ async function maybeOpenFromGameStudio() {
   }
   let desc = (p.description || '').replace(/^\[Game Studio\]\s*/, '').slice(0, 2000);
   if (_gsHandoffMilestone) {
-    desc = `[Game Studio · milestone ${_gsHandoffMilestone}]\nСтрой САМО етапите за ${_gsHandoffMilestone}.\n\n` + desc;
+    desc = t('pg.handoffBuildMilestones', { mid: _gsHandoffMilestone }) + desc;
   }
   if (mode === 'autopilot') {
     await openAutopilot(slug, p.name, desc, '', p.kind);

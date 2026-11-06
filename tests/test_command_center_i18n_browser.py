@@ -138,6 +138,10 @@ def test_command_center_hub_playground_game_studio_i18n(cc_server):
         ("/admin/daedalus/hub", "hub.intro", "Command Center"),
         ("/admin/daedalus/playground", "pg.intro", "Build"),
         ("/admin/daedalus/game-studio", "gs.intro", "games"),
+        ("/admin/daedalus/proposals", "prop.intro", "Review pending patches"),
+        ("/admin/daedalus/bundles", "bun.intro", "Multi-file bundles"),
+        ("/admin/daedalus/connectors", "conn.intro", "One place for everything"),
+        ("/admin/daedalus/skills", "skills.p1", "Skills are standing gates"),
     )
 
     with sync_playwright() as p:
