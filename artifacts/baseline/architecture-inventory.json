@@ -34,7 +34,7 @@
     },
     {
       "path": "daedalus/build_loop.py",
-      "lines": 587,
+      "lines": 589,
       "broad_excepts": 3
     },
     {
@@ -131,7 +131,7 @@
   },
   "tests": {
     "modules": 54,
-    "functions": 590
+    "functions": 596
   },
   "modules": {
     "daedalus": [

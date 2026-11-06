@@ -179,6 +179,8 @@ class BuildLoop:
         if not k:
             m = _KIND_RE.search(result_text or "")
             k = (m.group(1) if m else "").strip().lower()
+        if k == "phaser":
+            k = "vite"
         if k and (name == "playground_new" or not self.kind or self.kind == "static"):
             if name == "playground_new" or k in {"vite", "vite-react", "phaser", "godot", "unity"}:
                 self.kind = k

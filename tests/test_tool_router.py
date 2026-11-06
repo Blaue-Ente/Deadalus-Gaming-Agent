@@ -1,9 +1,11 @@
 """Kernel tool catalog + playbook router — no live LLM."""
 from __future__ import annotations
 
+import pytest
+
 from daedalus.native_tools import NATIVE_TOOL_SPECS, playground_build_specs
 from daedalus.playground_agent_routing import native_build_system
-from daedalus.task_playbooks import PLAYBOOKS
+from daedalus.task_playbooks import PLAYBOOKS, get as get_playbook
 from daedalus.tool_catalog import canonical, full_catalog, native_names
 from daedalus.tool_router import match_playbook, route, run_consult, score_plan
 
@@ -70,6 +72,51 @@ def test_route_snake_does_not_require_math3d():
     specs = {t["name"] for t in playground_build_specs(SNAKE)}
     assert "math3d" not in specs
     assert "write_file" in specs
+
+
+@pytest.mark.parametrize(
+    ("message", "kind", "playbook_id", "out_kind"),
+    [
+        ("kind=phaser", "", "playground.vite", "vite"),
+        ("kind=Phaser slug=ember", "", "playground.vite", "vite"),
+        ("Направи Phaser игра с Boot и Play", "", "playground.vite", "vite"),
+        ("kind=phaser canvas mount", "", "playground.vite", "vite"),
+        ("", "phaser", "playground.vite", "vite"),
+        ("Boot a scene", "phaser", "playground.vite", "vite"),
+        (LUMEN, "", "playground.vite", "vite"),
+        (LUMEN, "phaser", "playground.vite", "vite"),
+        ("kind=vite-react settings panel", "", "playground.vite", "vite-react"),
+        (SNAKE, "", "playground.arcade", "static"),
+        (SNAKE, "static", "playground.arcade", "static"),
+        (GODOT, "", "playground.godot", "godot"),
+        ("kind=godot CharacterBody2D", "", "playground.godot", "godot"),
+        (SLERP, "", "playground.math3d", "static"),
+        (CROWD, "", "playground.crowd", "static"),
+    ],
+)
+def test_route_matrix(message, kind, playbook_id, out_kind):
+    rt = route(message, kind=kind)
+    assert rt.playbook.id == playbook_id
+    assert rt.kind == out_kind
+
+
+def test_phaser_playbook_maps_to_vite_seed():
+    pb = get_playbook("phaser")
+    assert pb is not None
+    assert pb.id == "playground.vite"
+    assert pb.kind == "vite"
+    create = next(step for step in pb.steps if step.id == "create")
+    assert create.args.get("kind") == "vite"
+    assert "src/main.js" in pb.expected_files
+    assert "package.json" in pb.expected_files
+    alias = get_playbook("playground.phaser")
+    assert alias is not None and alias.id == "playground.vite"
+    from daedalus.playground import normalize_engine_kind
+    from daedalus.web_first import _browser_kind
+    assert normalize_engine_kind("Phaser") == "vite"
+    assert normalize_engine_kind("godot") == "godot"
+    assert _browser_kind("phaser") == "vite"
+    assert _browser_kind("html") == "static"
 
 
 def test_route_vite_phaser_not_arcade():

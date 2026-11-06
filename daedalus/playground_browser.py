@@ -463,12 +463,14 @@ async def verify_app(slug: str, kind: str) -> dict[str, Any]:
     • vite / vite-react → serve the built ``dist/`` (the real published artifact;
       already produced by the smoke-test compile gate) — falls back to project
       dir if dist is missing.
+    • phaser          → same path as vite (Phaser seed, Vite compile gate).
     • streamlit         → start the dev runner, hit its port (longer settle for
       the websocket-driven first paint).
     • expo              → serve built ``dist/`` when present; otherwise start
       Metro web and load the local port directly (bypasses iframe proxy).
     Non-visual kinds return a skipped result.
     """
+    kind = pg.normalize_engine_kind(kind)
     if kind not in VISUAL_KINDS:
         return {"ok": True, "skipped": True, "summary": f"Render-and-See пропуснат за {kind}",
                 "console_errors": [], "page_errors": [], "failed_requests": [],
