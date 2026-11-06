@@ -35,6 +35,24 @@ def test_effort_post_owner_tier_forced(isolated, monkeypatch):
     assert body.get("source") == "owner"
 
 
+def test_effort_get_and_post_same_decision(isolated, monkeypatch):
+    """GET and POST both call classify(q, requested=effort); prior UI used GET only — not wrong server-side."""
+    from app.main import app
+
+    client = TestClient(app)
+    text = "open world campaign with factions"
+    for effort in ("auto", "whisper", "craft", "epic"):
+        g = client.get(
+            "/api/v1/daedalus/effort",
+            params={"q": text, "effort": effort},
+        )
+        p = client.post("/api/v1/daedalus/effort", json={"text": text, "effort": effort})
+        assert g.status_code == 200 and p.status_code == 200
+        gj, pj = g.json(), p.json()
+        assert gj.get("tier") == pj.get("tier")
+        assert gj.get("source") == pj.get("source")
+
+
 def test_studio_js_uses_effort_post_not_query_only():
     from pathlib import Path
 
