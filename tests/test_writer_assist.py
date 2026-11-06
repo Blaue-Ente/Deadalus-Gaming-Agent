@@ -52,6 +52,56 @@ def test_kernel_scaffold_writes_webgl_game_mount(tmp_path, monkeypatch):
     assert (dest / ".daedalus-writer-assist.json").is_file()
 
 
+def test_kind_phaser_scaffold_is_vite_seed(tmp_path, monkeypatch):
+    monkeypatch.setenv("DAEDALUS_WRITER_ASSIST", "off")
+    dest = tmp_path / "ember"
+    _write_scaffold(dest, "phaser", "Ember", "ember", "browser game")
+    html = _read(dest, "index.html")
+    main = _read(dest, "src/main.js")
+    pkg = _read(dest, "package.json")
+    assert 'id="game"' in html
+    assert "Phaser.WEBGL" in main
+    assert '"phaser"' in pkg
+    assert '"vite"' in pkg
+    assert "Vanilla JS работи" not in main
+
+
+def test_create_project_kind_phaser_stores_vite(tmp_path, monkeypatch):
+    import asyncio
+
+    monkeypatch.setenv("DAEDALUS_STANDALONE", "1")
+    monkeypatch.setenv("DAEDALUS_WRITER_ASSIST", "off")
+    monkeypatch.setenv("DAEDALUS_DATA", str(tmp_path / "data"))
+    monkeypatch.setenv("DAEDALUS_PLAYGROUND", str(tmp_path / "projects"))
+    from daedalus.paths import data_root, playground_projects_dir, product_root, repo_root
+    data_root.cache_clear()
+    playground_projects_dir.cache_clear()
+    product_root.cache_clear()
+    repo_root.cache_clear()
+    from daedalus.store import reset_sqlite_pool
+    reset_sqlite_pool()
+    from daedalus import playground as pg
+
+    root = tmp_path / "projects"
+    root.mkdir(parents=True, exist_ok=True)
+    pg.PROJECTS_DIR = root
+
+    async def _run():
+        created = await pg.create_project(
+            "Ember", kind="phaser", description="browser game", slug="ember",
+        )
+        assert created["kind"] == "vite"
+        pdir = pg.project_dir(created["slug"])
+        main = (pdir / "src" / "main.js").read_text(encoding="utf-8")
+        pkg = (pdir / "package.json").read_text(encoding="utf-8")
+        assert "Phaser.WEBGL" in main
+        assert '"phaser"' in pkg
+        assert '"vite"' in pkg
+
+    asyncio.run(_run())
+    reset_sqlite_pool()
+
+
 def test_auto_seeds_only_when_brief_names_phaser(tmp_path, monkeypatch):
     monkeypatch.setenv("DAEDALUS_WRITER_ASSIST", "auto")
     hello = tmp_path / "todo"

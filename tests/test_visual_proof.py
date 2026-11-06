@@ -202,6 +202,55 @@ def test_new_project_gets_status_readme(tmp_path, monkeypatch):
     reset_sqlite_pool()
 
 
+def test_verify_kind_phaser_uses_vite_compile_gate(monkeypatch, tmp_path):
+    from daedalus.playground_browser import verify_app
+
+    seen = {"browser": False, "kind": ""}
+
+    async def fake_gate(root, *, slug="", kind="vite"):
+        seen["kind"] = kind
+        return {
+            "ok": False, "skipped": False, "install_ok": True,
+            "error": "stop before chromium", "logs": [],
+        }
+
+    async def fake_browser(*_a, **_k):
+        seen["browser"] = True
+        return {"ok": True, "summary": "should not run"}
+
+    monkeypatch.setattr("daedalus.playground_runner.vite_compile_gate", fake_gate)
+    monkeypatch.setattr("daedalus.playground_browser.browser_verify", fake_browser)
+    monkeypatch.setattr("daedalus.playground.project_dir", lambda slug: tmp_path)
+    (tmp_path / "package.json").write_text("{}", encoding="utf-8")
+    result = asyncio.run(verify_app("ember", "phaser"))
+    assert seen["kind"] == "vite"
+    assert seen["browser"] is False
+    assert result["ok"] is False
+
+
+def test_gameplay_kind_phaser_uses_vite_serve(monkeypatch, tmp_path):
+    from daedalus import playground_gameplay_verify as gp
+
+    monkeypatch.setattr(gp.pg, "project_dir", lambda slug: tmp_path)
+    (tmp_path / "index.html").write_text("<div id='game'></div>", encoding="utf-8")
+    seen = {}
+
+    def serve(directory):
+        seen["dir"] = directory
+        return "http://127.0.0.1:9", lambda: None
+
+    async def run(slug, url, *, kind, milestone_id):
+        seen["kind"] = kind
+        seen["url"] = url
+        return {"ok": True, "skipped": False, "summary": "ok", "checks": []}
+
+    monkeypatch.setattr(gp, "_serve_static", serve)
+    monkeypatch.setattr(gp, "_run_gameplay_on_url", run)
+    result = asyncio.run(gp.gameplay_verify_app("ember", "phaser"))
+    assert seen["kind"] == "vite"
+    assert result["ok"] is True
+
+
 def test_vite_verify_compile_fail_does_not_open_chromium(monkeypatch, tmp_path):
     from daedalus.playground_browser import verify_app
 

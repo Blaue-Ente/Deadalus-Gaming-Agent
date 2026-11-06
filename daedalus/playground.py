@@ -11,6 +11,7 @@ Standalone apps, които Дедал строи / клонира от GitHub, 
   streamlit — Streamlit app. Subprocess test (само dev).
   vite      — Frontend build tool. Test чрез dev server (dev) / build→static (publish).
               iOS+Android: Capacitor wrap of dist/ (not a new kind; see playground_capacitor).
+  phaser    — Не е отделен runner. Същият път като vite, със Phaser seed.
   vite-react — Vite + React 18. Test чрез dev server (dev) / build→static (publish).
   node      — Generic Node app. Subprocess test (само dev).
   expo      — React Native / Expo app. Dev test чрез Expo Web (браузър preview).
@@ -40,6 +41,18 @@ PROJECTS_DIR = playground_projects_dir()
 
 VALID_KINDS = {"static", "fastapi", "streamlit", "vite", "vite-react", "node", "expo", "unity", "godot", "auto"}
 VALID_SOURCES = {"built", "cloned", "imported", "revived"}
+
+
+def normalize_engine_kind(kind: str) -> str:
+    """Map an engine alias onto the playground kind we scaffold and run.
+
+    ``phaser`` is Vite plus the Phaser seed. It is not a separate runner,
+    and it must not fall through to a static HTML project.
+    """
+    k = (kind or "").strip().lower()
+    if k == "phaser":
+        return "vite"
+    return k
 
 _SLUG_RE = re.compile(r"[^a-z0-9-]+")
 _CYR = {
@@ -396,6 +409,12 @@ _SCAFFOLD["expo"] = _EXPO_SCAFFOLD
 
 def _write_scaffold(pdir: Path, kind: str, name: str, slug: str, description: str) -> None:
     """Write initial scaffold files if directory is empty (new project)."""
+    requested = (kind or "").strip().lower()
+    # kind=phaser always gets the Phaser skeleton. Writer-assist Off still
+    # leaves a plain kind=vite app on the Vite Hello scaffold; racer briefs win.
+    force_phaser = requested == "phaser"
+    if force_phaser:
+        kind = "vite"
     if kind == "unity":
         from .playground_unity_scaffold import write_unity_scaffold
         write_unity_scaffold(pdir, name, slug, description)
@@ -407,6 +426,10 @@ def _write_scaffold(pdir: Path, kind: str, name: str, slug: str, description: st
     if kind == "vite":
         from .playground_racer_scaffold import maybe_write_racer_scaffold
         if maybe_write_racer_scaffold(pdir, kind, name, slug, description):
+            return
+        if force_phaser:
+            from .writer_assist import seed_phaser_vite
+            seed_phaser_vite(pdir, name=name, slug=slug, description=description)
             return
         from .writer_assist import maybe_seed_phaser_vite
         if maybe_seed_phaser_vite(
@@ -467,8 +490,12 @@ async def create_project(
     if not _requested_auto:
         from .godot_first import coerce_kind
         kind = coerce_kind(kind, name, description)
+    phaser_seed = (kind or "").strip().lower() == "phaser"
+    if phaser_seed:
+        kind = "vite"
     if kind not in VALID_KINDS:
         kind = "static"
+        phaser_seed = False
     if source not in VALID_SOURCES:
         source = "built"
 
@@ -476,7 +503,9 @@ async def create_project(
     # ``auto`` — empty workspace; autopilot resolves platform before first build.
     requested_kind = kind
     if source == "built" and not _requested_auto and not any(pdir.iterdir()):
-        _write_scaffold(pdir, kind, name, slug, description)
+        _write_scaffold(
+            pdir, "phaser" if phaser_seed else kind, name, slug, description,
+        )
         # Re-detect after scaffold (picks up run_cmd / entry from real files)
         kind, run_cmd, entry = detect_kind(pdir)
         if requested_kind == "godot":

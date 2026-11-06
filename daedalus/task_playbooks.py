@@ -455,11 +455,12 @@ PLAYBOOKS: tuple[Playbook, ...] = (
         kind="vite",
         kinds=("vite", "vite-react", "phaser"),
         keywords=(
-            "kind=vite", "kind = vite", "vite-react", "vite + phaser",
-            "phaser 3", "phaser3",
+            "kind=vite", "kind = vite", "kind=phaser", "kind = phaser",
+            "vite-react", "vite + phaser",
+            "phaser 3", "phaser3", "phaser",
         ),
         regex=(
-            r"kind\s*=\s*vite|vite-react|"
+            r"kind\s*=\s*(?:vite|phaser)\b|vite-react|\bphaser\b|"
             r"(?:\bvite\b.{0,96}\bphaser\b)|(?:\bphaser\b.{0,96}\bvite\b)"
         ),
         tools=_CORE + (
@@ -577,8 +578,16 @@ PLAYBOOKS: tuple[Playbook, ...] = (
 )
 
 
+# "phaser" is not its own graph. It is the Vite playbook and that seed.
+_ALIASES = {
+    "phaser": "playground.vite",
+    "playground.phaser": "playground.vite",
+}
+
+
 def get(playbook_id: str) -> Playbook | None:
     pid = (playbook_id or "").strip()
+    pid = _ALIASES.get(pid, pid)
     for pb in PLAYBOOKS:
         if pb.id == pid:
             return pb

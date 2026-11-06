@@ -314,6 +314,8 @@ async def gameplay_verify_app(
     milestone_id: str = "M0",
 ) -> dict[str, Any]:
     """Serve app (or Unity web preview) and run interaction probes."""
+    if (kind or "").strip().lower() != "unity":
+        kind = pg.normalize_engine_kind(kind)
     if kind == "unity":
         root = pg.project_dir(slug)
         preview = root / "studio" / "preview"

@@ -206,9 +206,10 @@ def _run_async(coro: Any) -> Any:
 
 def _browser_kind(kind: str) -> str:
     k = (kind or "static").strip().lower()
-    if k in {"phaser", "html"}:
+    if k == "html":
         return "static"
-    return k or "static"
+    from .playground import normalize_engine_kind
+    return normalize_engine_kind(k) or "static"
 
 
 def runtime_verify(root: Path, *, slug: str, kind: str) -> dict[str, Any]:

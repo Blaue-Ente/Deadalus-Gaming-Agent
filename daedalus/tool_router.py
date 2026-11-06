@@ -17,6 +17,8 @@ from .task_playbooks import PLAYBOOKS, Playbook, Step, get as get_playbook
 from .tool_catalog import canonical, excerpt
 
 _KIND_EQ = re.compile(r"kind\s*=\s*([a-z0-9_-]+)", re.I)
+_ARCADE_TITLE = re.compile(r"\b(snake|tetris|pong|змия)\b", re.I)
+_EXPLICIT_WEB_KIND = re.compile(r"kind\s*=\s*(?:vite|phaser)\b", re.I)
 
 log = logging.getLogger(__name__)
 
@@ -77,13 +79,21 @@ def infer_dim(text: str) -> int:
 
 
 def infer_kind(message: str, playbook_kind: str = "", kind: str = "") -> str:
-    """Prefer an explicit kind=vite in the ask over the playbook default (static)."""
+    """Prefer an explicit kind= in the ask over the playbook default.
+
+    ``kind=phaser`` is the Vite + Phaser seed, so the route reports ``vite``.
+    """
+    from .playground import normalize_engine_kind
+
     if (kind or "").strip():
-        return kind.strip().lower()
-    m = _KIND_EQ.search(message or "")
-    if m:
-        return m.group(1).lower()
-    return ((playbook_kind or "static").strip() or "static")
+        raw = kind.strip().lower()
+    else:
+        m = _KIND_EQ.search(message or "")
+        if m:
+            raw = m.group(1).lower()
+        else:
+            raw = (playbook_kind or "static").strip().lower() or "static"
+    return normalize_engine_kind(raw)
 
 
 def _topo(steps: tuple[Step, ...]) -> list[Step]:
@@ -214,12 +224,14 @@ def match_playbook(
         if pb.id not in {"talk", "app.build", "playground.generic"}
         and _kw_hit(pb, blob, k)
     ]
-    # Explicit Vite briefs must not lose to canvas arcade on leftover keywords.
-    if (
-        hits
-        and re.search(r"kind\s*=\s*vite", blob, re.I)
-        and not re.search(r"\b(snake|tetris|pong|змия)\b", blob, re.I)
-    ):
+    # Vite / Phaser briefs must not lose to canvas arcade on leftover keywords.
+    # Named arcade titles (snake, tetris, pong) stay on the arcade graph.
+    web_engine = (
+        k in {"vite", "phaser", "vite-react"}
+        or bool(_EXPLICIT_WEB_KIND.search(blob))
+        or any(pb.id == "playground.vite" for pb in hits)
+    )
+    if hits and web_engine and not _ARCADE_TITLE.search(blob):
         hits = [pb for pb in hits if pb.id != "playground.arcade"] or hits
     if hits:
         return _merge_playbooks(hits) if len(hits) > 1 else hits[0]
