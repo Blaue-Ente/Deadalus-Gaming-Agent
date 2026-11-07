@@ -2232,11 +2232,23 @@
     box.appendChild(p2);
     const v = data.vision || {};
     const p3 = document.createElement("p");
-    p3.textContent = v.model
+    p3.dataset.role = "vision-state";
+    p3.textContent = visionLine(v);
+    box.appendChild(p3);
+    const list = document.createElement("div");
+    list.className = "cfg-list";
+    list.appendChild(actionRow({
+      id: "vision-test", title: dx.t("studio.visionTest"), sub: dx.t("studio.visionTestHint"),
+      buttons: [{ label: dx.t("studio.visionTest"), run: testVision }],
+    }));
+    box.appendChild(list);
+  }
+
+  function visionLine(v) {
+    return v.model
       ? dx.t("studio.visionState", { model: (v.provider ? v.provider + ":" : "") + v.model,
           state: v.verified ? dx.t("studio.visionVerified") : dx.t("studio.visionUnverified") })
       : dx.t("studio.visionNone");
-    box.appendChild(p3);
   }
 
   function paintProof(data) {
@@ -2252,9 +2264,159 @@
     box.appendChild(ul);
   }
 
+
+  // ---- A6.1b: workers, provider test, connections, MCP, durability, vision test ----------------------------------
+  const ERR_KEYS = { auth: "studio.errAuth", quota: "studio.errQuota", timeout: "studio.errTimeout",
+    budget_blocked: "studio.errBudget", provider_error: "studio.errProvider", unsupported_modality: "studio.errModality",
+    not_configured: "studio.errNotConfigured", disabled: "studio.errDisabled", routing: "studio.errRouting" };
+  const GIT_CODE_KEYS = { not_configured: "studio.codeNotConfigured", invalid_token: "studio.codeInvalid",
+    forbidden: "studio.codeForbidden", api_error: "studio.codeApi", network: "studio.codeNetwork" };
+
+  // One row: a name, a short state, one or more buttons, and a note under the row that carries the outcome.
+  // A button's ``run`` returns {text, bad} to show, or null when there is nothing to say (declined, or row repainted).
+  function actionRow(o) {
+    const item = document.createElement("div");
+    item.className = "cfg-row";
+    item.dataset.id = o.id;
+    const name = document.createElement("div");
+    name.className = "cfg-name";
+    const b = document.createElement("b");
+    b.textContent = o.title;
+    const small = document.createElement("small");
+    small.textContent = o.sub || "";
+    name.append(b, small);
+    const info = document.createElement("div");
+    info.className = "cfg-control";
+    info.textContent = o.info || "";
+    const actions = document.createElement("div");
+    actions.className = "cfg-actions";
+    const note = document.createElement("p");
+    note.className = "cfg-note";
+    note.hidden = true;
+    (o.buttons || []).forEach((def) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = def.label;
+      btn.disabled = !!def.disabled;
+      btn.addEventListener("click", async () => {
+        item.dataset.state = "";
+        note.hidden = true;
+        await runAction(btn, "harness-status", async () => {
+          const res = await def.run();
+          if (!res || !item.isConnected) return;
+          note.textContent = res.text;
+          note.hidden = false;
+          item.dataset.state = res.bad ? "error" : "ok";
+        });
+      });
+      actions.appendChild(btn);
+    });
+    item.append(name, info, actions, note);
+    return item;
+  }
+
+  function errText(err) {
+    const type = err && err.type;
+    return tOr(ERR_KEYS[type], dx.t("studio.errUnknown"));
+  }
+
+  async function testWorker(slot) {
+    const r = await postJson("/api/v1/harness/test-provider", { slot });
+    if (r.ok) return { text: dx.t("studio.workerOk", { model: r.model || "", ms: r.latency_ms == null ? "?" : r.latency_ms, reply: r.reply || "" }), bad: false };
+    return { text: dx.t("studio.workerFail", { why: errText(r.error) }), bad: true };
+  }
+
+  function paintWorkers(data) {
+    const box = $("settings-workers");
+    box.replaceChildren();
+    ((data && data.slots) || []).forEach((w) => {
+      box.appendChild(actionRow({
+        id: "worker-" + w.slot,
+        title: w.slot,
+        sub: (w.provider ? w.provider + ":" : "") + (w.model || ""),
+        info: !w.enabled ? dx.t("studio.workerOff") : (w.key_set ? dx.t("studio.workerKeySet") : dx.t("studio.workerNoKey")),
+        buttons: [{ label: dx.t("studio.workerTest"), run: () => testWorker(w.slot) }],
+      }));
+    });
+  }
+
+  async function testLink(target) {
+    const r = await postJson("/api/v1/harness/connections/test", { target });
+    if (r.ok) {
+      let text = dx.t("studio.codeOk", { who: r.login || r.username || "" });
+      if (typeof r.can_push === "boolean") text += " · " + dx.t(r.can_push ? "studio.canPush" : "studio.cannotPush");
+      return { text, bad: false };
+    }
+    return { text: tOr(GIT_CODE_KEYS[r.code], dx.t("studio.errUnknown")), bad: true };
+  }
+
+  function paintLinks() {
+    const box = $("settings-links");
+    box.replaceChildren();
+    [["github", "studio.linkGithub"], ["gitlab", "studio.linkGitlab"]].forEach(([target, key]) => {
+      box.appendChild(actionRow({
+        id: "link-" + target, title: dx.t(key), sub: target,
+        buttons: [{ label: dx.t("studio.linkTest"), run: () => testLink(target) }],
+      }));
+    });
+  }
+
+  async function toggleMcp(row, enable) {
+    if (enable && !window.confirm(dx.t("studio.mcpConfirm", { id: row.id }))) return null;
+    const data = await postJson("/api/v1/harness/mcp", { id: row.id, enabled: enable });
+    paintMcp(data.servers || []);
+    showStatus("harness-status", dx.t("studio.saved"), false);
+    return null;
+  }
+
+  function paintMcp(servers) {
+    const box = $("settings-mcp");
+    box.replaceChildren();
+    (servers || []).forEach((row) => {
+      const blocked = row.blocked_offline && !row.enabled;
+      box.appendChild(actionRow({
+        id: "mcp-" + row.id, title: row.id,
+        info: blocked ? dx.t("studio.mcpBlocked") : (row.enabled ? dx.t("studio.mcpOn") : dx.t("studio.mcpOffState")),
+        buttons: [{ label: row.enabled ? dx.t("studio.mcpDisable") : dx.t("studio.mcpEnable"), disabled: blocked,
+                    run: () => toggleMcp(row, !row.enabled) }],
+      }));
+    });
+  }
+
+  function paintDurability(d) {
+    const box = $("settings-durability");
+    box.replaceChildren();
+    if (!d || d.ok === false) return;
+    const p1 = document.createElement("p");
+    p1.textContent = dx.t("studio.durStorage", { state: d.storage_configured ? dx.t("studio.durConfigured") : dx.t("studio.durNot") });
+    const p2 = document.createElement("p");
+    p2.textContent = dx.t("studio.durProjects", { n: d.projects, p: d.published, e: d.empty_workspaces });
+    box.append(p1, p2);
+  }
+
+  function paintConnections(v) {
+    paintMcp(v.mcp && v.mcp.ok !== false ? v.mcp.servers : []);
+    paintDurability(v.durability);
+  }
+
+  async function testVision() {
+    const r = await postJson("/api/v1/harness/vision-probe", {});
+    try {                                         // the verdict is stored now: refresh the state line, not the whole block
+      const eng = await dx.api("/api/v1/harness/engines");
+      const line = document.querySelector("#settings-engines [data-role='vision-state']");
+      if (line) line.textContent = visionLine(eng.vision || {});
+    } catch (err) { /* the note below still tells the truth */ }
+    if (!r.ok) {
+      return { text: r.error === "no_mentor_model" ? dx.t("studio.visionNoModel") : dx.t("studio.visionFailed", { why: r.error || "?" }), bad: true };
+    }
+    return r.perceived ? { text: dx.t("studio.visionPerceived"), bad: false } : { text: dx.t("studio.visionNotPerceived"), bad: true };
+  }
+
   async function loadHarnessSettings() {
     const mine = ++harnessSeq;
-    const calls = ["/api/v1/harness/config", "/api/v1/harness/intents", "/api/v1/harness/engines"].map((p) => dx.api(p));
+    paintLinks();
+    const calls = ["/api/v1/harness/config", "/api/v1/harness/intents", "/api/v1/harness/engines",
+      "/api/v1/harness/workers", "/api/v1/harness/connections"].map((p) => dx.api(p));
     const results = await Promise.allSettled(calls);
     if (mine !== harnessSeq) return;                  // a newer load owns the screen
     const problems = [];
@@ -2265,6 +2427,8 @@
     paint(results[0], (v) => paintConfig(v.settings || []));
     paint(results[1], paintIntents);
     paint(results[2], (v) => { paintEngines(v); paintProof(v); });
+    paint(results[3], paintWorkers);
+    paint(results[4], paintConnections);
     const unique = problems.filter((p, i) => problems.indexOf(p) === i);
     showStatus("harness-status", unique.length ? dx.t("studio.requestFailed") + ": " + unique.join(" · ") : "", unique.length > 0);
   }

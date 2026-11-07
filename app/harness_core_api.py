@@ -263,3 +263,72 @@ async def harness_run_events(run_id: str, after: int = 0, last_event_id: str | N
 
     return StreamingResponse(gen(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+# ---- A6.1b: workers, provider test, connections, MCP, durability, vision --------------------------------------
+class TestProviderBody(BaseModel):
+    slot: str = Field(default="master", max_length=40)
+
+
+class GitTestBody(BaseModel):
+    target: str = Field(..., max_length=10)
+
+
+class McpBody(BaseModel):
+    id: str = Field(..., min_length=1, max_length=80)
+    enabled: bool
+
+
+@router.get("/api/v1/harness/workers")
+def harness_workers() -> dict[str, Any]:
+    from daedalus.harness import connections
+
+    return connections.workers_view()
+
+
+@router.post("/api/v1/harness/test-provider")
+async def harness_test_provider(body: TestProviderBody) -> Any:
+    from daedalus.harness import connections
+
+    return await connections.test_provider(body.slot)
+
+
+@router.post("/api/v1/harness/connections/test")
+async def harness_connection_test(body: GitTestBody) -> Any:
+    from daedalus.harness import connections
+
+    try:
+        return await connections.test_git(body.target)
+    except KeyError:
+        return JSONResponse({"ok": False, "error": "unknown_target", "target": body.target}, status_code=404)
+
+
+@router.get("/api/v1/harness/connections")
+async def harness_connections() -> dict[str, Any]:
+    from daedalus.harness import connections
+
+    out: dict[str, Any] = {"ok": True}
+    for key, fn in (("mcp", lambda: connections.mcp_view()), ("durability", connections.durability_view)):
+        try:
+            val = fn()
+            out[key] = await val if asyncio.iscoroutine(val) else val
+        except Exception as exc:   # one broken section must not hide the others
+            out[key] = {"ok": False, "error": type(exc).__name__}
+    return out
+
+
+@router.post("/api/v1/harness/mcp")
+def harness_mcp(body: McpBody) -> Any:
+    from daedalus.harness import connections
+
+    try:
+        return connections.set_mcp(body.id, body.enabled)
+    except KeyError:
+        return JSONResponse({"ok": False, "error": "unknown_server", "id": body.id}, status_code=404)
+
+
+@router.post("/api/v1/harness/vision-probe")
+async def harness_vision_probe() -> Any:
+    from daedalus.harness import connections
+
+    return await connections.vision_test()
