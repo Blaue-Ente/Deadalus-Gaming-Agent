@@ -690,7 +690,10 @@ button.item { width: 100%; text-align: left; }
 .asset-controls { display: flex; flex-direction: column; gap: 0.35rem; margin: 0 0 0.45rem; }
 .asset-controls label { display: flex; flex-direction: column; gap: 0.15rem; color: var(--muted); font-size: 0.72rem; }
 .asset-controls textarea { min-height: 2.6rem; resize: vertical; }
-.asset-controls .hint { margin: 0; }
+.asset-controls .hint, .ship-controls .hint { margin: 0; }
+.ship-controls { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.8rem 0 0; }
+.ship-controls label { display: flex; flex-direction: column; gap: 0.15rem; color: var(--muted); font-size: 0.72rem; }
+.ship-controls .row { flex-wrap: wrap; }
 .checkpoint p { margin: 0; white-space: pre-wrap; }
 #build-milestones li[data-current] { color: var(--gold-2); }
 #settings-fields .item small { font-family: var(--font); }

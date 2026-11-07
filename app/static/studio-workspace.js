@@ -20,9 +20,14 @@
   let assetFlight = 0;
   let assetSlug = null;
   let assetJobIds = [];
+  let shipGen = 0;
+  let shipFlight = 0;
+  let shipSlug = null;
   const ASSET_GENERATE_TIMEOUT_MS = 120000;
   const ASSET_AUTOPACK_TIMEOUT_MS = 660000;
   const ASSET_PIPELINE_TIMEOUT_MS = 60000;
+  const SHIP_TIMEOUT_MS = 60000;
+  const SHIP_UNITY_TIMEOUT_MS = 240000;
 
   function $(id) { return document.getElementById(id); }
 
@@ -1075,6 +1080,322 @@
     });
   }
 
+  function shipButtons() {
+    return [
+      "ship-unity-init",
+      "ship-unity-build",
+      "ship-firebase",
+      "ship-hybrid-init",
+      "ship-hybrid-export",
+      "ship-cap-init",
+      "ship-cap-export",
+    ].map($);
+  }
+
+  function syncShipButtons() {
+    const locked = shipFlight !== 0 || !dx.getSlug();
+    shipButtons().forEach((btn) => {
+      if (btn) btn.disabled = locked;
+    });
+  }
+
+  function shipFields() {
+    const projectId = ($("ship-firebase-project") && $("ship-firebase-project").value || "").trim();
+    const bundleId = ($("ship-bundle") && $("ship-bundle").value || "").trim();
+    const ids = {};
+    if (projectId) ids.project_id = projectId;
+    if (bundleId) ids.bundle_id = bundleId;
+    return {
+      ids: ids,
+      projectId: projectId,
+      bundleId: bundleId,
+      template: ($("ship-template") && $("ship-template").value || "daedalus_minimal").trim() || "daedalus_minimal",
+      preset: ($("ship-preset") && $("ship-preset").value || "custom").trim() || "custom",
+    };
+  }
+
+  function shipKind() {
+    const slug = dx.getSlug();
+    const rows = dx.projects() || [];
+    for (let i = 0; i < rows.length; i += 1) {
+      if (rows[i] && rows[i].slug === slug) return String(rows[i].kind || "").toLowerCase();
+    }
+    return "";
+  }
+
+  function unityWritesFirebase(template, preset) {
+    if (template === "unity_game_framework") return false;
+    if (template === "daedalus_ugf") return true;
+    return preset !== "racing" && preset !== "godot_2d" && preset !== "godot_3d";
+  }
+
+  function unityClones(template) {
+    return template === "unity_game_framework" || template === "daedalus_ugf";
+  }
+
+  function syncShipVisibility() {
+    const fields = shipFields();
+    const kind = shipKind();
+    const unity = fields.preset !== "hybrid_mobile";
+    const hybrid = fields.preset === "hybrid_mobile" || kind === "vite";
+    const cap = kind === "static" || kind === "vite" || kind === "vite-react" || fields.preset === "hybrid_mobile";
+    [
+      ["ship-unity-init", unity],
+      ["ship-unity-build", unity],
+      ["ship-hybrid-init", hybrid],
+      ["ship-hybrid-export", hybrid],
+      ["ship-cap-init", cap],
+      ["ship-cap-export", cap],
+    ].forEach((pair) => {
+      const el = $(pair[0]);
+      if (el) el.hidden = !pair[1];
+    });
+  }
+
+  function shipStill(flight, gen, slug) {
+    return flight === shipFlight && gen === shipGen && dx.getSlug() === slug;
+  }
+
+  function shipTimedOut(err) {
+    const msg = String((err && err.message) || "");
+    return msg === dx.t("studio.timeout") || /timed out|timeout|изтекло|изтече/i.test(msg);
+  }
+
+  function shipPaths(data) {
+    const rows = data && Array.isArray(data.written) ? data.written : [];
+    return rows.filter((path) => typeof path === "string" && path);
+  }
+
+  function shipWrote(data) {
+    const paths = shipPaths(data);
+    if (!paths.length) return dx.t("studio.shipNoNew");
+    return dx.t("studio.shipWrote", { paths: paths.join("\n") });
+  }
+
+  function describeUnity(data) {
+    if (!data || data.ok !== true) {
+      const err = data && (data.error || data.detail);
+      return { text: dx.t("studio.shipNotOk") + (err ? ": " + err : ""), bad: true, refresh: false };
+    }
+    const parts = [shipWrote(data)];
+    const cloned = typeof data.cloned === "string" ? data.cloned : "";
+    let bad = false;
+    if (cloned.indexOf("FAILED") === 0) {
+      parts.push(dx.t("studio.shipCloneFailed", { detail: cloned }));
+      bad = true;
+    } else if (cloned) {
+      parts.push(dx.t("studio.shipCloned", { path: cloned }));
+    }
+    parts.push(dx.t("studio.shipKind", { kind: "unity" }));
+    if (typeof data.preview === "string" && data.preview) {
+      parts.push(dx.t("studio.shipPreview", { path: data.preview }));
+    }
+    return { text: parts.join("\n"), bad: bad, refresh: shipPaths(data).length > 0 };
+  }
+
+  function describeFirebase(data) {
+    if (!data || data.ok !== true) {
+      const err = data && (data.error || data.detail);
+      return { text: dx.t("studio.shipNotOk") + (err ? ": " + err : ""), bad: true, refresh: false };
+    }
+    return {
+      text: shipWrote(data) + "\n" + dx.t("studio.shipPlaceholder"),
+      bad: false,
+      refresh: shipPaths(data).length > 0,
+    };
+  }
+
+  function describeHybrid(data) {
+    if (!data || data.ok !== true) {
+      const err = data && (data.error || data.detail);
+      return { text: dx.t("studio.shipNotOk") + (err ? ": " + err : ""), bad: true, refresh: false };
+    }
+    const parts = [shipWrote(data), dx.t("studio.shipKind", { kind: "vite" })];
+    if (typeof data.preview === "string" && data.preview) {
+      parts.push(dx.t("studio.shipPreview", { path: data.preview }));
+    }
+    return { text: parts.join("\n"), bad: false, refresh: shipPaths(data).length > 0 };
+  }
+
+  function describeCapInit(data) {
+    if (!data || data.ok !== true) {
+      const err = data && (data.error || data.detail);
+      return { text: dx.t("studio.shipNotOk") + (err ? ": " + err : ""), bad: true, refresh: false };
+    }
+    if (data.skipped === true) {
+      return { text: dx.t("studio.shipSkipped", { reason: data.reason || "" }), bad: false, refresh: false };
+    }
+    return {
+      text: shipWrote(data) + "\n" + dx.t("studio.shipNoStore"),
+      bad: false,
+      refresh: shipPaths(data).length > 0,
+    };
+  }
+
+  function describeHybridExport(data) {
+    if (!data || data.ok !== true) {
+      const err = data && (data.error || data.detail);
+      return { text: dx.t("studio.shipNotOk") + (err ? ": " + err : ""), bad: true, refresh: false };
+    }
+    const man = data.manifest && typeof data.manifest === "object" ? data.manifest : {};
+    const steps = Array.isArray(man.next_steps) ? man.next_steps.filter((step) => typeof step === "string" && step) : [];
+    const parts = [shipWrote(data), dx.t("studio.shipNoIpa")];
+    if (steps.length) parts.push(steps.join("\n"));
+    return { text: parts.join("\n"), bad: false, refresh: shipPaths(data).length > 0 };
+  }
+
+  function describeCapExport(data) {
+    if (!data || data.ok !== true) {
+      const err = data && (data.error || data.detail);
+      return { text: dx.t("studio.shipNotOk") + (err ? ": " + err : ""), bad: true, refresh: false };
+    }
+    const man = data.manifest && typeof data.manifest === "object" ? data.manifest : {};
+    const steps = Array.isArray(man.next_steps) ? man.next_steps.filter((step) => typeof step === "string" && step) : [];
+    const parts = [shipWrote(data), dx.t("studio.shipNoStore"), dx.t("studio.shipNoIpa")];
+    if (man.skipped === true) parts.push(dx.t("studio.shipSkipped", { reason: steps[0] || "" }));
+    else if (steps.length) parts.push(steps.join("\n"));
+    return { text: parts.join("\n"), bad: false, refresh: shipPaths(data).length > 0 };
+  }
+
+  function describeBuild(data) {
+    if (!data || data.ok !== true) {
+      const err = data && (data.error || data.detail);
+      return { text: dx.t("studio.shipNotOk") + (err ? ": " + err : ""), bad: true, refresh: false };
+    }
+    const parts = [shipWrote(data)];
+    if (data.local_only === true) parts.push(dx.t("studio.shipNoStore"));
+    return { text: parts.join("\n"), bad: false, refresh: shipPaths(data).length > 0 };
+  }
+
+  function shipPlan(action, fields) {
+    const slug = dx.getSlug();
+    const ids = Object.assign({}, fields.ids);
+    if (action === "unity") {
+      const extra = [
+        unityWritesFirebase(fields.template, fields.preset) ? dx.t("studio.shipUnityExtraFirebase") : dx.t("studio.shipUnityExtraNoFirebase"),
+        dx.t("studio.shipUnityExtraFollow"),
+        unityClones(fields.template) ? dx.t("studio.shipUnityExtraClone") : dx.t("studio.shipUnityExtraNoClone"),
+        dx.t("studio.shipPlaceholder"),
+      ].join(" ");
+      const body = { template_id: fields.template, studio_preset: fields.preset };
+      if (ids.project_id) body.project_id = ids.project_id;
+      if (ids.bundle_id) body.bundle_id = ids.bundle_id;
+      const steps = [{ path: "/unity/init", body: body, timeoutMs: SHIP_UNITY_TIMEOUT_MS, describe: describeUnity }];
+      if (ids.project_id || ids.bundle_id) {
+        steps.push({ path: "/firebase/configure", body: ids, timeoutMs: SHIP_TIMEOUT_MS, describe: describeFirebase });
+      }
+      return {
+        confirm: dx.t("studio.shipUnityConfirm", { slug: slug, template: fields.template, preset: fields.preset, extra: extra }),
+        steps: steps,
+      };
+    }
+    if (action === "build") {
+      return {
+        confirm: dx.t("studio.shipBuildConfirm", {
+          slug: slug,
+          bundle: fields.bundleId ? dx.t("studio.shipBuildBundle", { id: fields.bundleId }) : dx.t("studio.shipBuildNoBundle"),
+        }),
+        steps: [{
+          path: "/unity/generate-build-scripts",
+          body: fields.bundleId ? { bundle_id: fields.bundleId } : {},
+          timeoutMs: SHIP_TIMEOUT_MS,
+          describe: describeBuild,
+        }],
+      };
+    }
+    if (action === "firebase") {
+      return {
+        confirm: dx.t("studio.shipFirebaseConfirm", { slug: slug }),
+        steps: [{ path: "/firebase/configure", body: ids, timeoutMs: SHIP_TIMEOUT_MS, describe: describeFirebase }],
+      };
+    }
+    if (action === "hybrid") {
+      const steps = [{ path: "/hybrid-mobile/init", body: ids, timeoutMs: SHIP_TIMEOUT_MS, describe: describeHybrid }];
+      if (fields.projectId) {
+        steps.push({ path: "/firebase/configure", body: ids, timeoutMs: SHIP_TIMEOUT_MS, describe: describeFirebase });
+      }
+      steps.push({ path: "/capacitor/init", body: Object.assign({}, ids), timeoutMs: SHIP_TIMEOUT_MS, describe: describeCapInit });
+      return {
+        confirm: dx.t("studio.shipHybridConfirm", {
+          slug: slug,
+          firebase: fields.projectId ? dx.t("studio.shipHybridFirebase") : dx.t("studio.shipHybridNoFirebase"),
+        }),
+        steps: steps,
+      };
+    }
+    if (action === "hybrid-export") {
+      return {
+        confirm: dx.t("studio.shipHybridExportConfirm", { slug: slug }),
+        steps: [{ path: "/hybrid-mobile/export", body: null, timeoutMs: SHIP_TIMEOUT_MS, describe: describeHybridExport }],
+      };
+    }
+    if (action === "capacitor") {
+      return {
+        confirm: dx.t("studio.shipCapConfirm", { slug: slug }),
+        steps: [{ path: "/capacitor/init", body: Object.assign({}, ids), timeoutMs: SHIP_TIMEOUT_MS, describe: describeCapInit }],
+      };
+    }
+    return {
+      confirm: dx.t("studio.shipCapExportConfirm", { slug: slug }),
+      steps: [{ path: "/capacitor/export", body: null, timeoutMs: SHIP_TIMEOUT_MS, describe: describeCapExport }],
+    };
+  }
+
+  function runShip(action) {
+    if (shipFlight) return;
+    const slug = dx.getSlug();
+    if (!slug) {
+      showStatus("ship-status", dx.t("studio.shipNeedSlug"), true);
+      return;
+    }
+    const plan = shipPlan(action, shipFields());
+    if (!window.confirm(plan.confirm)) return;
+    const gen = shipGen;
+    const flight = ++shipFlight;
+    syncShipButtons();
+    const lines = [];
+    let bad = false;
+    let refresh = false;
+    const steps = plan.steps;
+    let index = 0;
+    const next = () => {
+      if (!shipStill(flight, gen, slug)) return Promise.resolve();
+      if (index >= steps.length) return Promise.resolve();
+      const step = steps[index];
+      index += 1;
+      const opts = { method: "POST", timeoutMs: step.timeoutMs };
+      if (step.body != null) opts.body = JSON.stringify(step.body);
+      return dx.api("/admin/daedalus/playground/api/projects/" + slugPath(slug) + step.path, opts).then((data) => {
+        if (!shipStill(flight, gen, slug)) return null;
+        const view = step.describe(data);
+        lines.push(view.text);
+        if (view.refresh) refresh = true;
+        if (view.bad) {
+          bad = true;
+          if (index < steps.length) lines.push(dx.t("studio.shipStopped"));
+          return null;
+        }
+        return next();
+      }).catch((err) => {
+        if (!shipStill(flight, gen, slug)) return null;
+        lines.push(shipTimedOut(err) ? dx.t("studio.shipUnknown") : dx.t("studio.requestFailed") + ": " + dx.errText(err));
+        bad = true;
+        if (index < steps.length) lines.push(dx.t("studio.shipStopped"));
+        return null;
+      });
+    };
+    next().then(() => {
+      if (!shipStill(flight, gen, slug)) return;
+      showStatus("ship-status", lines.join("\n"), bad);
+      if (refresh) loadFiles(slug);
+    }).finally(() => {
+      if (flight === shipFlight) {
+        shipFlight = 0;
+        syncShipButtons();
+      }
+    });
+  }
+
   function onSlug(snap) {
     const next = snap.slug || "";
     if (next !== assetSlug) {
@@ -1084,7 +1405,14 @@
       renderAssetJobs("");
       showStatus("asset-status", "", false);
     }
+    if (next !== shipSlug) {
+      shipSlug = next;
+      shipGen += 1;
+      showStatus("ship-status", "", false);
+    }
     syncAssetButtons();
+    syncShipButtons();
+    syncShipVisibility();
     if (checkpoint && snap.slug !== checkpoint.slug) clearCheckpoint();
     if (streamingSlug && snap.slug !== streamingSlug) closeBuildStream();
     loadFiles(snap.slug);
@@ -1420,6 +1748,21 @@
   });
   syncAssetFields();
   renderAssetJobs("");
+  if ($("ship-preset")) $("ship-preset").addEventListener("change", syncShipVisibility);
+  [
+    ["ship-unity-init", "unity"],
+    ["ship-unity-build", "build"],
+    ["ship-firebase", "firebase"],
+    ["ship-hybrid-init", "hybrid"],
+    ["ship-hybrid-export", "hybrid-export"],
+    ["ship-cap-init", "capacitor"],
+    ["ship-cap-export", "capacitor-export"],
+  ].forEach((pair) => {
+    const btn = $(pair[0]);
+    if (btn) btn.addEventListener("click", () => runShip(pair[1]));
+  });
+  syncShipButtons();
+  syncShipVisibility();
 
   const opening = readQuery();
   showPanel(opening.panel, opening.tab);
