@@ -170,7 +170,7 @@ def test_manager_refuses_past_the_limit_and_unknown_engine(play_env, monkeypatch
         m.start("fx", play_env / "fx")
     assert exc.value.code == "session_limit"
     with pytest.raises(PlayError) as exc2:
-        m.start("fx", play_env / "fx", engine="unity")
+        m.start("fx", play_env / "fx", engine="unreal")
     assert exc2.value.code == "unsupported_engine"
     # a stopped session frees its slot
     monkeypatch.setattr(PlaySession, "stop", lambda self: setattr(self, "state", "stopped") or {"ok": True})
@@ -340,7 +340,7 @@ def test_server_requires_the_token_and_reports_typed_errors(play_env, monkeypatc
     res = c.post("/v1/sessions", json={"slug": "fx"}, headers=ok)
     assert res.status_code == 424 and res.json()["error"] == "engine_missing" and res.json()["ok"] is False
     assert c.post("/v1/sessions", json={"slug": "../x"}, headers=ok).status_code == 400
-    assert c.post("/v1/sessions", json={"slug": "fx", "engine": "unity"}, headers=ok).status_code == 400
+    assert c.post("/v1/sessions", json={"slug": "fx", "engine": "unreal"}, headers=ok).status_code == 400
 
 
 # ---------------------------------------------------------------------------------------- real engine, real display
