@@ -16,6 +16,12 @@
   let checkpointGen = 0;
   let checkpoint = null;
   let continueInFlight = false;
+  let assetGen = 0;
+  let assetFlight = 0;
+  let assetSlug = null;
+  const ASSET_GENERATE_TIMEOUT_MS = 120000;
+  const ASSET_AUTOPACK_TIMEOUT_MS = 660000;
+  const ASSET_PIPELINE_TIMEOUT_MS = 60000;
 
   function $(id) { return document.getElementById(id); }
 
@@ -819,7 +825,183 @@
     });
   }
 
+  function assetButtons() {
+    return ["asset-generate", "asset-autopack", "asset-pipeline"].map($);
+  }
+
+  function syncAssetButtons() {
+    const locked = assetFlight !== 0;
+    assetButtons().forEach((btn) => {
+      if (btn) btn.disabled = locked || !dx.getSlug();
+    });
+  }
+
+  function assetTimedOut(err) {
+    const msg = String((err && err.message) || "");
+    return msg === dx.t("studio.timeout") || /timed out|timeout|изтекло|изтече/i.test(msg);
+  }
+
+  function assetConfirm(kind, slug, extra) {
+    if (kind === "generate") return dx.t("studio.assetGenerateConfirm", { slug, path: extra.path });
+    if (kind === "autopack") return dx.t("studio.assetAutopackConfirm", { slug });
+    if (kind === "mesh") return dx.t("studio.assetMeshConfirm", { slug });
+    if (kind === "music") return dx.t("studio.assetMusicConfirm", { slug });
+    if (kind === "status" || kind === "providers") return dx.t("studio.assetReadConfirm", { slug, action: kind });
+    return dx.t("studio.assetWriteConfirm", { slug, action: kind });
+  }
+
+  function describeGenerate(data) {
+    if (!data || data.ok !== true) {
+      const err = data && (data.error || data.detail);
+      return dx.t("studio.assetNotOk") + (err ? ": " + err : "");
+    }
+    if (typeof data.path !== "string" || !data.path) return dx.t("studio.assetNoFile");
+    if (typeof data.bytes === "number") return dx.t("studio.assetWrote", { path: data.path, bytes: data.bytes });
+    return dx.t("studio.assetWrotePath", { path: data.path });
+  }
+
+  function describeAutopack(data) {
+    if (!data || data.ok !== true) {
+      const err = data && (data.error || data.detail);
+      return { text: dx.t("studio.assetNotOk") + (err ? ": " + err : ""), bad: true, refresh: false };
+    }
+    const built = Array.isArray(data.built) ? data.built.filter((p) => typeof p === "string" && p) : [];
+    const errors = Array.isArray(data.errors) ? data.errors : [];
+    const parts = [dx.t("studio.assetPack", {
+      planned: data.planned == null ? 0 : data.planned,
+      built: built.length,
+      errors: errors.length,
+    })];
+    if (built.length) parts.push(dx.t("studio.assetPackBuilt", { paths: built.join(", ") }));
+    else parts.push(dx.t("studio.assetPackNone"));
+    if (errors.length) {
+      const lines = errors.map((row) => {
+        if (!row || typeof row !== "object") return String(row || "");
+        return (row.path || "") + (row.error ? ": " + row.error : "");
+      }).join("; ");
+      parts.push(dx.t("studio.assetPackErrors", { lines }));
+    }
+    return { text: parts.join("\n"), bad: errors.length > 0, refresh: built.length > 0 };
+  }
+
+  function pipelinePaths(data) {
+    const paths = [];
+    if (typeof data.png === "string" && data.png) paths.push(data.png);
+    if (typeof data.json === "string" && data.json) paths.push(data.json);
+    if (Array.isArray(data.files)) {
+      data.files.forEach((file) => {
+        if (typeof file === "string" && file) paths.push(file);
+      });
+    }
+    return paths;
+  }
+
+  function describePipeline(action, data) {
+    const body = data && typeof data === "object" ? data : {};
+    if (action === "music" || body.handoff === true) {
+      return { text: dx.t("studio.assetMusic", { drop: body.drop || "assets/music.mp3" }), bad: true, refresh: false };
+    }
+    if (body.need_key === true || (action === "mesh" && body.ok !== true)) {
+      return { text: dx.t("studio.assetNeedKey", { error: body.error || body.detail || "" }), bad: true, refresh: false };
+    }
+    if (body.ok !== true) {
+      const err = body.error || body.detail || "";
+      return { text: dx.t("studio.assetNotOk") + (err ? ": " + err : ""), bad: true, refresh: false };
+    }
+    if (action === "greybox" || body.greybox === true) {
+      if (body.hero !== false) return { text: dx.t("studio.assetNoFile"), bad: true, refresh: false };
+      return { text: dx.t("studio.assetGreybox", { path: body.glb || "" }), bad: false, refresh: false };
+    }
+    if (action === "mesh") {
+      if (body.status === "done" && body.output) {
+        return { text: dx.t("studio.assetMeshFile", { path: body.output }), bad: false, refresh: false };
+      }
+      return {
+        text: dx.t("studio.assetMeshPending", { id: body.id || "", status: body.status || "" }),
+        bad: false,
+        refresh: false,
+      };
+    }
+    if (action === "status" || action === "providers") {
+      const parts = [dx.t("studio.assetRead")];
+      const jobs = Array.isArray(body.jobs) ? body.jobs : [];
+      jobs.forEach((job) => {
+        if (!job || typeof job !== "object") return;
+        if (job.status === "done" && job.output) parts.push(dx.t("studio.assetReadFile", { path: job.output }));
+        else if (job.id) parts.push(dx.t("studio.assetMeshPending", { id: job.id, status: job.status || "" }));
+      });
+      if (body.status === "done" && body.output) parts.push(dx.t("studio.assetReadFile", { path: body.output }));
+      return { text: parts.join("\n"), bad: false, refresh: false };
+    }
+    const paths = pipelinePaths(body);
+    if (!paths.length) return { text: dx.t("studio.assetNoFile"), bad: true, refresh: false };
+    return { text: dx.t("studio.assetLocal", { paths: paths.join(", ") }), bad: false, refresh: false };
+  }
+
+  function assetStill(flight, gen, slug) {
+    return flight === assetFlight && gen === assetGen && dx.getSlug() === slug;
+  }
+
+  function finishAsset(flight, gen, slug, text, bad, refresh) {
+    if (!assetStill(flight, gen, slug)) return;
+    showStatus("asset-status", text, bad);
+    if (refresh) loadFiles(slug);
+  }
+
+  function failAsset(flight, gen, slug, err) {
+    if (!assetStill(flight, gen, slug)) return;
+    const text = assetTimedOut(err)
+      ? dx.t("studio.assetUnknown")
+      : dx.t("studio.requestFailed") + ": " + dx.errText(err);
+    showStatus("asset-status", text, true);
+  }
+
+  function startAsset(kind, path, body, timeoutMs, describe) {
+    if (assetFlight) return;
+    const slug = dx.getSlug();
+    if (!slug) {
+      showStatus("asset-status", dx.t("studio.assetNeedSlug"), true);
+      return;
+    }
+    if (kind === "generate" && !String((body && body.prompt) || "").trim()) {
+      showStatus("asset-status", dx.t("studio.assetNeedPrompt"), true);
+      return;
+    }
+    if (kind === "autopack" && !String((body && body.description) || "").trim()) {
+      showStatus("asset-status", dx.t("studio.assetNeedDesc"), true);
+      return;
+    }
+    const action = kind === "pipeline" ? body.action : kind;
+    if (!window.confirm(assetConfirm(action, slug, body))) return;
+    const gen = assetGen;
+    const flight = ++assetFlight;
+    syncAssetButtons();
+    dx.api("/admin/daedalus/playground/api/projects/" + slugPath(slug) + path, {
+      method: "POST",
+      body: JSON.stringify(body),
+      timeoutMs,
+    }).then((data) => {
+      const view = describe(data);
+      if (typeof view === "string") finishAsset(flight, gen, slug, view, !(data && data.ok === true && data.path), !!(data && data.ok === true && data.path));
+      else finishAsset(flight, gen, slug, view.text, view.bad, view.refresh);
+    }).catch((err) => {
+      failAsset(flight, gen, slug, err);
+    }).finally(() => {
+      if (flight === assetFlight) {
+        assetFlight = 0;
+        syncAssetButtons();
+      }
+    });
+  }
+
   function onSlug(snap) {
+    const next = snap.slug || "";
+    if (next !== assetSlug) {
+      assetSlug = next;
+      assetGen += 1;
+      showStatus("asset-status", "", false);
+    }
+    syncAssetButtons();
     if (checkpoint && snap.slug !== checkpoint.slug) clearCheckpoint();
     if (streamingSlug && snap.slug !== streamingSlug) closeBuildStream();
     loadFiles(snap.slug);
@@ -1124,6 +1306,21 @@
     const el = $(id);
     if (!el) return;
     el.addEventListener("input", () => syncCheckpointNotes(el));
+  });
+
+  $("asset-generate").addEventListener("click", () => {
+    const path = ($("asset-path").value || "").trim() || "assets/custom.png";
+    const prompt = ($("asset-prompt").value || "").trim();
+    const size = $("asset-size").value || "512x512";
+    startAsset("generate", "/assets/generate", { path, prompt, size }, ASSET_GENERATE_TIMEOUT_MS, describeGenerate);
+  });
+  $("asset-autopack").addEventListener("click", () => {
+    const description = ($("asset-desc").value || "").trim();
+    startAsset("autopack", "/assets/auto-pack", { description }, ASSET_AUTOPACK_TIMEOUT_MS, describeAutopack);
+  });
+  $("asset-pipeline").addEventListener("click", () => {
+    const action = $("asset-action").value || "status";
+    startAsset("pipeline", "/assets/pipeline", { action }, ASSET_PIPELINE_TIMEOUT_MS, (data) => describePipeline(action, data));
   });
 
   const opening = readQuery();

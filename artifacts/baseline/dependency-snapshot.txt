@@ -1,8 +1,8 @@
 # Daedalus dependency snapshot
 python: 3.12.3
 platform: Linux-6.12.113+-x86_64-with-glibc2.39
-git_commit: 170db2e4858fadc7204bf5339e9372e10b74e0c2
-git_branch: cursor/checkpoint-continue-4549
+git_commit: 17f60cef43bf5ca5dd1b497e3f0ec889270c92b5
+git_branch: cursor/studio-assets-rail-4549
 package_version: 0.3.8
 requires-python: >=3.11
 
@@ -48,7 +48,7 @@ chromadb==1.5.9
 click==8.5.1
 coverage==7.17.2
 cryptography==41.0.7
--e git+https://gitlab.com/Blaue-Ente/deadalus-agent-0.git/@170db2e4858fadc7204bf5339e9372e10b74e0c2#egg=daedalus
+-e git+https://gitlab.com/Blaue-Ente/deadalus-agent-0.git/@17f60cef43bf5ca5dd1b497e3f0ec889270c92b5#egg=daedalus
 dbus-python==1.3.2
 distro==1.9.0
 dnspython==2.6.1
