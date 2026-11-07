@@ -144,6 +144,26 @@ def bare_model(model: str | None) -> str | None:
     return model
 
 
+def _content_text(content: Any) -> str:
+    """Readable text of structured content: text parts joined, images named, never a Python repr."""
+    parts = content if isinstance(content, list) else [content]
+    out: list[str] = []
+    for part in parts:
+        if isinstance(part, str):
+            out.append(part)
+        elif isinstance(part, dict):
+            kind = str(part.get("type") or "")
+            if kind == "text" or (not kind and "text" in part):
+                out.append(str(part.get("text") or ""))
+            elif kind in ("image", "image_url") or "image_url" in part:
+                out.append("[image omitted: the text-only route cannot carry it]")
+            else:
+                out.append(str(part))
+        else:
+            out.append(str(part))
+    return "\n".join(x for x in out if x)
+
+
 def _split_messages(messages: list[dict[str, Any]]) -> tuple[str, str]:
     system_parts: list[str] = []
     user_parts: list[str] = []
@@ -151,7 +171,7 @@ def _split_messages(messages: list[dict[str, Any]]) -> tuple[str, str]:
         role = (msg.get("role") or "user").lower()
         content = msg.get("content") or ""
         if not isinstance(content, str):
-            content = str(content)
+            content = _content_text(content)
         if role == "system":
             system_parts.append(content)
         else:
@@ -244,6 +264,16 @@ async def route(
             return await mr.route(**kwargs)
         except Exception as exc:
             log.warning("mesh_router.route unavailable (%s); standalone LLM", exc)
+    from .harness import gateway
+    from .llm_client import messages_have_images
+
+    if gateway.path_enabled("mesh") and messages_have_images(messages):
+        # Images must reach the model as image parts. The text-only route below would drop them.
+        result = await gateway.call(
+            intent or "chat", messages, model_hint=model, max_tokens=max_tokens,
+            temperature=temperature, json_mode=json_mode, use_cache=use_cache, client_id=client_id,
+        )
+        return gateway.to_legacy_openai(result)
     system, user = _split_messages(messages)
     return await complete(
         system=system,

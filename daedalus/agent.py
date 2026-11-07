@@ -145,10 +145,31 @@ async def _call_claude(system: str, messages: list[dict[str, Any]],
         raise
 
 
+async def _call_claude_via_gateway(system: str, messages: list[dict[str, Any]], *,
+                                   use_cache_override: bool | None = None) -> str:
+    from .harness import gateway as gw
+
+    res = gw.resolve("persona")
+    do_cache = res.cfg.get("use_cache", True) if use_cache_override is None else use_cache_override
+    result = await gw.call("persona", messages, system=system, max_tokens=_MAX_TOKENS,
+                           use_cache=do_cache, client_id="daedalus")
+    if not result.ok and not result.budget_stopped and result.error is not None:
+        if result.error.type in ("auth", "routing") and result.error.message.startswith(("No API key", "No credentials")):
+            raise DaedalusError(result.error.message)
+    return gw.to_text_or_raise(result)
+
+
 async def _call_claude_primary(system: str, messages: list[dict[str, Any]],
                                 *,
                                 use_cache_override: bool | None = None) -> str:
-    """Direct provider call (the original logic). Used by call_with_fallback."""
+    """Direct provider call. Used by call_with_fallback.
+
+    Goes through the harness gateway (model resolution, budget, images, typed errors, trace);
+    ``DAEDALUS_GATEWAY_PERSONA=0`` restores the original provider code below.
+    """
+    from .harness import gateway as _gw
+    if _gw.path_enabled("persona"):
+        return await _call_claude_via_gateway(system, messages, use_cache_override=use_cache_override)
     import time as _t
     try:
         from argos_data_nexus.modules.llm_live_trace import record_llm_call
@@ -1397,7 +1418,19 @@ class Daedalus:
                             session_id, _chat_budget, len(_haiku_reply),
                             float(_mesh_res.get("cost_usd") or 0.0),
                         )
-                if not _haiku_reply:
+                from .harness import gateway as _gw
+                _gw_fast = _gw.path_enabled("fastpath")
+                if not _haiku_reply and _gw_fast:
+                    # Gateway: owner-selected writer model, run budget enforced and metered, any SDK.
+                    _gr = await _gw.call(
+                        "persona", [{"role": "user", "content": user_message}],
+                        system=_chat_system, max_tokens=_chat_max_tokens, client_id="daedalus/chat-fast-path",
+                    )
+                    if _gr.ok:
+                        _haiku_reply = _gr.text
+                        log.info("cost-aware route: session=%s intent=chat budget=%s served by gateway (%d chars)",
+                                 session_id, _chat_budget, len(_haiku_reply))
+                if not _haiku_reply and not _gw_fast:
                     from .llm_config import get_config
                     try:
                         _mcfg = get_config()
@@ -1423,7 +1456,19 @@ class Daedalus:
                             )
                     except Exception as _cfg_exc:
                         log.debug("chat fast-path master-config fallback failed: %s", _cfg_exc)
-                if not _haiku_reply:
+                if not _haiku_reply and _gw_fast:
+                    _croute = _gw.cheap_route()
+                    if _croute:
+                        _gr = await _gw.call(
+                            "summary", [{"role": "user", "content": user_message}],
+                            system=_chat_system, max_tokens=_chat_max_tokens, route=_croute,
+                            client_id="daedalus/chat-fast-path/cheap",
+                        )
+                        if _gr.ok:
+                            _haiku_reply = _gr.text
+                            log.info("cost-aware route: session=%s intent=chat budget=%s served by fast-model (%d chars)",
+                                     session_id, _chat_budget, len(_haiku_reply))
+                if not _haiku_reply and not _gw_fast:
                     from openai import AsyncOpenAI
                     from .cheap_llm import resolve_cheap_openai
                     _cheap = resolve_cheap_openai()
@@ -4298,7 +4343,18 @@ class Daedalus:
                             )
                     except Exception as _wrm_exc:
                         log.debug("empty-reply guard mesh_router failed: %s", _wrm_exc)
-                if not raw:
+                from .harness import gateway as _gw2
+                if not raw and _gw2.path_enabled("fastpath"):
+                    _wroute = _gw2.cheap_route()
+                    if _wroute:
+                        _wr = await _gw2.call(
+                            "summary", [{"role": "user", "content": _wrap_user}], system=_wrap_system,
+                            max_tokens=600, route=_wroute, client_id="daedalus/chat-wrap-up",
+                        )
+                        if _wr.ok:
+                            raw = _wr.text
+                            log.info("empty-reply guard: cheap-llm (%s) produced %d chars", _wr.model, len(raw))
+                elif not raw:
                     from openai import AsyncOpenAI
                     from .cheap_llm import resolve_cheap_openai
                     _cheap = resolve_cheap_openai()

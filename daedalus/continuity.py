@@ -197,6 +197,23 @@ def list_digests(limit: int = 30) -> list[dict]:
 
 def _llm_call(system: str, user: str) -> str:
     """Synchronous cheap LLM call for digest summaries — Novita Ling or OpenRouter Llama."""
+    from .harness import gateway
+    if gateway.path_enabled("continuity"):
+        nv_key = os.environ.get("NOVITA_API_KEY", "")
+        or_key = os.environ.get("OPENROUTER_API_KEY", "")
+        if nv_key:
+            route = gateway.route_for("novita", "inclusionai/ling-2.6-flash", nv_key, "https://api.novita.ai/v3/openai")
+        elif or_key:
+            route = gateway.route_for("openrouter", "meta-llama/llama-3.3-70b-instruct", or_key,
+                                      "https://openrouter.ai/api/v1")
+        else:
+            log.warning("continuity: no LLM provider configured (NOVITA_API_KEY or OPENROUTER_API_KEY)")
+            return ""
+        res = gateway.call_sync("summary", [{"role": "user", "content": user}], system=system,
+                                max_tokens=1024, route=route, client_id="daedalus/continuity")
+        if not res.ok:
+            log.warning("continuity: LLM call failed: %s", res.error.message if res.error else "?")
+        return res.text if res.ok else ""
     try:
         from openai import OpenAI
         nv_key = os.environ.get("NOVITA_API_KEY", "")

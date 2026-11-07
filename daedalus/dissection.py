@@ -15,6 +15,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from .playground import project_dir, write_file, _safe_join
+from .harness import gateway as _gateway
 from .playground_assets import ensure_assets_dir
 from .reference_scout import (
     classify_reference,
@@ -53,6 +54,7 @@ _STACK_MARKERS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("react", re.compile(r"react(\.min)?\.js|from ['\"]react['\"]", re.I)),
     ("pwa", re.compile(r"manifest\.webmanifest|serviceWorker", re.I)),
 )
+
 
 
 def _now_iso() -> str:
@@ -316,7 +318,7 @@ async def _synthesize(
         )
         res = await mesh.route(
             messages=[{"role": "system", "content": sys}, {"role": "user", "content": user}],
-            model="alltoken:deepseek-v3.2",
+            model=_gateway.model_tag_or_empty("scout"),
             intent="chat",
             max_tokens=1400,
             temperature=0.3,

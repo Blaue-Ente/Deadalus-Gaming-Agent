@@ -804,16 +804,29 @@ async def review_gate_critique(user_message: str, draft_reply: str,
             if os.environ.get("OPENROUTER_API_KEY")
             else "meta-llama/llama-3.1-8b-instruct"
         )
-        client = AsyncOpenAI(api_key=key, base_url=url)
-        resp = await client.chat.completions.create(
-            model=review_model,
-            max_tokens=400,
-            messages=[
-                {"role": "system", "content": sys_prompt},
-                {"role": "user",   "content": user_prompt},
-            ],
-        )
-        raw = resp.choices[0].message.content or "{}"
+        from .harness import gateway as _gw
+        if _gw.path_enabled("reviewer"):
+            _prov = "openrouter" if os.environ.get("OPENROUTER_API_KEY") else "novita"
+            _res = await _gw.call(
+                "critic", [{"role": "user", "content": user_prompt}], system=sys_prompt, max_tokens=400,
+                route=_gw.route_for(_prov, review_model, key, url), client_id="daedalus/draft-reviewer",
+            )
+            if not _res.ok:
+                if _res.budget_stopped:
+                    return {"ok": True, "issue": "", "suggested_fix": "", "skipped": "budget"}
+                raise RuntimeError(_res.error.message if _res.error else "reviewer call failed")
+            raw = _res.text or "{}"
+        else:
+            client = AsyncOpenAI(api_key=key, base_url=url)
+            resp = await client.chat.completions.create(
+                model=review_model,
+                max_tokens=400,
+                messages=[
+                    {"role": "system", "content": sys_prompt},
+                    {"role": "user",   "content": user_prompt},
+                ],
+            )
+            raw = resp.choices[0].message.content or "{}"
         import json as _json
         # Strip possible code fences
         clean = re.sub(r"^```(?:json)?|```$", "", raw.strip(), flags=re.MULTILINE).strip()

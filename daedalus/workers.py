@@ -635,7 +635,29 @@ async def _call_worker_single(slot: str, task: str, slot_cfg: dict) -> dict:
                 "provider":     mesh_res.get("provider"),
             }
         result_text = ""
-        for attempt in range(4):
+        from .harness import gateway as _gw
+        if _gw.path_enabled("workers"):
+            from .llm_config import PROVIDER_DEFAULTS
+            _pd = PROVIDER_DEFAULTS.get(provider, PROVIDER_DEFAULTS["openai"])
+            _route = _gw.route_for(provider, model, api_key, base_url or _pd["base_url"], sdk)
+            _reasoning = (model.startswith("gpt-5") or model.startswith("o4") or model.startswith("o3")
+                          or "r1" in model.lower() or "qwq" in model.lower() or slot == "analysis")
+            _budget = max(max_tokens * 2, 2000) if _reasoning else max_tokens
+            for attempt in range(4):
+                _gr = await _gw.call("worker", [{"role": "user", "content": task}], system=persona,
+                                     max_tokens=_budget, route=_route, reasoning=_reasoning,
+                                     client_id=f"daedalus/worker/{slot}")
+                if _gr.ok:
+                    result_text = _gr.text
+                    break
+                if attempt < 3 and _gr.error and _gr.error.type == "quota" and _is_rate_limited(Exception(_gr.error.message)):
+                    wait = 8 * (2 ** attempt)
+                    log.warning("Worker [%s/%s] rate-limited (try %d/4), sleep %ss: %s",
+                                slot, model, attempt + 1, wait, _gr.error.message)
+                    await asyncio.sleep(wait)
+                    continue
+                raise _gw.GatewayCallError(_gr.error or _gw.GatewayError("provider_error", "worker call failed"))
+        for attempt in range(4 if not _gw.path_enabled("workers") else 0):
             try:
                 if sdk == "anthropic":
                     from anthropic import AsyncAnthropic

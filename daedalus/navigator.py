@@ -535,6 +535,18 @@ async def _call_haiku(system: str, user_content: str) -> str:
 
 def _call_haiku_sync(system: str, user_content: str) -> str:
     """Direct SDK fallback when mesh_router is disabled or unavailable."""
+    from .harness import gateway
+    if gateway.path_enabled("navigator"):
+        route = gateway.cheap_route()
+        if not route:
+            return ""
+        res = gateway.call_sync(
+            "navigator", [{"role": "user", "content": user_content}], system=system,
+            max_tokens=_HAIKU_MAX_TOKENS, route=route, client_id="daedalus/navigator",
+        )
+        if not res.ok:
+            log.debug("navigator cheap-llm call failed (%s)", res.error.type if res.error else "?")
+        return res.text if res.ok else ""
     try:
         from openai import OpenAI
         from .cheap_llm import resolve_cheap_openai

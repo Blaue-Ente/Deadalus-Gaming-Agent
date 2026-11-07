@@ -5,6 +5,8 @@ import asyncio
 import sys
 import types
 
+import pytest
+
 from a0_support import a0_tmp  # noqa: F401
 
 
@@ -15,6 +17,20 @@ def _exhaust(monkeypatch, cap=5):
     run_budget.note_usage({"cost_usd": cap + 1, "cost_known": True}, model="m", role="writer")
     assert run_budget.exhausted()
     return run_budget
+
+
+@pytest.fixture(params=["gateway", "legacy"], autouse=True)
+def persona_path(request, monkeypatch):
+    """Every A0 persona-budget guarantee must hold on the gateway path and on the rollback path."""
+    monkeypatch.setenv("DAEDALUS_GATEWAY_PERSONA", "1" if request.param == "gateway" else "0")
+    return request.param
+
+
+def _use_cfg(monkeypatch, cfg):
+    from daedalus import agent
+
+    monkeypatch.setattr(agent, "get_config", lambda: cfg)            # legacy path
+    monkeypatch.setattr("daedalus.llm_config.get_config", lambda: cfg)  # gateway path
 
 
 def _cfg(provider="openrouter", sdk="openai"):
@@ -30,7 +46,7 @@ def test_exhausted_budget_blocks_before_any_sdk(a0_tmp, monkeypatch):
     from daedalus import agent
 
     rb = _exhaust(monkeypatch)
-    monkeypatch.setattr(agent, "get_config", lambda: _cfg())
+    _use_cfg(monkeypatch, _cfg())
     monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(AsyncOpenAI=_Boom))
     out = asyncio.run(agent._call_claude_primary("sys", [{"role": "user", "content": "hi"}]))
     assert out == rb.stop_text() and "blocked" in out
@@ -40,7 +56,7 @@ def test_local_provider_is_not_blocked(a0_tmp, monkeypatch):
     from daedalus import agent
 
     _exhaust(monkeypatch)
-    monkeypatch.setattr(agent, "get_config", lambda: _cfg(provider="ollama"))
+    _use_cfg(monkeypatch, _cfg(provider="ollama"))
 
     class Msg:
         content = "local ok"
@@ -65,9 +81,10 @@ def test_usage_is_metered_after_a_call(a0_tmp, monkeypatch):
     from daedalus import agent, run_budget
 
     monkeypatch.setenv("DAEDALUS_RUN_BUDGET", "20")
-    monkeypatch.setattr(agent, "get_config", lambda: _cfg())
+    _use_cfg(monkeypatch, _cfg())
     metered = []
     monkeypatch.setattr("daedalus.llm_client._meter", lambda resp, *, model, role: metered.append((model, role)))
+    monkeypatch.setattr("daedalus.run_budget.note_usage", lambda parsed, *, model="", role="writer": metered.append((model, "writer")))
 
     class Resp:
         choices = [types.SimpleNamespace(message=types.SimpleNamespace(content="hello"))]
@@ -104,12 +121,13 @@ def test_metering_failure_does_not_fail_a_successful_call(a0_tmp, monkeypatch):
     """Review fix: a billing-store error after a good provider reply must not turn it into an error."""
     from daedalus import agent
 
-    monkeypatch.setattr(agent, "get_config", lambda: _cfg())
+    _use_cfg(monkeypatch, _cfg())
 
-    def broken_meter(resp, *, model, role):
+    def broken_meter(*a, **k):
         raise OSError("budget store unavailable")
 
     monkeypatch.setattr("daedalus.llm_client._meter", broken_meter)
+    monkeypatch.setattr("daedalus.run_budget.note_usage", broken_meter)
 
     class Resp:
         choices = [types.SimpleNamespace(message=types.SimpleNamespace(content="fine"))]
