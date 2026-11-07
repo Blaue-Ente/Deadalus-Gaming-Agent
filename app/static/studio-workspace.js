@@ -77,9 +77,13 @@
     return dx.errText(err);
   }
 
+  // Every write to a status line bumps its stamp. A background refresh remembers the stamp when it starts and
+  // writes only if nothing else has written since, so a slow answer can never replace a newer result.
+  const statusStamp = {};
   function showStatus(id, message, bad) {
     const el = $(id);
     if (!el) return;
+    statusStamp[id] = (statusStamp[id] || 0) + 1;
     const msg = message || "";
     el.hidden = !msg;
     el.dataset.state = bad ? "error" : "ok";
@@ -600,7 +604,7 @@
       if (terminal === "done" || terminal === "error" || terminal === "milestone_done") {
         $("build-stop").hidden = true;
       }
-      if (terminal === "done" || terminal === "milestone_done") await loadWorkspace(slug, { quiet: true });
+      if (terminal === "done" || terminal === "milestone_done") await loadWorkspace(slug, { quiet: true, force: true });
     }).catch((err) => {
       if (gen !== streamGen) return;
       if (err && err.name === "AbortError") return;
@@ -635,7 +639,19 @@
     if (explicitFlight && explicitFlight.ticket === ticket) explicitFlight = null;
   }
 
-  async function resumeBuild(slug) {
+  // Each resume bumps resumeGen, which invalidates any earlier resume: so two asks for the same project while the
+  // first is still waiting used to throw the first answer away. An identical resume that is still current is shared.
+  let resumeFlight = null;        // {slug, gen, promise}
+  function resumeBuild(slug) {
+    if (resumeFlight && resumeFlight.slug === slug && resumeFlight.gen === resumeGen) return resumeFlight.promise;
+    const promise = resumeBuildNow(slug);
+    const entry = { slug, gen: resumeGen, promise };
+    resumeFlight = entry;
+    promise.then(() => { if (resumeFlight === entry) resumeFlight = null; });
+    return promise;
+  }
+
+  async function resumeBuildNow(slug) {
     if (!slug || streamingSlug === slug) return;
     if (explicitFlight && explicitFlight.slug === slug) return;
     resumeGen += 1;
@@ -659,19 +675,49 @@
     } catch (err) { /* no autopilot job */ }
   }
 
-  async function loadWorkspace(slug, opts) {
+  // The page asks for the workspace twice at startup (panel switch and slug snapshot). Two things used to go wrong:
+  // each call greyed out every build button before its request, so the second call disabled what the first had
+  // just enabled and a click in that gap vanished with no request and no message; and whichever response arrived
+  // last painted, even if it was the older one. Now a load of the same slug that is already running is shared,
+  // controls are greyed out only when the project changed, and only the newest load paints.
+  // A forced load (after a build step, a save) always reloads. Resuming twice is handled in resumeBuild itself.
+  let workspaceLoad = null;       // {slug, promise} while a load runs
+  let workspaceSeq = 0;
+  let workspacePainted = "";      // the slug the build controls currently describe
+  function loadWorkspace(slug, opts) {
+    const last = workspaceLoad;
+    if (last && last.slug === slug && !(opts && opts.force)) return last.promise;
+    const run = loadWorkspaceNow(slug, opts);
+    const entry = { slug, promise: run };
+    workspaceLoad = entry;
+    run.then(() => { if (workspaceLoad === entry) workspaceLoad = null; });
+    return run;
+  }
+
+  function setBuildControlsDisabled() {
+    ["build-guided", "build-autopilot", "build-gates", "build-verify", "build-advance"].forEach((id) => {
+      $(id).disabled = true;
+    });
+  }
+
+  async function loadWorkspaceNow(slug, opts) {
+    const mine = ++workspaceSeq;
     $("build-slug").textContent = slug ? dx.t("studio.project") + ": " + slug : "";
-    $("build-guided").disabled = true;
-    $("build-autopilot").disabled = true;
-    $("build-gates").disabled = true;
-    $("build-verify").disabled = true;
-    $("build-advance").disabled = true;
+    if (workspacePainted !== slug) {            // a different project: its controls are not known yet
+      setBuildControlsDisabled();
+      workspacePainted = "";
+    }
     if (!slug) return;
     try {
       const data = await dx.api("/admin/daedalus/game-studio/api/projects/" + slugPath(slug));
+      if (mine !== workspaceSeq) return;        // a newer load owns the screen
       paintMilestones(data);
+      workspacePainted = slug;
       if (!streamingSlug && !(checkpoint && checkpoint.slug === slug)) showStatus("build-status", "", false);
     } catch (err) {
+      if (mine !== workspaceSeq) return;
+      workspacePainted = "";
+      setBuildControlsDisabled();
       $("build-milestones").replaceChildren();
       if (!streamingSlug) showStatus("build-status", failText(err), true);
     }
@@ -705,11 +751,16 @@
       showStatus("preview-status", dx.t("studio.previewEmpty"), false);
       return;
     }
+    const stamp = statusStamp["preview-status"] || 0;
+    // stale: an action reported since this began, or the owner moved to another project meanwhile
+    const stale = () => (statusStamp["preview-status"] || 0) !== stamp || dx.getSlug() !== slug;
     try {
       const data = await dx.api("/admin/daedalus/playground/api/projects/" + slugPath(slug) + "/logs");
+      if (stale()) return;
       const running = !!(data.status && typeof data.status === "object");
       showStatus("preview-status", running ? dx.t("studio.started") : dx.t("studio.previewEmpty"), false);
     } catch (err) {
+      if (stale()) return;
       showStatus("preview-status", dx.t("studio.requestFailed") + ": " + failText(err), true);
     }
   }
@@ -2639,7 +2690,7 @@
       showStatus("build-status", data.slug || dx.t("studio.saved"), false);
       if (data.slug) dx.selectSlug(data.slug);
       await loadGameIndex();
-      await loadWorkspace(data.slug || dx.getSlug());
+      await loadWorkspace(data.slug || dx.getSlug(), { force: true });
     });
   });
   $("build-guided").addEventListener("click", () => {
@@ -2722,7 +2773,7 @@
         if (data.ok === false) throw new Error(data.error || dx.t("studio.requestFailed"));
         $("build-out").textContent = paintResult(data);
         showStatus("build-status", dx.t("studio.saved"), false);
-        await loadWorkspace(slug);
+        await loadWorkspace(slug, { force: true });
       });
     });
   });

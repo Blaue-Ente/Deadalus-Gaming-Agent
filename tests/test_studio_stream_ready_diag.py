@@ -12,6 +12,7 @@ import importlib.util
 import json
 import socket
 import subprocess
+import tempfile
 import sys
 import time
 import urllib.request
@@ -103,11 +104,12 @@ def studio_server(tmp_path_factory):
         "ALLTOKEN_API_KEY",
     ):
         env.pop(key, None)
+    server_log = tempfile.TemporaryFile()  # a file, never an unread pipe: a full pipe blocks the server
     proc = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", str(port)],
         cwd=str(ROOT),
         env=env,
-        stdout=subprocess.PIPE,
+        stdout=server_log,
         stderr=subprocess.STDOUT,
     )
     server = {"url": f"http://127.0.0.1:{port}", "data": data, "proc": proc}
@@ -120,7 +122,8 @@ def studio_server(tmp_path_factory):
         except Exception:
             time.sleep(0.2)
     else:
-        out = proc.stdout.read().decode("utf-8", "replace") if proc.stdout else ""
+        server_log.seek(0)
+        out = server_log.read().decode("utf-8", "replace")
         proc.kill()
         pytest.fail("studio server did not start\n" + out[-500:])
     game = _api(server, "POST", "/api/v1/playground/projects", {"name": "Old Game", "kind": "static"})
