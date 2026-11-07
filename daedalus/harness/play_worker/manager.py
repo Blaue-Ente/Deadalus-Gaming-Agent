@@ -48,8 +48,8 @@ class PlayManager:
         return self._limit if self._limit is not None else max_sessions()
 
     def start(self, slug: str, project_dir: Path, *, engine: str = "godot", size: tuple[int, int] = (640, 480)) -> dict[str, Any]:
-        if engine != "godot":
-            raise PlayError("unsupported_engine", f"{engine!r} has no play worker yet (Godot first)", engine=engine)
+        if engine not in {"godot", "unity"}:
+            raise PlayError("unsupported_engine", f"{engine!r} has no play worker", engine=engine)
         self.reap_idle()
         self.reap_dead()
         with self._lock:
@@ -57,7 +57,7 @@ class PlayManager:
             if len(live) >= self.limit:
                 raise PlayError("session_limit", f"{len(live)} of {self.limit} play sessions already running",
                                 running=[s.id for s in live])
-            sess = PlaySession(project_dir, slug=slug, size=size)
+            sess = PlaySession(project_dir, slug=slug, size=size, engine=engine)
             self._sessions[sess.id] = sess
             self._prune()
         return sess.start()
