@@ -16,6 +16,7 @@ jobs:
       - name: Install and test
         run: |
           pip install -e ".[dev]"
+          python3 -m playwright install --with-deps chromium
           python3 -m pytest tests -q
 
   build:

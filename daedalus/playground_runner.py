@@ -562,3 +562,23 @@ async def reap_idle() -> int:
             await stop(slug)
             killed += 1
     return killed
+
+
+REAP_INTERVAL_SEC = 60
+
+
+def start_idle_reaper(interval: float | None = None) -> "asyncio.Task[None]":
+    """Background task that stops runner apps idle longer than IDLE_KILL_SEC."""
+    every = float(REAP_INTERVAL_SEC if interval is None else interval)
+
+    async def _loop() -> None:
+        while True:
+            await asyncio.sleep(every)
+            try:
+                n = await reap_idle()
+                if n:
+                    log.info("runner: stopped %d idle app(s)", n)
+            except Exception:
+                log.debug("idle reaper tick failed", exc_info=True)
+
+    return asyncio.get_running_loop().create_task(_loop(), name="daedalus-idle-reaper")

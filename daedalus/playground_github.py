@@ -389,14 +389,9 @@ async def create_upstream_pr(
 
 
 def _auth_url(repo_url: str) -> str:
-    """Inject token into an https github URL for push/clone of private repos."""
-    tok = _token()
-    if not tok:
-        return repo_url
-    m = re.match(r"https://github\.com/(.+)", repo_url.strip())
-    if not m:
-        return repo_url
-    return f"https://x-access-token:{tok}@github.com/{m.group(1)}"
+    """Return the clean https URL. The token is sent via ``git_auth.auth_env`` in ``_run``,
+    never embedded in the URL, argv or ``.git/config``."""
+    return repo_url.strip()
 
 
 def _repo_slug_from_url(url: str) -> str:
@@ -408,8 +403,11 @@ def _repo_slug_from_url(url: str) -> str:
 
 async def _run(args: list[str], *, cwd: Path | None = None, timeout: int = _TIMEOUT) -> tuple[int, str]:
     """Run a git command, scrubbing the token from any output."""
-    env = dict(os.environ)
-    env["GIT_TERMINAL_PROMPT"] = "0"
+    from .git_auth import GIT_TOO_OLD, auth_env, git_supports_env_config
+
+    if _token() and not git_supports_env_config():
+        return 1, GIT_TOO_OLD
+    env = auth_env("github.com", "x-access-token", _token())
     proc = await asyncio.create_subprocess_exec(
         *args, cwd=str(cwd) if cwd else None,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
@@ -420,10 +418,9 @@ async def _run(args: list[str], *, cwd: Path | None = None, timeout: int = _TIME
     except asyncio.TimeoutError:
         proc.kill()
         return 124, f"timeout after {timeout}s"
-    text = (out or b"").decode("utf-8", errors="replace")
-    tok = _token()
-    if tok:
-        text = text.replace(tok, "***")
+    from .git_auth import scrub
+
+    text = scrub((out or b"").decode("utf-8", errors="replace"), _token(), "x-access-token")
     return proc.returncode or 0, text
 
 
@@ -557,8 +554,9 @@ async def push_project(
     private: bool = True,
     branch: str = "main",
     commit_msg: str = "",
+    force: bool = False,
 ) -> dict[str, Any]:
-    """Init git in the project dir and push to GitHub.
+    """Init git in the project dir and push to GitHub (non-force unless ``force``).
 
     repo_full_name: 'owner/repo'. If empty and create_if_missing, a repo named
     after the slug is created under the authenticated user.
@@ -622,13 +620,17 @@ async def push_project(
 
     for step in (
         ([_GIT, "remote", "add", "origin", auth],),
-        ([_GIT, "push", "-q", "-f", "-u", "origin", branch],),
+        ([_GIT, "push", "-q", "-f", "-u", "origin", branch] if force
+         else [_GIT, "push", "-q", "-u", "origin", branch],),
     ):
         for sub in step:
             code, out = await _run(sub, cwd=root)
             if code != 0 and sub[1] == "remote":
                 code, out = await _run([_GIT, "remote", "set-url", "origin", auth], cwd=root)
             if code != 0:
+                if sub[1] == "push":
+                    from .git_auth import raise_if_rejected
+                    raise_if_rejected(out, force=force)
                 raise RuntimeError(github_error_hint(f"git {sub[1]} failed: {out[-400:]}"))
             if out.strip():
                 log_out.append(out.strip())
@@ -733,12 +735,14 @@ async def push_kernel(
     repo_full_name: str = DEFAULT_KERNEL_REPO,
     paths: list[str] | None = None,
     branch: str = "main",
+    force: bool = False,
 ) -> dict[str, Any]:
     """Export only Дедал-relevant paths and push to the kernel repo.
 
     Creates a temporary directory, copies the selected paths (preserving
-    relative structure from workspace root), then does a fresh git init +
-    force-push so the repo always reflects the current state.
+    relative structure from workspace root), then does a fresh git init and a
+    push. The history is always fresh, so updating an existing kernel repo needs
+    ``force=True``, which the owner must confirm (a plain push is rejected).
     """
     import shutil
     import tempfile
@@ -797,7 +801,8 @@ async def push_kernel(
             [_GIT, "-c", "user.email=daedalus@argos.nexus",
              "-c", "user.name=Дедал", "commit", "-q", "-m", msg],
             [_GIT, "remote", "add", "origin", auth],
-            [_GIT, "push", "-q", "-f", "-u", "origin", branch],
+            ([_GIT, "push", "-q", "-f", "-u", "origin", branch] if force
+             else [_GIT, "push", "-q", "-u", "origin", branch]),
         ]
 
         log_lines: list[str] = []
@@ -808,6 +813,9 @@ async def push_kernel(
                     [_GIT, "remote", "set-url", "origin", auth], cwd=tmp
                 )
             if code != 0:
+                if step[1] == "push":
+                    from .git_auth import raise_if_rejected
+                    raise_if_rejected(out, force=force)
                 raise RuntimeError(f"git {step[1]} failed: {out[-400:]}")
             if out.strip():
                 log_lines.append(out.strip())

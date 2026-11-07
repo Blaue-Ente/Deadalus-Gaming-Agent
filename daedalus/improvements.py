@@ -335,6 +335,10 @@ async def call_with_fallback(primary_call_fn, system: str,
             if not (base_url and api_key):
                 log.debug("RateLimitFallback: skip %s (missing env)", label)
                 continue
+            from . import run_budget as _run_budget
+            if _run_budget.would_block(label):
+                # An alternate provider must not bypass the spent run budget.
+                return _run_budget.stop_text()
             from openai import AsyncOpenAI
             c = AsyncOpenAI(api_key=api_key, base_url=base_url)
             is_reasoning = model.startswith(("gpt-5", "o4", "o3"))
@@ -348,6 +352,11 @@ async def call_with_fallback(primary_call_fn, system: str,
                 k["max_tokens"] = 4000
             r = await c.chat.completions.create(**k)
             txt = r.choices[0].message.content or ""
+            try:
+                from .llm_client import _meter
+                _meter(r, model=model, role="writer")
+            except Exception:
+                log.debug("fallback metering skipped", exc_info=True)
             log.info("RateLimitFallback: served by %s/%s (%d chars)", label, model, len(txt))
             try: record_fallback_use(label)
             except Exception: pass

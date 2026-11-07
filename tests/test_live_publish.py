@@ -88,6 +88,7 @@ def test_publish_live_local_then_remote(live_tmp):
         backend="netlify_anon",
         local_fn=local_fn,
         deploy_fn=deploy_fn,
+        confirm_public=True,  # A0-c: anonymous Netlify needs the owner's explicit confirm
     ))
     assert out["ok"] is True
     assert out["local_url"] == "/apps/maze/"
@@ -114,7 +115,7 @@ def test_publish_live_fallback_when_remote_fails(live_tmp, monkeypatch):
 
 
 def test_http_and_studio(live_tmp, monkeypatch):
-    async def fake_live(slug, backend="auto"):
+    async def fake_live(slug, backend="auto", confirm_public=False):
         return {
             "ok": True,
             "slug": slug,

@@ -145,16 +145,28 @@ def status() -> dict[str, Any]:
 def apply_update(body: dict[str, Any] | None) -> dict[str, Any]:
     """Studio POST: toggle and/or director choice / daily token cap."""
     body = body or {}
-    if body.get("enabled") is not None:
-        set_enabled(bool(body["enabled"]))
     cid = str(body.get("choice_id") or body.get("id") or "").strip()
     provider = str(body.get("provider") or "").strip()
     model = str(body.get("model") or "").strip()
-    if cid or (provider and model):
+    cap = body.get("day_token_cap")
+    wants_choice = bool(cid or (provider and model))
+    wants_cap = cap is not None and cap != ""
+    # Refuse before writing anything: an env lock must never be silently overridden in storage.
+    from .env_lock import EnvLockedError
+    if body.get("enabled") is not None and env_override() is not None:
+        raise EnvLockedError("enabled", "DAEDALUS_MENTOR")
+    if wants_choice or wants_cap:
+        from . import mentor_helm
+        if wants_choice and mentor_helm.choice_env_locked():
+            raise EnvLockedError("choice", "DAEDALUS_MENTOR_MODEL")
+        if wants_cap and mentor_helm.day_cap_env_locked():
+            raise EnvLockedError("day_token_cap", "DAEDALUS_MENTOR_DAY_CAP")
+    if body.get("enabled") is not None:
+        set_enabled(bool(body["enabled"]))
+    if wants_choice:
         from . import mentor_helm
         mentor_helm.set_choice(body)
-    cap = body.get("day_token_cap")
-    if cap is not None and cap != "":
+    if wants_cap:
         from . import mentor_helm
         mentor_helm.set_day_token_cap(int(cap))
     return status()

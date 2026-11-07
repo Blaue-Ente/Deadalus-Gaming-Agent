@@ -281,8 +281,11 @@ async def daedalus_set_mentor(request: Request):
             payload[key] = body[key]
     if not payload:
         return JSONResponse({"error": "enabled, choice_id, or day_token_cap required"}, status_code=400)
+    from daedalus.env_lock import EnvLockedError
     try:
         st = apply_update(payload)
+    except EnvLockedError as exc:
+        return JSONResponse(exc.payload(), status_code=409)
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
     return JSONResponse({"ok": True, **st})
@@ -307,7 +310,11 @@ async def daedalus_set_writer_assist(request: Request):
         payload["enabled"] = body.get("enabled")
     if not payload:
         return JSONResponse({"error": "mode or enabled required"}, status_code=400)
-    st = apply_update(payload)
+    from daedalus.env_lock import EnvLockedError
+    try:
+        st = apply_update(payload)
+    except EnvLockedError as exc:
+        return JSONResponse(exc.payload(), status_code=409)
     return JSONResponse({"ok": True, **st})
 
 
@@ -319,9 +326,13 @@ async def daedalus_get_run_budget():
 
 @router.post("/daedalus/run-budget")
 async def daedalus_set_run_budget(request: Request):
+    from daedalus.env_lock import EnvLockedError
     from daedalus.run_budget import apply_update
     body = await _body(request)
-    st = apply_update(body)
+    try:
+        st = apply_update(body)
+    except EnvLockedError as exc:
+        return JSONResponse(exc.payload(), status_code=409)
     return JSONResponse({"ok": True, **st})
 
 
@@ -1887,6 +1898,7 @@ async def playground_revive(request: Request):
 
 @router.post("/daedalus/playground/api/projects/{slug}/push")
 async def playground_push(slug: str, request: Request):
+    from daedalus.git_auth import NonFastForward
     from daedalus.playground_git_push import forge_error_hint, push_project_remote
     body = await _body(request)
     provider = str(body.get("provider") or "auto").strip().lower() or "auto"
@@ -1900,8 +1912,14 @@ async def playground_push(slug: str, request: Request):
             branch=(body.get("branch") or "main").strip(),
             commit_msg=(body.get("commit_msg") or "").strip(),
             namespace=(body.get("namespace") or "").strip(),
+            force=body.get("force") is True,
         )
         return JSONResponse({"ok": True, **(result if isinstance(result, dict) else {})})
+    except NonFastForward as extra:
+        return JSONResponse(
+            {"ok": False, "error": "non_fast_forward", "detail": str(extra), "needs_force": True},
+            status_code=409,
+        )
     except Exception as extra:
         return JSONResponse(
             {"ok": False, "error": forge_error_hint(extra, provider=provider)},
@@ -2068,6 +2086,7 @@ async def skill_creator_start(request: Request):
     platform = (body.get("platform") or "generic").strip().lower()
     session = sc.init_session(idea=idea, platform=platform, extra_context=(body.get("context") or "").strip())
     plan_data = {"title": idea, "summary": idea, "questions": [], "files": ["SKILL.md"]}
+    stub_error = ""
     try:
         from daedalus.llm_client import complete
         raw = await complete(system=sc.build_plan_prompt(idea=idea, platform=platform, research_notes=idea),
@@ -2076,9 +2095,15 @@ async def skill_creator_start(request: Request):
         parsed = sc.extract_json_object(text) or _extract_json_obj(text)
         if parsed:
             plan_data = sc.normalize_plan_payload(parsed)
+        else:
+            stub_error = "plan_unparsable"
     except Exception as exc:
-        log.debug("skill-creator llm skipped: %s", exc)
+        log.debug("skill-creator llm failed: %s", exc)
+        stub_error = "llm_failed"
     sc.apply_start_result(session, research_notes=idea, tool_steps=[], plan_data=plan_data)
+    if stub_error:
+        # The plan is only the typed idea: say so instead of reporting success.
+        return JSONResponse({"ok": False, "error": stub_error, "stub": True, **sc.session_public_view(session)})
     return JSONResponse({"ok": True, **sc.session_public_view(session)})
 
 
@@ -2357,6 +2382,7 @@ async def kernel_config_set(request: Request):
 @router.post("/daedalus/kernel/push")
 async def kernel_push(request: Request):
     from daedalus import playground_github as gh
+    from daedalus.git_auth import NonFastForward
     body = await _body(request)
     cfg = _kernel_cfg()
     try:
@@ -2365,8 +2391,14 @@ async def kernel_push(request: Request):
             repo_full_name=str(body.get("repo") or cfg["repo"]).strip(),
             paths=body.get("paths") or cfg["paths"],
             branch=str(body.get("branch") or cfg["branch"]).strip(),
+            force=body.get("force") is True,
         )
         return JSONResponse(result if isinstance(result, dict) else {"ok": True, "result": result})
+    except NonFastForward as extra:
+        return JSONResponse(
+            {"ok": False, "error": "non_fast_forward", "detail": str(extra), "needs_force": True},
+            status_code=409,
+        )
     except Exception as extra:
         return JSONResponse({"ok": False, "error": str(extra)[:400]}, status_code=400)
 
@@ -3014,7 +3046,13 @@ async def daedalus_approve_all_pending():
                 failed.append({"id": pid, "error": res.get("error")})
         except Exception as extra:
             failed.append({"id": pid, "error": str(extra)})
-    return JSONResponse({"ok": True, "applied": len(applied), "failed": failed})
+    # ok only when nothing failed; "partial" tells the UI some proposals did apply.
+    return JSONResponse({
+        "ok": not failed,
+        "partial": bool(applied and failed),
+        "applied": len(applied),
+        "failed": failed,
+    })
 
 
 @router.post("/daedalus/blockers/{blocker_id}/remediate")
@@ -3103,7 +3141,7 @@ async def daedalus_rate_limit_stats():
     return JSONResponse(get_rate_limit_stats())
 
 
-# ── Catch-all last so copied JS never 404s ──────────────────────────────────
+# ── Catch-all last: unknown /admin/daedalus/* calls are an honest 404, not a fake 200 ─────
 
 @router.api_route("/daedalus/{rest:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def standalone_stub(rest: str, request: Request):
@@ -3112,6 +3150,7 @@ async def standalone_stub(rest: str, request: Request):
         "standalone": True,
         "wired": False,
         "configured": False,
+        "error": "not_wired",
         "path": f"/admin/daedalus/{rest}",
         "method": request.method,
         "projects": [],
@@ -3122,5 +3161,5 @@ async def standalone_stub(rest: str, request: Request):
         "sessions": [],
         "skills": [],
         "repos": [],
-        "message": "This ADN-hosted route is not fully wired in standalone Daedalus yet.",
-    })
+        "message": "This route does not exist in standalone Daedalus (retired or not wired).",
+    }, status_code=404)

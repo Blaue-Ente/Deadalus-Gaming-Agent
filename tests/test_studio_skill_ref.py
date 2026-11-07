@@ -359,7 +359,8 @@ def test_temp_skill_and_reference_handlers_are_stubbed(tmp_path, monkeypatch):
             })
             assert started.status_code == 200
             body = started.json()
-            assert body["ok"] is True
+            # A0-h: the provider call failed, so the typed-idea stub is reported as a failure.
+            assert body["ok"] is False and body["error"] == "llm_failed" and body["stub"] is True
             assert body["skill_name"] == "skill"
             assert body["ready_for_generation"] is False
             assert body["phase"] == "ready"
@@ -441,9 +442,12 @@ def test_temp_skill_and_reference_handlers_are_stubbed(tmp_path, monkeypatch):
             mode["mesh"] = "boom"
             stubbed = client.post(scout_url, json={"reference": "Pong"})
             assert stubbed.status_code == 200
-            assert stubbed.json()["ok"] is True
-            assert stubbed.json()["summary"] == "Референция: Pong. Вдъхнови се от механиките и визията."
-            assert stubbed.json()["visual_style"] == "match reference game art style"
+            # A0-h: a failed synthesis is not a success and never yields a brief block.
+            assert stubbed.json()["ok"] is False
+            assert stubbed.json()["degraded"] is True and stubbed.json()["error"] == "synthesis_failed"
+            assert stubbed.json()["brief_block"] == "" and stubbed.json()["summary"] == ""
+            assert stubbed.json()["fallback"]["summary"] == "Референция: Pong. Вдъхнови се от механиките и визията."
+            assert stubbed.json()["fallback"]["visual_style"] == "match reference game art style"
             fetch_before = len(fetch_calls)
             page = client.post(scout_url, json={"reference": "https://example.test/game"})
             assert page.status_code == 200

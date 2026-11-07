@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-07T07:48:36.434996+00:00",
+  "generated_at": "2026-11-07T13:57:19.165277+00:00",
   "package_version": "0.3.8",
-  "git_commit": "f5d498e0596c12bee5e1a2b1c1286a8fce87fc2d",
+  "git_commit": "7642c89653b81ef63d0a752c1c79be0260f3612f",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -9,17 +9,17 @@
   "hotspots": [
     {
       "path": "daedalus/agent.py",
-      "lines": 5042,
-      "broad_excepts": 163
+      "lines": 5062,
+      "broad_excepts": 166
     },
     {
       "path": "app/admin_compat.py",
-      "lines": 3126,
+      "lines": 3165,
       "broad_excepts": 78
     },
     {
       "path": "daedalus/native_tools.py",
-      "lines": 2163,
+      "lines": 2170,
       "broad_excepts": 20
     },
     {
@@ -130,8 +130,8 @@
     ]
   },
   "tests": {
-    "modules": 74,
-    "functions": 704
+    "modules": 86,
+    "functions": 764
   },
   "modules": {
     "daedalus": [
@@ -182,6 +182,7 @@
       "daedalus/edit_diff.py",
       "daedalus/engine_runners.py",
       "daedalus/engine_session.py",
+      "daedalus/env_lock.py",
       "daedalus/error_brain.py",
       "daedalus/evolution.py",
       "daedalus/expo_platform_guide.py",
@@ -198,6 +199,7 @@
       "daedalus/game_studio_gates.py",
       "daedalus/game_studio_skills.py",
       "daedalus/game_studio_verify.py",
+      "daedalus/git_auth.py",
       "daedalus/godot_bridge.py",
       "daedalus/godot_dod.py",
       "daedalus/godot_first.py",
@@ -342,6 +344,7 @@
       "daedalus/run_engine.py",
       "daedalus/sandbox.py",
       "daedalus/scratch_journal.py",
+      "daedalus/secret_paths.py",
       "daedalus/self_improve.py",
       "daedalus/session_branching.py",
       "daedalus/session_context.py",

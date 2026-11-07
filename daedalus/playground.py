@@ -129,7 +129,7 @@ def detect_kind(root: Path) -> tuple[str, str, str]:
         return "streamlit", f"streamlit run {main} --server.headless true", "index.html"
     if _any_py_imports(root, ("fastapi", "uvicorn")):
         main = _guess_python_main(root)
-        return "fastapi", f"uvicorn {main}:app --host 0.0.0.0", "index.html"
+        return "fastapi", f"uvicorn {main}:app --host 127.0.0.1", "index.html"
 
     # Unity
     if has("Packages/manifest.json") and (root / "Assets").is_dir():

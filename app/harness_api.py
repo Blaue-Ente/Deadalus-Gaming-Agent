@@ -6,7 +6,7 @@ import json
 from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field, field_validator
 
 router = APIRouter(tags=["harness"])
@@ -531,9 +531,12 @@ async def mentor_status() -> dict[str, Any]:
 
 @router.post("/api/v1/daedalus/mentor")
 async def mentor_set(body: MentorBody) -> dict[str, Any]:
+    from daedalus.env_lock import EnvLockedError
     from daedalus.mentor import apply_update
     try:
         st = apply_update(body.model_dump())
+    except EnvLockedError as exc:
+        return JSONResponse(exc.payload(), status_code=409)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"ok": True, **st}
@@ -547,8 +550,12 @@ async def writer_assist_status() -> dict[str, Any]:
 
 @router.post("/api/v1/daedalus/writer-assist")
 async def writer_assist_set(body: WriterAssistBody) -> dict[str, Any]:
+    from daedalus.env_lock import EnvLockedError
     from daedalus.writer_assist import apply_update
-    st = apply_update(body.model_dump())
+    try:
+        st = apply_update(body.model_dump())
+    except EnvLockedError as exc:
+        return JSONResponse(exc.payload(), status_code=409)
     return {"ok": True, **st}
 
 
@@ -560,8 +567,12 @@ async def run_budget_status() -> dict[str, Any]:
 
 @router.post("/api/v1/daedalus/run-budget")
 async def run_budget_set(body: RunBudgetBody) -> dict[str, Any]:
+    from daedalus.env_lock import EnvLockedError
     from daedalus.run_budget import apply_update
-    st = apply_update(body.model_dump())
+    try:
+        st = apply_update(body.model_dump())
+    except EnvLockedError as exc:
+        return JSONResponse(exc.payload(), status_code=409)
     return {"ok": True, **st}
 
 

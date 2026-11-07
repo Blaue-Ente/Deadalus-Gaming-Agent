@@ -137,6 +137,19 @@ def pick_chain(requested: str = "auto") -> list[str]:
     return chain
 
 
+# Backends that create an unclaimed public site or a public GitLab project. They run only after the
+# owner explicitly confirms (confirm_public=True); "auto" never picks them on its own.
+CONFIRM_REQUIRED_BACKENDS = frozenset({"netlify_anon", "gitlab_pages"})
+
+
+def effective_chain(requested: str = "auto", confirm_public: bool = False) -> list[str]:
+    """``pick_chain`` minus confirm-only backends the owner has not confirmed."""
+    chain = pick_chain(requested)
+    if confirm_public:
+        return chain
+    return [name for name in chain if name not in CONFIRM_REQUIRED_BACKENDS]
+
+
 def capabilities() -> dict[str, Any]:
     from .offline import enabled as offline_on
     from .playground_git_push import remote_status
@@ -359,8 +372,21 @@ async def publish_live(
     backend: str = "auto",
     local_fn: Callable[[str], Awaitable[dict[str, Any]]] | None = None,
     deploy_fn: Callable[..., Awaitable[dict[str, Any]]] | None = None,
+    confirm_public: bool = False,
 ) -> dict[str, Any]:
-    """Local /apps/ plus the first public backend that works."""
+    """Local /apps/ plus the first public backend that works.
+
+    Anonymous Netlify and GitLab Pages need ``confirm_public=True``; asking for one
+    explicitly without it is refused before anything is built or sent.
+    """
+    asked = (backend or "auto").strip().lower()
+    if asked in CONFIRM_REQUIRED_BACKENDS and not confirm_public:
+        return {
+            "ok": False,
+            "error": "confirm_required",
+            "backend": asked,
+            "detail": f"{asked} publishes publicly; confirm with confirm_public=true.",
+        }
     ensure = local_fn or ensure_local
     local = await ensure(slug)
     if not local.get("ok"):
@@ -372,7 +398,7 @@ async def publish_live(
         "local_url": local.get("local_url"),
         "url": None,
         "backend": "local",
-        "chain": pick_chain(backend),
+        "chain": effective_chain(backend, confirm_public),
         "note": "Играта е в /apps/ на тази машина.",
     }
     static_dir = local.get("dir")
@@ -383,7 +409,8 @@ async def publish_live(
         return result
 
     errors: list[str] = []
-    for name in pick_chain(backend):
+    skipped = [n for n in pick_chain(backend) if n in CONFIRM_REQUIRED_BACKENDS] if not confirm_public else []
+    for name in effective_chain(backend, confirm_public):
         if name == "local":
             continue
         try:
@@ -417,6 +444,8 @@ async def publish_live(
         return result
 
     result["ok"] = True
+    if skipped:
+        result["needs_confirm"] = skipped
     result["note"] = (
         "Локално е готово. За публичен линк сложи NETLIFY_AUTH_TOKEN "
         "(https://app.netlify.com/user/applications#personal-access-tokens) "

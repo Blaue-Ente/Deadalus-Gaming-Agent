@@ -163,6 +163,10 @@ async def _call_claude_primary(system: str, messages: list[dict[str, Any]],
     base_url = cfg.get("base_url", "")
     sdk      = cfg.get("sdk", "anthropic")
     do_cache = cfg.get("use_cache", True) if use_cache_override is None else use_cache_override
+    # Run-budget gate, same text and rule as llm_client: no provider call once the envelope is spent.
+    from . import run_budget as _run_budget
+    if _run_budget.would_block(provider):
+        return _run_budget.stop_text()
     t0 = _t.perf_counter()
     err = ""
     try:
@@ -198,6 +202,11 @@ async def _call_claude_primary(system: str, messages: list[dict[str, Any]],
                 system=system_param,
                 messages=_to_anth_msgs(messages),
             )
+            try:
+                from .llm_client import _meter
+                _meter(resp, model=model, role="writer")
+            except Exception:
+                log.debug("persona metering skipped", exc_info=True)  # never fail a billed, successful call
             block = resp.content[0]
             return block.text if block.type == "text" else ""
 
@@ -231,6 +240,11 @@ async def _call_claude_primary(system: str, messages: list[dict[str, Any]],
             max_tokens=_MAX_TOKENS,
             messages=oa_messages,
         )
+        try:
+            from .llm_client import _meter
+            _meter(resp, model=model, role="writer")
+        except Exception:
+            log.debug("persona metering skipped", exc_info=True)  # never fail a billed, successful call
         return resp.choices[0].message.content or ""
     except Exception as exc:
         err = str(exc)[:300]
@@ -630,10 +644,16 @@ def _extract_mesh_marker(raw: str) -> tuple[str, str, dict[str, Any]] | None:
 
 def _perm_gate(perm_class: str, tool: str) -> str | None:
     """Return denial message if permission missing, else None."""
-    from .outbox import check_permission, format_permission_denied
-    if check_permission(perm_class):
-        return None
-    return format_permission_denied(perm_class, tool=tool)
+    try:
+        from .outbox import check_permission, format_permission_denied
+        if check_permission(perm_class):
+            return None
+        return format_permission_denied(perm_class, tool=tool)
+    except Exception as exc:
+        # Fail closed: an unavailable permission check blocks the tool.
+        log.warning("permission check unavailable for %s (%s) - blocked", tool, exc)
+        from .native_tools import PERMISSION_CHECK_UNAVAILABLE
+        return PERMISSION_CHECK_UNAVAILABLE.format(tool=tool)
 
 
 def _format_mesh_call_result(target: str, action: str, mc: dict[str, Any]) -> str:

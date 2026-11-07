@@ -250,6 +250,21 @@ def day_token_cap() -> int:
     return DEFAULT_DAY_CAP
 
 
+def day_cap_env_locked() -> bool:
+    raw = (os.environ.get("DAEDALUS_MENTOR_DAY_CAP") or "").strip()
+    if not raw:
+        return False
+    try:
+        int(raw)
+    except ValueError:
+        return False
+    return True
+
+
+def choice_env_locked() -> bool:
+    return bool((os.environ.get("DAEDALUS_MENTOR_MODEL") or "").strip())
+
+
 def set_day_token_cap(cap: int) -> int:
     cap = max(0, min(2_000_000, int(cap)))
     kv.set(KV_DAY_CAP, {"cap": cap})

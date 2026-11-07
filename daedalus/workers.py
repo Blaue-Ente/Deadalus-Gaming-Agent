@@ -607,6 +607,14 @@ async def _call_worker_single(slot: str, task: str, slot_cfg: dict) -> dict:
             )
             result_text = dm.extract_text(mesh_res)
             model_used = mesh_res.get("model") or model
+            # A budget/route stop is not worker output: report it as a failure, keep the text.
+            mesh_stopped = bool(mesh_res.get("budget_stopped")) or mesh_res.get("ok") is False
+            mesh_ok = bool(str(result_text or "").strip()) and not mesh_stopped
+            mesh_error = (
+                "" if mesh_ok
+                else ("budget_stopped" if mesh_res.get("budget_stopped")
+                      else str(mesh_res.get("error") or "empty_or_failed_reply")[:200])
+            )
             elapsed_ms = int((asyncio.get_event_loop().time() - _t0) * 1000)
             log.info(
                 "Worker [%s/%s] mesh_router done (%d chars, %dms, $%.6f, %s)",
@@ -614,13 +622,14 @@ async def _call_worker_single(slot: str, task: str, slot_cfg: dict) -> dict:
                 float(mesh_res.get("cost_usd") or 0.0),
                 mesh_res.get("provider") or "?",
             )
-            _update_registry_stats(slot_cfg.get("_registry_id"), True, elapsed_ms)
+            _update_registry_stats(slot_cfg.get("_registry_id"), mesh_ok, elapsed_ms)
             return {
                 "slot":         slot,
                 "model":        model_used,
                 "task_preview": task[:100],
                 "result":       result_text,
-                "ok":           True,
+                "ok":           mesh_ok,
+                **({"error": mesh_error} if not mesh_ok else {}),
                 "mesh_router":  True,
                 "cost_usd":     mesh_res.get("cost_usd"),
                 "provider":     mesh_res.get("provider"),

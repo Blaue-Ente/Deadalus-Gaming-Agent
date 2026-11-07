@@ -60,7 +60,25 @@ async def _pool():
 # Zip helpers
 # ---------------------------------------------------------------------------
 
+def excluded_secret_files(root: Path) -> list[str]:
+    """Relative names of files a zip of ``root`` leaves out because they look secret."""
+    from .secret_paths import is_secret_path
+
+    out: list[str] = []
+    for p in root.rglob("*"):
+        if p.is_dir():
+            continue
+        rel = p.relative_to(root)
+        if any(part in _SKIP for part in rel.parts):
+            continue
+        if is_secret_path(rel):
+            out.append(rel.as_posix())
+    return sorted(out)
+
+
 def _zip_dir(root: Path) -> bytes:
+    from .secret_paths import is_secret_path
+
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         for p in root.rglob("*"):
@@ -68,6 +86,8 @@ def _zip_dir(root: Path) -> bytes:
                 continue
             rel = p.relative_to(root)
             if any(part in _SKIP for part in rel.parts):
+                continue
+            if is_secret_path(rel):
                 continue
             zf.write(p, str(rel))
     return buf.getvalue()

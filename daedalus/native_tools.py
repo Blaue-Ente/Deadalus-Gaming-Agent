@@ -1025,6 +1025,12 @@ async def _kernel_play_bot(loop: Any) -> str:
     )
 
 
+PERMISSION_CHECK_UNAVAILABLE = (
+    "Permission check unavailable - {tool} was blocked (fail-closed). "
+    "Nothing was run. Check the permission store and retry."
+)
+
+
 def before_tool_call(tool_name: str, *, marker_name: str | None = None) -> tuple[bool, str]:
     perm = PERM_MAP.get(tool_name)
     if perm is None:
@@ -1036,8 +1042,9 @@ def before_tool_call(tool_name: str, *, marker_name: str | None = None) -> tuple
         label = marker_name or f"native:{tool_name}"
         return False, format_permission_denied(perm, tool=label)
     except Exception as exc:
-        log.debug("before_tool_call failed open: %s", exc)
-        return True, ""
+        # Fail closed: a permission check that cannot run must not wave a gated tool through.
+        log.warning("permission check unavailable for %s (%s) - tool blocked", tool_name, exc)
+        return False, PERMISSION_CHECK_UNAVAILABLE.format(tool=marker_name or f"native:{tool_name}")
 
 
 async def execute_native_tool(
