@@ -19,6 +19,7 @@
   let assetGen = 0;
   let assetFlight = 0;
   let assetSlug = null;
+  let assetJobIds = [];
   const ASSET_GENERATE_TIMEOUT_MS = 120000;
   const ASSET_AUTOPACK_TIMEOUT_MS = 660000;
   const ASSET_PIPELINE_TIMEOUT_MS = 60000;
@@ -844,10 +845,69 @@
   function assetConfirm(kind, slug, extra) {
     if (kind === "generate") return dx.t("studio.assetGenerateConfirm", { slug, path: extra.path });
     if (kind === "autopack") return dx.t("studio.assetAutopackConfirm", { slug });
-    if (kind === "mesh") return dx.t("studio.assetMeshConfirm", { slug });
+    if (kind === "mesh") {
+      const named = extra && extra.provider && extra.provider !== "auto" ? extra.provider : "";
+      return dx.t("studio.assetMeshConfirm", {
+        slug,
+        provider: named || dx.t("studio.assetMeshProviders"),
+      });
+    }
     if (kind === "music") return dx.t("studio.assetMusicConfirm", { slug });
-    if (kind === "status" || kind === "providers") return dx.t("studio.assetReadConfirm", { slug, action: kind });
+    if (kind === "status" && extra && extra.job_id) {
+      return dx.t("studio.assetStatusPollConfirm", { slug, id: extra.job_id });
+    }
+    if (kind === "status") return dx.t("studio.assetStatusLocalConfirm", { slug });
+    if (kind === "providers") return dx.t("studio.assetReadConfirm", { slug, action: kind });
     return dx.t("studio.assetWriteConfirm", { slug, action: kind });
+  }
+
+  function syncAssetFields() {
+    const action = ($("asset-action") && $("asset-action").value) || "status";
+    const mesh = action === "mesh";
+    ["asset-mesh-prompt-field", "asset-mesh-name-field", "asset-mesh-provider-field"].forEach((id) => {
+      const el = $(id);
+      if (el) el.hidden = !mesh;
+    });
+    const job = $("asset-job-field");
+    if (job) job.hidden = action !== "status";
+    const kit = $("asset-kit-note");
+    if (kit) kit.hidden = action !== "atlas" && action !== "tileset";
+  }
+
+  function renderAssetJobs(selected) {
+    const sel = $("asset-job");
+    if (!sel) return;
+    const current = selected == null ? sel.value : selected;
+    sel.replaceChildren();
+    const local = document.createElement("option");
+    local.value = "";
+    local.textContent = dx.t("studio.assetJobLocal");
+    sel.appendChild(local);
+    assetJobIds.forEach((id) => {
+      const opt = document.createElement("option");
+      opt.value = id;
+      opt.textContent = id;
+      sel.appendChild(opt);
+    });
+    sel.value = current && assetJobIds.indexOf(current) !== -1 ? current : "";
+  }
+
+  function noteAssetResult(body, data) {
+    if (!data || typeof data !== "object") return;
+    const action = body && body.action;
+    if (action === "mesh" && data.ok === true && typeof data.id === "string" && data.id) {
+      if (assetJobIds.indexOf(data.id) === -1) assetJobIds.push(data.id);
+      renderAssetJobs(data.id);
+      return;
+    }
+    if (action === "status" && !body.job_id && Array.isArray(data.jobs)) {
+      data.jobs.forEach((job) => {
+        if (job && typeof job.id === "string" && job.id && assetJobIds.indexOf(job.id) === -1) {
+          assetJobIds.push(job.id);
+        }
+      });
+      renderAssetJobs(null);
+    }
   }
 
   function describeGenerate(data) {
@@ -896,7 +956,7 @@
     return paths;
   }
 
-  function describePipeline(action, data) {
+  function describePipeline(action, data, sent) {
     const body = data && typeof data === "object" ? data : {};
     if (action === "music" || body.handoff === true) {
       return { text: dx.t("studio.assetMusic", { drop: body.drop || "assets/music.mp3" }), bad: true, refresh: false };
@@ -922,15 +982,31 @@
         refresh: false,
       };
     }
+    if (action === "status" && sent && sent.job_id) {
+      if (body.ok === true && body.status === "done" && typeof body.output === "string" && body.output) {
+        return {
+          text: dx.t("studio.assetMeshFile", { path: body.output }) + " " + dx.t("studio.assetJobUpdated"),
+          bad: false,
+          refresh: true,
+        };
+      }
+      return {
+        text: dx.t("studio.assetStatusChecked", {
+          id: body.id || sent.job_id,
+          status: body.status || "",
+        }),
+        bad: false,
+        refresh: false,
+      };
+    }
     if (action === "status" || action === "providers") {
-      const parts = [dx.t("studio.assetRead")];
+      const parts = [action === "status" ? dx.t("studio.assetStatusLocal") : dx.t("studio.assetRead")];
       const jobs = Array.isArray(body.jobs) ? body.jobs : [];
       jobs.forEach((job) => {
         if (!job || typeof job !== "object") return;
         if (job.status === "done" && job.output) parts.push(dx.t("studio.assetReadFile", { path: job.output }));
         else if (job.id) parts.push(dx.t("studio.assetMeshPending", { id: job.id, status: job.status || "" }));
       });
-      if (body.status === "done" && body.output) parts.push(dx.t("studio.assetReadFile", { path: body.output }));
       return { text: parts.join("\n"), bad: false, refresh: false };
     }
     const paths = pipelinePaths(body);
@@ -971,6 +1047,10 @@
       showStatus("asset-status", dx.t("studio.assetNeedDesc"), true);
       return;
     }
+    if (kind === "pipeline" && body && body.action === "mesh" && !String(body.prompt || "").trim()) {
+      showStatus("asset-status", dx.t("studio.assetNeedMeshPrompt"), true);
+      return;
+    }
     const action = kind === "pipeline" ? body.action : kind;
     if (!window.confirm(assetConfirm(action, slug, body))) return;
     const gen = assetGen;
@@ -981,6 +1061,7 @@
       body: JSON.stringify(body),
       timeoutMs,
     }).then((data) => {
+      if (assetStill(flight, gen, slug)) noteAssetResult(body, data);
       const view = describe(data);
       if (typeof view === "string") finishAsset(flight, gen, slug, view, !(data && data.ok === true && data.path), !!(data && data.ok === true && data.path));
       else finishAsset(flight, gen, slug, view.text, view.bad, view.refresh);
@@ -999,6 +1080,8 @@
     if (next !== assetSlug) {
       assetSlug = next;
       assetGen += 1;
+      assetJobIds = [];
+      renderAssetJobs("");
       showStatus("asset-status", "", false);
     }
     syncAssetButtons();
@@ -1293,6 +1376,7 @@
   });
 
   document.addEventListener("daedalus:langchange", () => {
+    renderAssetJobs(null);
     if (currentPanel === "review") loadReview(currentTab);
     if (currentPanel === "settings") loadSettings();
     if (currentPanel === "build") loadWorkspace(dx.getSlug());
@@ -1318,10 +1402,24 @@
     const description = ($("asset-desc").value || "").trim();
     startAsset("autopack", "/assets/auto-pack", { description }, ASSET_AUTOPACK_TIMEOUT_MS, describeAutopack);
   });
+  $("asset-action").addEventListener("change", syncAssetFields);
   $("asset-pipeline").addEventListener("click", () => {
     const action = $("asset-action").value || "status";
-    startAsset("pipeline", "/assets/pipeline", { action }, ASSET_PIPELINE_TIMEOUT_MS, (data) => describePipeline(action, data));
+    const body = { action };
+    if (action === "mesh") {
+      body.prompt = ($("asset-mesh-prompt").value || "").trim();
+      const name = ($("asset-mesh-name").value || "").trim();
+      if (name) body.name = name;
+      body.provider = ($("asset-mesh-provider").value || "auto").trim() || "auto";
+    }
+    if (action === "status") {
+      const jobId = ($("asset-job").value || "").trim();
+      if (jobId) body.job_id = jobId;
+    }
+    startAsset("pipeline", "/assets/pipeline", body, ASSET_PIPELINE_TIMEOUT_MS, (data) => describePipeline(action, data, body));
   });
+  syncAssetFields();
+  renderAssetJobs("");
 
   const opening = readQuery();
   showPanel(opening.panel, opening.tab);

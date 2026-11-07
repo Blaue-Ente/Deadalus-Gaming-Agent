@@ -134,6 +134,26 @@
                 <option value="mesh">mesh</option>
               </select>
             </label>
+            <label id="asset-mesh-prompt-field" hidden><span data-i18n="studio.assetMeshPrompt">Mesh prompt</span>
+              <textarea id="asset-mesh-prompt" rows="2" data-i18n-aria="studio.assetMeshPrompt" aria-label="Mesh prompt"></textarea>
+            </label>
+            <label id="asset-mesh-name-field" hidden><span data-i18n="studio.assetMeshName">Name</span>
+              <input id="asset-mesh-name" value="hero" autocomplete="off" spellcheck="false" data-i18n-aria="studio.assetMeshName" aria-label="Name" />
+            </label>
+            <label id="asset-mesh-provider-field" hidden><span data-i18n="studio.assetMeshProvider">Provider</span>
+              <select id="asset-mesh-provider" data-i18n-aria="studio.assetMeshProvider" aria-label="Provider">
+                <option value="auto" selected>auto</option>
+                <option value="fal">fal</option>
+                <option value="tripo">tripo</option>
+                <option value="meshy">meshy</option>
+              </select>
+            </label>
+            <label id="asset-job-field"><span data-i18n="studio.assetJob">Job</span>
+              <select id="asset-job" data-i18n-aria="studio.assetJob" aria-label="Job">
+                <option value="" selected data-i18n="studio.assetJobLocal">Local list</option>
+              </select>
+            </label>
+            <p class="hint" id="asset-kit-note" hidden data-i18n="studio.assetKitNote">Atlas and tileset write the built-in kit only. The API accepts custom source images. This control does not send them.</p>
             <button id="asset-pipeline" type="button" data-i18n="studio.assetRun">Run</button>
             <p class="hint" id="asset-backend-note" data-i18n="studio.assetBackendNote">Cancel on the question sends nothing. After a request is sent, leaving this page does not stop the server.</p>
           </div>

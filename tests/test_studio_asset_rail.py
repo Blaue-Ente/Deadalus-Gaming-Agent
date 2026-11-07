@@ -37,6 +37,14 @@ KEYS = (
     "studio.assetNeedKey",
     "studio.assetRead",
     "studio.assetReadFile",
+    "studio.assetMeshPrompt",
+    "studio.assetNeedMeshPrompt",
+    "studio.assetStatusPollConfirm",
+    "studio.assetStatusLocalConfirm",
+    "studio.assetStatusLocal",
+    "studio.assetStatusChecked",
+    "studio.assetJobUpdated",
+    "studio.assetKitNote",
 )
 
 
@@ -132,12 +140,22 @@ def test_asset_labels_exist_and_mesh_is_not_the_default():
     assert 'id="asset-action"' in HTML
     assert '<option value="status" selected>status</option>' in HTML
     assert '<option value="mesh">mesh</option>' in HTML
+    assert 'id="asset-mesh-prompt"' in HTML
+    assert 'id="asset-mesh-name" value="hero"' in HTML
+    assert '<option value="fal">fal</option>' in HTML
+    assert '<option value="tripo">tripo</option>' in HTML
+    assert '<option value="meshy">meshy</option>' in HTML
+    assert 'id="asset-job"' in HTML
+    assert "custom source images" in HTML
+    assert "sources:" not in WORK
     assert "ASSET_GENERATE_TIMEOUT_MS = 120000" in WORK
     assert "ASSET_AUTOPACK_TIMEOUT_MS = 660000" in WORK
     assert "ASSET_PIPELINE_TIMEOUT_MS = 60000" in WORK
     assert '{ path, prompt, size }' in WORK
     assert '{ description }' in WORK
-    assert '{ action }' in WORK
+    assert "const body = { action };" in WORK
+    assert "body.prompt" in WORK
+    assert "body.job_id = jobId" in WORK
     assert "studio.assetUnknown" in WORK
     assert "not safe to retry" in I18N
     assert "Не е безопасно да се праща пак." in I18N
@@ -397,6 +415,14 @@ def test_pipeline_renders_each_contract_without_extra_fields(studio_server):
         _open(page, studio_server, game)
         for action, _payload, expect in cases:
             page.locator("#asset-action").select_option(action)
+            if action == "mesh":
+                page.locator("#asset-mesh-prompt").fill("a stone lantern")
+            if action == "status":
+                page.locator("#asset-job").select_option("")
+            if action == "atlas":
+                note = page.locator("#asset-kit-note")
+                assert note.is_visible()
+                assert "does not send" in note.inner_text()
             page.locator("#asset-pipeline").click()
             page.wait_for_function(
                 """(expect) => document.getElementById('asset-status').textContent.includes(expect)
@@ -408,11 +434,119 @@ def test_pipeline_renders_each_contract_without_extra_fields(studio_server):
             assert "published" not in text.lower()
             if action == "status":
                 assert "Nothing was written." in text
+                assert "was not polled" in text
                 assert "Wrote " not in text
             if action == "mesh" and _payload.get("need_key"):
                 assert "assets/" not in text
-        assert [row["body"] for row in posts] == [{"action": action} for action, _payload, _expect in cases]
+        expect_bodies = []
+        for action, _payload, _expect in cases:
+            if action == "mesh":
+                expect_bodies.append({
+                    "action": "mesh",
+                    "prompt": "a stone lantern",
+                    "name": "hero",
+                    "provider": "auto",
+                })
+            else:
+                expect_bodies.append({"action": action})
+        assert [row["body"] for row in posts] == expect_bodies
         assert all(f"/projects/{game}/assets/pipeline" in row["url"] for row in posts)
+        assert leaked == []
+        browser.close()
+
+
+def test_mesh_prompt_job_check_and_slug_clears_the_binding(studio_server):
+    from playwright.sync_api import sync_playwright
+    game = studio_server["game"]
+    other = studio_server["app"]
+    replies = [
+        {"ok": True, "id": "job-queued", "status": "queued", "provider": "fal"},
+        {"ok": True, "id": "job-queued", "status": "running"},
+        {"ok": True, "id": "job-queued", "status": "done"},
+        {"ok": True, "id": "job-queued", "status": "done", "output": "assets/lantern.glb"},
+        {"ok": True, "jobs": []},
+    ]
+    dialogs = []
+
+    def reply(route, _posts):
+        _fulfill(route, 200, replies.pop(0))
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        leaked = _guard(page)
+        posts = _arm(page, reply)
+        page.on("dialog", lambda dialog: dialogs.append(dialog.message) or dialog.accept())
+        _open(page, studio_server, game)
+        page.locator("#asset-action").select_option("mesh")
+        page.locator("#asset-mesh-prompt").fill("   ")
+        page.locator("#asset-pipeline").click()
+        assert posts == []
+        assert "Enter a mesh prompt." in page.locator("#asset-status").inner_text()
+        page.locator("#asset-mesh-prompt").fill("a stone lantern")
+        assert page.locator("#asset-mesh-name").input_value() == "hero"
+        assert page.locator("#asset-mesh-provider").input_value() == "auto"
+        page.locator("#asset-pipeline").click()
+        page.wait_for_function(
+            """() => document.getElementById('asset-job').value === 'job-queued'
+              && !document.getElementById('asset-pipeline').disabled"""
+        )
+        assert posts[0]["body"] == {
+            "action": "mesh",
+            "prompt": "a stone lantern",
+            "name": "hero",
+            "provider": "auto",
+        }
+        assert "not safe to retry" in dialogs[0]
+        assert "fal, Tripo, or Meshy" in dialogs[0]
+        assert "mesh prompt is sent" in dialogs[0]
+        page.locator("#asset-action").select_option("status")
+        page.locator("#asset-pipeline").click()
+        page.wait_for_function(
+            """() => document.getElementById('asset-status').textContent.includes('No mesh file yet')
+              && document.getElementById('asset-status').textContent.includes('job record was updated')
+              && !document.getElementById('asset-pipeline').disabled"""
+        )
+        running = page.locator("#asset-status").inner_text()
+        assert "Mesh file" not in running
+        assert "Nothing was written." not in running
+        assert posts[1]["body"] == {"action": "status", "job_id": "job-queued"}
+        assert "job-queued" in dialogs[1]
+        assert "does not submit a new mesh" in dialogs[1]
+        assert "not safe to retry" in dialogs[1]
+        page.locator("#asset-pipeline").click()
+        page.wait_for_function(
+            """() => document.getElementById('asset-status').textContent.includes('Provider reports done')
+              && !document.getElementById('asset-pipeline').disabled"""
+        )
+        assert "Mesh file" not in page.locator("#asset-status").inner_text()
+        page.locator("#asset-pipeline").click()
+        page.wait_for_function(
+            """() => document.getElementById('asset-status').textContent.includes('Mesh file assets/lantern.glb.')
+              && !document.getElementById('asset-pipeline').disabled"""
+        )
+        done = page.locator("#asset-status").inner_text()
+        assert "The job record was updated." in done
+        assert "Nothing was written." not in done
+        assert [row["body"]["action"] for row in posts] == ["mesh", "status", "status", "status"]
+        page.locator(f"#plist [data-slug='{other}']").click()
+        page.wait_for_function(
+            """(slug) => document.querySelector('#plist [data-slug="' + slug + '"]').classList.contains('active')
+              && document.getElementById('asset-job').value === ''""",
+            arg=other,
+        )
+        options = page.locator("#asset-job option").evaluate_all("els => els.map(el => el.value)")
+        assert "job-queued" not in options
+        page.locator("#asset-action").select_option("status")
+        page.locator("#asset-pipeline").click()
+        page.wait_for_function(
+            """() => document.getElementById('asset-status').textContent.includes('was not polled')
+              && !document.getElementById('asset-pipeline').disabled"""
+        )
+        assert posts[-1]["body"] == {"action": "status"}
+        assert "job_id" not in posts[-1]["body"]
+        assert "does not poll the provider" in dialogs[-1]
+        assert sum(1 for row in posts if row["body"].get("action") == "mesh") == 1
         assert leaked == []
         browser.close()
 
