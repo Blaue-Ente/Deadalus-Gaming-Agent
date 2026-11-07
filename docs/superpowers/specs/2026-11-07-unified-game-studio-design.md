@@ -95,12 +95,12 @@ Still open on that planner/discovery slice:
 - The status line names one pending id. If any id is unknown, that unknown sentence replaces the pending sentence. Each id in the map stays closed.
 - Delete stays available while that plan’s approve is still unresolved.
 
-Proposed next slice, not built. Two blocks inside the existing Review section, after discoveries. No new tab and no new page. Rows stay global. The selected slug is not a save target.
+Skill draft and reference brief are in Review, after discoveries. No new tab and no new page. Rows stay global. The selected slug is not a save target.
 
 Skill draft uses the existing handlers only:
 
 - `POST /admin/daedalus/playground/api/skill-creator/start` with `{idea, platform, context}`. Empty idea is 400 before the model. Platform is one of `cursor`, `claude`, `codex`, `generic`, `harness`; anything else is stored as `generic`.
-- Start calls `llm_client.complete` once (configured provider, max 1200 tokens). It does not call `build_research_prompt`, the skill catalog, or web search. It stores `research_notes` as the typed idea and `tool_steps` as `[]`. `context` is saved as `extra_context` and is not inserted into the start, refine, or generate prompt. If `complete` throws, the handler still returns `ok: true` with that stub plan.
+- Start calls `llm_client.complete` once (configured provider, max 1200 tokens). It does not call `build_research_prompt`, the skill catalog, or web search. It stores `research_notes` as the typed idea and `tool_steps` as `[]`. `context` is saved as `extra_context` and is not inserted into the start, refine, or generate prompt. The Review form sends `{idea, platform}` only. If `complete` throws, the handler still returns `ok: true` with that stub plan.
 - `POST .../skill-creator/refine` needs `session_id` and `message` (400 otherwise, 404 if the session is missing). One configured-provider call, max 2000 tokens. A thrown call is HTTP 500.
 - `POST .../skill-creator/generate` is one configured-provider call, max 8000 tokens. Without `force`, a session that is not `ready_for_generation` is HTTP 409 and the Bulgarian error string is server text. `force: true` spends the call anyway. `ok: true` can still mean zero parsed files plus a validation warning. Download uses the `files` object on that response. The multi-file control writes a `.txt` bundle. `GET .../skill-creator/session/{id}` returns a 4000-character preview and file names, not the full bodies.
 - Sessions are written to kv `skill-creator:{id}` and to process memory. The 24h purge applies to the memory map. A kv row can still load after that.
