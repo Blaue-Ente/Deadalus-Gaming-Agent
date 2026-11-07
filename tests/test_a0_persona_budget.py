@@ -5,7 +5,6 @@ import asyncio
 import sys
 import types
 
-import pytest
 from a0_support import a0_tmp  # noqa: F401
 
 
