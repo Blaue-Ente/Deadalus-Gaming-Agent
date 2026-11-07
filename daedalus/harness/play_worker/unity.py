@@ -20,6 +20,11 @@ _SKIP_DIRS = {"Library", "Temp", "Logs", "obj", "Builds", "Build", ".git", ".vs"
 BUILD_TIMEOUT_S = 900.0
 
 
+def _is_shim(path: str) -> bool:
+    """The Unity Hub puts a launcher called Unity.exe in ...\\Unity\\bin; it is not an Editor and cannot build."""
+    return Path(path).parent.name.lower() == "bin" and Path(path).parent.parent.name.lower() == "unity"
+
+
 def find_unity() -> dict[str, Any]:
     """UNITY_PATH/UNITY_EDITOR, PATH, then Hub installs (newest version first); shown, never assumed."""
     env = (os.environ.get("UNITY_PATH") or os.environ.get("UNITY_EDITOR") or "").strip()
@@ -29,9 +34,6 @@ def find_unity() -> dict[str, Any]:
             return {"ok": True, "path": str(p), "source": "env"}
         return {"ok": False, "error": "engine_missing", "source": "env",
                 "message": f"UNITY_PATH is set but is not a file: {env}"}
-    hit = shutil.which("Unity") or shutil.which("unity")
-    if hit:
-        return {"ok": True, "path": hit, "source": "path"}
     bases = [Path("C:/Program Files/Unity/Hub/Editor"), Path("~/Unity/Hub/Editor").expanduser(),
              Path("/Applications/Unity/Hub/Editor")]
     exe = "Unity.exe" if os.name == "nt" else "Unity"
@@ -44,6 +46,9 @@ def find_unity() -> dict[str, Any]:
             cand = d / "Editor" / exe
             if cand.is_file():
                 return {"ok": True, "path": str(cand), "source": "known-dir", "version": d.name}
+    hit = shutil.which("Unity") or shutil.which("unity")      # last: a PATH entry may be a Hub launcher shim, not the Editor
+    if hit and not _is_shim(hit):
+        return {"ok": True, "path": hit, "source": "path"}
     return {"ok": False, "error": "engine_missing", "source": "none",
             "message": "Unity Editor not found. Set UNITY_PATH. Files are not a playtest."}
 

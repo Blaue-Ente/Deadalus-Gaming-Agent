@@ -27,6 +27,18 @@ def test_unity_editor_env_wins_and_a_bad_pin_is_an_honest_error(tmp_path, monkey
     assert r["ok"] is False and r["error"] == "engine_missing" and r["source"] == "env"
 
 
+def test_a_hub_launcher_shim_on_path_is_not_taken_for_the_editor(tmp_path, monkeypatch):
+    shim = tmp_path / "Unity" / "bin" / "Unity.exe"
+    shim.parent.mkdir(parents=True)
+    shim.write_text("x")
+    monkeypatch.delenv("UNITY_PATH", raising=False)
+    monkeypatch.delenv("UNITY_EDITOR", raising=False)
+    monkeypatch.setattr(unity.shutil, "which", lambda name: str(shim))
+    monkeypatch.setattr(unity.Path, "is_dir", lambda self: False)
+    assert unity._is_shim(str(shim)) is True
+    assert unity.find_unity()["ok"] is False
+
+
 def test_is_unity_project(tmp_path):
     assert not unity.is_unity_project(tmp_path)
     (tmp_path / "Assets").mkdir()
