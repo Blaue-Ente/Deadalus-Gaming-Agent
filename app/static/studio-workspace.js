@@ -654,6 +654,9 @@
   async function resumeBuildNow(slug) {
     if (!slug || streamingSlug === slug) return;
     if (explicitFlight && explicitFlight.slug === slug) return;
+    // The stream of a paused job ends at its checkpoint. While that decision is open there is nothing to follow:
+    // resuming would replay the job from the start (every log line twice) and redraw the decision under the owner.
+    if (checkpoint && checkpoint.slug === slug) return;
     resumeGen += 1;
     const gen = resumeGen;
     const ticket = explicitTicket;
