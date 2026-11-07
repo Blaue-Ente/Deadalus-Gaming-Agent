@@ -3,6 +3,7 @@ owner.token
 __pycache__/
 *.pyc
 .pytest_cache/
+test-results/
 data/
 workspace/
 playground/
