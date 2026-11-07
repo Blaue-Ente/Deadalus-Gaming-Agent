@@ -97,7 +97,7 @@ WORKFLOWS: dict[str, tuple[str, str]] = {
     "workflow:build-full-auto": ("Full auto M0 to M8", "partial"),
     "workflow:preview-run": ("Run, stop, preview", "implemented"),
     "workflow:verify": ("Verify gates, browser and gameplay proof", "implemented"),
-    "workflow:native-playtest": ("Native rendered playtest with real input", "planned"),
+    "workflow:native-playtest": ("Native rendered playtest with real input", "partial"),  # Godot on Linux (A5a); Unity/Windows pending
     "workflow:publish": ("Publish local, live, capsule", "implemented"),
     "workflow:git": ("Git push, PR/MR, clone, revive", "implemented"),
 }
