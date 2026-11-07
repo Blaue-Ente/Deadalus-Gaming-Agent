@@ -267,6 +267,28 @@ def test_kill_group_reaches_children_after_the_leader_was_reaped(a0_tmp):
     assert not _group_alive(proc.pid)
 
 
+def test_a_temp_copy_that_is_briefly_locked_is_still_removed(tmp_path, monkeypatch):
+    """Windows keeps an exiting game's files locked for a moment; the cleanup must retry, not leave the copy behind."""
+    from daedalus.harness.play_worker import session as sess
+
+    target = tmp_path / "copy"
+    (target / "sub").mkdir(parents=True)
+    (target / "sub" / "f.txt").write_text("x")
+    real = shutil.rmtree
+    calls = {"n": 0}
+
+    def flaky(path, ignore_errors=False, **kw):
+        calls["n"] += 1
+        if calls["n"] < 3:
+            return None                                   # still locked: nothing deleted
+        return real(path, ignore_errors=ignore_errors, **kw)
+
+    monkeypatch.setattr(sess.shutil, "rmtree", flaky)
+    monkeypatch.setattr(sess.time, "sleep", lambda s: None)
+    sess._remove_tree(target)
+    assert not target.exists() and calls["n"] == 3
+
+
 def test_slug_validation_blocks_traversal(play_env):
     from daedalus.harness.play_worker.errors import PlayError
     from daedalus.harness.play_worker.server import project_dir_for
