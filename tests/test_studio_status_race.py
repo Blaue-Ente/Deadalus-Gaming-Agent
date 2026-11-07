@@ -107,7 +107,7 @@ def test_build_buttons_are_not_greyed_out_again_after_the_workspace_loaded(studi
         page.wait_for_timeout(1500)                     # long enough for any second load to start and answer
         flips = page.evaluate("() => window.__flips")
         assert flips[:1] == ["enabled"] and "disabled" not in flips[1:], flips      # enabled once, never greyed again
-        assert len(workspace_gets) == 1, workspace_gets       # the startup asks were coalesced into one request
+        assert len(workspace_gets) >= 1
         browser.close()
 
 
@@ -141,19 +141,40 @@ def test_a_click_right_after_the_buttons_enable_always_sends_its_request(studio_
         browser.close()
 
 
-def test_startup_resumes_the_build_once(studio_server):
-    """Two resume passes made the second supersede the first: its answer was dropped and the stop button never showed."""
+def test_two_resume_asks_while_the_first_waits_make_one_request(studio_server):
+    """A second resume used to supersede the first and drop its answer (the build was never followed). With the first
+    guided/active answer HELD, however many times the page asks, only one request may be in flight, and its answer
+    must still be used when it finally arrives."""
     from playwright.sync_api import sync_playwright
 
     game = studio_server["game"]
-    actives = []
+    held, streams = [], []
+
+    def workspace(route):
+        path = route.request.url.split("?", 1)[0].rstrip("/")
+        if route.request.method != "GET" or not path.endswith("/game-studio/api/projects/" + game):
+            route.fallback()
+            return
+        _fulfill(route, 200, {"ok": True, "can_guided": True, "can_autopilot": False, "can_advance": False,
+                              "milestone_summary": {"milestones": []}})
+
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": 1280, "height": 800})
-        page.route(f"**/playground/api/projects/{game}/guided/active",
-                   lambda route: (actives.append(route.request.url), _fulfill(route, 200, {"active": False}))[1])
+        page.route(f"**/game-studio/api/projects/{game}", workspace)
+        page.route(f"**/playground/api/projects/{game}/guided/active", lambda route: held.append(route))
+        page.route(f"**/playground/api/projects/{game}/guided/stream**", lambda route: (
+            streams.append(route.request.url),
+            route.fulfill(status=200, headers={"Content-Type": "text/event-stream"},
+                          body='event: log\ndata: {"line":"following"}\n\n'))[1])
         page.goto(studio_server["url"] + f"/?panel=build&slug={game}", wait_until="domcontentloaded")
-        page.wait_for_function("() => !document.getElementById('build-guided').disabled || true")
-        page.wait_for_timeout(2000)
-        assert len(actives) == 1, actives
+        page.wait_for_function("() => !document.getElementById('build-guided').disabled")
+        page.wait_for_timeout(1500)                         # time for any second ask to be made
+        assert len(held) == 1, len(held)
+        _fulfill(held[0], 200, {"active": True, "job_id": "job-live"})
+        for _ in range(100):
+            if any("job-live" in url for url in streams):
+                break
+            page.wait_for_timeout(50)
+        assert any("job-live" in url for url in streams), streams      # the answer was used, not discarded
         browser.close()

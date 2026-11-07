@@ -639,7 +639,19 @@
     if (explicitFlight && explicitFlight.ticket === ticket) explicitFlight = null;
   }
 
-  async function resumeBuild(slug) {
+  // Each resume bumps resumeGen, which invalidates any earlier resume: so two asks for the same project while the
+  // first is still waiting used to throw the first answer away. An identical resume that is still current is shared.
+  let resumeFlight = null;        // {slug, gen, promise}
+  function resumeBuild(slug) {
+    if (resumeFlight && resumeFlight.slug === slug && resumeFlight.gen === resumeGen) return resumeFlight.promise;
+    const promise = resumeBuildNow(slug);
+    const entry = { slug, gen: resumeGen, promise };
+    resumeFlight = entry;
+    promise.then(() => { if (resumeFlight === entry) resumeFlight = null; });
+    return promise;
+  }
+
+  async function resumeBuildNow(slug) {
     if (!slug || streamingSlug === slug) return;
     if (explicitFlight && explicitFlight.slug === slug) return;
     resumeGen += 1;
@@ -668,33 +680,31 @@
   // just enabled and a click in that gap vanished with no request and no message; and whichever response arrived
   // last painted, even if it was the older one. Now a load of the same slug that is already running is shared,
   // controls are greyed out only when the project changed, and only the newest load paints.
-  // The startup asks arrive back to back, often with the first already finished, so a load of the same project that
-  // just finished (within WORKSPACE_BURST_MS) also counts as "already done". Resuming a build twice used to make the
-  // second resume supersede the first. A forced load (after a build step, a save) always reloads.
-  const WORKSPACE_BURST_MS = 1000;
-  let workspaceLoad = null;       // {slug, promise, doneAt} for the latest load
+  // A forced load (after a build step, a save) always reloads. Resuming twice is handled in resumeBuild itself.
+  let workspaceLoad = null;       // {slug, promise} while a load runs
   let workspaceSeq = 0;
   let workspacePainted = "";      // the slug the build controls currently describe
   function loadWorkspace(slug, opts) {
     const last = workspaceLoad;
-    if (last && last.slug === slug && !(opts && opts.force)
-        && (last.doneAt === 0 || Date.now() - last.doneAt < WORKSPACE_BURST_MS)) return last.promise;
+    if (last && last.slug === slug && !(opts && opts.force)) return last.promise;
     const run = loadWorkspaceNow(slug, opts);
-    const entry = { slug, promise: run, doneAt: 0 };
+    const entry = { slug, promise: run };
     workspaceLoad = entry;
-    run.then(() => { entry.doneAt = Date.now(); });
+    run.then(() => { if (workspaceLoad === entry) workspaceLoad = null; });
     return run;
+  }
+
+  function setBuildControlsDisabled() {
+    ["build-guided", "build-autopilot", "build-gates", "build-verify", "build-advance"].forEach((id) => {
+      $(id).disabled = true;
+    });
   }
 
   async function loadWorkspaceNow(slug, opts) {
     const mine = ++workspaceSeq;
     $("build-slug").textContent = slug ? dx.t("studio.project") + ": " + slug : "";
     if (workspacePainted !== slug) {            // a different project: its controls are not known yet
-      $("build-guided").disabled = true;
-      $("build-autopilot").disabled = true;
-      $("build-gates").disabled = true;
-      $("build-verify").disabled = true;
-      $("build-advance").disabled = true;
+      setBuildControlsDisabled();
       workspacePainted = "";
     }
     if (!slug) return;
@@ -707,11 +717,7 @@
     } catch (err) {
       if (mine !== workspaceSeq) return;
       workspacePainted = "";
-      $("build-guided").disabled = true;
-      $("build-autopilot").disabled = true;
-      $("build-gates").disabled = true;
-      $("build-verify").disabled = true;
-      $("build-advance").disabled = true;
+      setBuildControlsDisabled();
       $("build-milestones").replaceChildren();
       if (!streamingSlug) showStatus("build-status", failText(err), true);
     }
@@ -746,7 +752,8 @@
       return;
     }
     const stamp = statusStamp["preview-status"] || 0;
-    const stale = () => (statusStamp["preview-status"] || 0) !== stamp;   // an action reported since this began
+    // stale: an action reported since this began, or the owner moved to another project meanwhile
+    const stale = () => (statusStamp["preview-status"] || 0) !== stamp || dx.getSlug() !== slug;
     try {
       const data = await dx.api("/admin/daedalus/playground/api/projects/" + slugPath(slug) + "/logs");
       if (stale()) return;
