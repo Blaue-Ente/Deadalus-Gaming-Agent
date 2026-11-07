@@ -487,7 +487,9 @@ def run_job(pdir: Path, job_id: str, params: dict[str, Any] | None = None) -> di
     if not want:
         return info
     if not binary:
-        info["ok"] = True
+        # Execution was requested but could not happen: that is a skip, never a pass.
+        info["ok"] = False
+        info["skipped"] = True
         info["ran"] = False
         info["error"] = "Blender not on PATH; script written only"
         return info

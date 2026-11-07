@@ -218,8 +218,9 @@ async def _synthesize_reference(
     except Exception as exc:
         log.warning("reference scout synthesis failed: %s", exc)
 
-    # Fallback without LLM
+    # Fallback without LLM: marked degraded so callers never present it as a real brief.
     return {
+        "_degraded": True,
         "title": reference[:80],
         "summary": f"Референция: {reference}. Вдъхнови се от механиките и визията.",
         "mechanics": [],
@@ -262,6 +263,27 @@ async def scout_reference(
         sources=sources,
         page_text=page_text,
     )
+
+    degraded = bool(synth.pop("_degraded", False))
+    if degraded:
+        # Synthesis failed: report it. The template is kept under "fallback" only, no brief block
+        # (so it is never injected downstream as a specimen) and nothing is saved to the project.
+        return {
+            "ok": False,
+            "degraded": True,
+            "error": "synthesis_failed",
+            "reference": ref_value,
+            "reference_type": ref_type,
+            "title": ref_value,
+            "summary": "",
+            "mechanics": [],
+            "visual_style": "",
+            "scope_hints": "",
+            "sources": sources,
+            "queries": queries,
+            "fallback": synth,
+            "brief_block": "",
+        }
 
     result: dict[str, Any] = {
         "ok": True,

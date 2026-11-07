@@ -479,7 +479,8 @@ def auto_fix_all_open(*, hours: float = 8.0) -> dict[str, Any]:
         else:
             skipped.append({"id": bid, "error": res.get("error"), "message": res.get("message", "")})
     return {
-        "ok": True,
+        # ok when there was nothing to fix, or at least one blocker was actually fixed.
+        "ok": (not open_blockers) or bool(fixed),
         "fixed_count": len(fixed),
         "skipped_count": len(skipped),
         "fixed": fixed,

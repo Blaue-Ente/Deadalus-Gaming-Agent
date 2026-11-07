@@ -2086,6 +2086,7 @@ async def skill_creator_start(request: Request):
     platform = (body.get("platform") or "generic").strip().lower()
     session = sc.init_session(idea=idea, platform=platform, extra_context=(body.get("context") or "").strip())
     plan_data = {"title": idea, "summary": idea, "questions": [], "files": ["SKILL.md"]}
+    stub_error = ""
     try:
         from daedalus.llm_client import complete
         raw = await complete(system=sc.build_plan_prompt(idea=idea, platform=platform, research_notes=idea),
@@ -2094,9 +2095,15 @@ async def skill_creator_start(request: Request):
         parsed = sc.extract_json_object(text) or _extract_json_obj(text)
         if parsed:
             plan_data = sc.normalize_plan_payload(parsed)
+        else:
+            stub_error = "plan_unparsable"
     except Exception as exc:
-        log.debug("skill-creator llm skipped: %s", exc)
+        log.debug("skill-creator llm failed: %s", exc)
+        stub_error = "llm_failed"
     sc.apply_start_result(session, research_notes=idea, tool_steps=[], plan_data=plan_data)
+    if stub_error:
+        # The plan is only the typed idea: say so instead of reporting success.
+        return JSONResponse({"ok": False, "error": stub_error, "stub": True, **sc.session_public_view(session)})
     return JSONResponse({"ok": True, **sc.session_public_view(session)})
 
 
@@ -3039,7 +3046,13 @@ async def daedalus_approve_all_pending():
                 failed.append({"id": pid, "error": res.get("error")})
         except Exception as extra:
             failed.append({"id": pid, "error": str(extra)})
-    return JSONResponse({"ok": True, "applied": len(applied), "failed": failed})
+    # ok only when nothing failed; "partial" tells the UI some proposals did apply.
+    return JSONResponse({
+        "ok": not failed,
+        "partial": bool(applied and failed),
+        "applied": len(applied),
+        "failed": failed,
+    })
 
 
 @router.post("/daedalus/blockers/{blocker_id}/remediate")

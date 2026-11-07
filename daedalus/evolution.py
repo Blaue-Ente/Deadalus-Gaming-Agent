@@ -576,8 +576,10 @@ async def run_cycle(
     state["last_skip"] = None
     _save_state(state)
     journal_append({"event": "cycle", **summary})
+    cycle_ok = bool(radar.get("ok", True)) or bool(studied and studied.get("ok"))
     return {
-        "ok": True,
+        "ok": cycle_ok,
+        **({"error": str(radar.get("error") or "radar_failed")[:240]} if not cycle_ok else {}),
         "skipped": False,
         "sources": picked,
         "radar": {

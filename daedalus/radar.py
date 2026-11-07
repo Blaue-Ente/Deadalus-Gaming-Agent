@@ -305,8 +305,15 @@ async def run_radar_scan(
         len(catalog), total_found, total_new_discoveries, elapsed,
     )
 
+    sources_ok = sum(1 for r in source_results if r.get("ok"))
+    failed_sources = [r["id"] for r in source_results if not r.get("ok")]
+    # Honest result: a scan where every source failed is a failure, not a quiet success.
+    all_failed = bool(catalog) and sources_ok == 0
     return {
-        "ok": True,
+        "ok": not all_failed,
+        **({"error": "all_sources_failed"} if all_failed else {}),
+        "sources_ok": sources_ok,
+        "failed_sources": failed_sources,
         "scan_count": state["scan_count"],
         "sources_scanned": len(catalog),
         "total_found": total_found,
