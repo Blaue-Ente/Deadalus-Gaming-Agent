@@ -7,6 +7,9 @@ and emits one trace event per call. It never returns made-up reply text: a failu
 ``ok=False`` with an ``error``; legacy call sites keep their old text through the shims at the
 bottom of this module.
 
+Known limits (unchanged from the code this replaced): the Anthropic adapter has no JSON mode and no
+reasoning budget, so a JSON reply there is requested through the prompt only.
+
 Message content is a ``str`` or a list of parts:
 ``{"type": "text", "text": ...}`` and ``{"type": "image", "media_type": ..., "data": <base64>}`` (or
 ``"path"``). OpenAI ``image_url`` data URLs and Anthropic ``image`` blocks are accepted and
@@ -77,6 +80,10 @@ class GatewayError:
         return {"type": self.type, "message": self.message}
 
 
+class InvalidContentError(ValueError):
+    """A message part the gateway cannot send faithfully (for example an image it holds no bytes for)."""
+
+
 class GatewayCallError(RuntimeError):
     """Raised by the legacy shims so existing ``except`` / rate-limit string checks keep working."""
 
@@ -86,18 +93,29 @@ class GatewayCallError(RuntimeError):
 
 
 def classify_error(exc: BaseException) -> GatewayError:
+    """Typed error from the exception: HTTP status and SDK class first, text only as a precise fallback."""
     from ..llm_client import is_no_image_support
 
     text = str(exc)[:500]
     low = text.lower()
-    if isinstance(exc, (asyncio.TimeoutError, TimeoutError)) or "timed out" in low or "timeout" in low:
+    status = getattr(exc, "status_code", None) or getattr(getattr(exc, "response", None), "status_code", None)
+    name = type(exc).__name__.lower()
+    if isinstance(exc, (asyncio.TimeoutError, TimeoutError)) or "timeout" in name:
         return GatewayError("timeout", text)
     if is_no_image_support(exc):
         return GatewayError("unsupported_modality", text)
-    if "401" in low or "403" in low or "unauthorized" in low or "invalid_api_key" in low or "incorrect api key" in low:
+    if status in (401, 403) or "authentication" in name or "permissiondenied" in name:
         return GatewayError("auth", text)
-    if "429" in low or "rate limit" in low or "quota" in low or "insufficient" in low or "credit" in low:
+    if status == 429 or "ratelimit" in name:
         return GatewayError("quota", text)
+    if status is None:  # no structured signal: match whole tokens only, never bare substrings
+        if re.search(r"\b(401|403)\b", low) or "unauthorized" in low or "invalid_api_key" in low or "incorrect api key" in low:
+            return GatewayError("auth", text)
+        if (re.search(r"\b429\b", low) or "rate limit" in low or "rate-limited" in low or "insufficient_quota" in low
+                or "insufficient credit" in low or "out of credits" in low or "quota exceeded" in low):
+            return GatewayError("quota", text)
+        if "timed out" in low or re.search(r"\btimeout\b", low):
+            return GatewayError("timeout", text)
     return GatewayError("provider_error", text)
 
 
@@ -143,14 +161,15 @@ def _normalise_block(block: Any) -> dict[str, Any] | None:
         if block.get("data") or block.get("path"):
             return image_part(media_type=str(block.get("media_type") or "image/png"),
                               data=block.get("data"), path=block.get("path"))
-        return None
+        raise InvalidContentError("image part has no data or path")
     if kind == "image_url" or "image_url" in block:  # OpenAI shape
         ref = block.get("image_url")
         url = ref.get("url") if isinstance(ref, dict) else ref
         m = _DATA_URL.match(str(url or ""))
         if m:
             return image_part(media_type=m.group(1), data=m.group(2))
-        return None  # remote URLs are not fetched: the gateway only sends bytes it holds
+        # Remote URLs are never fetched: the gateway only sends bytes it holds, and never drops an image quietly.
+        raise InvalidContentError("image_url must be a base64 data URL; remote URLs are not fetched")
     return text_part(json.dumps(block, ensure_ascii=False, default=str)) if block else None
 
 
@@ -291,6 +310,11 @@ def model_tag_for(intent: str) -> str | None:
     return INTENT_DEFAULTS.get(intent)
 
 
+def model_tag_or_empty(intent: str) -> str:
+    """``model_tag_for`` for ``model=`` arguments: an empty string means "no explicit model"."""
+    return model_tag_for(intent) or ""
+
+
 def resolve(intent: str, *, model_hint: str | None = None, route: dict[str, Any] | None = None) -> Resolution:
     """Which model serves ``intent``: hint > env lock > owner override > registry default > brain."""
     from ..llm_config import get_config
@@ -304,7 +328,10 @@ def resolve(intent: str, *, model_hint: str | None = None, route: dict[str, Any]
     if model_hint and str(model_hint).strip():
         tag, source = str(model_hint).strip(), "call-site"
     elif locked:
-        tag, source = None, "env-lock"
+        # DAEDALUS_MODEL pins the brain and the owner-selectable intents. Registry defaults (scout, asset)
+        # are not owner choices and keep applying, exactly as the old hard-coded call sites did.
+        tag = INTENT_DEFAULTS.get(intent)
+        source = "registry-default" if tag else "env-lock"
     else:
         tag = model_tag_for(intent)
         source = ("owner-override" if tag and tag == get_overrides().get(_SELECTOR.get(intent, intent))
@@ -437,10 +464,15 @@ async def _execute(cfg: dict[str, Any], system: str, messages: list[dict[str, An
     # whether to retry without frames (nothing is silently dropped here).
     try:
         resp = await _once(body)
-    except Exception:
-        if not json_mode:
-            raise
-        # Some backends reject response_format; retry once without it (the mentor relied on this).
+    except Exception as exc:
+        low = str(exc).lower()
+        rejected = json_mode and (
+            "response_format" in low or "json_object" in low or "json mode" in low
+            or (getattr(exc, "status_code", None) == 400 and "json" in low)
+        )
+        if not rejected:
+            raise  # timeouts, auth and quota errors are never re-sent
+        # The backend rejects response_format: retry once without it (the mentor relied on this).
         body.pop("response_format", None)
         resp = await _once(body)
     choice = resp.choices[0] if getattr(resp, "choices", None) else None
@@ -473,9 +505,16 @@ async def call(
     from ..llm_cost import parse_usage
 
     intent_c = canonical_intent(intent)
-    norm = normalise_messages(messages)
-    hashes = image_hashes(norm)
     t0 = time.perf_counter()
+    try:
+        norm = normalise_messages(messages)
+    except InvalidContentError as exc:
+        res_early = resolve(intent_c, model_hint=model_hint, route=route)
+        _emit({"intent": intent_c, "provider": res_early.provider, "model": res_early.model, "ok": False,
+               "error_type": "invalid_request", "latency_ms": 0, "image_sha256": [], "client_id": client_id,
+               "slug": slug, "run_id": run_id})
+        return GatewayResult(False, resolution=res_early, error=GatewayError("invalid_request", str(exc)))
+    hashes = image_hashes(norm)
 
     res = resolve(intent_c, model_hint=model_hint, route=route)
     cfg = dict(res.cfg)
@@ -552,7 +591,11 @@ def cheap_route() -> dict[str, Any] | None:
 
 # --- sync bridge (navigator/continuity/reviewer call sites are synchronous) -----------------------
 def call_sync(*args: Any, **kwargs: Any) -> GatewayResult:
-    """``call`` for synchronous code: runs on a private loop in a helper thread when a loop is running."""
+    """``call`` for synchronous code: runs on a private loop in a helper thread when a loop is running.
+
+    A default 60 s timeout bounds the wait so a hung provider cannot stall the caller forever.
+    """
+    kwargs.setdefault("timeout", 60.0)
     try:
         asyncio.get_running_loop()
     except RuntimeError:

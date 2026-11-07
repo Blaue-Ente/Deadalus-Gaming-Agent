@@ -183,12 +183,26 @@ def test_normalise_accepts_every_image_shape_and_keeps_bytes(gw):
         assert content[1]["sha256"] == PNG_SHA and base64.b64decode(content[1]["data"]) == PNG
 
 
-def test_text_only_lists_collapse_and_remote_urls_are_not_fetched(gw):
+def test_text_only_lists_collapse(gw):
     assert gw.normalise_content([gw.text_part("a"), gw.text_part("b")]) == "a\nb"
     assert gw.normalise_content("plain") == "plain"
-    out = gw.normalise_content([{"type": "image_url", "image_url": {"url": "https://example.test/x.png"}},
-                                gw.text_part("t")])
-    assert out == "t"  # a URL the gateway does not hold bytes for is dropped, never stringified into text
+
+
+def test_images_are_never_dropped_silently(gw, monkeypatch):
+    """A remote URL (bytes the gateway does not hold) or an empty image part is a typed error, not a missing image."""
+    for bad in ({"type": "image_url", "image_url": {"url": "https://example.test/x.png"}},
+                {"type": "image", "media_type": "image/png"}):
+        with pytest.raises(gw.InvalidContentError):
+            gw.normalise_content([bad, gw.text_part("t")])
+
+    class Boom:
+        def __init__(self, *a, **k):
+            raise AssertionError("no provider call for invalid content")
+
+    monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(AsyncOpenAI=Boom))
+    out = run(gw.call("critic", [{"role": "user", "content": [
+        gw.text_part("look"), {"type": "image_url", "image_url": {"url": "https://example.test/x.png"}}]}]))
+    assert out.ok is False and out.error.type == "invalid_request" and "remote URLs" in out.error.message
 
 
 def test_image_round_trip_openai_and_hash_reaches_trace(gw, monkeypatch):
@@ -703,8 +717,9 @@ def test_scout_and_asset_models_are_declared_once(gw):
     from daedalus import dissection, playground_assets, reference_scout
 
     assert gw.INTENT_DEFAULTS["scout"] == gw.INTENT_DEFAULTS["asset"] == "alltoken:deepseek-v3.2"
-    assert reference_scout._scout_model() == dissection._scout_model() == "alltoken:deepseek-v3.2"
-    assert playground_assets._asset_model() == "alltoken:deepseek-v3.2"
+    assert gw.model_tag_or_empty("scout") == gw.model_tag_or_empty("asset") == "alltoken:deepseek-v3.2"
+    assert gw.model_tag_or_empty("critic") == ""  # no registry default: follow the brain
+    assert all(hasattr(m, "_gateway") for m in (reference_scout, dissection, playground_assets))
     root = Path(__file__).resolve().parents[1] / "daedalus"
     for name in ("reference_scout.py", "dissection.py", "playground_assets.py"):
         assert "alltoken:deepseek-v3.2" not in (root / name).read_text(encoding="utf-8"), name
@@ -795,3 +810,82 @@ def test_intents_endpoints_need_the_owner_token(gw, raw_http):
     client = TestClient(app)
     assert client.get("/api/v1/harness/intents").status_code == 401
     assert client.post("/api/v1/harness/intents", json={"intent": "critic", "model": ""}).status_code == 401
+
+
+# ---- review fixes: classification, json retry, sync timeout, env lock vs registry defaults, mentor clear ----------------------
+
+class _Status(Exception):
+    def __init__(self, msg, status):
+        super().__init__(msg)
+        self.status_code = status
+
+
+@pytest.mark.parametrize("exc,etype", [
+    (_Status("anything", 401), "auth"),
+    (_Status("x", 429), "quota"),
+    (_Status("request id abc403def failed", 500), "provider_error"),                     # bare '403' inside an id is not auth
+    (RuntimeError("max_tokens 4010 exceeds the limit"), "provider_error"),                # not a 401
+    (RuntimeError("insufficient context length for this prompt"), "provider_error"),      # not a quota error
+    (RuntimeError("Error code: 401 - unauthorized"), "auth"),
+    (_Status("401 Unauthorized after a timeout elsewhere", 401), "auth"),                 # status wins over text
+])
+def test_classification_uses_status_and_whole_tokens(gw, exc, etype):
+    assert gw.classify_error(exc).type == etype
+
+
+def test_json_mode_retry_only_for_a_response_format_rejection(gw, monkeypatch):
+    calls = []
+    mode = {"err": "format"}
+
+    class Client:
+        def __init__(self, **kw):
+            self.chat = types.SimpleNamespace(completions=types.SimpleNamespace(create=self.create))
+
+        async def create(self, **kw):
+            calls.append("response_format" in kw)
+            if kw.get("response_format") and mode["err"] == "format":
+                raise _Status("Unsupported parameter: response_format", 400)
+            if mode["err"] == "auth":
+                raise _Status("bad key", 401)
+            msg = types.SimpleNamespace(content="{}")
+            return types.SimpleNamespace(choices=[types.SimpleNamespace(message=msg)], usage=None)
+
+    monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(AsyncOpenAI=Client))
+    out = run(gw.call("mentor", [{"role": "user", "content": "x"}], json_mode=True))
+    assert out.ok and calls == [True, False]           # rejected format -> exactly one retry without it
+    calls.clear()
+    mode["err"] = "auth"
+    out = run(gw.call("mentor", [{"role": "user", "content": "x"}], json_mode=True))
+    assert out.ok is False and out.error.type == "auth" and calls == [True]  # an auth failure is never re-sent
+
+
+def test_call_sync_applies_a_default_timeout(gw, monkeypatch):
+    seen = {}
+
+    async def fake_call(*a, **kw):
+        seen.update(kw)
+        return gw.GatewayResult(True, text="x")
+
+    monkeypatch.setattr(gw, "call", fake_call)
+    gw.call_sync("persona", [{"role": "user", "content": "x"}])
+    assert seen["timeout"] == 60.0
+    gw.call_sync("persona", [{"role": "user", "content": "x"}], timeout=5)
+    assert seen["timeout"] == 5
+
+
+def test_registry_defaults_still_apply_under_an_env_lock(gw, monkeypatch):
+    monkeypatch.setenv("DAEDALUS_MODEL", "pinned/model")
+    scout = gw.resolve("scout")
+    assert scout.source == "registry-default" and scout.model == "deepseek-v3.2"   # same as the old call sites
+    assert gw.resolve("critic").source == "env-lock"
+
+
+def test_mentor_choice_can_be_cleared_through_the_api(gw, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    seen = []
+    monkeypatch.setattr("daedalus.mentor.apply_update", lambda body: seen.append(body) or {})
+    res = TestClient(app).post("/api/v1/harness/intents", json={"intent": "mentor", "model": ""})
+    assert res.status_code == 200 and seen == [{"choice_id": "auto"}]

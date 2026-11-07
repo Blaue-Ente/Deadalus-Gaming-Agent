@@ -13,6 +13,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 from .playground import project_dir, write_file, _safe_join
+from .harness import gateway as _gateway
 from .playground_assets import ensure_assets_dir
 
 log = logging.getLogger(__name__)
@@ -20,13 +21,6 @@ log = logging.getLogger(__name__)
 REFERENCE_REL = "assets/_reference.json"
 _URL_RE = re.compile(r"^https?://", re.I)
 
-
-
-def _scout_model() -> str:
-    """Model for research synthesis: the registry default (or owner choice) from the gateway."""
-    from .harness import gateway
-
-    return gateway.model_tag_for("scout") or ""
 
 
 def _now_iso() -> str:
@@ -207,7 +201,7 @@ async def _synthesize_reference(
     try:
         res = await mesh.route(
             messages=[{"role": "system", "content": sys}, {"role": "user", "content": user}],
-            model=_scout_model(),
+            model=_gateway.model_tag_or_empty("scout"),
             intent="chat",
             max_tokens=1200,
             temperature=0.3,

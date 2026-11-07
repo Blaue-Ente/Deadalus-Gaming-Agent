@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 from .playground import project_dir, write_bytes, _safe_join
+from .harness import gateway as _gateway
 
 log = logging.getLogger(__name__)
 
@@ -38,13 +39,6 @@ _STYLE_BIBLE_SYS = (
     "prompt_prefix трябва да е 1-2 изречения на АНГЛИЙСКИ — един и същ стил за всички assets."
 )
 
-
-
-def _asset_model() -> str:
-    """The planning model for asset work: the owner's choice or the registry default (gateway)."""
-    from .harness import gateway
-
-    return gateway.model_tag_for("asset") or ""
 
 
 def max_assets_cap() -> int:
@@ -330,7 +324,7 @@ async def ensure_style_bible(
     client_id: str = "",
 ) -> dict[str, Any]:
     """Create or load project-wide art direction for consistent assets."""
-    model = model or _asset_model()
+    model = model or _gateway.model_tag_or_empty("asset")
     existing = load_style_bible(slug)
     if existing.get("prompt_prefix"):
         return existing
@@ -479,7 +473,7 @@ async def plan_assets(
     is_game: bool = False,
 ) -> list[dict[str, Any]]:
     """LLM plans which images to generate for a project."""
-    model = model or _asset_model()
+    model = model or _gateway.model_tag_or_empty("asset")
     from . import daedalus_mesh as mesh
 
     budget = max_count or compute_asset_budget(
@@ -521,7 +515,7 @@ async def plan_assets(
     manifest = None
     asset_sys = _asset_sys_for_budget(budget)
     for attempt in range(2):
-        plan_model = model if attempt == 0 else _asset_model()
+        plan_model = model if attempt == 0 else _gateway.model_tag_or_empty("asset")
         try:
             ares = await mesh.route(
                 messages=[
@@ -584,7 +578,7 @@ async def ensure_stage_assets(
     client_id: str = "",
 ) -> list[str]:
     """Generate missing PNGs for one visual stage (ultra / guided checkpoint)."""
-    model = model or _asset_model()
+    model = model or _gateway.model_tag_or_empty("asset")
     if not stage.get("uses_visuals") and stage.get("fragment_kind") not in ("entity", "level"):
         return []
 
@@ -719,7 +713,7 @@ async def auto_pack_assets(
     is_game: bool = False,
 ) -> dict[str, Any]:
     """Plan + batch-generate assets from a game/project description."""
-    model = model or _asset_model()
+    model = model or _gateway.model_tag_or_empty("asset")
     ensure_assets_dir(slug)
     proj = await _get_project_name(slug, name)
     bible = await ensure_style_bible(

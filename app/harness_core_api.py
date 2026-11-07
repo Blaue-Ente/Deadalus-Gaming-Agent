@@ -83,10 +83,13 @@ def harness_intents_set(body: IntentBody) -> Any:
             from daedalus.mentor import apply_update
             from daedalus.model_router import parse_provider_model_tag
 
-            prov, mid = parse_provider_model_tag(body.model)
-            if not (prov and mid):
-                raise ValueError("model must look like provider:model")
-            apply_update({"provider": prov, "model": mid})
+            if not body.model.strip():
+                apply_update({"choice_id": "auto"})  # clearing the owner's choice = the mentor's automatic pick
+            else:
+                prov, mid = parse_provider_model_tag(body.model)
+                if not (prov and mid):
+                    raise ValueError("model must look like provider:model")
+                apply_update({"provider": prov, "model": mid})
         else:
             gw.set_override(intent, body.model)
     except EnvLockedError as exc:
