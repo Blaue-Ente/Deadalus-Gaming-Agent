@@ -73,16 +73,19 @@ def test_mentor_cap_is_default_until_saved(a0_tmp):
     assert row["persisted"] == 1234 and row["effective"] == 1234 and row["source"] == "saved"
 
 
-def test_play_max_sessions_is_bounded_one_to_three(a0_tmp):
+def test_play_max_sessions_is_bounded_by_the_platform(a0_tmp):
+    from daedalus.harness.play_worker.backend import platform_cap
+
+    cap = platform_cap()                                  # Linux 3, Windows 1
     c = _client()
     row = _row(c.get("/api/v1/harness/config").json(), "play.max_sessions")
     assert row["effective"] == 1 and row["default"] == 1 and row["persisted"] is None
-    assert (row["min"], row["max"]) == (1, 3)                      # the UI can constrain its input
-    for bad in (0, 4, -1, "x"):
+    assert (row["min"], row["max"]) == (1, cap)           # the UI can constrain its input
+    for bad in (0, cap + 1, -1, "x"):
         assert c.post("/api/v1/harness/config", json={"key": "play.max_sessions", "value": bad}).status_code == 400
-    assert c.post("/api/v1/harness/config", json={"key": "play.max_sessions", "value": 3}).status_code == 200
+    assert c.post("/api/v1/harness/config", json={"key": "play.max_sessions", "value": cap}).status_code == 200
     row = _row(c.get("/api/v1/harness/config").json(), "play.max_sessions")
-    assert row["effective"] == 3 and row["persisted"] == 3 and row["source"] == "saved"
+    assert row["effective"] == cap and row["persisted"] == cap and row["source"] == "saved"
 
 
 def test_play_max_sessions_bounds_follow_the_platform(a0_tmp, monkeypatch):
