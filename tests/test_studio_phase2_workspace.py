@@ -34,6 +34,9 @@ NEW_KEYS = (
     "studio.saved",
     "studio.indexFallback",
     "studio.checkpoint",
+    "studio.liveReady",
+    "studio.liveLocal",
+    "studio.capsuleMeta",
 )
 
 
@@ -406,11 +409,19 @@ def test_game_index_lists_marker_and_workspace_progress(studio_server):
     studio_server["expo"] = slug
 
 
-def test_game_index_failure_uses_kind_fallback(studio_server):
+def test_game_index_failure_keeps_all_and_reports_the_error(studio_server):
     from playwright.sync_api import sync_playwright
     game = studio_server["game"]
     app = studio_server["app"]
-    expo = studio_server["expo"]
+    expo = studio_server.get("expo")
+    if not expo:
+        made = _api(studio_server, "POST", "/api/v1/playground/projects", {"name": "Expo Marker", "kind": "expo"})
+        expo = made["project"]["slug"]
+        _api(studio_server, "POST", f"/admin/daedalus/playground/api/projects/{expo}/file", {
+            "path": "design/game-studio.json",
+            "content": json.dumps({"build_mode": "guided", "studio_preset": "custom"}),
+        })
+        studio_server["expo"] = expo
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": 1280, "height": 800})
@@ -427,16 +438,22 @@ def test_game_index_failure_uses_kind_fallback(studio_server):
             """() => document.getElementById('workspace-status').textContent.includes('Game index failed')
               && document.getElementById('workspace-status').textContent.includes('index down')
               && window.dxStudio.gameIndexState() === 'failed'
-              && !document.querySelector('#kind-filter [data-filter=apps]').disabled"""
+              && document.querySelector('#kind-filter [data-filter=games]').disabled
+              && document.querySelector('#kind-filter [data-filter=apps]').disabled
+              && !document.querySelector('#kind-filter [data-filter=all]').disabled"""
         )
-        page.locator("#kind-filter [data-filter=apps]").click()
+        page.wait_for_selector(f"#plist [data-slug='{game}']")
         page.wait_for_selector(f"#plist [data-slug='{app}']")
         page.wait_for_selector(f"#plist [data-slug='{expo}']")
-        assert page.locator(f"#plist [data-slug='{game}']").count() == 0
-        page.locator("#kind-filter [data-filter=games]").click()
-        page.wait_for_selector(f"#plist [data-slug='{game}']")
-        assert page.locator(f"#plist [data-slug='{expo}']").count() == 0
-        assert page.locator(f"#plist [data-slug='{app}']").count() == 0
+        buckets = page.evaluate(
+            """(slugs) => slugs.map((slug) => {
+              const row = document.querySelector("#plist [data-slug='" + slug + "']");
+              return row && row.dataset.bucket;
+            })""",
+            [game, app, expo],
+        )
+        assert buckets == ["pending", "pending", "pending"]
+        assert page.locator("#kind-filter [data-filter=all]").get_attribute("aria-pressed") == "true"
         browser.close()
 
 
@@ -496,7 +513,241 @@ def test_build_progress_and_guided_stream_are_visible(studio_server):
         page.locator("#build-guided").click()
         page.wait_for_function(
             """() => document.getElementById('build-out').textContent.includes('compile-slice-ready')
-              && document.getElementById('log').textContent.includes('compile-slice-ready')"""
+              && document.getElementById('log').textContent.includes('compile-slice-ready')
+              && document.getElementById('pane-flight').classList.contains('on')"""
         )
         page.screenshot(path="/opt/cursor/artifacts/phase2-build-progress.png")
         browser.close()
+
+
+def test_build_stream_failure_and_cancel_are_visible(studio_server):
+    from playwright.sync_api import sync_playwright
+    game = studio_server["game"]
+    error_sse = 'event: error\ndata: {"message":"build broke"}\n\n'
+    running_sse = 'event: log\ndata: {"line":"still-running"}\n\n'
+
+    def workspace(route):
+        path = route.request.url.split("?", 1)[0].rstrip("/")
+        if route.request.method != "GET" or not path.endswith("/game-studio/api/projects/" + game):
+            route.fallback()
+            return
+        _fulfill(route, 200, {
+            "ok": True,
+            "can_guided": True,
+            "can_autopilot": False,
+            "can_advance": False,
+            "milestone_summary": {"milestones": []},
+        })
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        calls = {"stream": 0}
+
+        def stream(route):
+            calls["stream"] += 1
+            body = error_sse if calls["stream"] == 1 else running_sse
+            route.fulfill(status=200, headers={"Content-Type": "text/event-stream"}, body=body)
+
+        page.route(f"**/game-studio/api/projects/{game}/build/guided", lambda route: _fulfill(
+            route, 200, {"ok": True, "job_id": "job-err"},
+        ))
+        page.route(f"**/playground/api/projects/{game}/guided/stream**", stream)
+        page.route(f"**/playground/api/projects/{game}/guided/active", lambda route: _fulfill(
+            route, 200, {"active": False},
+        ))
+        page.route(f"**/playground/api/projects/{game}/guided/stop", lambda route: _fulfill(
+            route, 200, {"ok": True, "cancelled": True},
+        ))
+        page.route(f"**/game-studio/api/projects/{game}", workspace)
+        page.goto(studio_server["url"] + f"/?panel=build&slug={game}", wait_until="domcontentloaded")
+        page.locator("#build-guided").click()
+        page.wait_for_function(
+            """() => {
+              const status = document.getElementById('build-status');
+              return status.dataset.state === 'error'
+                && status.textContent.includes('build broke')
+                && document.getElementById('pane-flight').classList.contains('on')
+                && document.getElementById('log').textContent.includes('build broke');
+            }"""
+        )
+        assert "Started." not in page.locator("#build-status").inner_text()
+        page.locator("#build-guided").click()
+        page.wait_for_function("() => document.getElementById('build-out').textContent.includes('still-running')")
+        page.locator("#build-stop").click()
+        page.wait_for_function(
+            """() => document.getElementById('build-status').textContent.includes('Stopped.')
+              && document.getElementById('build-out').textContent.includes('still-running')"""
+        )
+        browser.close()
+
+
+def test_preview_rejects_false_ok_and_distinguishes_publish_copy(studio_server):
+    from playwright.sync_api import sync_playwright
+    game = studio_server["game"]
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        page.route(
+            "**/playground/api/projects/" + game + "/run",
+            lambda route: _fulfill(route, 200, {"ok": False, "error": "runner refused"}),
+        )
+        page.route(
+            "**/api/v1/playground/projects/" + game + "/publish-local",
+            lambda route: _fulfill(route, 200, {"ok": True, "url": f"/apps/{game}/"}),
+        )
+        page.route(
+            "**/api/v1/playground/projects/" + game + "/live",
+            lambda route: _fulfill(route, 200, {
+                "ok": True,
+                "backend": "local",
+                "url": None,
+                "local_url": f"/apps/{game}/",
+            }),
+        )
+        page.route(
+            "**/api/v1/playground/projects/" + game + "/capsule.json",
+            lambda route: _fulfill(route, 200, {"ok": True, "slug": game, "has_index": True}),
+        )
+        page.goto(studio_server["url"] + f"/?panel=preview&slug={game}", wait_until="domcontentloaded")
+        page.locator(f"#plist [data-slug='{game}']").wait_for()
+        page.locator("#preview-run").click()
+        page.wait_for_function("() => document.getElementById('preview-status').textContent.includes('runner refused')")
+        assert "Started." not in page.locator("#preview-status").inner_text()
+        page.unroute("**/playground/api/projects/" + game + "/run")
+        page.route(
+            "**/api/v1/playground/projects/" + game + "/live",
+            lambda route: _fulfill(route, 200, {
+                "ok": True,
+                "backend": "netlify",
+                "url": "https://example.netlify.app",
+            }),
+        )
+        page.locator("#preview-local").click()
+        page.wait_for_function("() => document.getElementById('preview-status').textContent === 'Local copy is ready.'")
+        page.locator("#preview-live").click()
+        page.wait_for_function("() => document.getElementById('preview-status').textContent === 'Live link is ready.'")
+        page.unroute("**/api/v1/playground/projects/" + game + "/live")
+        page.route(
+            "**/api/v1/playground/projects/" + game + "/live",
+            lambda route: _fulfill(route, 200, {
+                "ok": True,
+                "backend": "local",
+                "url": None,
+                "local_url": f"/apps/{game}/",
+            }),
+        )
+        page.locator("#preview-live").click()
+        page.wait_for_function(
+            "() => document.getElementById('preview-status').textContent.includes('No public link')"
+        )
+        assert "Local copy is ready." not in page.locator("#preview-status").inner_text()
+        page.locator("#preview-capsule").click()
+        page.wait_for_function(
+            "() => document.getElementById('preview-status').textContent.includes('Nothing was published')"
+        )
+        browser.close()
+
+
+def test_review_requires_explicit_ok(studio_server):
+    from playwright.sync_api import sync_playwright
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+
+        def proposals(route):
+            if route.request.method == "GET":
+                _fulfill(route, 200, {"proposals": [{"id": "prop-empty", "status": "pending", "reason": "Empty body"}]})
+            else:
+                route.fallback()
+
+        page.route("**/admin/daedalus/proposals/api", proposals)
+        page.route(
+            "**/admin/daedalus/proposals/prop-empty/approve",
+            lambda route: _fulfill(route, 200, {}),
+        )
+        page.goto(studio_server["url"] + "/?panel=review&tab=proposals", wait_until="domcontentloaded")
+        page.get_by_text("Empty body").wait_for()
+        page.locator("#review-list button[data-act=approve]").click()
+        page.wait_for_function(
+            """() => {
+              const status = document.getElementById('review-status');
+              return status.dataset.state === 'error' && !status.textContent.includes('Saved');
+            }"""
+        )
+        browser.close()
+
+
+def test_proposal_approve_and_outbox_dismiss_roundtrip(studio_server):
+    """Real handlers: approve a scratch proposal, then dismiss an outbox note. No send."""
+    data = Path(studio_server["data"])
+    proposal_id = "prop_phase2_review"
+    scratch = ROOT / "tests" / "phase2_review_scratch.py"
+    proposal_path = data / "proposals" / f"{proposal_id}.json"
+    kv = data / "kv"
+    kv.mkdir(parents=True, exist_ok=True)
+    item_id = "out-phase2"
+    (kv / "adn_outbox_index.json").write_text(json.dumps([item_id]), encoding="utf-8")
+    (kv / "adn_outbox_out-phase2.json").write_text(json.dumps({
+        "id": item_id,
+        "type": "message",
+        "title": "Phase2 note",
+        "body": "do not send",
+        "category": "",
+        "payload": None,
+        "status": "pending",
+        "session_id": "",
+        "created_at": 1,
+        "updated_at": 1,
+        "apply_result": None,
+        "dedup_key": "",
+    }), encoding="utf-8")
+    skills_path = data / "skills.json"
+    skills = json.loads(skills_path.read_text(encoding="utf-8")) if skills_path.exists() else {}
+    skills["write_tests"] = True
+    skills_path.write_text(json.dumps(skills), encoding="utf-8")
+    head_before = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=str(ROOT), text=True).strip()
+    proposal_path.parent.mkdir(parents=True, exist_ok=True)
+    proposal_path.write_text(json.dumps({
+        "id": proposal_id,
+        "created_at": 1,
+        "status": "pending",
+        "file_path": "tests/phase2_review_scratch.py",
+        "file_existed": False,
+        "skill": "write_tests",
+        "reason": "phase2 review fixture",
+        "proposed_by": "test",
+        "risk_level": "low",
+        "risk_rationale": "scratch",
+        "old_content": "",
+        "new_content": "# phase2 review scratch\n",
+        "diff": "",
+        "stats": {},
+    }), encoding="utf-8")
+    try:
+        approved = _api(studio_server, "POST", f"/admin/daedalus/proposals/{proposal_id}/approve", {})
+        assert approved["ok"] is True
+        assert scratch.read_text(encoding="utf-8") == "# phase2 review scratch\n"
+        listed = _api(studio_server, "GET", "/admin/daedalus/outbox/api")
+        assert item_id in [row["id"] for row in listed["items"]]
+        dismissed = _api(studio_server, "POST", f"/admin/daedalus/outbox/{item_id}/dismiss", {})
+        assert dismissed["ok"] is True
+        assert dismissed["item"]["status"] == "dismissed"
+        again = _api(studio_server, "GET", "/admin/daedalus/outbox/api")
+        match = [row for row in again["items"] if row["id"] == item_id][0]
+        assert match["status"] == "dismissed"
+        rolled = _api(studio_server, "POST", f"/admin/daedalus/proposals/{proposal_id}/rollback", {})
+        assert rolled["ok"] is True
+        assert not scratch.exists()
+    finally:
+        scratch.unlink(missing_ok=True)
+        proposal_path.unlink(missing_ok=True)
+        head_now = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=str(ROOT), text=True).strip()
+        if head_now != head_before:
+            subjects = subprocess.check_output(
+                ["git", "log", "--format=%s", f"{head_before}..HEAD"],
+                cwd=str(ROOT),
+                text=True,
+            ).splitlines()
+            if subjects and all(line.startswith("daedalus-snapshot:") for line in subjects):
+                subprocess.check_call(["git", "reset", "--mixed", head_before], cwd=str(ROOT))

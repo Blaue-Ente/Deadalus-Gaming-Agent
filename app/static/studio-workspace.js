@@ -110,8 +110,11 @@
       }
     } catch (err) {
       const kept = dx.gameIndexState() === "ready";
-      if (!kept) dx.failGameIndex();
-      setKindButtons(true);
+      if (!kept) {
+        dx.failGameIndex();
+        if (dx.getKindFilter() !== "all") dx.setKindFilter("all");
+        setKindButtons(false);
+      }
       const note = kept ? dx.t("studio.requestFailed") : dx.t("studio.indexFallback");
       showStatus("workspace-status", note + " " + failText(err), true);
       if (status) status.dataset.reason = "index";
@@ -397,6 +400,8 @@
     flight = kind;
     $("build-stop").hidden = false;
     $("build-out").textContent = "";
+    const flightTab = document.querySelector('.tabs button[data-pane="flight"]');
+    if (flightTab) flightTab.click();
     const url = kind === "autopilot"
       ? "/api/v1/playground/projects/" + slugPath(slug) + "/autopilot/stream"
       : "/admin/daedalus/playground/api/projects/" + slugPath(slug) + "/guided/stream?job_id=" + encodeURIComponent(jobId || "") + "&from=0";
@@ -609,8 +614,8 @@
       else if (act === "out-apply") path = "/admin/daedalus/outbox/" + encodeURIComponent(id) + "/apply";
       else if (act === "out-dismiss") path = "/admin/daedalus/outbox/" + encodeURIComponent(id) + "/dismiss";
       const data = await postJson(path, body);
-      if (data && data.ok === false) {
-        showStatus("review-status", dx.t("studio.requestFailed") + ": " + (data.error || ""), true);
+      if (!data || data.ok !== true) {
+        showStatus("review-status", dx.t("studio.requestFailed") + ": " + ((data && data.error) || ""), true);
         return;
       }
       showStatus("review-status", dx.t("studio.saved"), false);
@@ -868,6 +873,7 @@
         showStatus("preview-status", dx.t("studio.harnessCheck"), false);
         return;
       }
+      if (!data || data.ok !== true) throw new Error((data && data.error) || dx.t("studio.requestFailed"));
       showStatus("preview-status", dx.t("studio.started"), false);
     });
   });
@@ -903,11 +909,12 @@
     if (!slug) return;
     runAction($("preview-capsule"), "preview-status", async () => {
       const data = await dx.api("/api/v1/playground/projects/" + slugPath(slug) + "/capsule.json");
-      showStatus(
-        "preview-status",
-        data.harness_check ? dx.t("studio.harnessCheck") : dx.t("studio.localReady"),
-        false
-      );
+      if (data && data.harness_check) {
+        showStatus("preview-status", dx.t("studio.harnessCheck"), false);
+        return;
+      }
+      if (!data || data.ok !== true) throw new Error((data && data.error) || dx.t("studio.requestFailed"));
+      showStatus("preview-status", dx.t("studio.capsuleMeta"), false);
     });
   });
 
@@ -920,8 +927,13 @@
         showStatus("preview-status", dx.t("studio.harnessCheck"), false);
         return;
       }
-      if (data.ok === false) throw new Error(data.error || dx.t("studio.notPublished"));
-      showStatus("preview-status", suffix === "/live" ? dx.t("studio.localReady") : dx.t("studio.localReady"), false);
+      if (!data || data.ok !== true) throw new Error((data && data.error) || dx.t("studio.notPublished"));
+      if (suffix === "/live") {
+        const published = !!(data.url && data.backend && data.backend !== "local");
+        showStatus("preview-status", dx.t(published ? "studio.liveReady" : "studio.liveLocal"), false);
+        return;
+      }
+      showStatus("preview-status", dx.t("studio.localReady"), false);
     });
   }
 

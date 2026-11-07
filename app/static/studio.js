@@ -619,6 +619,7 @@
   }
 
   function projectBucket(project) {
+    if (state.gameIndex !== "ready") return "";
     const slug = project && project.slug;
     if (state.gameSlugs && slug && state.gameSlugs.has(slug)) return "games";
     const kind = String((project && project.kind) || "").toLowerCase();
@@ -640,8 +641,10 @@
   function renderProjectList() {
     const box = $("plist");
     box.replaceChildren();
+    const indexed = state.gameIndex === "ready";
     const visible = state.projects.filter((p) => {
-      return state.kindFilter === "all" || projectBucket(p) === state.kindFilter;
+      if (!indexed || state.kindFilter === "all") return true;
+      return projectBucket(p) === state.kindFilter;
     });
     if (!visible.length) {
       const empty = document.createElement("div");
@@ -652,7 +655,7 @@
     visible.forEach((p) => {
       const el = itemEl(p.name || p.slug, p.kind + " · " + p.slug, p.slug === state.slug);
       el.dataset.slug = p.slug;
-      el.dataset.bucket = projectBucket(p);
+      el.dataset.bucket = indexed ? projectBucket(p) : "pending";
       el.onclick = () => {
         state.slug = p.slug;
         localStorage.setItem("dx.slug", state.slug);
