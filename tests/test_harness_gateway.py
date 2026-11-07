@@ -330,3 +330,62 @@ def test_path_flag(gw, monkeypatch):
     assert gw.path_enabled("mesh") is True
     monkeypatch.setenv("DAEDALUS_GATEWAY_MESH", "0")
     assert gw.path_enabled("mesh") is False
+
+
+# ---- migration 1: mesh.route keeps images in standalone mode -----------------------------------------
+
+def test_mesh_route_sends_images_as_image_parts(gw, monkeypatch):
+    from daedalus import daedalus_mesh as mesh
+
+    monkeypatch.setattr(mesh, "use_mesh_router", lambda: False)
+    record = _install_openai(monkeypatch, text="critic reply")
+    msgs = [{"role": "system", "content": "judge"},
+            {"role": "user", "content": [gw.text_part("rate this"), {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{PNG_B64}"}}]}]
+    out = run(mesh.route(messages=msgs, intent="vision", max_tokens=300))
+    assert out["ok"] and out["reply"] == "critic reply"
+    sent = record["body"]["messages"]
+    assert sent[0] == {"role": "system", "content": "judge"}
+    assert sent[1]["content"][1]["image_url"]["url"] == f"data:image/png;base64,{PNG_B64}"  # bytes intact
+    assert record["body"]["max_tokens"] == 300
+
+
+def test_mesh_route_text_only_still_uses_llm_client(gw, monkeypatch):
+    from daedalus import daedalus_mesh as mesh
+
+    monkeypatch.setattr(mesh, "use_mesh_router", lambda: False)
+    seen = {}
+
+    async def fake_complete(**kw):
+        seen.update(kw)
+        return {"ok": True, "reply": "plain"}
+
+    monkeypatch.setattr("daedalus.llm_client.complete", fake_complete)
+    out = run(mesh.route(messages=[{"role": "user", "content": "hi"}], intent="chat"))
+    assert out["reply"] == "plain" and seen["user"] == "hi"
+
+
+def test_mesh_route_flag_off_restores_the_old_path(gw, monkeypatch):
+    from daedalus import daedalus_mesh as mesh
+
+    monkeypatch.setattr(mesh, "use_mesh_router", lambda: False)
+    monkeypatch.setenv("DAEDALUS_GATEWAY_MESH", "0")
+    seen = {}
+
+    async def fake_complete(**kw):
+        seen.update(kw)
+        return {"ok": True, "reply": "old"}
+
+    monkeypatch.setattr("daedalus.llm_client.complete", fake_complete)
+    msgs = [{"role": "user", "content": [gw.text_part("rate this"), gw.image_part(data=PNG_B64)]}]
+    run(mesh.route(messages=msgs, intent="vision"))
+    assert "image omitted" in seen["user"] and "{'type'" not in seen["user"]  # readable, never a repr
+
+
+def test_split_messages_never_dumps_a_python_repr(gw):
+    from daedalus.daedalus_mesh import _split_messages
+
+    system, user = _split_messages([
+        {"role": "system", "content": [{"type": "text", "text": "sys"}]},
+        {"role": "user", "content": [{"type": "text", "text": "hello"}, {"type": "image_url", "image_url": {"url": "data:x"}}]},
+    ])
+    assert system == "sys" and user.startswith("hello") and "{" not in user
