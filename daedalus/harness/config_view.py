@@ -26,7 +26,7 @@ class Setting:
     write: Callable[[Any], Any] | None      # None = read-only here
     secret: bool = False
     choices: Callable[[], list[str]] | None = None   # enum settings: the accepted values
-    bounds: tuple[int, int] | None = None            # int settings: inclusive (low, high)
+    bounds: Callable[[], tuple[int, int]] | tuple[int, int] | None = None   # int settings: inclusive (low, high)
 
 
 def _mentor_enabled() -> dict[str, Any]:
@@ -95,6 +95,11 @@ def _write_play_max(v: Any) -> Any:
     return settings_file.update({"play_max_sessions": int(v)})
 
 
+def _play_bounds() -> tuple[int, int]:
+    from .play_worker.backend import platform_cap
+    return 1, platform_cap()                  # Windows can run one game (one desktop, pointer, keyboard); Linux three
+
+
 def _evolution() -> dict[str, Any]:
     from .. import evolution, settings_file
     persisted = settings_file.load().get("evolution_enabled")
@@ -138,7 +143,7 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("evolution.enabled", "settings.evolution", "evolution", "bool", "DAEDALUS_EVOLUTION", _evolution, _write_evolution),
     Setting("auto_apply.enabled", "settings.autoApply", "evolution", "bool", "", _auto_apply, _write_auto_apply),
     Setting("play.max_sessions", "settings.playMax", "runtime", "int", "DAEDALUS_PLAY_MAX", _play_max, _write_play_max,
-            bounds=(1, 3)),
+            bounds=_play_bounds),
     Setting("kv.backend", "settings.kvBackend", "storage", "enum", "DAEDALUS_KV", _kv, None),
     Setting("brain.model", "settings.brainModel", "runtime", "str", "DAEDALUS_MODEL", _brain, None),
 )
@@ -167,6 +172,10 @@ def _locked(s: Setting, env_value: str | None) -> bool:
     return True
 
 
+def _bounds(s: Setting) -> tuple[int, int] | None:
+    return s.bounds() if callable(s.bounds) else s.bounds
+
+
 def _coerce(s: Setting, value: Any) -> Any:
     """Validate before anything is stored: the settings' own normalisers silently turn junk into a default."""
     if s.kind == "bool":
@@ -182,7 +191,7 @@ def _coerce(s: Setting, value: Any) -> Any:
         if isinstance(value, bool):
             raise ValueError(f"{s.key} expects a whole number")
         number = int(str(value).strip())      # ValueError for junk
-        lo, hi = s.bounds or (0, 2**31 - 1)
+        lo, hi = _bounds(s) or (0, 2**31 - 1)
         if not lo <= number <= hi:
             raise ValueError(f"{s.key} must be between {lo} and {hi}" if s.bounds else f"{s.key} must be 0 or more")
         return number
@@ -204,7 +213,7 @@ def view_one(s: Setting) -> dict[str, Any]:
         "writable": s.write is not None and not locked,
     }
     if s.bounds:
-        row["min"], row["max"] = s.bounds
+        row["min"], row["max"] = _bounds(s)
     if s.choices is not None:
         try:
             row["choices"] = s.choices()

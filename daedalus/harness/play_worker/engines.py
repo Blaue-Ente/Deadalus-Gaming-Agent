@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shutil
 from pathlib import Path
 from typing import Any
@@ -17,11 +18,15 @@ _KNOWN_DIRS = (
 _WIN_PATTERNS = ("Godot_v*win64_console.exe", "Godot_v*win64.exe", "godot*.exe")
 
 
+def _version_key(path: Path) -> list[int]:
+    return [int(n) for n in re.findall(r"\d+", path.name)]            # 4.10 is newer than 4.9
+
+
 def _windows_binary(base: Path) -> Path | None:
-    folders = [base] + sorted(p for p in base.glob("*") if p.is_dir())
+    folders = [base] + sorted((p for p in base.glob("*") if p.is_dir()), key=_version_key, reverse=True)
     for pattern in _WIN_PATTERNS:
         for folder in folders:
-            for hit in sorted(folder.glob(pattern), reverse=True):
+            for hit in sorted(folder.glob(pattern), key=_version_key, reverse=True):
                 if hit.is_file():
                     return hit
     return None

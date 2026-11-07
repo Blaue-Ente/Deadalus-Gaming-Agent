@@ -109,6 +109,10 @@ class PlaySession:
             if not (self.source / "project.godot").is_file():
                 self.state = "failed"
                 raise PlayError("start_failed", "not a Godot project (no project.godot)", slug=self.slug)
+            missing = [k for k, ok in self.backend.tools().items() if not ok]
+            if missing:                                                # cheap check first: no copy, no import
+                self.state = "failed"
+                raise PlayError("tool_missing", f"a rendered session needs: {', '.join(missing)}", tools=missing)
             try:
                 self.artifacts.mkdir(parents=True, exist_ok=True)
                 (self.artifacts / "session.json").write_text(
@@ -119,9 +123,6 @@ class PlaySession:
                 imp = godot_bridge.run_import(proj, eng["path"], timeout=120)
                 if imp.get("ok") is False and imp.get("error"):
                     self._event("import_warning", error=str(imp.get("error"))[:200])
-                missing = [k for k, ok in self.backend.tools().items() if not ok]
-                if missing:
-                    raise PlayError("tool_missing", f"a rendered session needs: {', '.join(missing)}", tools=missing)
                 backend_env = self.backend.start(self.size)
                 env = {**os.environ, **backend_env, **self.env_extra}
                 env.pop("WAYLAND_DISPLAY", None)

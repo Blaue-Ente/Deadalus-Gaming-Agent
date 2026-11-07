@@ -117,6 +117,56 @@ def test_no_key_is_sent_when_the_game_window_cannot_take_focus():
     assert exc.value.code == "focus_lost" and be.sent == []        # nothing reached whatever else was in front
 
 
+def test_a_key_is_always_released_even_when_focus_is_lost_during_the_hold(monkeypatch):
+    monkeypatch.setattr(win32.time, "sleep", lambda s: None)
+    be = _fake_backend(foreground=7)
+    state = {"calls": 0}
+
+    def fg():
+        state["calls"] += 1
+        return 7 if state["calls"] == 1 else 999          # in front when pressed, gone by release time
+
+    be.u32.GetForegroundWindow = fg
+    be._focus = lambda: (_ for _ in ()).throw(PlayError("focus_lost", "lost"))
+    with pytest.raises(PlayError) as exc:
+        be.key("space", 100)
+    assert exc.value.code == "focus_lost"
+    assert len(be.sent) == 2                              # key-down AND key-up: nothing is left held in the game
+
+
+def test_capture_never_takes_keyboard_focus(monkeypatch, tmp_path):
+    be = _fake_backend(foreground=999)                    # the owner's editor is in front
+    calls = []
+    be._focus = lambda: calls.append("focus")
+    be._raise = lambda on: calls.append(("raise", on))
+    be._grab = lambda x, y, w, h, m: bytes([10, 20, 30, 0]) * (w * h)
+    be.method = "screen"
+    be.capture("7", tmp_path / "f.png")
+    assert "focus" not in calls and calls == [("raise", True), ("raise", False)]
+
+
+def test_windows_engine_discovery_uses_numeric_version_order(tmp_path):
+    from daedalus.harness.play_worker import engines
+
+    for ver in ("4.10", "5.0", "4.3", "4.9"):
+        d = tmp_path / ver
+        d.mkdir(parents=True)
+        (d / f"Godot_v{ver}-stable_win64.exe").write_bytes(b"x")
+    assert engines._windows_binary(tmp_path).parent.name == "5.0"      # string order would pick "4.10"
+
+
+def test_every_play_error_code_has_an_http_status():
+    import re
+
+    from daedalus.harness.play_worker.server import _STATUS
+
+    codes = set()
+    for f in (ROOT / "daedalus" / "harness" / "play_worker").glob("*.py"):
+        codes |= set(re.findall(r'PlayError\(\s*"([a-z_]+)"', f.read_text(encoding="utf-8")))
+    assert codes, "no PlayError codes found"
+    assert sorted(c for c in codes if c not in _STATUS) == []      # none may fall through to a 500
+
+
 def test_a_click_outside_the_game_window_is_refused_before_any_movement():
     be = _fake_backend(foreground=7)
     for x, y in ((640, 10), (-1, 10), (10, 480), (9999, 9999)):

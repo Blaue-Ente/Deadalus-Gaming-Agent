@@ -283,7 +283,6 @@ class WindowsBackend:
         """Bring the game window to the front and prove it is there; never assume."""
         hwnd = self.hwnd
         self.u32.ShowWindow(hwnd, 9)                                   # SW_RESTORE
-        self.u32.SetWindowPos(hwnd, wt.HWND(-1), 0, 0, 0, 0, 0x1 | 0x2 | 0x40)   # topmost, no move/size, show
         fg = self.u32.GetForegroundWindow()
         me = self.k32.GetCurrentThreadId()
         fg_thread = self.u32.GetWindowThreadProcessId(fg, None) if fg else 0
@@ -301,6 +300,11 @@ class WindowsBackend:
             time.sleep(0.05)
         raise PlayError("focus_lost", "could not bring the game window to the front; input was NOT sent")
 
+    def _raise(self, on: bool) -> None:
+        """Topmost without activation (and back): visible over other windows, keyboard focus untouched."""
+        self.u32.ShowWindow(self.hwnd, 4)                              # SW_SHOWNOACTIVATE: restore if minimised
+        self.u32.SetWindowPos(self.hwnd, wt.HWND(-1 if on else -2), 0, 0, 0, 0, 0x1 | 0x2 | 0x10 | 0x40)
+
     def _require_focus(self) -> None:
         self._client()                                                  # window still exists
         if self.u32.GetForegroundWindow() != self.hwnd:
@@ -315,9 +319,16 @@ class WindowsBackend:
         if w < 2 or h < 2:
             raise PlayError("window_missing", f"game window has no area ({w}x{h})")
         method = self.method if self.method in {"screen", "printwindow"} else "screen"
-        if method == "screen":
-            self._focus() if self.u32.GetForegroundWindow() != self.hwnd else None
-        bgra = self._grab(x, y, w, h, method)
+        # A screenshot needs the window visible and on top, NOT focused: taking focus here would pull the owner's
+        # typing into the game. Raise it without activating, grab, and put it back in the normal order.
+        raised = method == "screen"
+        if raised:
+            self._raise(True)
+        try:
+            bgra = self._grab(x, y, w, h, method)
+        finally:
+            if raised:
+                self._raise(False)
         out.parent.mkdir(parents=True, exist_ok=True)
         out.write_bytes(encode_rgba(w, h, bgra_to_rgba(bgra)))
         info = cap.describe_frame(out)
@@ -371,9 +382,15 @@ class WindowsBackend:
         vk, ext = vk_for(name)
         self._require_focus()
         self._send(self._key_event(vk, ext, False))
-        time.sleep(max(0, min(int(hold_ms), 5000)) / 1000.0)
-        self._require_focus()                                           # never release into another window's state
-        self._send(self._key_event(vk, ext, True))
+        lost: PlayError | None = None
+        try:
+            time.sleep(max(0, min(int(hold_ms), 5000)) / 1000.0)
+            self._require_focus()
+        except PlayError as exc:                                        # focus went away while the key was down
+            lost = exc
+        self._send(self._key_event(vk, ext, True))                      # ALWAYS release: a stuck key is worse
+        if lost is not None:
+            raise lost
         return {"via": "os", "type": "key", "key": name, "hold_ms": hold_ms, "backend": "win32"}
 
     def _mouse_event(self, flags: int, nx: int = 0, ny: int = 0) -> INPUT:

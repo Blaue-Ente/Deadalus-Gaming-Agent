@@ -85,6 +85,16 @@ def test_play_max_sessions_is_bounded_one_to_three(a0_tmp):
     assert row["effective"] == 3 and row["persisted"] == 3 and row["source"] == "saved"
 
 
+def test_play_max_sessions_bounds_follow_the_platform(a0_tmp, monkeypatch):
+    import sys
+
+    monkeypatch.setattr(sys, "platform", "win32")          # one desktop, one pointer, one keyboard
+    c = _client()
+    row = _row(c.get("/api/v1/harness/config").json(), "play.max_sessions")
+    assert (row["min"], row["max"]) == (1, 1)
+    assert c.post("/api/v1/harness/config", json={"key": "play.max_sessions", "value": 3}).status_code == 400
+
+
 def test_unparsable_pin_does_not_lock(a0_tmp, monkeypatch):
     monkeypatch.setenv("DAEDALUS_RUN_BUDGET", "lots")
     row = _row(_client().get("/api/v1/harness/config").json(), "run_budget.usd")
