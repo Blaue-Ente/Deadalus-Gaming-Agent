@@ -168,6 +168,128 @@ def facts(page) -> dict:
     return {"facts_error": "facts were not an object", "falseFacts": ["facts-unavailable"]}
 
 
+_OWNER_FACTS = """() => {
+  const clip = (value) => {
+    const text = value || "";
+    return text.length > 180 ? text.slice(0, 180) : text;
+  };
+  const q = (id) => document.getElementById(id);
+  const stop = q("build-stop");
+  const guided = q("build-guided");
+  const params = new URL(location.href).searchParams;
+  return {
+    slug: (window.dxStudio && window.dxStudio.getSlug()) || "",
+    panel: params.get("panel") || "",
+    buildStopHidden: stop ? stop.hidden : null,
+    buildGuidedDisabled: guided ? guided.disabled : null,
+    buildCheckpointHidden: q("build-checkpoint") ? q("build-checkpoint").hidden : null,
+    flightCheckpointHidden: q("flight-checkpoint") ? q("flight-checkpoint").hidden : null,
+    flightOn: !!(q("pane-flight") && q("pane-flight").classList.contains("on")),
+    buildStatus: q("build-status") ? clip(q("build-status").textContent) : null,
+  };
+}"""
+
+
+def owner_facts(page) -> dict:
+    try:
+        data = page.evaluate(_OWNER_FACTS)
+    except Exception as exc:
+        return {"owner_facts_error": redact(str(exc))}
+    if isinstance(data, dict):
+        return data
+    return {"owner_facts_error": "owner_facts-not-object"}
+
+
+def owned_state(owned) -> dict:
+    """Bounded stub state from guided-resume Playwright tests (no secrets)."""
+    if owned is None:
+        return {}
+    streams = list(getattr(owned, "streams", None) or [])
+    return {
+        "streams_count": len(streams),
+        "streams_paths": [safe_url(u) for u in streams[:24]],
+        "active_held_count": len(getattr(owned, "actives", None) or []),
+        "active_answered_count": len(getattr(owned, "answered", None) or []),
+        "posts_held_count": len(getattr(owned, "held_posts", None) or []),
+        "posts_released_count": len(getattr(owned, "posts", None) or []),
+        "stops_count": len(getattr(owned, "stops", None) or []),
+        "post_mode": str(getattr(owned, "post_mode", "") or ""),
+    }
+
+
+def _utf8_len(text: str) -> int:
+    return len(text.encode("utf-8"))
+
+
+def _serialize_bounded(payload: dict, *, cap: int | None = None) -> str:
+    cap = FILE_CAP if cap is None else cap
+    work: dict = dict(payload)
+    work.pop("truncated", None)
+    work.pop("events_omitted", None)
+    for _ in range(256):
+        text = json.dumps(work, ensure_ascii=False, indent=2)
+        if _utf8_len(text) <= cap:
+            return text
+        trimmed = False
+        events = work.get("events")
+        if isinstance(events, list) and events:
+            work["events"] = events[:-1]
+            work["truncated"] = True
+            work["events_omitted"] = int(work.get("events_omitted") or 0) + 1
+            trimmed = True
+        elif isinstance(work.get("streams_paths"), list) and work["streams_paths"]:
+            work["streams_paths"] = work["streams_paths"][:-1]
+            work["truncated"] = True
+            trimmed = True
+        owned = work.get("owned")
+        if not trimmed and isinstance(owned, dict):
+            for key in ("streams_paths",):
+                if isinstance(owned.get(key), list) and owned[key]:
+                    owned = dict(owned)
+                    owned[key] = owned[key][:-1]
+                    work["owned"] = owned
+                    work["truncated"] = True
+                    trimmed = True
+                    break
+        frame = work.get("facts")
+        if not trimmed and isinstance(frame, dict) and frame:
+            key = max(frame, key=lambda k: len(str(frame[k])))
+            work["facts"] = {k: v for k, v in frame.items() if k != key}
+            work["truncated"] = True
+            trimmed = True
+        if not trimmed:
+            break
+    minimal = {
+        "label": work.get("label", "unknown"),
+        "truncated": True,
+        "reason": "payload_exceeded_file_cap",
+        "events_omitted": work.get("events_omitted"),
+        "dropped_events": work.get("dropped_events"),
+    }
+    text = json.dumps(minimal, ensure_ascii=False, indent=2)
+    if _utf8_len(text) > cap:
+        text = json.dumps(
+            {"label": str(work.get("label", "unknown"))[:80], "truncated": True, "reason": "minimal_cap"},
+            ensure_ascii=False,
+        )
+    return text
+
+
+def _write_artifact(label: str, text: str) -> str:
+    ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
+    global _SEQ
+    _SEQ += 1
+    safe = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in label)[:48]
+    path = ARTIFACT_DIR / f"{safe}-{_SEQ}.json"
+    path.write_text(text, encoding="utf-8")
+    _prune()
+    try:
+        rel = path.relative_to(ROOT)
+    except ValueError:
+        rel = path.name
+    return f"stream-diag artifact: {rel}"
+
+
 def _prune() -> None:
     existing = sorted(ARTIFACT_DIR.glob("*.json"), key=lambda path: path.stat().st_mtime)
     while len(existing) > KEEP_ARTIFACTS:
@@ -182,16 +304,42 @@ def dump(page, trace: Trace, label: str) -> str:
         "dropped_events": trace.dropped,
         "events": trace.events,
     }
-    text = json.dumps(payload, ensure_ascii=False, indent=2)
-    if len(text) > FILE_CAP:
-        text = text[: FILE_CAP - 1] + "…"
-    ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
-    global _SEQ
-    _SEQ += 1
-    safe = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in label)[:48]
-    (ARTIFACT_DIR / f"{safe}-{_SEQ}.json").write_text(text, encoding="utf-8")
-    _prune()
+    text = _serialize_bounded(payload, cap=FILE_CAP)
+    _write_artifact(label, text)
     return text
+
+
+def record_failure(
+    page,
+    trace: Trace,
+    label: str,
+    *,
+    owned=None,
+) -> str:
+    """Failure-only artifact for guided-resume owner flows. Re-raise stays with caller."""
+    payload = {
+        "label": label,
+        "facts": facts(page),
+        "owner": owner_facts(page),
+        "owned": owned_state(owned),
+        "dropped_events": trace.dropped,
+        "events": trace.events,
+    }
+    summary = ""
+    try:
+        text = _serialize_bounded(payload, cap=FILE_CAP)
+        summary = _write_artifact(label, text)
+    except Exception as cap_err:
+        summary = f"stream-diag capture failed: {type(cap_err).__name__}"
+    import sys
+
+    exc = sys.exc_info()[1]
+    if exc is not None and hasattr(exc, "add_note"):
+        try:
+            exc.add_note(summary)
+        except Exception:
+            pass
+    return summary
 
 
 def wait(page, trace: Trace, expression: str, label: str, arg=None) -> None:
