@@ -29,6 +29,8 @@ import time
 import uuid
 from typing import AsyncIterator, Callable, Optional
 
+from .harness import runs as _runs
+
 log = logging.getLogger(__name__)
 
 try:
@@ -70,6 +72,7 @@ class AutopilotJob:
         from .autopilot_loop_guard import RalphLoopGuard
 
         self.id          = uuid.uuid4().hex[:16]
+        self.run_id      = ""           # run-ledger id; set by start_autopilot only
         self.slug        = slug
         self.description = description[:200]
         self.events: list[dict] = []   # [{event:str, data:dict}]
@@ -124,6 +127,11 @@ class AutopilotJob:
         self._durable(event, data if isinstance(data, dict) else {})
 
     def _durable(self, event: str, data: dict) -> None:
+        if event in ("phase", "done", "error", "file", "interrupted") and self.run_id:
+            _runs.safe_event(self.run_id, event, {
+                "label": data.get("label"), "n": data.get("n") if isinstance(data.get("n"), int) else None,
+                "path": data.get("path"), "message": str(data.get("message") or "")[:300] or None,
+                "files": len(data.get("files") or []) if isinstance(data.get("files"), list) else None})
         try:
             from .run_engine import record
             phase = data.get("n") if isinstance(data.get("n"), int) else data.get("label")
@@ -151,6 +159,7 @@ class AutopilotJob:
             self.cond.notify_all()
         self._persist(force=True)
         self._durable("done", {"files": files, "assets": assets})
+        _runs.sync_job(self, "autopilot")  # after the final event, so a streaming client never misses it
 
     async def fail(self, error: str) -> None:
         async with self.cond:
@@ -165,6 +174,7 @@ class AutopilotJob:
             self.cond.notify_all()
         self._persist(force=True)
         self._durable("error", {"message": error})
+        _runs.sync_job(self, "autopilot")
 
     async def mark_interrupted(self, reason: str) -> None:
         async with self.cond:
@@ -177,6 +187,7 @@ class AutopilotJob:
             self.cond.notify_all()
         self._persist(force=True)
         self._durable("interrupted", {"message": reason})
+        _runs.sync_job(self, "autopilot")
 
     async def pause(self) -> bool:
         async with self.cond:
@@ -190,6 +201,7 @@ class AutopilotJob:
             self.updated = _now()
             self.cond.notify_all()
         self._persist(force=True)
+        _runs.sync_job(self, "autopilot")
         return True
 
     async def resume(self) -> bool:
@@ -203,6 +215,7 @@ class AutopilotJob:
             self.updated = _now()
             self.cond.notify_all()
         self._persist(force=True)
+        _runs.sync_job(self, "autopilot")
         return True
 
     async def wait_if_paused(self) -> None:
@@ -259,6 +272,7 @@ async def _run_job(
     generator advancement (i.e. before each LLM call).
     """
     agen = gen_factory()
+    _runs.bind(job.run_id)
     try:
         while True:
             await job.wait_if_paused()
@@ -323,6 +337,8 @@ def start_autopilot(
     slug: str,
     description: str,
     gen_factory: Callable[[], AsyncIterator[tuple[str, dict]]],
+    *,
+    run_kind: str = "autopilot",
 ) -> "AutopilotJob":
     """Create a job, cancel any in-flight autopilot for the slug, spawn detached task."""
     _gc()
@@ -334,8 +350,10 @@ def start_autopilot(
     job = AutopilotJob(slug, description)
     _AP_JOBS[job.id] = job
     _AP_ACTIVE[slug] = job.id
+    job.run_id = _runs.safe_open(run_kind, slug=slug, ref=f"autopilot:{job.id}", summary=description)
     job._persist(force=True)
     job.task = asyncio.create_task(_run_job(job, gen_factory))
+    job.task.add_done_callback(_runs.on_task_done(job, "autopilot"))
     return job
 
 

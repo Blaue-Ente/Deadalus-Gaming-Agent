@@ -506,6 +506,12 @@ async def call(
 
     intent_c = canonical_intent(intent)
     t0 = time.perf_counter()
+    if not run_id:  # a model call made inside a tracked run belongs to that run
+        try:
+            from .runs import current_run_id
+            run_id = current_run_id() or None
+        except Exception:
+            run_id = None
     try:
         norm = normalise_messages(messages)
     except InvalidContentError as exc:

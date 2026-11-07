@@ -28,6 +28,8 @@ import time
 import uuid
 from typing import Awaitable, Callable, Optional
 
+from .harness import runs as _runs
+
 log = logging.getLogger(__name__)
 
 try:
@@ -65,6 +67,7 @@ class BuildJob:
 
     def __init__(self, slug: str, mode: str, mode_label: str):
         self.id = uuid.uuid4().hex[:16]
+        self.run_id = ""  # run-ledger id; set by start_build only
         self.slug = slug
         self.mode = mode
         self.mode_label = mode_label
@@ -132,6 +135,7 @@ class BuildJob:
             self.updated = _now()
             self.cond.notify_all()
         self._persist(force=True)
+        _runs.sync_job(self, "build")
 
     async def fail(self, error: str) -> None:
         async with self.cond:
@@ -141,6 +145,7 @@ class BuildJob:
             self.updated = _now()
             self.cond.notify_all()
         self._persist(force=True)
+        _runs.sync_job(self, "build")
 
 
 async def subscribe(job: "BuildJob", from_offset: int = 0):
@@ -191,6 +196,7 @@ async def _run(
     write_files: Callable[[str, dict], object],
 ) -> None:
     """Background task body — drives the LLM stream to completion, then writes files."""
+    _runs.bind(job.run_id)
     try:
         stream = route_stream_factory()
         async for ev in stream:
@@ -264,11 +270,13 @@ def start_build(
     job = BuildJob(slug, mode, mode_label)
     _JOBS[job.id] = job
     _ACTIVE[slug] = job.id   # claim the slug before persisting / spawning
+    job.run_id = _runs.safe_open("build", slug=slug, ref=f"build:{job.id}", summary=mode_label or mode)
     job._persist(force=True)
     job.task = asyncio.create_task(
         _run(job, route_stream_factory=route_stream_factory,
              parse_files=parse_files, write_files=write_files)
     )
+    job.task.add_done_callback(_runs.on_task_done(job, "build"))
     return job
 
 
@@ -281,6 +289,7 @@ def cancel_active(slug: str) -> bool:
             jb.status = "interrupted"
             jb.error = "Спрян ръчно от потребителя."
             jb._persist(force=True)
+            _runs.sync_job(jb, "build")
             cancelled = True
     return cancelled
 
