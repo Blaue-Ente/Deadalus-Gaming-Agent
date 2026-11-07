@@ -88,6 +88,15 @@ def verify_unity_scaffold(slug: str, paths: list[str] | None = None) -> dict[str
     }
 
 
+def runner_host() -> str:
+    """Interface that run/preview apps bind to. Loopback unless the owner opts in
+    with ``DAEDALUS_RUNNER_HOST`` (e.g. ``0.0.0.0`` to test from a phone on the LAN)."""
+    host = (os.environ.get("DAEDALUS_RUNNER_HOST") or "").strip()
+    if host and re.fullmatch(r"[A-Za-z0-9.:\-]{1,64}", host):
+        return host
+    return "127.0.0.1"
+
+
 class PlaygroundRuntime:
     """Facade for playground subprocess lifecycle helpers."""
 
@@ -130,7 +139,7 @@ class PlaygroundRuntime:
                 if (root / f"{cand}.py").exists():
                     main = cand
                     break
-            return f"python -m uvicorn {main}:app --host 0.0.0.0 --port {port}"
+            return f"python -m uvicorn {main}:app --host {runner_host()} --port {port}"
 
         if kind == "streamlit":
             target = "streamlit_app.py"
@@ -140,7 +149,7 @@ class PlaygroundRuntime:
                     break
             base = (
                 f"python -m streamlit run {target} --server.headless true "
-                f"--server.port {port} --server.address 0.0.0.0 "
+                f"--server.port {port} --server.address {runner_host()} "
                 f"--browser.gatherUsageStats false"
             )
             if preview_base:
@@ -153,7 +162,7 @@ class PlaygroundRuntime:
             return base
 
         if kind in ("vite", "vite-react"):
-            return f"npx --yes vite --host 0.0.0.0 --port {port} --base ./ --no-open"
+            return f"npx --yes vite --host {runner_host()} --port {port} --base ./ --no-open"
 
         if kind == "node":
             for cand in ("index.js", "server.js", "app.js", "main.js"):

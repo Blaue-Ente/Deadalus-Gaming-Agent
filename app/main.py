@@ -133,9 +133,21 @@ async def lifespan(_app: FastAPI):
         start_gardener()
     except Exception:
         log.exception("evolution gardener failed to start (non-fatal)")
+    reaper = None
+    try:
+        from daedalus.playground_runner import start_idle_reaper
+        reaper = start_idle_reaper()
+    except Exception:
+        log.exception("idle runner reaper failed to start (non-fatal)")
     try:
         yield
     finally:
+        if reaper is not None:
+            reaper.cancel()
+            try:
+                await reaper
+            except BaseException:  # CancelledError on shutdown
+                pass
         try:
             from daedalus.evolution import stop_gardener
             await stop_gardener()
