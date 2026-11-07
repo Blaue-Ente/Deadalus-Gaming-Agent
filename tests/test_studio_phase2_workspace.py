@@ -32,6 +32,8 @@ NEW_KEYS = (
     "studio.missingSlug",
     "studio.noMatch",
     "studio.saved",
+    "studio.indexFallback",
+    "studio.checkpoint",
 )
 
 
@@ -45,6 +47,7 @@ def test_phase2_strings_and_shell_contract():
     assert 'data-filter="apps"' in HTML
     assert "window.dxStudio" in KERNEL
     assert "setGameSlugs" in KERNEL
+    assert "failGameIndex" in KERNEL
     assert "fastapi" in KERNEL and "streamlit" in KERNEL
     assert ".mask" not in WORK
     assert "api_key" not in WORK
@@ -374,4 +377,126 @@ def test_language_keeps_user_text_and_screenshots(studio_server):
         page.wait_for_selector(".shell.tools-open .rail")
         _hit(page, ".tabs button[data-pane=shell]")
         assert page.locator("#pane-shell").evaluate("el => el.classList.contains('on')")
+        browser.close()
+
+
+def test_game_index_lists_marker_and_workspace_progress(studio_server):
+    """Real backend: game-studio.json is the index, and the workspace reports progress."""
+    made = _api(studio_server, "POST", "/api/v1/playground/projects", {
+        "name": "Expo Marker",
+        "kind": "expo",
+    })
+    slug = made["project"]["slug"]
+    _api(studio_server, "POST", f"/admin/daedalus/playground/api/projects/{slug}/file", {
+        "path": "design/game-studio.json",
+        "content": json.dumps({"build_mode": "guided", "studio_preset": "custom"}),
+    })
+    listed = _api(studio_server, "GET", "/admin/daedalus/game-studio/api/projects")
+    assert slug in [row["slug"] for row in listed["projects"]]
+    ctx = _api(studio_server, "GET", f"/admin/daedalus/game-studio/api/projects/{slug}")
+    summary = ctx["milestone_summary"]
+    assert isinstance(summary["milestones"], list) and summary["milestones"]
+    assert "done" in summary["milestones"][0] and "total" in summary["milestones"][0]
+    assert isinstance(summary["stages_done"], int) and isinstance(summary["stages_total"], int)
+    active = _api(
+        studio_server, "GET",
+        f"/admin/daedalus/playground/api/projects/{slug}/guided/active",
+    )
+    assert active["active"] is False
+    studio_server["expo"] = slug
+
+
+def test_game_index_failure_uses_kind_fallback(studio_server):
+    from playwright.sync_api import sync_playwright
+    game = studio_server["game"]
+    app = studio_server["app"]
+    expo = studio_server["expo"]
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        def index_down(route):
+            path = route.request.url.split("?", 1)[0].rstrip("/")
+            if route.request.method != "GET" or not path.endswith("/game-studio/api/projects"):
+                route.fallback()
+                return
+            _fulfill(route, 500, {"detail": "index down"})
+
+        page.route("**/game-studio/api/projects**", index_down)
+        page.goto(studio_server["url"] + "/", wait_until="domcontentloaded")
+        page.wait_for_function(
+            """() => document.getElementById('workspace-status').textContent.includes('Game index failed')
+              && document.getElementById('workspace-status').textContent.includes('index down')
+              && window.dxStudio.gameIndexState() === 'failed'
+              && !document.querySelector('#kind-filter [data-filter=apps]').disabled"""
+        )
+        page.locator("#kind-filter [data-filter=apps]").click()
+        page.wait_for_selector(f"#plist [data-slug='{app}']")
+        page.wait_for_selector(f"#plist [data-slug='{expo}']")
+        assert page.locator(f"#plist [data-slug='{game}']").count() == 0
+        page.locator("#kind-filter [data-filter=games]").click()
+        page.wait_for_selector(f"#plist [data-slug='{game}']")
+        assert page.locator(f"#plist [data-slug='{expo}']").count() == 0
+        assert page.locator(f"#plist [data-slug='{app}']").count() == 0
+        browser.close()
+
+
+def test_build_progress_and_guided_stream_are_visible(studio_server):
+    from playwright.sync_api import sync_playwright
+    game = studio_server["game"]
+    sse = (
+        "event: log\n"
+        'data: {"line":"compile-slice-ready"}\n\n'
+        "event: done\n"
+        "data: {}\n\n"
+    )
+
+    def workspace(route):
+        path = route.request.url.split("?", 1)[0].rstrip("/")
+        if route.request.method != "GET" or not path.endswith("/game-studio/api/projects/" + game):
+            route.fallback()
+            return
+        _fulfill(route, 200, {
+            "ok": True,
+            "can_guided": True,
+            "can_autopilot": False,
+            "can_advance": False,
+            "current_milestone": "M1",
+            "milestone_summary": {
+                "stages_done": 1,
+                "stages_total": 4,
+                "milestones": [{
+                    "id": "M1",
+                    "title": "Boot",
+                    "done": 1,
+                    "total": 4,
+                    "current": True,
+                }],
+            },
+        })
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        page.route(f"**/game-studio/api/projects/{game}/build/guided", lambda route: _fulfill(
+            route, 200, {"ok": True, "job_id": "job-1"},
+        ))
+        page.route(f"**/playground/api/projects/{game}/guided/stream**", lambda route: route.fulfill(
+            status=200,
+            headers={"Content-Type": "text/event-stream"},
+            body=sse,
+        ))
+        page.route(f"**/playground/api/projects/{game}/guided/active", lambda route: _fulfill(
+            route, 200, {"active": False},
+        ))
+        page.route(f"**/game-studio/api/projects/{game}", workspace)
+        page.goto(studio_server["url"] + f"/?panel=build&slug={game}", wait_until="domcontentloaded")
+        page.wait_for_selector("#build-milestones li[data-current]")
+        assert "1/4" in page.locator("#build-milestones").inner_text()
+        assert "Boot" in page.locator("#build-milestones").inner_text()
+        page.locator("#build-guided").click()
+        page.wait_for_function(
+            """() => document.getElementById('build-out').textContent.includes('compile-slice-ready')
+              && document.getElementById('log').textContent.includes('compile-slice-ready')"""
+        )
+        page.screenshot(path="/opt/cursor/artifacts/phase2-build-progress.png")
         browser.close()

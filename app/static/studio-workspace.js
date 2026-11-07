@@ -9,6 +9,10 @@
   let queryReady = false;
   let flight = "";
   let fileGen = 0;
+  let streamGen = 0;
+  let streamCtrl = null;
+  let streamingSlug = "";
+  let resumeToken = 0;
 
   function $(id) { return document.getElementById(id); }
 
@@ -86,13 +90,31 @@
     return encodeURIComponent(slug || "");
   }
 
+  function setKindButtons(on) {
+    document.querySelectorAll("#kind-filter button[data-filter='games'], #kind-filter button[data-filter='apps']").forEach((btn) => {
+      btn.disabled = !on;
+    });
+  }
+
   async function loadGameIndex() {
+    const status = $("workspace-status");
     try {
       const data = await dx.api("/admin/daedalus/game-studio/api/projects");
-      dx.setGameSlugs((data.projects || []).map((p) => p.slug).filter(Boolean));
-      document.querySelectorAll("#kind-filter button").forEach((btn) => { btn.disabled = false; });
+      const rows = data && Array.isArray(data.projects) ? data.projects : null;
+      if (!rows) throw new Error(dx.t("studio.requestFailed"));
+      dx.setGameSlugs(rows.map((p) => p.slug).filter(Boolean));
+      setKindButtons(true);
+      if (status && status.dataset.reason === "index") {
+        status.dataset.reason = "";
+        showStatus("workspace-status", "", false);
+      }
     } catch (err) {
-      showStatus("workspace-status", dx.t("studio.requestFailed") + ": " + failText(err), true);
+      const kept = dx.gameIndexState() === "ready";
+      if (!kept) dx.failGameIndex();
+      setKindButtons(true);
+      const note = kept ? dx.t("studio.requestFailed") : dx.t("studio.indexFallback");
+      showStatus("workspace-status", note + " " + failText(err), true);
+      if (status) status.dataset.reason = "index";
     }
   }
 
@@ -237,10 +259,24 @@
     }
   }
 
+  function milestoneLabel(row) {
+    if (typeof row === "string") return row;
+    const id = row.id || row.name || "";
+    const title = row.title || "";
+    let progress = row.status || "";
+    if (typeof row.done === "number" && typeof row.total === "number") {
+      progress = row.done + "/" + row.total;
+    }
+    return [id, title, progress].filter(Boolean).join(" ");
+  }
+
   function paintMilestones(data) {
     const list = $("build-milestones");
     list.replaceChildren();
-    const rows = Array.isArray(data.milestones) ? data.milestones : [];
+    const summary = data.milestone_summary || {};
+    const rows = Array.isArray(summary.milestones) && summary.milestones.length
+      ? summary.milestones
+      : (Array.isArray(data.milestones) ? data.milestones : []);
     if (!rows.length && data.current_milestone) {
       const li = document.createElement("li");
       li.textContent = String(data.current_milestone);
@@ -248,10 +284,16 @@
     }
     rows.forEach((row) => {
       const li = document.createElement("li");
-      if (typeof row === "string") li.textContent = row;
-      else li.textContent = [row.id || row.name || "", row.status || ""].filter(Boolean).join(" ");
+      li.textContent = milestoneLabel(row);
+      if (row && row.current) li.dataset.current = "1";
       list.appendChild(li);
     });
+    if (typeof summary.stages_done === "number" && typeof summary.stages_total === "number") {
+      const li = document.createElement("li");
+      li.dataset.progress = "stages";
+      li.textContent = summary.stages_done + "/" + summary.stages_total;
+      list.appendChild(li);
+    }
     $("build-guided").disabled = !data.can_guided;
     $("build-autopilot").disabled = !data.can_autopilot;
     $("build-gates").disabled = false;
@@ -259,7 +301,145 @@
     $("build-advance").disabled = !data.can_advance;
   }
 
-  async function loadWorkspace(slug) {
+  function appendBuild(line) {
+    if (!line) return;
+    const out = $("build-out");
+    out.textContent += (out.textContent ? "\n" : "") + line;
+    out.scrollTop = out.scrollHeight;
+    const log = $("log");
+    if (log) log.textContent += line + "\n";
+  }
+
+  function closeBuildStream() {
+    streamGen += 1;
+    streamingSlug = "";
+    if (streamCtrl) {
+      try { streamCtrl.abort(); } catch (err) { /* already closed */ }
+      streamCtrl = null;
+    }
+  }
+
+  function streamLine(event, data) {
+    if (event === "log") return data.line || "";
+    if (event === "stage" && data.stage_id) return "#" + data.stage_id;
+    if (event === "stage_done" && data.stage_id) {
+      return "#" + data.stage_id + " " + (data.ok === false ? "!" : dx.t("studio.done"));
+    }
+    if (event === "phase") return data.phase || data.name || "";
+    if (event === "checkpoint") return data.review || data.message || dx.t("studio.checkpoint");
+    if (event === "milestone_done") return (data.milestone_id || "") + " " + dx.t("studio.done");
+    if (event === "done") return dx.t("studio.done");
+    if (event === "error") return data.message || data.error || dx.t("studio.streamStopped");
+    return "";
+  }
+
+  function parseSse(chunk) {
+    const parts = chunk.split("\n\n");
+    return parts.map((block) => {
+      const ev = (block.match(/^event: (.+)/m) || [])[1] || "message";
+      const raw = (block.match(/^data: (.+)/m) || [])[1] || "";
+      if (!raw && ev === "message") return null;
+      let data = {};
+      try { data = raw ? JSON.parse(raw) : {}; }
+      catch (err) { data = { line: raw }; }
+      return { event: ev, data };
+    }).filter(Boolean);
+  }
+
+  async function readBuildStream(url, gen) {
+    const ctrl = new AbortController();
+    streamCtrl = ctrl;
+    const res = await fetch(url, { signal: ctrl.signal, headers: { Accept: "text/event-stream" } });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    let buf = "";
+    let terminal = "";
+    const apply = (block) => {
+      const line = streamLine(block.event, block.data || {});
+      if (line) appendBuild(line);
+      if (block.event === "error") showStatus("build-status", line || dx.t("studio.streamStopped"), true);
+      else if (line) showStatus("build-status", line, false);
+      return block.event;
+    };
+    const take = (text, flush) => {
+      const parts = text.split("\n\n");
+      const rest = flush ? "" : (parts.pop() || "");
+      const body = parts.join("\n\n");
+      if (!body) return rest;
+      for (const block of parseSse(body)) {
+        terminal = apply(block);
+        if (terminal === "checkpoint" || terminal === "done" || terminal === "error" || terminal === "milestone_done") {
+          return rest;
+        }
+      }
+      return rest;
+    };
+    const stopped = () => terminal === "checkpoint" || terminal === "done" || terminal === "error" || terminal === "milestone_done";
+    if (!res.body || !res.body.getReader) {
+      take((await res.text()).replace(/\r\n/g, "\n"), true);
+      return terminal;
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    while (gen === streamGen) {
+      const step = await reader.read();
+      buf += decoder.decode(step.value || new Uint8Array(), { stream: !step.done }).replace(/\r\n/g, "\n");
+      buf = take(buf, !!step.done);
+      if (stopped()) return terminal;
+      if (step.done) break;
+    }
+    return terminal;
+  }
+
+  function followBuild(kind, slug, jobId) {
+    closeBuildStream();
+    const gen = streamGen;
+    streamingSlug = slug;
+    flight = kind;
+    $("build-stop").hidden = false;
+    $("build-out").textContent = "";
+    const url = kind === "autopilot"
+      ? "/api/v1/playground/projects/" + slugPath(slug) + "/autopilot/stream"
+      : "/admin/daedalus/playground/api/projects/" + slugPath(slug) + "/guided/stream?job_id=" + encodeURIComponent(jobId || "") + "&from=0";
+    readBuildStream(url, gen).then(async (terminal) => {
+      if (gen !== streamGen) return;
+      if (terminal === "done" || terminal === "error" || terminal === "milestone_done") {
+        $("build-stop").hidden = true;
+      }
+      if (terminal === "done" || terminal === "milestone_done") await loadWorkspace(slug, { quiet: true });
+    }).catch((err) => {
+      if (gen !== streamGen) return;
+      if (err && err.name === "AbortError") return;
+      appendBuild(dx.t("studio.streamCut"));
+      showStatus("build-status", dx.t("studio.streamCut") + " " + failText(err), true);
+    }).finally(() => {
+      if (gen === streamGen) {
+        streamingSlug = "";
+        streamCtrl = null;
+      }
+    });
+  }
+
+  async function resumeBuild(slug) {
+    if (!slug || streamingSlug === slug) return;
+    const token = ++resumeToken;
+    try {
+      const guided = await dx.api("/admin/daedalus/playground/api/projects/" + slugPath(slug) + "/guided/active");
+      if (token !== resumeToken || streamingSlug) return;
+      if (guided && guided.active && guided.job_id) {
+        followBuild("guided", slug, guided.job_id);
+        return;
+      }
+    } catch (err) { /* no guided job is not a failed build */ }
+    if (token !== resumeToken || streamingSlug) return;
+    try {
+      const auto = await dx.api("/api/v1/playground/projects/" + slugPath(slug) + "/autopilot");
+      if (token !== resumeToken || streamingSlug) return;
+      const job = auto && auto.job;
+      if (job && job.id && job.status === "running") followBuild("autopilot", slug, job.id);
+    } catch (err) { /* no autopilot job */ }
+  }
+
+  async function loadWorkspace(slug, opts) {
     $("build-slug").textContent = slug ? dx.t("studio.project") + ": " + slug : "";
     $("build-guided").disabled = true;
     $("build-autopilot").disabled = true;
@@ -270,11 +450,12 @@
     try {
       const data = await dx.api("/admin/daedalus/game-studio/api/projects/" + slugPath(slug));
       paintMilestones(data);
-      showStatus("build-status", "", false);
+      if (!streamingSlug) showStatus("build-status", "", false);
     } catch (err) {
       $("build-milestones").replaceChildren();
-      showStatus("build-status", failText(err), true);
+      if (!streamingSlug) showStatus("build-status", failText(err), true);
     }
+    if (!opts || !opts.quiet) resumeBuild(slug);
   }
 
   async function postJson(path, body) {
@@ -522,6 +703,7 @@
   }
 
   function onSlug(snap) {
+    if (streamingSlug && snap.slug !== streamingSlug) closeBuildStream();
     loadFiles(snap.slug);
     syncFilter();
     if (currentPanel === "build") loadWorkspace(snap.slug);
@@ -613,8 +795,12 @@
     runAction($("build-guided"), "build-status", async () => {
       const data = await postJson("/admin/daedalus/game-studio/api/projects/" + slugPath(slug) + "/build/guided", {});
       if (data.ok === false) throw new Error(data.error || dx.t("studio.requestFailed"));
-      $("build-stop").hidden = false;
+      if (data.harness_check) {
+        showStatus("build-status", dx.t("studio.harnessCheck"), false);
+        return;
+      }
       showStatus("build-status", dx.t("studio.started"), false);
+      if (data.job_id) followBuild("guided", slug, data.job_id);
     });
   });
   $("build-autopilot").addEventListener("click", () => {
@@ -628,8 +814,13 @@
         mode: "full",
         effort: "auto",
       });
-      $("build-stop").hidden = false;
-      showStatus("build-status", data.harness_check ? dx.t("studio.harnessCheck") : dx.t("studio.started"), false);
+      if (data.harness_check) {
+        showStatus("build-status", dx.t("studio.harnessCheck"), false);
+        return;
+      }
+      showStatus("build-status", dx.t("studio.started"), false);
+      const jobId = data.job && data.job.id;
+      if (jobId) followBuild("autopilot", slug, jobId);
     });
   });
   $("build-stop").addEventListener("click", () => {
@@ -641,6 +832,7 @@
     runAction($("build-stop"), "build-status", async () => {
       const data = await postJson(path, {});
       if (data.ok === false) throw new Error(data.error || dx.t("studio.requestFailed"));
+      closeBuildStream();
       $("build-stop").hidden = true;
       showStatus("build-status", dx.t("studio.stopped"), false);
     });

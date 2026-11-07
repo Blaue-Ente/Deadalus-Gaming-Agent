@@ -18,6 +18,7 @@
     addons: [],
     kindFilter: "all",
     gameSlugs: null,
+    gameIndex: "pending",
     projectsReady: false,
   };
   const slugWatchers = [];
@@ -1993,8 +1994,17 @@
     getKindFilter() { return state.kindFilter; },
     setGameSlugs(slugs) {
       state.gameSlugs = new Set(slugs || []);
+      state.gameIndex = "ready";
       renderProjectList();
     },
+    failGameIndex() {
+      if (state.gameIndex === "ready") return "ready";
+      state.gameIndex = "failed";
+      state.gameSlugs = null;
+      renderProjectList();
+      return "failed";
+    },
+    gameIndexState() { return state.gameIndex; },
     kindOf: projectBucket,
   };
   showGreeting();
