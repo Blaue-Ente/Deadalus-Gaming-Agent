@@ -17,6 +17,7 @@ from app.admin_compat import router as admin_compat_router
 from app.envload import load_env_file
 from app.playground_api import router as playground_router
 from app.harness_api import router as harness_router
+from app.harness_core_api import router as harness_core_router
 from daedalus.playground_router import router as published_apps_router
 from daedalus.skill_catalog import catalog_router
 from daedalus.paths import product_root, repo_root, chroma_dir
@@ -164,6 +165,7 @@ app.include_router(playground_router)
 app.include_router(published_apps_router)
 app.include_router(admin_compat_router)
 app.include_router(harness_router)
+app.include_router(harness_core_router)
 app.include_router(catalog_router)
 if _UI_STATIC.is_dir():
     app.mount("/admin/static", StaticFiles(directory=_UI_STATIC), name="admin-static")

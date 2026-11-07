@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-07T13:57:19.165277+00:00",
+  "generated_at": "2026-11-07T15:00:04.673762+00:00",
   "package_version": "0.3.8",
-  "git_commit": "7642c89653b81ef63d0a752c1c79be0260f3612f",
+  "git_commit": "156238cc7f33f63771b8611ab9112b48f9f5ca38",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -130,8 +130,8 @@
     ]
   },
   "tests": {
-    "modules": 86,
-    "functions": 764
+    "modules": 87,
+    "functions": 774
   },
   "modules": {
     "daedalus": [
@@ -208,6 +208,10 @@
       "daedalus/godot_scene_index.py",
       "daedalus/godot_tools.py",
       "daedalus/guided_jobs.py",
+      "daedalus/harness/__init__.py",
+      "daedalus/harness/manifest.py",
+      "daedalus/harness/parity.py",
+      "daedalus/harness/registry.py",
       "daedalus/hello_test.py",
       "daedalus/host.py",
       "daedalus/identity.py",
@@ -393,6 +397,7 @@
       "app/desktop.py",
       "app/envload.py",
       "app/harness_api.py",
+      "app/harness_core_api.py",
       "app/main.py",
       "app/playground_api.py",
       "app/windows_gui.py"
