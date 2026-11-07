@@ -58,6 +58,12 @@ SYSTEM_PROMPT = (
     "Never invent tools. Spend few tokens."
 )
 
+FRAMES_ADDENDUM = (
+    " Real frames of the running game are attached as images, newest last. Look at them and judge playability "
+    "from what is visible, not from file names. Add \"observations\":[up to 3 short strings of what is visibly on "
+    "screen] to the JSON. Never claim to see anything that is not in the images."
+)
+
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
 _THINKING_MARKERS = ("thinking", "r1", "qwq", "reasoner", "o1-", "o3-", "o4-")
 _COST_ORDER = {"none": 0, "low": 1, "mid": 2, "high": 3, "varies": 2}
@@ -672,6 +678,8 @@ def parse_director_json(text: str) -> dict[str, Any] | None:
     reason = str(data.get("reason") or "")[:140]
     forbid = [str(x) for x in (data.get("forbid_tools") or []) if x][:12]
     blockers = [str(x) for x in (data.get("blockers") or []) if x][:8]
+    obs_raw = data.get("observations")
+    observations = [str(x).strip()[:160] for x in obs_raw if str(x).strip()][:3] if isinstance(obs_raw, list) else []
     return {
         "ok": True,
         "action": action,
@@ -680,6 +688,7 @@ def parse_director_json(text: str) -> dict[str, Any] | None:
         "reason": reason,
         "forbid_tools": forbid,
         "blockers": blockers,
+        "observations": observations,
         "source": "llm",
     }
 
@@ -751,7 +760,8 @@ async def _complete_director_gateway(provider: str, model: str, user: str,
     content: Any = user
     if frames:  # real image parts for the mentor (A5c); never summarised into text
         content = [gw.text_part(user), *frames]
-    result = await gw.call("mentor", [{"role": "user", "content": content}], system=SYSTEM_PROMPT,
+    result = await gw.call("mentor", [{"role": "user", "content": content}],
+                           system=SYSTEM_PROMPT + (FRAMES_ADDENDUM if frames else ""),
                            max_tokens=max_out_tokens(), temperature=0.1, json_mode=True,
                            route=route, timeout=llm_timeout_s(), use_cache=False, client_id="daedalus/mentor")
     if not result.ok:
@@ -870,8 +880,13 @@ async def consult(
     rules_steer: dict[str, Any],
     *,
     turn_calls: int = 0,
+    frames: Any = None,
 ) -> dict[str, Any]:
-    """Ask the director. Always returns a steer dict; `source` is llm|rules."""
+    """Ask the director. Always returns a steer dict; `source` is llm|rules.
+
+    ``frames`` is a ``harness.perception.FrameSet``: when given, its frames go to the model as real image parts and
+    the steer carries a ``perception`` block saying exactly what happened (image | text-only and why).
+    """
     why = skip_reason(inspect, rules_steer, turn_calls=turn_calls)
     if why:
         log.info("mentor helm skip: %s", why)
@@ -884,16 +899,37 @@ async def consult(
     provider, model = endpoint
     user = build_user_prompt(inspect)
     in_tok = estimate_tokens(SYSTEM_PROMPT) + estimate_tokens(user)
+    from .harness import gateway as _gw0
+    from .harness import perception as _perc
+    parts: list[dict[str, Any]] = []
+    p_mode, p_reason = "text-only", ("no_frames" if not frames else "")
+    if frames:
+        if not _gw0.path_enabled("mentor"):
+            p_reason = "gateway_disabled"          # the legacy path cannot carry images
+        else:
+            parts = frames.parts()
+            p_mode, p_reason = ("image", "") if parts else ("text-only", "frames_unavailable")
     t0 = time.monotonic()
     try:
-        text = await asyncio.wait_for(
-            _complete_director(provider, model, user),
-            timeout=llm_timeout_s() + 1.0,
-        )
+        try:
+            director = (_complete_director(provider, model, user, parts) if parts
+                        else _complete_director(provider, model, user))   # frame-less call keeps the old signature
+            text = await asyncio.wait_for(director, timeout=llm_timeout_s() + 1.0)
+        except Exception as exc:
+            err = getattr(exc, "error", None)
+            if parts and getattr(err, "type", "") == "unsupported_modality":
+                # The model cannot take images: ask again as text and SAY so (never pretend it looked).
+                log.info("mentor helm: %s/%s has no vision; retrying text-only", provider, model)
+                parts, p_mode, p_reason = [], "text-only", "model_has_no_vision"
+                text = await asyncio.wait_for(
+                    _complete_director(provider, model, user), timeout=llm_timeout_s() + 1.0)
+            else:
+                raise
     except Exception as exc:
         log.info("mentor helm LLM failed: %s: %s", type(exc).__name__, exc or "(empty)")
         from .mentor_graph import guard_steer
         return guard_steer(_rules_fallback(rules_steer, "llm_error"), inspect, rules_steer)
+    in_tok += 800 * len(parts)                     # rough image cost for the daily ledger
     parsed = parse_director_json(text or "")
     out_tok = estimate_tokens(text or "")
     record_spend(in_tok + out_tok)
@@ -914,6 +950,10 @@ async def consult(
     parsed["llm_model"] = model
     parsed["llm_provider"] = provider
     parsed["llm_tokens"] = in_tok + out_tok
+    parsed["perception"] = _perc.describe(frames, mode=p_mode, reason=p_reason,
+                                          provider=provider, model=model)
+    if p_mode != "image":
+        parsed["observations"] = []                # no picture was sent: anything it "observed" is not observation
     nxt = parsed.get("next_tool")
     if nxt and nxt in merged_forbid:
         parsed["next_tool"] = rules_steer.get("next_tool")

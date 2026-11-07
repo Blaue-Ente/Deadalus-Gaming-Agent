@@ -30,7 +30,8 @@ def _artifact_root() -> Path:
 
 class PlaySession:
     def __init__(self, project_dir: Path, *, slug: str = "", size: tuple[int, int] = (640, 480),
-                 session_id: str = "", artifacts: Path | None = None) -> None:
+                 session_id: str = "", artifacts: Path | None = None, env_extra: dict[str, str] | None = None) -> None:
+        self.env_extra = dict(env_extra or {})
         self.id = session_id or uuid.uuid4().hex[:12]
         self.slug = slug
         self.source = Path(project_dir)
@@ -63,6 +64,8 @@ class PlaySession:
                 raise PlayError("start_failed", "not a Godot project (no project.godot)", slug=self.slug)
             try:
                 self.artifacts.mkdir(parents=True, exist_ok=True)
+                (self.artifacts / "session.json").write_text(
+                    json.dumps({"id": self.id, "slug": self.slug, "started_at": time.time()}), encoding="utf-8")
                 self.workdir = Path(tempfile.mkdtemp(prefix=f"daedalus-play-{self.id}-"))
                 proj = self.workdir / "project"
                 shutil.copytree(self.source, proj, ignore=_COPY_SKIP)   # the owner's project is never touched
@@ -70,7 +73,7 @@ class PlaySession:
                 if imp.get("ok") is False and imp.get("error"):
                     self._event("import_warning", error=str(imp.get("error"))[:200])
                 display = self.display.start()
-                env = {**os.environ, "DISPLAY": display, "LIBGL_ALWAYS_SOFTWARE": "1"}
+                env = {**os.environ, "DISPLAY": display, "LIBGL_ALWAYS_SOFTWARE": "1", **self.env_extra}
                 env.pop("WAYLAND_DISPLAY", None)
                 self.game = godot_bridge.GodotSession(proj)
                 w, h = self.size
