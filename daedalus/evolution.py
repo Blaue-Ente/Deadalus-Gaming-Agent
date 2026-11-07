@@ -549,7 +549,7 @@ async def run_cycle(
             continue
         try:
             fn = study_fn or study_repo
-            studied = fn(url)
+            studied = await asyncio.to_thread(fn, url)
         except Exception as extra:
             studied = {"ok": False, "error": str(extra)[:240], "url": url}
         seen.append(url)
