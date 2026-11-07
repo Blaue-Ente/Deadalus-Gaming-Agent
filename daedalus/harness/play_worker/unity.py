@@ -29,6 +29,11 @@ def _is_shim(path: str) -> bool:
     return Path(path).parent.name.lower() == "bin" and Path(path).parent.parent.name.lower() == "unity"
 
 
+def _hub_bases() -> list[Path]:
+    return [Path("C:/Program Files/Unity/Hub/Editor"), Path("~/Unity/Hub/Editor").expanduser(),
+            Path("/Applications/Unity/Hub/Editor")]
+
+
 def find_unity() -> dict[str, Any]:
     """UNITY_PATH/UNITY_EDITOR, then Hub installs (newest version first), then PATH (last: it may be a launcher shim);
     shown, never assumed."""
@@ -39,8 +44,7 @@ def find_unity() -> dict[str, Any]:
             return {"ok": True, "path": str(p), "source": "env"}
         return {"ok": False, "error": "engine_missing", "source": "env",
                 "message": f"UNITY_PATH is set but is not a file: {env}"}
-    bases = [Path("C:/Program Files/Unity/Hub/Editor"), Path("~/Unity/Hub/Editor").expanduser(),
-             Path("/Applications/Unity/Hub/Editor")]
+    bases = _hub_bases()
     exe = "Unity.exe" if os.name == "nt" else "Unity"
     for base in bases:
         if not base.is_dir():

@@ -34,7 +34,7 @@ def test_a_hub_launcher_shim_on_path_is_not_taken_for_the_editor(tmp_path, monke
     monkeypatch.delenv("UNITY_PATH", raising=False)
     monkeypatch.delenv("UNITY_EDITOR", raising=False)
     monkeypatch.setattr(unity.shutil, "which", lambda name: str(shim))
-    monkeypatch.setattr(unity.Path, "is_dir", lambda self: False)
+    monkeypatch.setattr(unity, "_hub_bases", lambda: [])
     assert unity._is_shim(str(shim)) is True
     assert unity.find_unity()["ok"] is False
 
@@ -133,10 +133,9 @@ def test_content_hash_streams_large_files(tmp_path):
 def test_find_unity_knows_the_linux_and_macos_hub_layouts(tmp_path, monkeypatch):
     for var in ("UNITY_PATH", "UNITY_EDITOR"):
         monkeypatch.delenv(var, raising=False)
-    monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("USERPROFILE", str(tmp_path))
     monkeypatch.setattr(unity.shutil, "which", lambda name: None)
     base = tmp_path / "Unity" / "Hub" / "Editor"
+    monkeypatch.setattr(unity, "_hub_bases", lambda: [base])        # hermetic: never the machine's real Unity
     mac = base / "6000.1.0f1" / "Unity.app" / "Contents" / "MacOS" / "Unity"
     mac.parent.mkdir(parents=True)
     mac.write_text("x")
