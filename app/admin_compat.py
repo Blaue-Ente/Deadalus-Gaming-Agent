@@ -281,8 +281,11 @@ async def daedalus_set_mentor(request: Request):
             payload[key] = body[key]
     if not payload:
         return JSONResponse({"error": "enabled, choice_id, or day_token_cap required"}, status_code=400)
+    from daedalus.env_lock import EnvLockedError
     try:
         st = apply_update(payload)
+    except EnvLockedError as exc:
+        return JSONResponse(exc.payload(), status_code=409)
     except ValueError as exc:
         return JSONResponse({"error": str(exc)}, status_code=400)
     return JSONResponse({"ok": True, **st})
@@ -307,7 +310,11 @@ async def daedalus_set_writer_assist(request: Request):
         payload["enabled"] = body.get("enabled")
     if not payload:
         return JSONResponse({"error": "mode or enabled required"}, status_code=400)
-    st = apply_update(payload)
+    from daedalus.env_lock import EnvLockedError
+    try:
+        st = apply_update(payload)
+    except EnvLockedError as exc:
+        return JSONResponse(exc.payload(), status_code=409)
     return JSONResponse({"ok": True, **st})
 
 
@@ -319,9 +326,13 @@ async def daedalus_get_run_budget():
 
 @router.post("/daedalus/run-budget")
 async def daedalus_set_run_budget(request: Request):
+    from daedalus.env_lock import EnvLockedError
     from daedalus.run_budget import apply_update
     body = await _body(request)
-    st = apply_update(body)
+    try:
+        st = apply_update(body)
+    except EnvLockedError as exc:
+        return JSONResponse(exc.payload(), status_code=409)
     return JSONResponse({"ok": True, **st})
 
 

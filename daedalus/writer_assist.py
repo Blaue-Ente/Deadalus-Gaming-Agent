@@ -148,6 +148,9 @@ def apply_update(body: dict[str, Any] | None) -> dict[str, Any]:
     if (raw is None or str(raw).strip() == "") and body.get("enabled") is not None:
         raw = "kernel-scaffold" if body.get("enabled") else "off"
     if raw is not None and str(raw).strip() != "":
+        if env_override() is not None:
+            from .env_lock import EnvLockedError
+            raise EnvLockedError("mode", "DAEDALUS_WRITER_ASSIST")
         set_mode(str(raw))
     return status()
 

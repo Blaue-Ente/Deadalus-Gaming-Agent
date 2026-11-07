@@ -482,6 +482,9 @@ def apply_update(body: dict[str, Any] | None) -> dict[str, Any]:
     if raw is None and body.get("enabled") is False:
         raw = 0
     if raw is not None and str(raw).strip() != "":
+        if env_override() is not None:
+            from .env_lock import EnvLockedError
+            raise EnvLockedError("usd", "DAEDALUS_RUN_BUDGET")
         set_usd(raw)
     if body.get("reset_spend"):
         cap_now = usd()
