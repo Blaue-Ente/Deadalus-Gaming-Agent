@@ -53,6 +53,20 @@ def bgra_to_rgba(bgra: bytes) -> bytes:
     return bytes(out)
 
 
+def tree_pids(pairs: list[tuple[int, int]], root: int) -> set[int]:
+    """``root`` and every descendant, from (pid, parent pid) pairs. The Godot console build is only a wrapper that
+    starts the real engine as a child, and that child owns the window."""
+    out = {root}
+    grew = True
+    while grew:
+        grew = False
+        for pid, ppid in pairs:
+            if ppid in out and pid not in out:
+                out.add(pid)
+                grew = True
+    return out
+
+
 def normalise_absolute(x: int, y: int, left: int, top: int, width: int, height: int) -> tuple[int, int]:
     """Screen pixel -> the 0..65535 space SendInput uses for ABSOLUTE movement over the virtual desktop."""
     nx = int((x - left) * 65535 / max(1, width - 1))
@@ -81,6 +95,13 @@ class _INPUTUNION(ctypes.Union):
 class INPUT(ctypes.Structure):
     _anonymous_ = ("u",)
     _fields_ = [("type", wt.DWORD), ("u", _INPUTUNION)]
+
+
+class PROCESSENTRY32W(ctypes.Structure):
+    _fields_ = [("dwSize", wt.DWORD), ("cntUsage", wt.DWORD), ("th32ProcessID", wt.DWORD),
+                ("th32DefaultHeapID", ULONG_PTR), ("th32ModuleID", wt.DWORD), ("cntThreads", wt.DWORD),
+                ("th32ParentProcessID", wt.DWORD), ("pcPriClassBase", wt.LONG), ("dwFlags", wt.DWORD),
+                ("szExeFile", wt.WCHAR * 260)]
 
 
 class BITMAPINFOHEADER(ctypes.Structure):
@@ -153,6 +174,12 @@ class WindowsBackend:
                                 ctypes.POINTER(BITMAPINFOHEADER), wt.UINT]
         g.DeleteObject.argtypes = [wt.HGDIOBJ]
         g.DeleteDC.argtypes = [wt.HDC]
+        k = self.k32
+        k.CreateToolhelp32Snapshot.argtypes = [wt.DWORD, wt.DWORD]
+        k.CreateToolhelp32Snapshot.restype = wt.HANDLE
+        k.Process32FirstW.argtypes = [wt.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
+        k.Process32NextW.argtypes = [wt.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
+        k.CloseHandle.argtypes = [wt.HANDLE]
 
     # ---- Backend interface ----------------------------------------------------------------------------------------
     def tools(self) -> dict[str, bool]:
@@ -191,14 +218,31 @@ class WindowsBackend:
             pass
 
     # ---- window ---------------------------------------------------------------------------------------------------
+    def _process_pairs(self) -> list[tuple[int, int]]:
+        snap = self.k32.CreateToolhelp32Snapshot(0x2, 0)                # TH32CS_SNAPPROCESS
+        pairs: list[tuple[int, int]] = []
+        if not snap or snap == wt.HANDLE(-1).value:
+            return pairs
+        try:
+            entry = PROCESSENTRY32W()
+            entry.dwSize = ctypes.sizeof(PROCESSENTRY32W)
+            ok = self.k32.Process32FirstW(snap, ctypes.byref(entry))
+            while ok:
+                pairs.append((int(entry.th32ProcessID), int(entry.th32ParentProcessID)))
+                ok = self.k32.Process32NextW(snap, ctypes.byref(entry))
+        finally:
+            self.k32.CloseHandle(snap)
+        return pairs
+
     def find_window(self, pid: int, timeout: float = 20.0) -> str:
         found: list[int] = []
         enum_proto = ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
+        owners: set[int] = {pid}
 
         def cb(hwnd, _lp):
             owner = wt.DWORD(0)
             self.u32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
-            if owner.value == pid and self.u32.IsWindowVisible(hwnd):
+            if owner.value in owners and self.u32.IsWindowVisible(hwnd):
                 rect = wt.RECT()
                 self.u32.GetClientRect(hwnd, ctypes.byref(rect))
                 if rect.right - rect.left >= 100 and rect.bottom - rect.top >= 100:
@@ -209,6 +253,8 @@ class WindowsBackend:
         deadline = time.time() + timeout
         while time.time() < deadline:
             found.clear()
+            owners.clear()
+            owners.update(tree_pids(self._process_pairs(), pid))        # the wrapper and the engine it started
             self.u32.EnumWindows(enum, 0)
             if found:
                 self.hwnd = found[0]

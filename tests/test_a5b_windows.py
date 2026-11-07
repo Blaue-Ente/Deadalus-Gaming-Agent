@@ -43,6 +43,15 @@ def test_bgra_becomes_opaque_rgba():
     assert len(win32.bgra_to_rgba(bytes(4 * 640 * 480))) == 4 * 640 * 480
 
 
+def test_the_window_owner_is_found_through_the_process_tree():
+    pairs = [(1, 0), (10, 1), (11, 10), (12, 11), (20, 1), (21, 20), (30, 12)]
+    assert win32.tree_pids(pairs, 10) == {10, 11, 12, 30}      # wrapper -> engine -> anything it started
+    assert win32.tree_pids(pairs, 20) == {20, 21}
+    assert win32.tree_pids(pairs, 99) == {99}                  # unknown pid: just itself, never everything
+    assert win32.tree_pids([], 5) == {5}
+    assert win32.tree_pids([(7, 7), (8, 7)], 7) == {7, 8}      # a self-parent entry cannot loop forever
+
+
 def test_absolute_mouse_coordinates_cover_the_virtual_desktop():
     assert win32.normalise_absolute(0, 0, 0, 0, 1920, 1080) == (0, 0)
     assert win32.normalise_absolute(1919, 1079, 0, 0, 1920, 1080) == (65535, 65535)
