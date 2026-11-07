@@ -32,11 +32,14 @@
   let planDetail = null;
   const planApproved = new Set();
   const planDeleted = new Set();
+  let planGenerateOp = null;
+  const planApproveOp = new Map();
   let discoveryGen = 0;
   let discoverySeq = 0;
   let discoveryFlight = 0;
   const discoveryApproved = new Set();
   const discoveryRejected = new Set();
+  const discoveryApproveOp = new Map();
   const ASSET_GENERATE_TIMEOUT_MS = 120000;
   const ASSET_AUTOPACK_TIMEOUT_MS = 660000;
   const ASSET_PIPELINE_TIMEOUT_MS = 60000;
@@ -876,12 +879,68 @@
     }
   }
 
-  function reviewFail(err, unknownKey) {
+  function reviewUnresolved(err) {
     const message = String((err && err.message) || err || "");
-    if (err && (err.name === "AbortError" || /aborted|timed out|timeout|изтекло|изтече/i.test(message))) {
-      return dx.t(unknownKey);
-    }
+    return !!(err && (err.name === "AbortError" || /aborted|timed out|timeout|failed to fetch|networkerror|err_timed_out|err_aborted|изтекло|изтече/i.test(message)));
+  }
+
+  function reviewFail(err, unknownKey) {
+    if (reviewUnresolved(err)) return dx.t(unknownKey);
     return dx.t("studio.requestFailed") + ": " + dx.errText(err);
+  }
+
+  function planHoldMessage() {
+    let unknown = planGenerateOp === "unknown";
+    let pendingId = "";
+    planApproveOp.forEach((state, id) => {
+      if (state === "unknown") unknown = true;
+      else if (!pendingId) pendingId = id;
+    });
+    if (unknown) return dx.t("studio.planUnknown");
+    if (planGenerateOp === "pending") return dx.t("studio.planGeneratePending");
+    if (pendingId) return dx.t("studio.planApprovePending", { id: pendingId });
+    return "";
+  }
+
+  function showPlanListStatus(opts) {
+    const hold = planHoldMessage();
+    if (hold) {
+      showStatus("plan-status", hold, true);
+      return;
+    }
+    if (!opts || !opts.keepStatus) showStatus("plan-status", "", false);
+  }
+
+  function discoveryHoldMessage() {
+    let unknown = false;
+    let pendingId = "";
+    discoveryApproveOp.forEach((state, id) => {
+      if (state === "unknown") unknown = true;
+      else if (!pendingId) pendingId = id;
+    });
+    if (unknown) return dx.t("studio.discoveryUnknown");
+    if (pendingId) return dx.t("studio.discoveryApprovePending", { id: pendingId });
+    return "";
+  }
+
+  function showDiscoveryListStatus(opts) {
+    const hold = discoveryHoldMessage();
+    if (hold) {
+      showStatus("discovery-status", hold, true);
+      return;
+    }
+    if (!opts || !opts.keepStatus) showStatus("discovery-status", "", false);
+  }
+
+  function dropRowAct(listId, id, act) {
+    const list = $(listId);
+    if (!list || !id) return;
+    list.querySelectorAll("[data-id]").forEach((row) => {
+      if (row.dataset.id !== id) return;
+      row.querySelectorAll("button").forEach((btn) => {
+        if (!act || btn.dataset.act === act) btn.remove();
+      });
+    });
   }
 
   function planStill(gen) {
@@ -889,12 +948,14 @@
   }
 
   function syncPlanButtons() {
-    const locked = planFlight !== 0;
-    ["plan-generate", "plan-refresh"].forEach((id) => {
-      const btn = $(id);
-      if (btn) btn.disabled = locked;
+    const listLocked = planFlight !== 0;
+    const generate = $("plan-generate");
+    const refresh = $("plan-refresh");
+    if (generate) generate.disabled = listLocked || planGenerateOp !== null;
+    if (refresh) refresh.disabled = listLocked;
+    document.querySelectorAll("#plan-list button").forEach((btn) => {
+      btn.disabled = listLocked || (btn.dataset.act === "approve" && planApproveOp.has(btn.dataset.id || ""));
     });
-    document.querySelectorAll("#plan-list button").forEach((btn) => { btn.disabled = locked; });
   }
 
   function renderPlans(rows, gen) {
@@ -926,7 +987,7 @@
       sub.textContent = lines.join("\n");
       const actions = document.createElement("div");
       actions.className = "row tight";
-      if (id && item.status === "draft" && !planApproved.has(id)) {
+      if (id && item.status === "draft" && !planApproved.has(id) && !planApproveOp.has(id)) {
         const approve = document.createElement("button");
         approve.type = "button";
         approve.dataset.act = "approve";
@@ -962,15 +1023,17 @@
       const data = await dx.api("/admin/daedalus/planner/plans", { timeoutMs: PLAN_TIMEOUT_MS });
       if (!planStill(gen) || flight !== planFlight) return;
       if (!data || !Array.isArray(data.plans)) {
-        showStatus("plan-status", dx.t("studio.planNotOk"), true);
+        if (!planHoldMessage()) showStatus("plan-status", dx.t("studio.planNotOk"), true);
+        else showPlanListStatus();
         $("plan-list").replaceChildren();
         return;
       }
       renderPlans(data.plans, gen);
-      if (!opts || !opts.keepStatus) showStatus("plan-status", "", false);
+      showPlanListStatus(opts);
     } catch (err) {
       if (!planStill(gen) || flight !== planFlight) return;
-      showStatus("plan-status", reviewFail(err, "studio.planUnknown"), true);
+      if (!planHoldMessage()) showStatus("plan-status", reviewFail(err, "studio.planUnknown"), true);
+      else showPlanListStatus();
       $("plan-list").replaceChildren();
     } finally {
       if (planFlight === flight) {
@@ -981,7 +1044,7 @@
   }
 
   function generatePlan() {
-    if (planFlight || currentPanel !== "review") return;
+    if (planFlight || planGenerateOp || currentPanel !== "review") return;
     const goal = ($("plan-goal").value || "").trim();
     if (!goal) {
       showStatus("plan-status", dx.t("studio.planNeedGoal"), true);
@@ -993,31 +1056,37 @@
     }
     const gen = planGen;
     if (!window.confirm(dx.t("studio.planGenerateConfirm", { goal }))) return;
-    if (!planStill(gen)) return;
-    const flight = ++planSeq;
-    planFlight = flight;
+    if (!planStill(gen) || planGenerateOp) return;
+    planGenerateOp = "pending";
     syncPlanButtons();
+    showStatus("plan-status", dx.t("studio.planGeneratePending"), true);
     let refresh = false;
     dx.api("/admin/daedalus/planner/plans/auto", {
       method: "POST",
       body: JSON.stringify({ goal }),
       timeoutMs: PLAN_TIMEOUT_MS,
     }).then(async (data) => {
-      if (!planStill(gen) || flight !== planFlight) return;
       if (!data || data.ok !== true) {
+        planGenerateOp = null;
+        syncPlanButtons();
+        if (!planStill(gen)) return;
         const detail = data && (data.error || data.detail);
         showStatus("plan-status", dx.t("studio.planNotOk") + (detail ? ": " + detail : ""), true);
         return;
       }
       const id = String((data.plan && data.plan.id) || data.plan_id || "");
       if (!id) {
-        showStatus("plan-status", dx.t("studio.planNotOk"), true);
+        planGenerateOp = null;
+        syncPlanButtons();
+        if (planStill(gen)) showStatus("plan-status", dx.t("studio.planNotOk"), true);
         return;
       }
-      showStatus("plan-status", dx.t("studio.planDraft", { id }), false);
+      planGenerateOp = null;
+      syncPlanButtons();
+      if (planStill(gen)) showStatus("plan-status", dx.t("studio.planDraft", { id }), false);
       try {
         const stored = await dx.api("/admin/daedalus/planner/plans/" + encodeURIComponent(id), { timeoutMs: PLAN_TIMEOUT_MS });
-        if (!planStill(gen) || flight !== planFlight) return;
+        if (!planStill(gen)) return;
         if (!stored || String(stored.id || "") !== id) {
           showStatus("plan-status", dx.t("studio.planMissing", { id }), true);
           return;
@@ -1025,7 +1094,7 @@
         planDetail = stored;
         refresh = true;
       } catch (err) {
-        if (!planStill(gen) || flight !== planFlight) return;
+        if (!planStill(gen)) return;
         const message = String((err && err.message) || err || "");
         if (/not found|404/i.test(message)) {
           showStatus("plan-status", dx.t("studio.planMissing", { id }), true);
@@ -1034,49 +1103,59 @@
         showStatus("plan-status", reviewFail(err, "studio.planUnknown"), true);
       }
     }).catch((err) => {
-      if (!planStill(gen) || flight !== planFlight) return;
-      showStatus("plan-status", reviewFail(err, "studio.planUnknown"), true);
-    }).finally(() => {
-      if (planFlight === flight) {
-        planFlight = 0;
+      if (reviewUnresolved(err)) {
+        planGenerateOp = "unknown";
         syncPlanButtons();
+        if (planStill(gen)) showStatus("plan-status", dx.t("studio.planUnknown"), true);
+        return;
       }
+      planGenerateOp = null;
+      syncPlanButtons();
+      if (planStill(gen)) showStatus("plan-status", reviewFail(err, "studio.planUnknown"), true);
+    }).finally(() => {
       if (refresh && planStill(gen)) loadPlans({ keepStatus: true });
     });
   }
 
   function approvePlan(id, gen, btn) {
-    if (planFlight || currentPanel !== "review" || !btn.isConnected) return;
+    if (currentPanel !== "review" || !btn.isConnected) return;
     if (btn.dataset.gen !== String(planGen) || gen !== planGen) return;
-    if (planApproved.has(id) || planDeleted.has(id)) return;
+    if (planApproved.has(id) || planDeleted.has(id) || planApproveOp.has(id)) return;
     if (!window.confirm(dx.t("studio.planApproveConfirm", { id }))) return;
     if (!planStill(gen) || !btn.isConnected || btn.dataset.gen !== String(planGen)) return;
-    const flight = ++planSeq;
-    planFlight = flight;
+    if (planApproved.has(id) || planApproveOp.has(id)) return;
+    planApproveOp.set(id, "pending");
     syncPlanButtons();
+    showStatus("plan-status", dx.t("studio.planApprovePending", { id }), true);
     let refresh = false;
     dx.api("/admin/daedalus/planner/plans/" + encodeURIComponent(id) + "/approve", {
       method: "POST",
       timeoutMs: PLAN_TIMEOUT_MS,
     }).then((data) => {
-      if (!planStill(gen) || flight !== planFlight) return;
       if (!data || data.ok !== true) {
+        planApproveOp.delete(id);
+        if (!planStill(gen)) return;
         const detail = data && (data.error || data.detail);
         showStatus("plan-status", dx.t("studio.planNotOk") + (detail ? ": " + detail : ""), true);
         return;
       }
+      planApproveOp.delete(id);
       planApproved.add(id);
+      dropRowAct("plan-list", id, "approve");
+      if (!planStill(gen)) return;
       const count = Array.isArray(data.tasks_created) ? data.tasks_created.length : 0;
       showStatus("plan-status", dx.t("studio.planApproved", { id, count }), false);
       refresh = true;
     }).catch((err) => {
-      if (!planStill(gen) || flight !== planFlight) return;
-      showStatus("plan-status", reviewFail(err, "studio.planUnknown"), true);
-    }).finally(() => {
-      if (planFlight === flight) {
-        planFlight = 0;
-        syncPlanButtons();
+      if (reviewUnresolved(err)) {
+        planApproveOp.set(id, "unknown");
+        if (planStill(gen)) showStatus("plan-status", dx.t("studio.planUnknown"), true);
+        return;
       }
+      planApproveOp.delete(id);
+      if (planStill(gen)) showStatus("plan-status", reviewFail(err, "studio.planUnknown"), true);
+    }).finally(() => {
+      syncPlanButtons();
       if (refresh && planStill(gen)) loadPlans({ keepStatus: true });
     });
   }
@@ -1127,7 +1206,9 @@
     const filter = $("discovery-filter");
     if (refresh) refresh.disabled = locked;
     if (filter) filter.disabled = locked;
-    document.querySelectorAll("#discovery-list button").forEach((btn) => { btn.disabled = locked; });
+    document.querySelectorAll("#discovery-list button").forEach((btn) => {
+      btn.disabled = locked || discoveryApproveOp.has(btn.dataset.id || "");
+    });
   }
 
   function discoveryMeta(item) {
@@ -1162,7 +1243,7 @@
         .join("\n");
       const actions = document.createElement("div");
       actions.className = "row tight";
-      const closed = discoveryApproved.has(id) || discoveryRejected.has(id) || status === "approved" || status === "rejected";
+      const closed = discoveryApproved.has(id) || discoveryRejected.has(id) || discoveryApproveOp.has(id) || status === "approved" || status === "rejected";
       if (id && !closed) {
         const approve = document.createElement("button");
         approve.type = "button";
@@ -1201,16 +1282,19 @@
       );
       if (!discoveryStill(gen) || flight !== discoveryFlight) return;
       if (!data || !Array.isArray(data.discoveries) || data.error) {
-        const detail = data && data.error;
-        showStatus("discovery-status", dx.t("studio.discoveryNotOk") + (detail ? ": " + detail : ""), true);
+        if (!discoveryHoldMessage()) {
+          const detail = data && data.error;
+          showStatus("discovery-status", dx.t("studio.discoveryNotOk") + (detail ? ": " + detail : ""), true);
+        } else showDiscoveryListStatus();
         $("discovery-list").replaceChildren();
         return;
       }
       renderDiscoveries(data.discoveries, gen);
-      if (!opts || !opts.keepStatus) showStatus("discovery-status", "", false);
+      showDiscoveryListStatus(opts);
     } catch (err) {
       if (!discoveryStill(gen) || flight !== discoveryFlight) return;
-      showStatus("discovery-status", reviewFail(err, "studio.discoveryUnknown"), true);
+      if (!discoveryHoldMessage()) showStatus("discovery-status", reviewFail(err, "studio.discoveryUnknown"), true);
+      else showDiscoveryListStatus();
       $("discovery-list").replaceChildren();
     } finally {
       if (discoveryFlight === flight) {
@@ -1221,38 +1305,48 @@
   }
 
   function approveDiscovery(id, gen, btn, meta) {
-    if (discoveryFlight || currentPanel !== "review" || !btn.isConnected) return;
+    if (currentPanel !== "review" || !btn.isConnected) return;
     if (btn.dataset.gen !== String(discoveryGen) || gen !== discoveryGen) return;
-    if (discoveryApproved.has(id) || discoveryRejected.has(id)) return;
+    if (discoveryApproved.has(id) || discoveryRejected.has(id) || discoveryApproveOp.has(id)) return;
     let question = dx.t("studio.discoveryApproveConfirm", { id });
     if (meta && meta.for_self) question += "\n" + dx.t("studio.discoveryForSelf");
     if (!window.confirm(question)) return;
     if (!discoveryStill(gen) || !btn.isConnected || btn.dataset.gen !== String(discoveryGen)) return;
-    const flight = ++discoverySeq;
-    discoveryFlight = flight;
+    if (discoveryApproved.has(id) || discoveryApproveOp.has(id)) return;
+    discoveryApproveOp.set(id, "pending");
     syncDiscoveryButtons();
+    showStatus("discovery-status", dx.t("studio.discoveryApprovePending", { id }), true);
     let refresh = false;
     dx.api("/admin/daedalus/discoveries/" + encodeURIComponent(id) + "/approve", {
       method: "POST",
       timeoutMs: DISCOVERY_TIMEOUT_MS,
     }).then((data) => {
-      if (!discoveryStill(gen) || flight !== discoveryFlight) return;
       if (!data || data.approved !== true) {
+        discoveryApproveOp.delete(id);
+        syncDiscoveryButtons();
+        if (!discoveryStill(gen)) return;
         showStatus("discovery-status", dx.t("studio.discoveryNotApproved", { id }), true);
         return;
       }
+      discoveryApproveOp.delete(id);
       discoveryApproved.add(id);
+      dropRowAct("discovery-list", id);
+      if (!discoveryStill(gen)) return;
       const key = data.plan_id === "pending" ? "studio.discoveryScheduled" : "studio.discoveryUnscheduled";
       showStatus("discovery-status", dx.t(key, { id }), false);
       refresh = true;
     }).catch((err) => {
-      if (!discoveryStill(gen) || flight !== discoveryFlight) return;
-      showStatus("discovery-status", reviewFail(err, "studio.discoveryUnknown"), true);
-    }).finally(() => {
-      if (discoveryFlight === flight) {
-        discoveryFlight = 0;
+      if (reviewUnresolved(err)) {
+        discoveryApproveOp.set(id, "unknown");
         syncDiscoveryButtons();
+        if (discoveryStill(gen)) showStatus("discovery-status", dx.t("studio.discoveryUnknown"), true);
+        return;
       }
+      discoveryApproveOp.delete(id);
+      syncDiscoveryButtons();
+      if (discoveryStill(gen)) showStatus("discovery-status", reviewFail(err, "studio.discoveryUnknown"), true);
+    }).finally(() => {
+      syncDiscoveryButtons();
       if (refresh && discoveryStill(gen)) loadDiscoveries({ keepStatus: true });
     });
   }
@@ -1260,7 +1354,7 @@
   function rejectDiscovery(id, gen, btn) {
     if (discoveryFlight || currentPanel !== "review" || !btn.isConnected) return;
     if (btn.dataset.gen !== String(discoveryGen) || gen !== discoveryGen) return;
-    if (discoveryApproved.has(id) || discoveryRejected.has(id)) return;
+    if (discoveryApproved.has(id) || discoveryRejected.has(id) || discoveryApproveOp.has(id)) return;
     if (!window.confirm(dx.t("studio.discoveryRejectConfirm", { id }))) return;
     if (!discoveryStill(gen) || !btn.isConnected || btn.dataset.gen !== String(discoveryGen)) return;
     const flight = ++discoverySeq;

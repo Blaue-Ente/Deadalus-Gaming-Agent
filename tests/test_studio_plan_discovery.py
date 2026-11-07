@@ -29,11 +29,14 @@ KEYS = (
     "studio.planApproved",
     "studio.planDeleted",
     "studio.planUnknown",
+    "studio.planGeneratePending",
+    "studio.planApprovePending",
     "studio.discoveryApproveConfirm",
     "studio.discoveryScheduled",
     "studio.discoveryUnscheduled",
     "studio.discoveryRejectConfirm",
     "studio.discoveryUnknown",
+    "studio.discoveryApprovePending",
     "studio.discoveryForSelf",
 )
 
@@ -189,7 +192,7 @@ def test_plan_discovery_contract_names_the_real_dispatch():
     assert 'id="blocker-controls"' in review
     for banned in ("panel-planner", "panel-discoveries", "/progress"):
         assert banned not in review
-    block = _slice(WORK, "function reviewFail", "async function reviewAct")
+    block = _slice(WORK, "function reviewUnresolved", "async function reviewAct")
     assert "setInterval" not in block
     assert "innerHTML" not in block
     assert "/progress" not in block
@@ -199,11 +202,29 @@ def test_plan_discovery_contract_names_the_real_dispatch():
     assert "Composer" not in block
     assert "studio.planUnknown" in block
     assert "studio.discoveryUnknown" in block
+    assert "timed out" in block
+    assert "failed to fetch" in block
     approve = _slice(block, "function approvePlan", "function deletePlan")
     delete = _slice(block, "function deletePlan", "function discoveryStill")
     assert "body" not in approve
     assert "body" not in delete
+    discovery = _slice(block, "function approveDiscovery", "function rejectDiscovery")
+    recorded = discovery.index("discoveryApproved.add(id)")
+    assert "discoveryStill(gen)" in discovery[recorded:]
+    assert 'discoveryApproveOp.set(id, "pending")' in discovery
+    assert 'discoveryApproveOp.set(id, "unknown")' in discovery
+    assert 'planGenerateOp = "unknown"' in block
+    assert 'planApproveOp.set(id, "pending")' in approve
+    assert 'planApproveOp.set(id, "unknown")' in approve
+    assert "setInterval" not in block
+    assert "retry" not in discovery
     assert 'method: "DELETE"' in delete
+    leave = _slice(WORK, "function showPanel", "function slugPath")
+    assert "planFlight = 0" in leave
+    assert "discoveryFlight = 0" in leave
+    assert "planApproveOp" not in leave
+    assert "discoveryApproveOp" not in leave
+    assert "planGenerateOp" not in leave
     confirm = I18N[I18N.find('"studio.discoveryApproveConfirm"'):I18N.find('"studio.discoveryForSelf"')]
     assert "OpenRouter Claude Sonnet" in confirm
     assert "Novita DeepSeek" in confirm
@@ -432,6 +453,12 @@ def _arm(page, state, held, posts):
         path = req.url.split("?", 1)[0]
         if req.method == "POST" and path.endswith("/approve"):
             posts.append({"kind": "disc-approve", "url": path, "body": req.post_data})
+            if state.get("disc_abort"):
+                route.abort("timedout")
+                return
+            if state.get("hold_disc_approve"):
+                held.setdefault("disc_approve", []).append(route)
+                return
             _fulfill(route, 200, state["disc_approve"])
             return
         if req.method == "POST" and path.endswith("/reject"):
@@ -776,13 +803,26 @@ def test_leaving_review_drops_late_plan_replies(studio_server):
             page.locator("#plan-list button[data-act=approve]").click(timeout=500)
         assert len(posts) == 1
         _hit(page, "#workspace-nav button[data-panel=build]")
+        _hit(page, "#workspace-nav button[data-panel=review]")
+        page.wait_for_function(
+            """(title) => {
+              const status = document.getElementById('plan-status').textContent || '';
+              return document.getElementById('plan-list').textContent.includes(title)
+                && document.querySelectorAll('#plan-list button[data-act=approve]').length === 0
+                && status.includes('not finished');
+            }""",
+            arg=TITLE,
+        )
+        assert len(posts) == 1
+        _hit(page, "#workspace-nav button[data-panel=build]")
         state["hold_approve"] = False
         _fulfill(held["approve"].pop(), 200, state["approve"])
         page.evaluate("() => new Promise((resolve) => setTimeout(resolve, 50))")
         assert "Tasks created" not in page.locator("#plan-status").evaluate("el => el.textContent")
         _hit(page, "#workspace-nav button[data-panel=review]")
         page.wait_for_function(
-            """(title) => document.getElementById('plan-list').textContent.includes(title)""",
+            """(title) => document.getElementById('plan-list').textContent.includes(title)
+              && document.querySelectorAll('#plan-list button[data-act=approve]').length === 0""",
             arg=TITLE,
         )
         assert "Tasks created" not in page.locator("#plan-status").evaluate("el => el.textContent")
@@ -800,7 +840,7 @@ def test_leaving_review_drops_late_plan_replies(studio_server):
         _hit(page, "#workspace-nav button[data-panel=build]")
         page.evaluate("() => { document.getElementById('panel-review').hidden = false; }")
         dialogs.clear()
-        _hit(page, "#plan-list button[data-act=approve]")
+        assert page.locator("#plan-list button[data-act=approve]").count() == 0
         assert dialogs == []
         assert len(posts) == posted
         _hit(page, "#workspace-nav button[data-panel=review]")
@@ -817,5 +857,164 @@ def test_leaving_review_drops_late_plan_replies(studio_server):
             assert page.locator("#panel-settings").is_visible()
             assert page.locator("#plan-goal").input_value() == GOAL
             assert page.evaluate("() => window.scrollY") == 0
+        assert leaked == []
+        browser.close()
+
+
+def test_unresolved_costly_actions_stay_blocked_across_navigation(studio_server):
+    from playwright.sync_api import TimeoutError as PlaywrightTimeout
+    from playwright.sync_api import sync_playwright
+
+    state = {
+        "list": {"plans": [PLAN]},
+        "list_status": 200,
+        "detail": PLAN,
+        "detail_status": 200,
+        "auto": {"ok": True, "plan_id": "plan_demo", "status": "draft", "plan": PLAN},
+        "auto_status": 200,
+        "approve": {"ok": True, "plan_id": "plan_demo", "status": "active", "tasks_created": ["task_1"]},
+        "approve_status": 200,
+        "delete": {"ok": True},
+        "delete_status": 200,
+        "disc": {"discoveries": [DISC_PEND, DISC_BG], "count": 2},
+        "disc_status": 200,
+        "disc_approve": {"discovery_id": "disc_pend", "approved": True, "plan_id": "pending"},
+        "disc_reject": {"rejected": False},
+        "hold_list": False,
+        "hold_auto": False,
+        "hold_approve": False,
+        "hold_disc": False,
+        "hold_disc_approve": True,
+        "disc_abort": False,
+    }
+    held = {"list": [], "auto": [], "approve": [], "disc": [], "disc_approve": []}
+    posts = []
+    accept = {"on": True}
+
+    def kind(name):
+        return [item for item in posts if item["kind"] == name]
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        leaked = _guard(page)
+        _arm(page, state, held, posts)
+        page.on("dialog", lambda dialog: dialog.accept() if accept["on"] else dialog.dismiss())
+        page.goto(studio_server["url"] + "/?panel=review", wait_until="domcontentloaded")
+        page.wait_for_function(
+            """(title) => document.getElementById('plan-list').textContent.includes(title)
+              && document.getElementById('discovery-list').textContent.includes('disc_pend')""",
+            arg=TITLE,
+        )
+        _hit(page, "#discovery-list [data-id=disc_pend] button[data-act=approve]")
+        _wait_len(page, posts, 1)
+        _hit(page, "#workspace-nav button[data-panel=build]")
+        _hit(page, "#workspace-nav button[data-panel=review]")
+        page.wait_for_function(
+            """() => document.querySelectorAll('#discovery-list [data-id=disc_pend] button[data-act=approve]').length === 0
+              && document.querySelector('#discovery-list [data-id=disc_bg] button[data-act=approve]')
+              && (document.getElementById('discovery-status').textContent || '').includes('not finished')"""
+        )
+        assert len(kind("disc-approve")) == 1
+        with pytest.raises(PlaywrightTimeout):
+            page.locator("#discovery-list [data-id=disc_pend] button[data-act=approve]").click(timeout=400)
+        assert len(kind("disc-approve")) == 1
+        _hit(page, "#workspace-nav button[data-panel=build]")
+        state["hold_disc_approve"] = False
+        _fulfill(held["disc_approve"].pop(), 200, {"approved": True, "plan_id": "pending", "discovery_id": "disc_pend"})
+        page.evaluate("() => new Promise((resolve) => setTimeout(resolve, 50))")
+        assert "The id is pending" not in page.locator("#discovery-status").evaluate("el => el.textContent")
+        page.evaluate(
+            """() => {
+              const row = document.querySelector('#plan-list .item');
+              if (row) row.dataset.seen = 'old';
+            }"""
+        )
+        _hit(page, "#workspace-nav button[data-panel=review]")
+        page.wait_for_function(
+            """() => {
+              const row = document.querySelector('#plan-list .item');
+              const refresh = document.getElementById('plan-refresh');
+              return row && row.dataset.seen !== 'old' && refresh && !refresh.disabled
+                && document.querySelector('#plan-list button[data-act=approve]')
+                && document.getElementById('discovery-list').textContent.includes('disc_pend')
+                && document.querySelectorAll('#discovery-list [data-id=disc_pend] button[data-act=approve]').length === 0;
+            }"""
+        )
+        assert len(kind("disc-approve")) == 1
+        state["hold_approve"] = True
+        _hit(page, "#plan-list button[data-act=approve]")
+        _wait_len(page, posts, 2)
+        _hit(page, "#workspace-nav button[data-panel=build]")
+        _hit(page, "#workspace-nav button[data-panel=review]")
+        page.wait_for_function(
+            """() => document.querySelectorAll('#plan-list button[data-act=approve]').length === 0
+              && (document.getElementById('plan-status').textContent || '').includes('Approval of plan plan_demo')"""
+        )
+        assert len(kind("approve")) == 1
+        with pytest.raises(PlaywrightTimeout):
+            page.locator("#plan-list button[data-act=approve]").click(timeout=400)
+        assert len(kind("approve")) == 1
+        _hit(page, "#workspace-nav button[data-panel=build]")
+        state["hold_approve"] = False
+        _fulfill(held["approve"].pop(), 200, state["approve"])
+        page.evaluate("() => new Promise((resolve) => setTimeout(resolve, 50))")
+        assert "Tasks created" not in page.locator("#plan-status").evaluate("el => el.textContent")
+        _hit(page, "#workspace-nav button[data-panel=review]")
+        page.wait_for_function(
+            """(title) => document.getElementById('plan-list').textContent.includes(title)
+              && document.querySelectorAll('#plan-list button[data-act=approve]').length === 0""",
+            arg=TITLE,
+        )
+        assert len(kind("approve")) == 1
+        state["hold_auto"] = True
+        page.locator("#plan-goal").fill(GOAL)
+        _hit(page, "#plan-generate")
+        _wait_len(page, posts, 3)
+        assert kind("auto")[0]["body"] == {"goal": GOAL}
+        _hit(page, "#workspace-nav button[data-panel=build]")
+        _hit(page, "#workspace-nav button[data-panel=review]")
+        page.wait_for_function(
+            """() => document.getElementById('plan-generate').disabled
+              && (document.getElementById('plan-status').textContent || '').includes('still being generated')"""
+        )
+        with pytest.raises(PlaywrightTimeout):
+            page.locator("#plan-generate").click(timeout=400)
+        assert len(kind("auto")) == 1
+        _hit(page, "#workspace-nav button[data-panel=build]")
+        state["hold_auto"] = False
+        _fulfill(held["auto"].pop(), 200, state["auto"])
+        page.evaluate("() => new Promise((resolve) => setTimeout(resolve, 50))")
+        assert "is stored" not in page.locator("#plan-status").evaluate("el => el.textContent")
+        _hit(page, "#workspace-nav button[data-panel=review]")
+        page.wait_for_function("() => !document.getElementById('plan-generate').disabled")
+        assert len(kind("auto")) == 1
+        state["disc_abort"] = True
+        before = len(kind("disc-approve"))
+        seen = len(posts)
+        _hit(page, "#discovery-list [data-id=disc_bg] button[data-act=approve]")
+        _wait_len(page, posts, seen + 1)
+        _status_has(page, "discovery-status", "Outcome unknown")
+        assert "Not safe to retry" in page.locator("#discovery-status").inner_text()
+        assert "Try again" not in page.locator("#discovery-status").inner_text()
+        with pytest.raises(PlaywrightTimeout):
+            page.locator("#discovery-list [data-id=disc_bg] button[data-act=approve]").click(timeout=400)
+        assert len(kind("disc-approve")) == before + 1
+        _hit(page, "#discovery-refresh")
+        page.wait_for_function(
+            """() => (document.getElementById('discovery-status').textContent || '').includes('Outcome unknown')
+              && document.querySelectorAll('#discovery-list [data-id=disc_bg] button').length === 0
+              && document.getElementById('discovery-list').textContent.includes('disc_bg')"""
+        )
+        _hit(page, "#workspace-nav button[data-panel=build]")
+        _hit(page, "#workspace-nav button[data-panel=review]")
+        page.wait_for_function(
+            """() => (document.getElementById('discovery-status').textContent || '').includes('Not safe to retry')
+              && document.querySelectorAll('#discovery-list [data-id=disc_bg] button').length === 0
+              && document.querySelectorAll('#discovery-list [data-id=disc_pend] button[data-act=approve]').length === 0"""
+        )
+        assert len(kind("disc-approve")) == before + 1
+        assert len(kind("auto")) == 1
+        assert len(kind("approve")) == 1
         assert leaked == []
         browser.close()
