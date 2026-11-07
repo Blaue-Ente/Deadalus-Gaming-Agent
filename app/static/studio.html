@@ -15,11 +15,11 @@
     <header class="app">
       <img class="mark" src="/static/daedalus-mark.png" alt="Daedalus" />
       <div class="brand">
-        <h1 data-i18n="studio.brand">Daedalus</h1>
+        <h1 data-i18n="studio.headerName">Game Studio</h1>
         <div class="sub">
           <span data-i18n="studio.tagline">Games first · speak plainly</span>
-          · <a href="/admin/daedalus/proposals" data-i18n="nav.proposals">Proposals</a>
-          · <a href="/admin/daedalus/hub" data-i18n="nav.hub">Hub</a>
+          · <button type="button" class="textlink" id="open-review" data-i18n="nav.proposals">Proposals</button>
+          · <a href="/admin/daedalus" data-i18n="studio.classicLink">Classic</a>
         </div>
       </div>
       <button type="button" class="chip empty" id="projchip" data-i18n="studio.noProject">No project selected</button>
@@ -55,7 +55,7 @@
         <button type="button" data-lang="en" aria-pressed="true">EN</button>
         <button type="button" data-lang="bg" aria-pressed="false">BG</button>
       </div>
-      <a id="settings-link" class="chip" href="/admin/daedalus/connectors" data-i18n="studio.settings">Settings</a>
+      <button type="button" id="settings-link" class="chip" data-i18n="studio.settings">Settings</button>
       <p id="header-status" class="header-status" role="status" hidden></p>
       <div class="pills" id="pills"></div>
     </header>
@@ -89,7 +89,36 @@
           <button id="ppub" type="button" disabled>/apps/</button>
           <button class="primary" id="plive" type="button" disabled data-i18n="studio.live">Live</button>
         </div>
+        <div class="kind-filter" id="kind-filter" role="group" data-i18n-aria="studio.filterAria" aria-label="Project filter">
+          <button type="button" data-filter="all" aria-pressed="true" data-i18n="studio.filter.all">All</button>
+          <button type="button" data-filter="games" aria-pressed="false" disabled data-i18n="studio.filter.games">Games</button>
+          <button type="button" data-filter="apps" aria-pressed="false" disabled data-i18n="studio.filter.apps">Apps</button>
+        </div>
         <div class="list" id="plist"></div>
+        <div class="files">
+          <p class="kicker" data-i18n="studio.files">Files</p>
+          <p id="file-status" class="workspace-status" role="status" hidden></p>
+          <div class="list" id="filelist"></div>
+          <pre id="fileview"></pre>
+          <p class="kicker" data-i18n="studio.assets">Assets</p>
+          <div class="list" id="assetlist"></div>
+        </div>
+        <details id="git-menu">
+          <summary data-i18n="studio.gitMenu">Git</summary>
+          <label><span data-i18n="studio.gitUrl">Remote URL</span>
+            <input id="git-url" autocomplete="off" data-i18n-aria="studio.gitUrl" aria-label="Remote URL" />
+          </label>
+          <div class="row tight">
+            <button id="git-clone" type="button" data-i18n="studio.clone">Clone</button>
+            <button id="git-revive" type="button" data-i18n="studio.revive">Revive</button>
+          </div>
+          <div class="row tight">
+            <button id="git-push" type="button" data-i18n="studio.push">Push</button>
+            <button id="git-pr" type="button" data-i18n="studio.pullRequest">Pull request</button>
+            <button id="project-delete" type="button" data-i18n="studio.delete">Delete</button>
+          </div>
+          <p id="git-status" class="workspace-status" role="status" hidden></p>
+        </details>
       </div>
       <div class="prefs">
         <p class="kicker" data-i18n="studio.prefs">Preferences</p>
@@ -114,6 +143,17 @@
     </aside>
 
     <main>
+      <nav id="workspace-nav" class="workspace-nav" role="tablist" data-i18n-aria="studio.navAria" aria-label="Workspace">
+        <button type="button" data-panel="chat" aria-selected="true" data-i18n="studio.panel.chat">Chat</button>
+        <button type="button" data-panel="build" aria-selected="false" data-i18n="studio.panel.build">Build</button>
+        <button type="button" data-panel="preview" aria-selected="false" data-i18n="studio.panel.preview">Preview</button>
+        <button type="button" data-panel="review" aria-selected="false" data-i18n="studio.panel.review">Review</button>
+        <button type="button" data-panel="settings" aria-selected="false" data-i18n="studio.panel.settings">Settings</button>
+        <button type="button" data-panel="world" aria-selected="false" data-i18n="studio.panel.world">World</button>
+        <button type="button" data-panel="tools" aria-selected="false" data-i18n="studio.panel.tools">Tools</button>
+      </nav>
+      <p id="workspace-status" class="workspace-status" role="status" hidden></p>
+      <div id="panel-chat" class="workspace-panel" data-panel="chat">
       <p class="kicker" data-i18n="studio.chat">Chat</p>
       <div class="msgs" id="msgs"></div>
       <div class="composer">
@@ -151,6 +191,103 @@
           accept=".txt,.md,.py,.js,.ts,.jsx,.tsx,.json,.csv,.yaml,.yml,.xml,.html,.css,.sql,.sh,.toml,.ini,.log,.gd,.svg" />
         <input type="file" id="ctximage" class="sr-only" multiple accept="image/png,image/jpeg,image/gif,image/webp,.png,.jpg,.jpeg,.gif,.webp" />
       </div>
+      </div>
+      <section id="panel-build" class="workspace-panel" data-panel="build" hidden>
+        <p class="kicker" data-i18n="studio.panel.build">Build</p>
+        <p class="hint" id="build-slug"></p>
+        <label><span data-i18n="studio.buildIdea">Idea</span>
+          <textarea id="build-idea" rows="3" data-i18n-aria="studio.buildIdea" aria-label="Idea"></textarea>
+        </label>
+        <div class="row">
+          <label class="grow"><span data-i18n="studio.genre">Genre</span>
+            <select id="build-genre" data-i18n-aria="studio.genre" aria-label="Genre"></select>
+          </label>
+          <label class="grow"><span data-i18n="studio.audience">Audience</span>
+            <select id="build-audience" data-i18n-aria="studio.audience" aria-label="Audience"></select>
+          </label>
+          <label class="grow"><span data-i18n="studio.platform">Platform</span>
+            <select id="build-platform" data-i18n-aria="studio.platform" aria-label="Platform"></select>
+          </label>
+          <label class="grow"><span data-i18n="studio.buildMode">Mode</span>
+            <select id="build-mode" data-i18n-aria="studio.buildMode" aria-label="Mode"></select>
+          </label>
+        </div>
+        <div class="row">
+          <button id="build-brainstorm" type="button" data-i18n="studio.brainstorm">Brainstorm</button>
+          <button id="build-gdd" type="button" data-i18n="studio.gdd">GDD</button>
+          <button class="primary" id="build-start" type="button" data-i18n="studio.startProject">Start</button>
+        </div>
+        <p id="build-status" class="workspace-status" role="status" hidden></p>
+        <pre id="build-out"></pre>
+        <div class="row">
+          <button id="build-guided" type="button" disabled data-i18n="studio.guided">Guided</button>
+          <button id="build-autopilot" type="button" disabled data-i18n="studio.autopilot">Autopilot</button>
+          <button id="build-stop" type="button" hidden data-i18n="studio.stop">Stop</button>
+          <button id="build-gates" type="button" disabled data-i18n="studio.gates">Gates</button>
+          <button id="build-verify" type="button" disabled data-i18n="studio.verify">Verify</button>
+          <button id="build-advance" type="button" disabled data-i18n="studio.advance">Advance</button>
+        </div>
+        <ul id="build-milestones"></ul>
+      </section>
+      <section id="panel-preview" class="workspace-panel" data-panel="preview" hidden>
+        <p class="kicker" data-i18n="studio.panel.preview">Preview</p>
+        <div class="row">
+          <button class="primary" id="preview-run" type="button" data-i18n="studio.previewRun">Run</button>
+          <button id="preview-stop" type="button" data-i18n="studio.previewStop">Stop</button>
+          <button id="preview-logs" type="button" data-i18n="studio.previewLogs">Logs</button>
+          <button id="preview-show" type="button" data-i18n="studio.showPreview">Show preview</button>
+        </div>
+        <p id="preview-status" class="workspace-status" role="status" hidden></p>
+        <div class="computer-frame"><iframe id="preview-frame" title="Preview" data-i18n-title="studio.showPreview"></iframe></div>
+        <div class="row">
+          <button id="preview-local" type="button" data-i18n="studio.publishLocal">Local copy</button>
+          <button id="preview-live" type="button" data-i18n="studio.liveBtn">Live</button>
+          <button id="preview-capsule" type="button" data-i18n="studio.capsuleBtn">Capsule</button>
+        </div>
+      </section>
+      <section id="panel-review" class="workspace-panel" data-panel="review" hidden>
+        <p class="kicker" data-i18n="studio.panel.review">Review</p>
+        <div id="review-tabs" class="workspace-nav" role="tablist">
+          <button type="button" data-tab="proposals" aria-selected="true" data-i18n="studio.review.proposals">Proposals</button>
+          <button type="button" data-tab="skills" aria-selected="false" data-i18n="studio.review.skills">Skills</button>
+          <button type="button" data-tab="bundles" aria-selected="false" data-i18n="studio.review.bundles">Bundles</button>
+          <button type="button" data-tab="permissions" aria-selected="false" data-i18n="studio.review.permissions">Permissions</button>
+          <button type="button" data-tab="outbox" aria-selected="false" data-i18n="studio.review.outbox">Outbox</button>
+        </div>
+        <p class="hint" data-i18n="studio.classicRemain">The classic page stays available until the old routes redirect. These controls call the same admin routes.</p>
+        <p id="review-status" class="workspace-status" role="status" hidden></p>
+        <div id="review-list"></div>
+      </section>
+      <section id="panel-settings" class="workspace-panel" data-panel="settings" hidden>
+        <p class="kicker" data-i18n="studio.panel.settings">Settings</p>
+        <p id="settings-status" class="workspace-status" role="status" hidden></p>
+        <p class="kicker" data-i18n="studio.settingsBrain">Brain</p>
+        <div id="settings-brain"></div>
+        <form id="settings-prefs">
+          <label><span data-i18n="studio.gitProvider">Git provider</span>
+            <select id="settings-provider" data-i18n-aria="studio.gitProvider" aria-label="Git provider">
+              <option value="auto">auto</option>
+              <option value="github">github</option>
+              <option value="gitlab">gitlab</option>
+            </select>
+          </label>
+          <label><span data-i18n="studio.gitBranch">Default branch</span>
+            <input id="settings-branch" autocomplete="off" data-i18n-aria="studio.gitBranch" aria-label="Default branch" />
+          </label>
+          <button class="primary" type="submit" data-i18n="studio.settingsSave">Save</button>
+        </form>
+        <p class="kicker" data-i18n="studio.settingsConnectors">Connectors</p>
+        <div id="settings-fields"></div>
+        <form id="settings-secret">
+          <p class="hint" data-i18n="studio.settingsSecretHint">Write-only. The value is not shown again.</p>
+          <label><span data-i18n="studio.settingsSecret">Key</span>
+            <select id="secret-key" data-i18n-aria="studio.settingsSecret" aria-label="Key"></select>
+          </label>
+          <input id="secret-value" type="password" autocomplete="off" data-i18n-aria="studio.settingsSecret" aria-label="Key" />
+          <button class="primary" type="submit" data-i18n="studio.settingsSave">Save</button>
+        </form>
+        <p class="hint"><a href="/admin/daedalus/connectors" data-i18n="studio.settingsLegacy">Previous connectors page</a></p>
+      </section>
     </main>
 
     <section class="rail">
@@ -249,5 +386,6 @@
     </form>
   </dialog>
   <script src="/static/studio.js"></script>
+  <script src="/static/studio-workspace.js"></script>
 </body>
 </html>
