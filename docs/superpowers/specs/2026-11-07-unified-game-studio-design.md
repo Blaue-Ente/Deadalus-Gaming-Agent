@@ -110,7 +110,16 @@ Reference brief uses `POST /admin/daedalus/playground/api/reference-scout` only.
 
 Each costly control confirms first, stays blocked across leaving Review while its outcome is pending or unknown, and does not send a second write for that same in-flight call. A received success updates the page-session result even when the hidden panel is not painted. A timeout stays unknown. The server calls are not idempotent. Tests use a temp data root, stub `complete`, `web_search_tool`, `web_fetch_tool`, and `mesh.route`, and do not publish.
 
-Still out: radar scan (writes discoveries; the classic source checkboxes are not sent), journal list/pause/clear, manual plan create, step add/override/mark, pause/resume, progress polling, background run, discovery delete, and discovery regenerate-plan.
+Radar and the scratch journal are in Review, after the reference brief. No new tab and no new page. Entering Review does not call them.
+
+- `GET /admin/daedalus/radar/sources` returns the catalog of 12 sources. `GET /admin/daedalus/radar/state` returns `last_scan`, `scan_count`, and `last_summary`. The field is `last_scan`, not `last_scan_ts`. Both loads are manual and read-only.
+- `POST /admin/daedalus/radar/scan` reads no body and does not take a source subset. It scans all 12 sources: 8 `github_search_tool` and 4 DuckDuckGo `web_search_tool`, with `for_self` false and `record_discoveries` true when memory is present. A URL already stored is not written again. New hits are written to owner memory. The handler writes `radar_state.json` and returns `ok: true` even when one source fails; that source keeps its own `ok` and `error`. There is no model call. The shell does not refresh discoveries after a scan.
+- `GET /admin/daedalus/journal/list` returns `ok`, `budget` 150000, `threshold_pct` 80, and summary rows (`session_id`, `task_name`, `status`, `step_count`, `tokens_est`, `budget_pct`, `last_summary` cut to 200 characters, `updated_at`, `pause_requested`, `paused`). That GET deletes scratch sessions idle for more than 24 hours, including their pause keys, through `clear_journal`. The shell asks before every load. It does not load on mount, after pause or clear, on a timer, or while Review is hidden.
+- `POST /admin/daedalus/journal/{session_id}/pause` sets the cooperative pause flag. It does not mark the journal paused. `POST .../clear` deletes that scratch record and its pause key. The shell confirms the id and the effect. Rows are summaries, not full steps, an export, or the evolution journal.
+
+A pending or unknown radar or journal call, including the destructive list GET, stays blocked across leaving Review. A success received while Review is hidden is stored and painted on return. There is no automatic retry. Pause and clear do not start for an id that is already unresolved, and they do not start while the list outcome is unknown.
+
+Still out: manual plan create, step add/override/mark, planner pause/resume, progress polling, background run, discovery delete, and discovery regenerate-plan.
 
 `/admin/llm-router` is not a fourth brain. Phase 2 Settings is the only brain UI. The old page redirects in phase 3.
 

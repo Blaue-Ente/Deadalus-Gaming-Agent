@@ -462,6 +462,28 @@
           <div id="ref-brief"></div>
           <p class="hint" data-i18n="studio.refHint">A reference brief is global. Scout searches DuckDuckGo and calls alltoken:deepseek-v3.2. It does not use the Studio provider and it does not save a project file.</p>
         </div>
+        <div class="radar-controls" id="radar-controls">
+          <p class="kicker" data-i18n="studio.radarTitle">Radar</p>
+          <p id="radar-status" class="workspace-status" role="status" hidden></p>
+          <div class="row">
+            <button id="radar-catalog" type="button" data-i18n="studio.radarCatalog">Load catalog</button>
+            <button id="radar-state" type="button" data-i18n="studio.radarState">Load state</button>
+            <button id="radar-scan" type="button" data-i18n="studio.radarScan">Scan</button>
+          </div>
+          <div id="radar-catalog-list"></div>
+          <div id="radar-state-view"></div>
+          <div id="radar-scan-view"></div>
+          <p class="hint" data-i18n="studio.radarHint">Radar is global. Catalog and state load only when asked. Scan calls all 12 sources and can write discoveries. There are no source checkboxes and no model call.</p>
+        </div>
+        <div class="journal-controls" id="journal-controls">
+          <p class="kicker" data-i18n="studio.journalTitle">Scratch journal</p>
+          <p id="journal-status" class="workspace-status" role="status" hidden></p>
+          <div class="row">
+            <button id="journal-load" type="button" data-i18n="studio.journalLoad">Load journal</button>
+          </div>
+          <div id="journal-list"></div>
+          <p class="hint" data-i18n="studio.journalHint">The list is a destructive GET. It does not load by itself. Pause sets a flag and does not stop the session immediately. Clear deletes that scratch record and its pause key.</p>
+        </div>
       </section>
       <section id="panel-settings" class="workspace-panel" data-panel="settings" hidden>
         <p class="kicker" data-i18n="studio.panel.settings">Settings</p>

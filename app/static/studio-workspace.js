@@ -52,6 +52,22 @@
   let refResult = null;
   let refNote = "";
   let refNoteBad = false;
+  let radarGen = 0;
+  let radarCatalogOp = null;
+  let radarStateOp = null;
+  let radarScanOp = null;
+  let radarCatalog = null;
+  let radarState = null;
+  let radarScan = null;
+  let radarNote = "";
+  let radarNoteBad = false;
+  let journalGen = 0;
+  let journalListOp = null;
+  let journalRows = null;
+  let journalMeta = null;
+  let journalNote = "";
+  let journalNoteBad = false;
+  const journalRowOp = new Map();
   const ASSET_GENERATE_TIMEOUT_MS = 120000;
   const ASSET_AUTOPACK_TIMEOUT_MS = 660000;
   const ASSET_PIPELINE_TIMEOUT_MS = 60000;
@@ -62,6 +78,8 @@
   const DISCOVERY_TIMEOUT_MS = 20000;
   const SKILL_TIMEOUT_MS = 90000;
   const REF_TIMEOUT_MS = 45000;
+  const RADAR_TIMEOUT_MS = 45000;
+  const JOURNAL_TIMEOUT_MS = 45000;
   const SKILL_PLATFORMS = ["generic", "cursor", "claude", "codex", "harness"];
   const PLAN_GOAL_MAX = 2000;
 
@@ -122,6 +140,8 @@
       discoveryFlight = 0;
       skillGen += 1;
       refGen += 1;
+      radarGen += 1;
+      journalGen += 1;
     }
     currentPanel = panel;
     if (tab && TABS.indexOf(tab) >= 0) currentTab = tab;
@@ -149,6 +169,8 @@
       loadDiscoveries();
       paintSkill();
       paintRef();
+      paintRadar();
+      paintJournal();
     }
     if (panel === "settings") loadSettings();
     if (queryReady) writeQuery();
@@ -1812,6 +1834,385 @@
     });
   }
 
+  function radarVisible() {
+    return currentPanel === "review";
+  }
+
+  function addTextLine(parent, text) {
+    const row = document.createElement("p");
+    row.textContent = text;
+    parent.appendChild(row);
+  }
+
+  function radarUnknownNow() {
+    return radarCatalogOp === "unknown" || radarStateOp === "unknown" || radarScanOp === "unknown";
+  }
+
+  function showRadarStatus() {
+    if (!radarVisible()) return;
+    if (radarUnknownNow()) {
+      showStatus("radar-status", dx.t("studio.radarUnknown"), true);
+      return;
+    }
+    if (radarScanOp === "pending") {
+      showStatus("radar-status", dx.t("studio.radarScanPending"), true);
+      return;
+    }
+    if (radarCatalogOp === "pending") {
+      showStatus("radar-status", dx.t("studio.radarCatalogPending"), true);
+      return;
+    }
+    if (radarStateOp === "pending") {
+      showStatus("radar-status", dx.t("studio.radarStatePending"), true);
+      return;
+    }
+    if (radarNote) showStatus("radar-status", radarNote, radarNoteBad);
+    else showStatus("radar-status", "", false);
+  }
+
+  function syncRadarButtons() {
+    const catalog = $("radar-catalog");
+    const state = $("radar-state");
+    const scan = $("radar-scan");
+    if (catalog) catalog.disabled = radarCatalogOp !== null;
+    if (state) state.disabled = radarStateOp !== null;
+    if (scan) scan.disabled = radarScanOp !== null;
+  }
+
+  function paintRadarCatalog() {
+    const box = $("radar-catalog-list");
+    if (!box) return;
+    box.replaceChildren();
+    if (!Array.isArray(radarCatalog)) return;
+    addTextLine(box, dx.t("studio.radarCatalogCount", { count: radarCatalog.length }));
+    radarCatalog.forEach((src) => {
+      if (!src || typeof src !== "object") return;
+      addTextLine(box, [src.id, src.type, src.label].map((item) => String(item || "")).join(" · "));
+      addTextLine(box, String(src.query || ""));
+    });
+  }
+
+  function paintRadarState() {
+    const box = $("radar-state-view");
+    if (!box) return;
+    box.replaceChildren();
+    if (!radarState || typeof radarState !== "object") return;
+    addTextLine(box, "last_scan: " + String(radarState.last_scan));
+    addTextLine(box, "scan_count: " + String(radarState.scan_count));
+    const summary = radarState.last_summary;
+    addTextLine(box, "last_summary: " + (summary == null ? "null" : JSON.stringify(summary)));
+  }
+
+  function paintRadarScan() {
+    const box = $("radar-scan-view");
+    if (!box) return;
+    box.replaceChildren();
+    if (!radarScan || typeof radarScan !== "object") return;
+    addTextLine(box, "ok: " + String(radarScan.ok));
+    addTextLine(box, "sources_scanned: " + String(radarScan.sources_scanned));
+    addTextLine(box, "total_found: " + String(radarScan.total_found));
+    addTextLine(box, "new_discoveries: " + String(radarScan.new_discoveries));
+    addTextLine(box, "elapsed_s: " + String(radarScan.elapsed_s));
+    addTextLine(box, "for_self: " + String(radarScan.for_self));
+    addTextLine(box, "ts: " + String(radarScan.ts));
+    (Array.isArray(radarScan.sources) ? radarScan.sources : []).forEach((src) => {
+      if (!src || typeof src !== "object") return;
+      const bits = [
+        String(src.id || ""),
+        String(src.type || ""),
+        String(src.label || ""),
+        "ok: " + String(src.ok),
+        "found: " + String(src.found),
+        "new_discoveries: " + String(src.new_discoveries),
+      ];
+      if (src.error) bits.push("error: " + String(src.error));
+      addTextLine(box, bits.join(" · "));
+    });
+  }
+
+  function paintRadar() {
+    if (!radarVisible()) return;
+    showRadarStatus();
+    paintRadarCatalog();
+    paintRadarState();
+    paintRadarScan();
+    syncRadarButtons();
+  }
+
+  function radarCaught(which, err) {
+    if (reviewUnresolved(err)) {
+      if (which === "catalog") radarCatalogOp = "unknown";
+      else if (which === "state") radarStateOp = "unknown";
+      else radarScanOp = "unknown";
+      if (radarVisible()) paintRadar();
+      else syncRadarButtons();
+      return;
+    }
+    if (which === "catalog") radarCatalogOp = null;
+    else if (which === "state") radarStateOp = null;
+    else radarScanOp = null;
+    radarNote = reviewFail(err, "studio.radarUnknown");
+    radarNoteBad = true;
+    if (radarVisible()) paintRadar();
+    else syncRadarButtons();
+  }
+
+  function loadRadarCatalog() {
+    if (radarCatalogOp || currentPanel !== "review") return;
+    radarCatalogOp = "pending";
+    syncRadarButtons();
+    showStatus("radar-status", dx.t("studio.radarCatalogPending"), true);
+    dx.api("/admin/daedalus/radar/sources", { timeoutMs: RADAR_TIMEOUT_MS }).then((data) => {
+      radarCatalogOp = null;
+      const sources = data && data.sources;
+      if (!Array.isArray(sources)) {
+        radarNote = dx.t("studio.radarNotOk");
+        radarNoteBad = true;
+      } else {
+        radarCatalog = sources;
+        radarNote = dx.t("studio.radarCatalogCount", { count: sources.length });
+        radarNoteBad = false;
+      }
+      if (radarVisible()) paintRadar();
+      else syncRadarButtons();
+    }).catch((err) => radarCaught("catalog", err));
+  }
+
+  function loadRadarState() {
+    if (radarStateOp || currentPanel !== "review") return;
+    radarStateOp = "pending";
+    syncRadarButtons();
+    showStatus("radar-status", dx.t("studio.radarStatePending"), true);
+    dx.api("/admin/daedalus/radar/state", { timeoutMs: RADAR_TIMEOUT_MS }).then((data) => {
+      radarStateOp = null;
+      if (!data || typeof data !== "object" || !("last_scan" in data)) {
+        radarNote = dx.t("studio.radarNotOk");
+        radarNoteBad = true;
+      } else {
+        radarState = data;
+        radarNote = "last_scan: " + String(data.last_scan);
+        radarNoteBad = false;
+      }
+      if (radarVisible()) paintRadar();
+      else syncRadarButtons();
+    }).catch((err) => radarCaught("state", err));
+  }
+
+  function scanRadar() {
+    if (radarScanOp || currentPanel !== "review") return;
+    if (!window.confirm(dx.t("studio.radarScanConfirm"))) return;
+    if (radarScanOp || currentPanel !== "review") return;
+    radarScanOp = "pending";
+    syncRadarButtons();
+    showStatus("radar-status", dx.t("studio.radarScanPending"), true);
+    dx.api("/admin/daedalus/radar/scan", {
+      method: "POST",
+      timeoutMs: RADAR_TIMEOUT_MS,
+    }).then((data) => {
+      radarScanOp = null;
+      if (!data || data.ok !== true) {
+        const detail = data && (data.error || data.detail);
+        radarNote = dx.t("studio.radarNotOk") + (detail ? ": " + detail : "");
+        radarNoteBad = true;
+      } else {
+        radarScan = data;
+        const sources = Array.isArray(data.sources) ? data.sources : [];
+        const partial = sources.some((src) => src && (src.ok === false || src.error));
+        radarNote = partial ? dx.t("studio.radarPartial") : dx.t("studio.radarScanned");
+        radarNoteBad = partial;
+      }
+      if (radarVisible()) paintRadar();
+      else syncRadarButtons();
+    }).catch((err) => radarCaught("scan", err));
+  }
+
+  function journalVisible() {
+    return currentPanel === "review";
+  }
+
+  function journalRowHeld() {
+    let held = false;
+    journalRowOp.forEach((op) => {
+      if (op && (op.state === "pending" || op.state === "unknown")) held = true;
+    });
+    return held;
+  }
+
+  function journalUnknownNow() {
+    if (journalListOp === "unknown") return true;
+    let unknown = false;
+    journalRowOp.forEach((op) => {
+      if (op && op.state === "unknown") unknown = true;
+    });
+    return unknown;
+  }
+
+  function showJournalStatus() {
+    if (!journalVisible()) return;
+    if (journalUnknownNow()) {
+      showStatus("journal-status", dx.t("studio.journalUnknown"), true);
+      return;
+    }
+    if (journalListOp === "pending") {
+      showStatus("journal-status", dx.t("studio.journalListPending"), true);
+      return;
+    }
+    let pending = null;
+    journalRowOp.forEach((op, id) => {
+      if (!pending && op && op.state === "pending") pending = { op, id };
+    });
+    if (pending) {
+      const key = pending.op.action === "clear" ? "studio.journalClearPending" : "studio.journalPausePending";
+      showStatus("journal-status", dx.t(key, { id: pending.id }), true);
+      return;
+    }
+    if (journalNote) showStatus("journal-status", journalNote, journalNoteBad);
+    else showStatus("journal-status", "", false);
+  }
+
+  function syncJournalButtons() {
+    const load = $("journal-load");
+    if (load) load.disabled = journalListOp !== null || journalRowHeld();
+    document.querySelectorAll("#journal-list button").forEach((btn) => {
+      const id = btn.dataset.journalId || "";
+      btn.disabled = journalListOp !== null || journalRowOp.has(id);
+    });
+  }
+
+  function paintJournal() {
+    if (!journalVisible()) return;
+    showJournalStatus();
+    const box = $("journal-list");
+    if (!box) return;
+    box.replaceChildren();
+    if (journalMeta) {
+      addTextLine(box, dx.t("studio.journalBudget", {
+        budget: journalMeta.budget,
+        threshold: journalMeta.threshold_pct,
+      }));
+    }
+    if (Array.isArray(journalRows) && journalRows.length === 0) addTextLine(box, dx.t("studio.journalEmpty"));
+    (Array.isArray(journalRows) ? journalRows : []).forEach((row) => {
+      if (!row || typeof row !== "object") return;
+      const id = String(row.session_id || "");
+      const block = document.createElement("div");
+      block.className = "item";
+      addTextLine(block, "session_id: " + id);
+      addTextLine(block, "task_name: " + String(row.task_name || ""));
+      addTextLine(block, "status: " + String(row.status || ""));
+      addTextLine(block, "step_count: " + String(row.step_count));
+      addTextLine(block, "tokens_est: " + String(row.tokens_est));
+      addTextLine(block, "budget_pct: " + String(row.budget_pct));
+      addTextLine(block, "last_summary: " + String(row.last_summary || ""));
+      addTextLine(block, "updated_at: " + String(row.updated_at));
+      addTextLine(block, "pause_requested: " + String(row.pause_requested));
+      addTextLine(block, "paused: " + String(row.paused));
+      const actions = document.createElement("div");
+      actions.className = "row";
+      ["pause", "clear"].forEach((action) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.dataset.journalId = id;
+        btn.dataset.journalAction = action;
+        btn.textContent = dx.t(action === "pause" ? "studio.journalPause" : "studio.journalClear");
+        btn.disabled = journalListOp !== null || journalRowOp.has(id);
+        btn.addEventListener("click", () => {
+          if (action === "pause") pauseJournal(id);
+          else clearJournal(id);
+        });
+        actions.appendChild(btn);
+      });
+      block.appendChild(actions);
+      box.appendChild(block);
+    });
+    syncJournalButtons();
+  }
+
+  function journalCaught(kind, id, err) {
+    if (reviewUnresolved(err)) {
+      if (kind === "list") journalListOp = "unknown";
+      else journalRowOp.set(id, { action: kind, state: "unknown" });
+      if (journalVisible()) paintJournal();
+      else syncJournalButtons();
+      return;
+    }
+    if (kind === "list") journalListOp = null;
+    else journalRowOp.delete(id);
+    journalNote = reviewFail(err, "studio.journalUnknown");
+    journalNoteBad = true;
+    if (journalVisible()) paintJournal();
+    else syncJournalButtons();
+  }
+
+  function loadJournal() {
+    if (journalListOp || journalRowHeld() || currentPanel !== "review") return;
+    if (!window.confirm(dx.t("studio.journalLoadConfirm"))) return;
+    if (journalListOp || journalRowHeld() || currentPanel !== "review") return;
+    journalListOp = "pending";
+    syncJournalButtons();
+    showStatus("journal-status", dx.t("studio.journalListPending"), true);
+    dx.api("/admin/daedalus/journal/list", { timeoutMs: JOURNAL_TIMEOUT_MS }).then((data) => {
+      journalListOp = null;
+      if (!data || data.ok !== true || !Array.isArray(data.journals)) {
+        const detail = data && (data.error || data.detail);
+        journalNote = dx.t("studio.journalNotOk") + (detail ? ": " + detail : "");
+        journalNoteBad = true;
+      } else {
+        journalMeta = { budget: data.budget, threshold_pct: data.threshold_pct };
+        journalRows = data.journals;
+        journalNote = dx.t("studio.journalLoaded");
+        journalNoteBad = false;
+      }
+      if (journalVisible()) paintJournal();
+      else syncJournalButtons();
+    }).catch((err) => journalCaught("list", "", err));
+  }
+
+  function mutateJournal(id, action) {
+    if (!id || journalListOp || journalRowOp.has(id) || currentPanel !== "review") return;
+    const question = action === "clear" ? "studio.journalClearConfirm" : "studio.journalPauseConfirm";
+    if (!window.confirm(dx.t(question, { id }))) return;
+    if (!id || journalListOp || journalRowOp.has(id) || currentPanel !== "review") return;
+    journalRowOp.set(id, { action, state: "pending" });
+    const pendingKey = action === "clear" ? "studio.journalClearPending" : "studio.journalPausePending";
+    syncJournalButtons();
+    showStatus("journal-status", dx.t(pendingKey, { id }), true);
+    dx.api("/admin/daedalus/journal/" + encodeURIComponent(id) + "/" + action, {
+      method: "POST",
+      timeoutMs: JOURNAL_TIMEOUT_MS,
+    }).then((data) => {
+      if (!data || data.ok !== true) {
+        journalRowOp.delete(id);
+        const detail = data && (data.error || data.detail);
+        journalNote = dx.t("studio.journalNotOk") + (detail ? ": " + detail : "");
+        journalNoteBad = true;
+      } else {
+        journalRowOp.delete(id);
+        if (action === "clear") {
+          journalRows = (journalRows || []).filter((row) => String(row.session_id || "") !== id);
+          journalNote = dx.t("studio.journalCleared", { id });
+        } else {
+          journalRows = (journalRows || []).map((row) => {
+            if (String(row.session_id || "") !== id) return row;
+            return Object.assign({}, row, { pause_requested: true });
+          });
+          journalNote = dx.t("studio.journalPauseSet", { id });
+        }
+        journalNoteBad = false;
+      }
+      if (journalVisible()) paintJournal();
+      else syncJournalButtons();
+    }).catch((err) => journalCaught(action, id, err));
+  }
+
+  function pauseJournal(id) {
+    mutateJournal(id, "pause");
+  }
+
+  function clearJournal(id) {
+    mutateJournal(id, "clear");
+  }
+
   async function reviewAct(act, id, button) {
     await runAction(button, "review-status", async () => {
       let path = "";
@@ -2800,6 +3201,8 @@
       loadReview(currentTab);
       paintSkill();
       paintRef();
+      paintRadar();
+      paintJournal();
     }
     if (currentPanel === "settings") loadSettings();
     if (currentPanel === "build") loadWorkspace(dx.getSlug());
@@ -2882,8 +3285,18 @@
   if (skillBundle) skillBundle.addEventListener("click", downloadSkillBundle);
   const refScout = $("ref-scout");
   if (refScout) refScout.addEventListener("click", scoutReference);
+  const radarCatalogBtn = $("radar-catalog");
+  if (radarCatalogBtn) radarCatalogBtn.addEventListener("click", loadRadarCatalog);
+  const radarStateBtn = $("radar-state");
+  if (radarStateBtn) radarStateBtn.addEventListener("click", loadRadarState);
+  const radarScanBtn = $("radar-scan");
+  if (radarScanBtn) radarScanBtn.addEventListener("click", scanRadar);
+  const journalLoadBtn = $("journal-load");
+  if (journalLoadBtn) journalLoadBtn.addEventListener("click", loadJournal);
   syncSkillButtons();
   syncRefButtons();
+  syncRadarButtons();
+  syncJournalButtons();
 
   const opening = readQuery();
   showPanel(opening.panel, opening.tab);

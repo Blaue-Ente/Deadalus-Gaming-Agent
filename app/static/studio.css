@@ -696,11 +696,11 @@ button.item { width: 100%; text-align: left; }
 .blocker-controls label { display: flex; flex-direction: column; gap: 0.15rem; color: var(--muted); font-size: 0.72rem; }
 .blocker-controls .hint { margin: 0; }
 .blocker-controls .item small { white-space: pre-wrap; }
-.plan-controls, .discovery-controls, .skill-controls, .ref-controls { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.8rem 0 0; }
-.plan-controls label, .discovery-controls label, .skill-controls label, .ref-controls label { display: flex; flex-direction: column; gap: 0.15rem; color: var(--muted); font-size: 0.72rem; }
+.plan-controls, .discovery-controls, .skill-controls, .ref-controls, .radar-controls, .journal-controls { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.8rem 0 0; }
+.plan-controls label, .discovery-controls label, .skill-controls label, .ref-controls label, .radar-controls label, .journal-controls label { display: flex; flex-direction: column; gap: 0.15rem; color: var(--muted); font-size: 0.72rem; }
 .plan-controls textarea, .skill-controls textarea, .ref-controls textarea { min-height: 2.6rem; resize: vertical; }
-.plan-controls .hint, .discovery-controls .hint, .skill-controls .hint, .ref-controls .hint { margin: 0; }
-.plan-controls .item small, .discovery-controls .item small, .skill-controls small, .ref-controls small { white-space: pre-wrap; }
+.plan-controls .hint, .discovery-controls .hint, .skill-controls .hint, .ref-controls .hint, .radar-controls .hint, .journal-controls .hint { margin: 0; }
+.plan-controls .item small, .discovery-controls .item small, .skill-controls small, .ref-controls small, .radar-controls small, .journal-controls small { white-space: pre-wrap; }
 .ship-controls label { display: flex; flex-direction: column; gap: 0.15rem; color: var(--muted); font-size: 0.72rem; }
 .ship-controls .row { flex-wrap: wrap; }
 .checkpoint p { margin: 0; white-space: pre-wrap; }
