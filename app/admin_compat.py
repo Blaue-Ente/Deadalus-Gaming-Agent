@@ -2236,19 +2236,8 @@ async def skill_creator_session(session_id: str):
 # ── Command Center APIs the copied UI loads on the chat page ────────────────
 
 def _kernel_defaults() -> dict:
-    from daedalus.host import standalone_mode
     from daedalus import playground_github as gh
-    if standalone_mode():
-        return {
-            "repo": "Blaue-Ente/Daedalus",
-            "paths": ["daedalus", "app", "ui", "README.md", "pyproject.toml", "Dockerfile"],
-            "branch": "main",
-        }
-    return {
-        "repo": gh.DEFAULT_KERNEL_REPO,
-        "paths": gh.DEFAULT_KERNEL_PATHS,
-        "branch": "main",
-    }
+    return {"repo": gh.DEFAULT_KERNEL_REPO, "paths": list(gh.DEFAULT_KERNEL_PATHS), "branch": gh.DEFAULT_KERNEL_BRANCH}
 
 
 def _kernel_cfg() -> dict:
@@ -2374,7 +2363,7 @@ async def kernel_config_set(request: Request):
     cfg = {
         "repo": str(body.get("repo") or defaults["repo"]).strip(),
         "paths": body.get("paths") or defaults["paths"],
-        "branch": str(body.get("branch") or "main").strip(),
+        "branch": str(body.get("branch") or defaults["branch"]).strip(),
     }
     kv.set("adn:daedalus_kernel_config", cfg)
     return JSONResponse({"ok": True, "config": cfg})
