@@ -142,9 +142,12 @@ def test_not_a_godot_project_is_start_failed(play_env, monkeypatch):
 def test_session_limit_default_is_one_and_clamped(a0_tmp, monkeypatch):  # noqa: F811
     from daedalus.harness.play_worker.manager import max_sessions
 
+    from daedalus.harness.play_worker.backend import platform_cap
+
+    cap = platform_cap()                                  # Linux 3; Windows 1 (one desktop, pointer, keyboard)
     monkeypatch.delenv("DAEDALUS_PLAY_MAX", raising=False)
     assert max_sessions() == 1
-    for raw, want in (("3", 3), ("2", 2), ("9", 3), ("0", 1), ("-4", 1), ("many", 1)):
+    for raw, want in (("3", min(3, cap)), ("2", min(2, cap)), ("9", min(3, cap)), ("0", 1), ("-4", 1), ("many", 1)):
         monkeypatch.setenv("DAEDALUS_PLAY_MAX", raw)
         assert max_sessions() == want, raw
 
@@ -214,13 +217,26 @@ def test_frame_math_and_blank_judgement(a0_tmp):  # noqa: F811
     assert len(capture.describe_frame(busy)["sha256"]) == 64
 
 
-@pytest.mark.skipif(shutil.which("convert") is None, reason="needs ImageMagick")
+def _palette_png() -> bytes:
+    """A valid 8-bit PALETTE png (colour type 3), hand-built so no external tool is needed on any platform."""
+    import struct
+    import zlib
+
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+
+    ihdr = struct.pack(">IIBBBBB", 8, 8, 8, 3, 0, 0, 0)
+    rows = b"".join(b"\x00" + b"\x00" * 8 for _ in range(8))
+    return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", ihdr) + chunk(b"PLTE", bytes([255, 0, 0]))
+            + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
+
+
 def test_unreadable_capture_is_an_error_not_a_blank_frame(a0_tmp):  # noqa: F811
     from daedalus.harness.play_worker import capture
     from daedalus.harness.play_worker.errors import PlayError
 
     pal = a0_tmp / "pal.png"
-    subprocess.run(["convert", "-size", "8x8", "xc:red", "PNG8:" + str(pal)], check=True)
+    pal.write_bytes(_palette_png())
     with pytest.raises(PlayError) as exc:
         capture.describe_frame(pal)
     assert exc.value.code == "frame_unreadable"
@@ -230,11 +246,14 @@ def test_max_sessions_unparsable_pin_falls_back_to_the_saved_value(a0_tmp, monke
     from daedalus import settings_file
     from daedalus.harness.play_worker.manager import max_sessions
 
+    from daedalus.harness.play_worker.backend import platform_cap
+
+    cap = platform_cap()
     settings_file.update({"play_max_sessions": 3})
     monkeypatch.setenv("DAEDALUS_PLAY_MAX", "abc")
-    assert max_sessions() == 3
+    assert max_sessions() == min(3, cap)
     monkeypatch.setenv("DAEDALUS_PLAY_MAX", "2")
-    assert max_sessions() == 2                                    # a valid pin wins over the saved value
+    assert max_sessions() == min(2, cap)                          # a valid pin wins over the saved value
 
 
 def test_manager_forgets_old_finished_sessions_but_keeps_live_ones(play_env, monkeypatch):
