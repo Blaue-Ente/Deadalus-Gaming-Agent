@@ -309,7 +309,7 @@ button.chip {
   background: rgba(201, 162, 39, 0.16);
   color: var(--gold-2);
 }
-a#settings-link {
+#settings-link {
   flex: 0 0 auto;
   color: var(--ink);
   text-decoration: none;
@@ -638,9 +638,74 @@ main {
   background: #000;
 }
 
-@media (max-width: 1040px) {
-  .shell { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr auto; }
+button.textlink {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--gold-2);
+  font-size: inherit;
+}
+.kind-filter, .workspace-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+.kind-filter button, .workspace-nav button {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  padding: 0.35rem 0.5rem;
+}
+.kind-filter button[aria-pressed="true"],
+.workspace-nav button[aria-selected="true"] {
+  color: var(--gold-2);
+  border-bottom-color: var(--gold);
+}
+.workspace-nav [data-panel="tools"] { display: none; }
+.workspace-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  gap: 0.45rem;
+}
+.workspace-panel[hidden] { display: none !important; }
+.workspace-status { margin: 0; color: var(--muted); font-size: 0.78rem; white-space: pre-wrap; }
+.workspace-status[data-state="error"] { color: var(--err); }
+#fileview, #build-out {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  white-space: pre-wrap;
+  color: var(--muted);
+  max-height: 14rem;
+  overflow: auto;
+  margin: 0;
+}
+button.item { width: 100%; text-align: left; }
+#build-milestones { margin: 0.2rem 0 0; padding-left: 1.1rem; }
+#settings-fields .item small { font-family: var(--font); }
+label.grow { flex: 1; min-width: 7rem; }
+#git-menu { margin-top: 0.4rem; }
+#preview-frame { background: #000; }
+
+@media (max-width: 1100px) {
+  .shell {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 28vh) minmax(0, 1fr);
+  }
   header.app { flex-wrap: wrap; height: auto; padding: 0.6rem 0.8rem; }
   .pills { max-width: 100%; margin-left: 0; }
-  aside, .rail { max-height: 34vh; }
+  .rail { display: none; }
+  .workspace-nav [data-panel="tools"] { display: inline-flex; }
+  .shell.tools-open {
+    grid-template-rows: auto minmax(0, 22vh) auto minmax(0, 1fr);
+  }
+  .shell.tools-open .workspace-panel { display: none !important; }
+  .shell.tools-open .rail {
+    display: block;
+    max-height: none;
+    border-left: 0;
+  }
 }

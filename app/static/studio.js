@@ -16,7 +16,12 @@
     attachments: [],
     ctxPane: "",
     addons: [],
+    kindFilter: "all",
+    gameSlugs: null,
+    projectsReady: false,
   };
+  const slugWatchers = [];
+  const APP_KINDS = { fastapi: 1, streamlit: 1, node: 1, expo: 1 };
   localStorage.setItem("dx.session", state.session);
 
   const msgs = $("msgs");
@@ -612,6 +617,51 @@
     }
   }
 
+  function projectBucket(project) {
+    const slug = project && project.slug;
+    if (state.gameSlugs && slug && state.gameSlugs.has(slug)) return "games";
+    const kind = String((project && project.kind) || "").toLowerCase();
+    if (APP_KINDS[kind]) return "apps";
+    return "games";
+  }
+
+  function notifySlug() {
+    const snap = {
+      slug: state.slug,
+      projects: state.projects.slice(),
+      ready: state.projectsReady,
+    };
+    slugWatchers.slice().forEach((fn) => {
+      try { fn(snap); } catch (err) { /* a panel watcher must not break the list */ }
+    });
+  }
+
+  function renderProjectList() {
+    const box = $("plist");
+    box.replaceChildren();
+    const visible = state.projects.filter((p) => {
+      return state.kindFilter === "all" || projectBucket(p) === state.kindFilter;
+    });
+    if (!visible.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      text(empty, state.projects.length ? t("studio.noMatch") : t("studio.noProjects"));
+      box.appendChild(empty);
+    }
+    visible.forEach((p) => {
+      const el = itemEl(p.name || p.slug, p.kind + " · " + p.slug, p.slug === state.slug);
+      el.dataset.slug = p.slug;
+      el.dataset.bucket = projectBucket(p);
+      el.onclick = () => {
+        state.slug = p.slug;
+        localStorage.setItem("dx.slug", state.slug);
+        refreshProjects();
+      };
+      box.appendChild(el);
+    });
+    notifySlug();
+  }
+
   async function refreshProjects() {
     try {
       const data = await api("/api/v1/playground/projects");
@@ -620,23 +670,8 @@
       add("bot", t("studio.projectsErr") + ": " + errText(e));
       state.projects = state.projects || [];
     }
-    const box = $("plist");
-    box.replaceChildren();
-    if (!state.projects.length) {
-      const empty = document.createElement("div");
-      empty.className = "empty";
-      text(empty, t("studio.noProjects"));
-      box.appendChild(empty);
-    }
-    state.projects.forEach((p) => {
-      const el = itemEl(p.name || p.slug, p.kind + " · " + p.slug, p.slug === state.slug);
-      el.onclick = () => {
-        state.slug = p.slug;
-        localStorage.setItem("dx.slug", state.slug);
-        refreshProjects();
-      };
-      box.appendChild(el);
-    });
+    state.projectsReady = true;
+    renderProjectList();
     syncProjectChrome();
     refreshWorld();
     refreshSessionPins();
@@ -1928,6 +1963,40 @@
     }
   }
   document.addEventListener("daedalus:langchange", relabelChrome);
+  window.dxStudio = {
+    api,
+    t,
+    text,
+    errText,
+    busy,
+    getSlug() { return state.slug; },
+    projects() { return state.projects.slice(); },
+    selectSlug(slug) {
+      state.slug = slug || null;
+      if (state.slug) localStorage.setItem("dx.slug", state.slug);
+      else localStorage.removeItem("dx.slug");
+      refreshProjects();
+    },
+    watchSlug(fn) {
+      slugWatchers.push(fn);
+      fn({
+        slug: state.slug,
+        projects: state.projects.slice(),
+        ready: state.projectsReady,
+      });
+    },
+    setKindFilter(filter) {
+      state.kindFilter = filter === "games" || filter === "apps" ? filter : "all";
+      renderProjectList();
+      syncProjectChrome();
+    },
+    getKindFilter() { return state.kindFilter; },
+    setGameSlugs(slugs) {
+      state.gameSlugs = new Set(slugs || []);
+      renderProjectList();
+    },
+    kindOf: projectBucket,
+  };
   showGreeting();
   refreshHealth();
   refreshProjects();

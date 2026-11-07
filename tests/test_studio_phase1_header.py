@@ -30,7 +30,9 @@ def test_header_css_contract():
     assert "grid-template-rows: var(--header) 1fr;" not in CSS
     header = CSS.split("header.app {", 1)[1].split("}", 1)[0]
     assert "z-index: 2;" in header
-    assert 'id="settings-link"' in HTML
+    header = HTML.split("<header", 1)[1].split("</header>", 1)[0]
+    assert '<button type="button" id="settings-link"' in header
+    assert 'href="/admin/daedalus/connectors"' not in header
     assert 'href="/admin/daedalus/connectors"' in HTML
 
 
@@ -150,7 +152,9 @@ def test_header_hits_at_laptop_viewports(studio_server):
                 _hit(page, sel)
             assert page.evaluate("() => window.scrollY") == 0
             _hit(page, "#settings-link")
-            page.wait_for_url("**/admin/daedalus/connectors")
+            page.wait_for_selector("#panel-settings:not([hidden])")
+            assert "panel=settings" in page.url
+            assert "/admin/daedalus/connectors" not in page.url
             context.close()
         browser.close()
 
@@ -263,6 +267,7 @@ def test_settings_persist_across_process_and_browser_restart(studio_server):
         _restart(studio_server)
         page.reload(wait_until="domcontentloaded")
         page.wait_for_function("() => document.querySelector('.mentor button[data-mentor=off]').getAttribute('aria-pressed') === 'true'")
+        page.wait_for_function("() => document.querySelector('.budget button[data-budget=\"5\"]').getAttribute('aria-pressed') === 'true'")
         assert page.locator(".mentor button[data-mentor='off']").get_attribute("aria-pressed") == "true"
         assert page.locator(".budget button[data-budget='5']").get_attribute("aria-pressed") == "true"
         assert page.locator(".effort button[data-effort='craft']").get_attribute("aria-pressed") == "true"
@@ -271,6 +276,7 @@ def test_settings_persist_across_process_and_browser_restart(studio_server):
         page2 = fresh.new_page()
         page2.goto(url, wait_until="domcontentloaded")
         page2.wait_for_function("() => document.querySelector('.mentor button[data-mentor=off]').getAttribute('aria-pressed') === 'true'")
+        page2.wait_for_function("() => document.querySelector('.budget button[data-budget=\"5\"]').getAttribute('aria-pressed') === 'true'")
         assert page2.evaluate("() => localStorage.getItem('dx.lang')") in (None, "en")
         assert page2.locator(".dx-lang button[data-lang='en']").get_attribute("aria-pressed") == "true"
         assert page2.locator(".effort button[data-effort='auto']").get_attribute("aria-pressed") == "true"
