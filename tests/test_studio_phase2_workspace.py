@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import socket
 import subprocess
 import sys
@@ -70,6 +71,18 @@ def _free_port() -> int:
 
 def _token(server) -> str:
     return (Path(server["data"]) / "owner.token").read_text(encoding="utf-8").strip()
+
+
+def _git_output(args: list[str]) -> str | None:
+    """Read git output when the binary exists. CI's slim image has no git."""
+    if shutil.which("git") is None:
+        return None
+    try:
+        return subprocess.check_output(
+            args, cwd=str(ROOT), text=True, stderr=subprocess.DEVNULL,
+        ).strip()
+    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
+        return None
 
 
 def _api(server, method: str, path: str, body=None):
@@ -706,7 +719,7 @@ def test_proposal_approve_and_outbox_dismiss_roundtrip(studio_server):
     skills = json.loads(skills_path.read_text(encoding="utf-8")) if skills_path.exists() else {}
     skills["write_tests"] = True
     skills_path.write_text(json.dumps(skills), encoding="utf-8")
-    head_before = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=str(ROOT), text=True).strip()
+    head_before = _git_output(["git", "rev-parse", "HEAD"])
     proposal_path.parent.mkdir(parents=True, exist_ok=True)
     proposal_path.write_text(json.dumps({
         "id": proposal_id,
@@ -742,12 +755,11 @@ def test_proposal_approve_and_outbox_dismiss_roundtrip(studio_server):
     finally:
         scratch.unlink(missing_ok=True)
         proposal_path.unlink(missing_ok=True)
-        head_now = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=str(ROOT), text=True).strip()
-        if head_now != head_before:
-            subjects = subprocess.check_output(
-                ["git", "log", "--format=%s", f"{head_before}..HEAD"],
-                cwd=str(ROOT),
-                text=True,
-            ).splitlines()
-            if subjects and all(line.startswith("daedalus-snapshot:") for line in subjects):
+        head_now = _git_output(["git", "rev-parse", "HEAD"]) if head_before else None
+        if head_before and head_now and head_now != head_before:
+            subjects = _git_output(["git", "log", "--format=%s", f"{head_before}..HEAD"])
+            lines = [line for line in (subjects or "").splitlines() if line]
+            if subjects is not None and lines and all(
+                line.startswith("daedalus-snapshot:") for line in lines
+            ):
                 subprocess.check_call(["git", "reset", "--mixed", head_before], cwd=str(ROOT))
