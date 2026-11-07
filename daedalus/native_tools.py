@@ -1033,17 +1033,20 @@ PERMISSION_CHECK_UNAVAILABLE = (
 
 
 def _leaves_playground(args: dict[str, Any] | None) -> bool:
-    """True when a call names a working directory outside the Playground projects folder."""
-    cwd = str((args or {}).get("cwd") or "").strip()
-    if not cwd:
-        return False
+    """True when run_command would execute outside the Playground projects folder.
+
+    Uses the shell's own resolver (slug first, then cwd relative to the product root, ``~`` expanded, else the
+    product root itself) so this boundary and the real working directory cannot disagree.
+    """
+    a = args or {}
     try:
         from .paths import playground_projects_dir
+        from .shell_center import resolve_cwd
+        effective = resolve_cwd(str(a.get("cwd") or "").strip() or None, slug=str(a.get("slug") or "").strip())
         root = playground_projects_dir().resolve()
-        target = (Path(cwd) if Path(cwd).is_absolute() else root / cwd).resolve()
-        return root != target and root not in target.parents
+        return not (effective == root or root in effective.parents)
     except Exception:
-        return True  # cannot tell -> do not extend the default grant
+        return True  # cannot tell, or the shell would refuse it -> do not extend the default grant
 
 
 def before_tool_call(
@@ -1054,8 +1057,10 @@ def before_tool_call(
         return True, ""
     try:
         from .outbox import check_permission, format_permission_denied
-        # The default Playground grant never stretches to a directory outside the Playground.
-        if check_permission(perm, default_ok=not _leaves_playground(args)):
+        # The default Playground grant never stretches to a run_command outside the Playground. write_file,
+        # edit_file and spawn_subagent are addressed by project slug, so they have no other directory to name.
+        scoped_out = tool_name == "run_command" and _leaves_playground(args)
+        if check_permission(perm, default_ok=not scoped_out):
             return True, ""
         label = marker_name or f"native:{tool_name}"
         return False, format_permission_denied(perm, tool=label)

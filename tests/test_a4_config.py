@@ -64,6 +64,15 @@ def test_locked_setting_reports_lock_and_refuses_write(a0_tmp, monkeypatch, key,
     assert after[1] == before[1]
 
 
+def test_mentor_cap_is_default_until_saved(a0_tmp):
+    c = _client()
+    row = _row(c.get("/api/v1/harness/config").json(), "mentor.day_token_cap")
+    assert row["persisted"] is None and row["source"] == "default"
+    assert c.post("/api/v1/harness/config", json={"key": "mentor.day_token_cap", "value": 1234}).status_code == 200
+    row = _row(c.get("/api/v1/harness/config").json(), "mentor.day_token_cap")
+    assert row["persisted"] == 1234 and row["effective"] == 1234 and row["source"] == "saved"
+
+
 def test_unparsable_pin_does_not_lock(a0_tmp, monkeypatch):
     monkeypatch.setenv("DAEDALUS_RUN_BUDGET", "lots")
     row = _row(_client().get("/api/v1/harness/config").json(), "run_budget.usd")

@@ -1,9 +1,11 @@
 """Tiny key-value store: JSON files by default, Replit DB only when asked for.
 
 Backend selection is explicit (``DAEDALUS_KV``):
-  unset / ``json``  JSON files under ``DAEDALUS_DATA/kv`` (the default; existing data never moves).
+  ``json``          JSON files under ``DAEDALUS_DATA/kv``.
   ``replit``        Replit DB first, JSON files as the fallback for keys it does not hold.
-  ``auto``          the pre-A4 behaviour: Replit DB whenever the module imports (rollback switch).
+  ``auto``          Replit DB whenever the module imports (the behaviour before A4).
+  unset             ``json`` for the standalone product (DAEDALUS_STANDALONE=1); ``auto`` on a host that is not
+                    standalone, so a Replit-hosted install keeps seeing the data it already has.
 ``backend()`` reports what is really in use and is shown in /health and Settings.
 """
 from __future__ import annotations
@@ -23,7 +25,13 @@ _INDEX_NAME = "_index.json"
 def _requested() -> str:
     import os
     value = (os.environ.get("DAEDALUS_KV") or "").strip().lower()
-    return value if value in {"json", "replit", "auto"} else "json"
+    if value in {"json", "replit", "auto"}:
+        return value
+    try:
+        from .host import standalone_mode
+        return "json" if standalone_mode() else "auto"
+    except Exception:
+        return "json"
 
 
 def _replit_db():
@@ -51,10 +59,12 @@ def replit_required():
 
 def backend() -> dict[str, Any]:
     """Which backend is effective, what was requested, and whether the request could be honoured."""
+    import os
     requested = _requested()
     replit_ok = _replit_db() is not None
     effective = "replit+json" if replit_ok else "json"
-    out: dict[str, Any] = {"requested": requested, "effective": effective}
+    out: dict[str, Any] = {"requested": requested, "effective": effective,
+                           "explicit": bool((os.environ.get("DAEDALUS_KV") or "").strip())}
     if requested in {"replit", "auto"} and not replit_ok:
         out["note"] = "replit module not available; using JSON files"
     return out

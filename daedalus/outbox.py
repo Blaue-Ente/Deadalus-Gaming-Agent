@@ -453,11 +453,10 @@ def check_permission(perm_class: str, *, default_ok: bool = True) -> bool:
     """
     perms: dict = _rdb_get(_PERMS_KEY) or {}
     p = perms.get(perm_class)
-    if p:
-        if int(time.time()) <= p.get("expires_at", 0):
-            return True
-        perms.pop(perm_class, None)  # expired: drop the explicit grant, the default (if any) still applies
-        _rdb_set(_PERMS_KEY, perms)
+    if p and int(time.time()) <= p.get("expires_at", 0):
+        return True
+    # An expired explicit grant is left in place (list_permissions shows it as inactive, renew replaces it): a
+    # read check must not rewrite the whole permission map and race a concurrent grant or revoke.
     return bool(default_ok and default_grant_active(perm_class))
 
 

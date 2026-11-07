@@ -41,9 +41,13 @@ def _write_mentor_enabled(v: Any) -> Any:
 
 def _mentor_cap() -> dict[str, Any]:
     from .. import mentor_helm
-    eff = mentor_helm.day_token_cap()
-    return {"effective": eff, "persisted": eff if not mentor_helm.day_cap_env_locked() else None,
-            "default": mentor_helm.DEFAULT_DAY_CAP}
+    stored = mentor_helm._kv_json(mentor_helm.KV_DAY_CAP, None)
+    saved: int | None = None
+    if isinstance(stored, dict) and stored.get("cap") is not None:
+        saved = int(stored["cap"])
+    elif isinstance(stored, (int, float)):
+        saved = int(stored)
+    return {"effective": mentor_helm.day_token_cap(), "persisted": saved, "default": mentor_helm.DEFAULT_DAY_CAP}
 
 
 def _write_mentor_cap(v: Any) -> Any:

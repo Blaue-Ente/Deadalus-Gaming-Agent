@@ -30,7 +30,20 @@ def test_default_is_json_even_when_replit_is_importable(a0_tmp, fake_replit, mon
     kv.set("adn:a4", {"x": 1})
     assert fake_replit == {}                      # nothing went to Replit
     assert kv.get("adn:a4") == {"x": 1}
-    assert kv.backend() == {"requested": "json", "effective": "json"}
+    assert kv.backend() == {"requested": "json", "effective": "json", "explicit": False}
+
+
+def test_a_non_standalone_host_keeps_replit_first_when_unset(a0_tmp, fake_replit, monkeypatch):
+    """A Replit-hosted install must keep seeing the data it already has (no silent switch to empty JSON)."""
+    from daedalus import kv
+
+    monkeypatch.delenv("DAEDALUS_KV", raising=False)
+    monkeypatch.setenv("DAEDALUS_STANDALONE", "0")
+    fake_replit["adn:existing"] = '{"v": 1}'
+    assert kv.get("adn:existing") == {"v": 1}
+    assert kv.backend()["requested"] == "auto" and kv.backend()["explicit"] is False
+    monkeypatch.setenv("DAEDALUS_KV", "json")  # an explicit choice wins
+    assert kv.get("adn:existing") is None
 
 
 def test_replit_is_used_only_when_requested(a0_tmp, fake_replit, monkeypatch):
