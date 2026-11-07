@@ -121,3 +121,6 @@ def test_evolution_run_cycle_heartbeat_during_slow_study(conc_tmp):
         )
 
     asyncio.run(_run())
+    from daedalus.evolution import set_enabled
+
+    set_enabled(False)

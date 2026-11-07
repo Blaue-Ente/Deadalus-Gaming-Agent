@@ -263,6 +263,9 @@ def test_settings_persist_across_process_and_browser_restart(studio_server):
         _restart(studio_server)
         page.reload(wait_until="domcontentloaded")
         page.wait_for_function("() => document.querySelector('.mentor button[data-mentor=off]').getAttribute('aria-pressed') === 'true'")
+        page.wait_for_function(
+            "() => document.querySelector('.budget button[data-budget=\"5\"]').getAttribute('aria-pressed') === 'true'"
+        )
         assert page.locator(".mentor button[data-mentor='off']").get_attribute("aria-pressed") == "true"
         assert page.locator(".budget button[data-budget='5']").get_attribute("aria-pressed") == "true"
         assert page.locator(".effort button[data-effort='craft']").get_attribute("aria-pressed") == "true"

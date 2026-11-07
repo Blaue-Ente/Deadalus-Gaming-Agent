@@ -26,3 +26,13 @@
 ---
 
 **Scope distinction (binding):** Approved deliverable is **proven** asyncio responsiveness under slow sync LLM resolution and slow sync study work on **one** process/loop. **Windows** 12s health stall with concurrent fast routes remains **uncorrelated / unresolved** by this MR — no marketing as a cure.
+
+## Studio persist test (order-dependent, not budget-route regression)
+
+Independent review @ `fbf72e4`: full suite failed `tests/test_studio_phase1_header.py:267` (`aria-pressed` on budget after process restart); isolated module sometimes passed, `4918f74` full suite green; diff does not touch `run-budget` / `studio.js`.
+
+**Reproduction:** `pytest tests/test_event_loop_concurrency.py tests/test_studio_phase1_header.py::test_settings_persist_across_process_and_browser_restart` → fail; same test alone on `4918f74` → pass; on MR118 without fix → fail reliably.
+
+**Root cause:** Thread-pooled `/health` returns HTTP 200 while LLM snapshot threads may still run. `_restart()` tight `/health` poll no longer serializes startup like sync-in-handler health did. After reload, `loadMentor()` often wins before `loadBudget()` paints; test waited for mentor only post-reload.
+
+**Fix:** Post-reload `wait_for_function` for budget `$5` `aria-pressed` (mirrors pre-restart); `set_enabled(False)` teardown on evolution concurrency test. Assertions unchanged.
