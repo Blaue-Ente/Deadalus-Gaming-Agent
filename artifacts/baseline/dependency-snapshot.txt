@@ -1,8 +1,8 @@
 # Daedalus dependency snapshot
 python: 3.12.3
 platform: Linux-6.12.113+-x86_64-with-glibc2.39
-git_commit: 4ab2d2b405577592e4bf10ba089a771283aefd6f
-git_branch: cursor/studio-blockers-review-4549
+git_commit: bcb5f835bb4abd808b72d71f57bb98b6245b87a6
+git_branch: cursor/studio-planner-discoveries-4549
 package_version: 0.3.8
 requires-python: >=3.11
 
@@ -48,7 +48,7 @@ chromadb==1.5.9
 click==8.5.1
 coverage==7.17.2
 cryptography==41.0.7
--e git+https://gitlab.com/Blaue-Ente/deadalus-agent-0.git/@4ab2d2b405577592e4bf10ba089a771283aefd6f#egg=daedalus
+-e git+https://gitlab.com/Blaue-Ente/deadalus-agent-0.git/@bcb5f835bb4abd808b72d71f57bb98b6245b87a6#egg=daedalus
 dbus-python==1.3.2
 distro==1.9.0
 dnspython==2.6.1

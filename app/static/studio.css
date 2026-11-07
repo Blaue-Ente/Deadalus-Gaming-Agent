@@ -696,6 +696,11 @@ button.item { width: 100%; text-align: left; }
 .blocker-controls label { display: flex; flex-direction: column; gap: 0.15rem; color: var(--muted); font-size: 0.72rem; }
 .blocker-controls .hint { margin: 0; }
 .blocker-controls .item small { white-space: pre-wrap; }
+.plan-controls, .discovery-controls { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.8rem 0 0; }
+.plan-controls label, .discovery-controls label { display: flex; flex-direction: column; gap: 0.15rem; color: var(--muted); font-size: 0.72rem; }
+.plan-controls textarea { min-height: 2.6rem; resize: vertical; }
+.plan-controls .hint, .discovery-controls .hint { margin: 0; }
+.plan-controls .item small, .discovery-controls .item small { white-space: pre-wrap; }
 .ship-controls label { display: flex; flex-direction: column; gap: 0.15rem; color: var(--muted); font-size: 0.72rem; }
 .ship-controls .row { flex-wrap: wrap; }
 .checkpoint p { margin: 0; white-space: pre-wrap; }

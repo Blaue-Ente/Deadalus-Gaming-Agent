@@ -380,6 +380,37 @@
           </div>
           <p class="hint" data-i18n="studio.blockerHint">This list is a local read. Resolve only marks a blocker resolved. It does not grant a permission or change a project kind.</p>
         </div>
+        <div class="plan-controls" id="plan-controls">
+          <p class="kicker" data-i18n="studio.planTitle">Plans</p>
+          <p id="plan-status" class="workspace-status" role="status" hidden></p>
+          <label>
+            <span data-i18n="studio.planGoal">Goal</span>
+            <textarea id="plan-goal" rows="3" data-i18n-aria="studio.planGoal" aria-label="Goal"></textarea>
+          </label>
+          <div class="row">
+            <button id="plan-generate" type="button" data-i18n="studio.planGenerate">Generate draft</button>
+            <button id="plan-refresh" type="button" data-i18n="studio.planRefresh">Refresh</button>
+          </div>
+          <div id="plan-list"></div>
+          <p class="hint" data-i18n="studio.planHint">Plans are global. Generate writes a draft with one agent turn. Approve creates tasks and does not run them. Delete removes the plan and its steps and keeps tasks.</p>
+        </div>
+        <div class="discovery-controls" id="discovery-controls">
+          <p class="kicker" data-i18n="studio.discoveryTitle">Discoveries</p>
+          <p id="discovery-status" class="workspace-status" role="status" hidden></p>
+          <label>
+            <span data-i18n="studio.discoveryFilter">Status</span>
+            <select id="discovery-filter" data-i18n-aria="studio.discoveryFilter" aria-label="Status">
+              <option value="pending" selected data-i18n="studio.discoveryPending">pending</option>
+              <option value="approved" data-i18n="studio.discoveryApproved">approved</option>
+              <option value="rejected" data-i18n="studio.discoveryRejected">rejected</option>
+            </select>
+          </label>
+          <div class="row">
+            <button id="discovery-refresh" type="button" data-i18n="studio.discoveryRefresh">Refresh</button>
+          </div>
+          <div id="discovery-list"></div>
+          <p class="hint" data-i18n="studio.discoveryHint">Discoveries are global. Approve writes a lesson and schedules a model call. Reject only changes status.</p>
+        </div>
       </section>
       <section id="panel-settings" class="workspace-panel" data-panel="settings" hidden>
         <p class="kicker" data-i18n="studio.panel.settings">Settings</p>
