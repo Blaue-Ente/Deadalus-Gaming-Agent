@@ -292,6 +292,52 @@
           <button id="build-advance" type="button" disabled data-i18n="studio.advance">Advance</button>
         </div>
         <ul id="build-milestones"></ul>
+        <div class="ship-controls" id="ship-controls">
+          <p class="kicker" data-i18n="studio.shipTitle">Init and export</p>
+          <p id="ship-status" class="workspace-status" role="status" hidden></p>
+          <label><span data-i18n="studio.shipTemplate">Unity template</span>
+            <select id="ship-template" data-i18n-aria="studio.shipTemplate" aria-label="Unity template">
+              <option value="daedalus_minimal" selected>daedalus_minimal</option>
+              <option value="unity_game_framework">unity_game_framework</option>
+              <option value="daedalus_ugf">daedalus_ugf</option>
+            </select>
+          </label>
+          <label><span data-i18n="studio.shipPreset">Studio preset</span>
+            <select id="ship-preset" data-i18n-aria="studio.shipPreset" aria-label="Studio preset">
+              <option value="custom" selected>custom</option>
+              <option value="action">action</option>
+              <option value="rpg_collection">rpg_collection</option>
+              <option value="puzzle">puzzle</option>
+              <option value="strategy">strategy</option>
+              <option value="survival">survival</option>
+              <option value="platformer">platformer</option>
+              <option value="racing">racing</option>
+              <option value="godot_2d">godot_2d</option>
+              <option value="godot_3d">godot_3d</option>
+              <option value="open_world">open_world</option>
+              <option value="multiplayer">multiplayer</option>
+              <option value="hybrid_mobile">hybrid_mobile</option>
+              <option value="backend_api">backend_api</option>
+            </select>
+          </label>
+          <label><span data-i18n="studio.shipFirebaseProject">Firebase project id</span>
+            <input id="ship-firebase-project" autocomplete="off" spellcheck="false" data-i18n-aria="studio.shipFirebaseProject" aria-label="Firebase project id" />
+          </label>
+          <label><span data-i18n="studio.shipBundle">Bundle id</span>
+            <input id="ship-bundle" autocomplete="off" spellcheck="false" data-i18n-aria="studio.shipBundle" aria-label="Bundle id" />
+          </label>
+          <div class="row">
+            <button id="ship-unity-init" type="button" data-i18n="studio.shipUnityInit">Init Unity</button>
+            <button id="ship-unity-build" type="button" data-i18n="studio.shipUnityBuild">Build scripts</button>
+            <button id="ship-firebase" type="button" data-i18n="studio.shipFirebase">Firebase</button>
+            <button id="ship-hybrid-init" type="button" hidden data-i18n="studio.shipHybridInit">Init hybrid</button>
+            <button id="ship-hybrid-export" type="button" hidden data-i18n="studio.shipHybridExport">Export hybrid</button>
+            <button id="ship-cap-init" type="button" hidden data-i18n="studio.shipCapInit">Init Capacitor</button>
+            <button id="ship-cap-export" type="button" hidden data-i18n="studio.shipCapExport">Export Capacitor</button>
+          </div>
+          <p class="hint" id="ship-overwrite" data-i18n="studio.shipOverwrite">Scaffold and hybrid files are written only when missing. Build scripts, Firebase files, both export manifests, and Capacitor package.json are overwritten.</p>
+          <p class="hint" id="ship-note" data-i18n="studio.shipNote">Cancel on the question sends nothing. After a request is sent, leaving this page does not stop the server. A timed-out call is not retried.</p>
+        </div>
       </section>
       <section id="panel-preview" class="workspace-panel" data-panel="preview" hidden>
         <p class="kicker" data-i18n="studio.panel.preview">Preview</p>
