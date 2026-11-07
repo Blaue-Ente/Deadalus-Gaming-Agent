@@ -83,6 +83,35 @@ Each row names the home in Game Studio and the handler to call. Phase 2 may not 
 | Shell | Right rail | `POST /api/v1/daedalus/shell` |
 | Preferences, learned-skill drafts | Left rail, as today | `/api/v1/daedalus/preferences`, `/learned-skills` |
 
+### Shell status on `9d716f784736fa36e593995f18fafbf3cdeda0e8`
+
+This note records what the Studio shell actually calls. It does not add a route, a panel, or a redirect, and it does not claim the nine phase-3 checks.
+
+Already in `#panel-review`, under the five tabs: blockers, planner draft/approve/delete, and discovery approve/reject. Settings and the shared slug are unchanged.
+
+Still open on that planner/discovery slice:
+
+- A reload clears the in-page hold maps. A list that still says draft or pending can show the action again.
+- The status line names one pending id. If any id is unknown, that unknown sentence replaces the pending sentence. Each id in the map stays closed.
+- Delete stays available while that plan’s approve is still unresolved.
+
+Skill draft and reference brief are in Review, after discoveries. No new tab and no new page. Rows stay global. The selected slug is not a save target.
+
+Skill draft uses the existing handlers only:
+
+- `POST /admin/daedalus/playground/api/skill-creator/start` with `{idea, platform, context}`. Empty idea is 400 before the model. Platform is one of `cursor`, `claude`, `codex`, `generic`, `harness`; anything else is stored as `generic`.
+- Start calls `llm_client.complete` once (configured provider, max 1200 tokens). It does not call `build_research_prompt`, the skill catalog, or web search. It stores `research_notes` as the typed idea and `tool_steps` as `[]`. `context` is saved as `extra_context` and is not inserted into the start, refine, or generate prompt. The Review form sends `{idea, platform}` only. If `complete` throws, the handler still returns `ok: true` with that stub plan.
+- `POST .../skill-creator/refine` needs `session_id` and `message` (400 otherwise, 404 if the session is missing). One configured-provider call, max 2000 tokens. A thrown call is HTTP 500.
+- `POST .../skill-creator/generate` is one configured-provider call, max 8000 tokens. Without `force`, a session that is not `ready_for_generation` is HTTP 409 and the Bulgarian error string is server text. `force: true` spends the call anyway. `ok: true` can still mean zero parsed files plus a validation warning. Download uses the `files` object on that response. The multi-file control writes a `.txt` bundle. `GET .../skill-creator/session/{id}` returns a 4000-character preview and file names, not the full bodies.
+- Sessions are written to kv `skill-creator:{id}` and to process memory. The 24h purge applies to the memory map. A kv row can still load after that.
+- `POST .../skill-creator/github-gist` publishes a public gist and stays out of this slice.
+
+Reference brief uses `POST /admin/daedalus/playground/api/reference-scout` only. Empty `reference` is 400. The handler passes `memory` and does not pass `save_slug`, so it does not write `assets/_reference.json`. It runs up to four DuckDuckGo searches with `record_discoveries=false`, fetches a URL when the reference is a URL, then calls `mesh.route` with model `alltoken:deepseek-v3.2` (max 1200). That is not the configured Studio model. Search or synthesis failure can still return `ok: true` with a generic stub. The project scout route is not this slice: it also does not save the file, and it uses the slug as the search name.
+
+Each costly control confirms first, stays blocked across leaving Review while its outcome is pending or unknown, and does not send a second write for that same in-flight call. A received success updates the page-session result even when the hidden panel is not painted. A timeout stays unknown. The server calls are not idempotent. Tests use a temp data root, stub `complete`, `web_search_tool`, `web_fetch_tool`, and `mesh.route`, and do not publish.
+
+Still out: radar scan (writes discoveries; the classic source checkboxes are not sent), journal list/pause/clear, manual plan create, step add/override/mark, pause/resume, progress polling, background run, discovery delete, and discovery regenerate-plan.
+
 `/admin/llm-router` is not a fourth brain. Phase 2 Settings is the only brain UI. The old page redirects in phase 3.
 
 Classic chat (`GET /admin/daedalus`, `POST /admin/daedalus/chat`) stays a real linked page until phase 3's nine parity checks pass. It is not embedded.

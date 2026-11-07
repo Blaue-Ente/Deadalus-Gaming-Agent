@@ -411,6 +411,57 @@
           <div id="discovery-list"></div>
           <p class="hint" data-i18n="studio.discoveryHint">Discoveries are global. Approve writes a lesson and schedules a model call. Reject only changes status.</p>
         </div>
+        <div class="skill-controls" id="skill-controls">
+          <p class="kicker" data-i18n="studio.skillTitle">Skill draft</p>
+          <p id="skill-status" class="workspace-status" role="status" hidden></p>
+          <label>
+            <span data-i18n="studio.skillPlatform">Skill format</span>
+            <select id="skill-platform" data-i18n-aria="studio.skillPlatform" aria-label="Skill format">
+              <option value="generic" selected data-i18n="studio.skillPlatformGeneric">Universal (skills/)</option>
+              <option value="cursor" data-i18n="studio.skillPlatformCursor">Cursor IDE (.cursor/skills/)</option>
+              <option value="claude" data-i18n="studio.skillPlatformClaude">Claude Code (.claude/skills/)</option>
+              <option value="codex" data-i18n="studio.skillPlatformCodex">Codex (.agents/skills/)</option>
+              <option value="harness" data-i18n="studio.skillPlatformHarness">Harness plugin (skills/)</option>
+            </select>
+          </label>
+          <label>
+            <span data-i18n="studio.skillIdea">Idea</span>
+            <textarea id="skill-idea" rows="3" data-i18n-aria="studio.skillIdea" aria-label="Idea"></textarea>
+          </label>
+          <label>
+            <span data-i18n="studio.skillMessage">Refine message</span>
+            <textarea id="skill-message" rows="2" data-i18n-aria="studio.skillMessage" aria-label="Refine message"></textarea>
+          </label>
+          <div class="row">
+            <button id="skill-start" type="button" data-i18n="studio.skillStart">Start draft</button>
+            <button id="skill-refine" type="button" data-i18n="studio.skillRefine">Refine</button>
+            <button id="skill-generate" type="button" data-i18n="studio.skillGenerate">Generate</button>
+            <button id="skill-force" type="button" data-i18n="studio.skillForce">Generate anyway</button>
+          </div>
+          <p id="skill-phase"></p>
+          <p id="skill-research"></p>
+          <div id="skill-questions"></div>
+          <div id="skill-warnings"></div>
+          <div id="skill-files"></div>
+          <div class="row">
+            <button id="skill-download" type="button" data-i18n="studio.skillDownload" hidden>Download SKILL.md</button>
+            <button id="skill-bundle" type="button" data-i18n="studio.skillBundle" hidden>Download text bundle</button>
+          </div>
+          <p class="hint" data-i18n="studio.skillHint">Skills are global. Start sends one configured-provider call and does not search the web. Generate returns files in that response. Nothing is published.</p>
+        </div>
+        <div class="ref-controls" id="ref-controls">
+          <p class="kicker" data-i18n="studio.refTitle">Reference brief</p>
+          <p id="ref-status" class="workspace-status" role="status" hidden></p>
+          <label>
+            <span data-i18n="studio.refField">Reference</span>
+            <textarea id="ref-input" rows="2" data-i18n-aria="studio.refField" aria-label="Reference"></textarea>
+          </label>
+          <div class="row">
+            <button id="ref-scout" type="button" data-i18n="studio.refScout">Scout</button>
+          </div>
+          <div id="ref-brief"></div>
+          <p class="hint" data-i18n="studio.refHint">A reference brief is global. Scout searches DuckDuckGo and calls alltoken:deepseek-v3.2. It does not use the Studio provider and it does not save a project file.</p>
+        </div>
       </section>
       <section id="panel-settings" class="workspace-panel" data-panel="settings" hidden>
         <p class="kicker" data-i18n="studio.panel.settings">Settings</p>

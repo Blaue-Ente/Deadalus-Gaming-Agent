@@ -40,6 +40,18 @@
   const discoveryApproved = new Set();
   const discoveryRejected = new Set();
   const discoveryApproveOp = new Map();
+  let skillGen = 0;
+  let skillOp = null;
+  let skillView = null;
+  let skillFiles = null;
+  let skillNote = "";
+  let skillNoteBad = false;
+  let skillGenerateRefused = false;
+  let refGen = 0;
+  let refOp = null;
+  let refResult = null;
+  let refNote = "";
+  let refNoteBad = false;
   const ASSET_GENERATE_TIMEOUT_MS = 120000;
   const ASSET_AUTOPACK_TIMEOUT_MS = 660000;
   const ASSET_PIPELINE_TIMEOUT_MS = 60000;
@@ -48,6 +60,9 @@
   const BLOCKER_TIMEOUT_MS = 20000;
   const PLAN_TIMEOUT_MS = 20000;
   const DISCOVERY_TIMEOUT_MS = 20000;
+  const SKILL_TIMEOUT_MS = 90000;
+  const REF_TIMEOUT_MS = 45000;
+  const SKILL_PLATFORMS = ["generic", "cursor", "claude", "codex", "harness"];
   const PLAN_GOAL_MAX = 2000;
 
   function $(id) { return document.getElementById(id); }
@@ -105,6 +120,8 @@
       planFlight = 0;
       discoveryGen += 1;
       discoveryFlight = 0;
+      skillGen += 1;
+      refGen += 1;
     }
     currentPanel = panel;
     if (tab && TABS.indexOf(tab) >= 0) currentTab = tab;
@@ -130,6 +147,8 @@
       loadBlockers();
       loadPlans();
       loadDiscoveries();
+      paintSkill();
+      paintRef();
     }
     if (panel === "settings") loadSettings();
     if (queryReady) writeQuery();
@@ -1385,6 +1404,414 @@
     });
   }
 
+  function skillVisible() {
+    return currentPanel === "review";
+  }
+
+  function skillPlatform() {
+    const value = ($("skill-platform") && $("skill-platform").value) || "generic";
+    return SKILL_PLATFORMS.indexOf(value) >= 0 ? value : "generic";
+  }
+
+  function skillLines(parts) {
+    return parts.filter((line) => line).join("\n");
+  }
+
+  function skillPhaseLine(data) {
+    const ready = data && data.ready_for_generation === true;
+    return dx.t("studio.skillPhaseLine", {
+      phase: String((data && data.phase) || ""),
+      ready: dx.t(ready ? "studio.skillReadyYes" : "studio.skillReadyNo"),
+    });
+  }
+
+  function acceptSkillView(data) {
+    skillView = {
+      session_id: String((data && data.session_id) || ""),
+      phase: data && data.phase,
+      platform: data && data.platform,
+      idea: data && data.idea,
+      research_notes: data && data.research_notes,
+      tool_steps: data && Array.isArray(data.tool_steps) ? data.tool_steps : [],
+      skill_name: data && data.skill_name,
+      summary: data && data.summary,
+      clarifying_questions: data && Array.isArray(data.clarifying_questions) ? data.clarifying_questions : [],
+      ready_for_generation: !!(data && data.ready_for_generation === true),
+      validation_warnings: data && Array.isArray(data.validation_warnings) ? data.validation_warnings : [],
+    };
+  }
+
+  function takeSkillFiles(data) {
+    const raw = data && data.files;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+    const files = {};
+    Object.keys(raw).forEach((path) => {
+      if (typeof raw[path] === "string" && raw[path]) files[path] = raw[path];
+    });
+    if (!Object.keys(files).length) return false;
+    skillFiles = {
+      sessionId: String((data && data.session_id) || ""),
+      skillName: String((data && data.skill_name) || "skill"),
+      files,
+    };
+    return true;
+  }
+
+  function skillFileNames() {
+    return skillFiles && skillFiles.files ? Object.keys(skillFiles.files) : [];
+  }
+
+  function skillMdPath() {
+    return skillFileNames().find((path) => path === "SKILL.md" || path.endsWith("/SKILL.md")) || "";
+  }
+
+  function showSkillStatus() {
+    if (!skillVisible()) return;
+    if (skillOp && skillOp.state === "unknown") {
+      showStatus("skill-status", dx.t("studio.skillUnknown"), true);
+      return;
+    }
+    if (skillOp && skillOp.state === "pending") {
+      const key = skillOp.action === "refine"
+        ? "studio.skillRefinePending"
+        : skillOp.action === "generate"
+          ? "studio.skillGeneratePending"
+          : "studio.skillStartPending";
+      showStatus("skill-status", dx.t(key), true);
+      return;
+    }
+    if (skillNote) showStatus("skill-status", skillNote, skillNoteBad);
+    else showStatus("skill-status", "", false);
+  }
+
+  function paintSkill() {
+    if (!skillVisible()) return;
+    showSkillStatus();
+    const phase = $("skill-phase");
+    const research = $("skill-research");
+    const questions = $("skill-questions");
+    const warnings = $("skill-warnings");
+    const files = $("skill-files");
+    if (phase) phase.textContent = skillView ? skillPhaseLine(skillView) : "";
+    if (research) research.textContent = skillView ? String(skillView.research_notes || "") : "";
+    if (questions) {
+      questions.replaceChildren();
+      ((skillView && skillView.clarifying_questions) || []).forEach((item) => {
+        const row = document.createElement("div");
+        const ask = document.createElement("div");
+        ask.textContent = typeof item === "string" ? item : String((item && item.question) || "");
+        row.appendChild(ask);
+        if (item && item.why) {
+          const why = document.createElement("small");
+          why.textContent = String(item.why);
+          row.appendChild(why);
+        }
+        questions.appendChild(row);
+      });
+    }
+    if (warnings) {
+      warnings.textContent = ((skillView && skillView.validation_warnings) || []).map((item) => String(item)).join("\n");
+    }
+    if (files) {
+      files.replaceChildren();
+      skillFileNames().forEach((path) => {
+        const row = document.createElement("div");
+        row.textContent = path;
+        files.appendChild(row);
+      });
+    }
+    syncSkillButtons();
+  }
+
+  function syncSkillButtons() {
+    const locked = skillOp !== null;
+    const ready = !!(skillView && skillView.ready_for_generation === true);
+    const hasSession = !!(skillView && skillView.session_id);
+    const start = $("skill-start");
+    const refine = $("skill-refine");
+    const generate = $("skill-generate");
+    const force = $("skill-force");
+    if (start) start.disabled = locked;
+    if (refine) refine.disabled = locked || !hasSession;
+    if (generate) generate.disabled = locked || !ready;
+    if (force) force.disabled = locked || !hasSession || (ready && !skillGenerateRefused);
+    const download = $("skill-download");
+    const bundle = $("skill-bundle");
+    if (download) download.hidden = !skillMdPath();
+    if (bundle) bundle.hidden = skillFileNames().length === 0;
+  }
+
+  function describeSkillStart(data) {
+    const questions = Array.isArray(data.clarifying_questions) ? data.clarifying_questions : [];
+    const ready = data.ready_for_generation === true;
+    const lines = [
+      dx.t("studio.skillStarted", { id: String(data.session_id || "") }),
+      dx.t("studio.skillNoSearch"),
+      skillPhaseLine(data),
+    ];
+    if (String(data.research_notes || "") === String(data.idea || "")) lines.push(dx.t("studio.skillNoteIsIdea"));
+    if (!Array.isArray(data.tool_steps) || data.tool_steps.length === 0) lines.push(dx.t("studio.skillNoTools"));
+    if (!questions.length && !ready && data.skill_name === "skill" && data.summary === data.idea) {
+      lines.push(dx.t("studio.skillFallback"));
+    }
+    return skillLines(lines);
+  }
+
+  function finishSkill(note, bad) {
+    skillOp = null;
+    skillNote = note;
+    skillNoteBad = !!bad;
+    if (skillVisible()) paintSkill();
+    else syncSkillButtons();
+  }
+
+  function skillCaught(action, err) {
+    if (reviewUnresolved(err)) {
+      skillOp = { action, state: "unknown" };
+      if (skillVisible()) paintSkill();
+      else syncSkillButtons();
+      return;
+    }
+    if (action === "generate") skillGenerateRefused = true;
+    finishSkill(reviewFail(err, "studio.skillUnknown"), true);
+  }
+
+  function startSkill() {
+    if (skillOp || currentPanel !== "review") return;
+    const idea = ($("skill-idea").value || "").trim();
+    const platform = skillPlatform();
+    if (!idea) {
+      showStatus("skill-status", dx.t("studio.skillNeedIdea"), true);
+      return;
+    }
+    if (!window.confirm(dx.t("studio.skillStartConfirm", { idea, platform }))) return;
+    if (skillOp || currentPanel !== "review") return;
+    skillOp = { action: "start", state: "pending" };
+    syncSkillButtons();
+    showStatus("skill-status", dx.t("studio.skillStartPending"), true);
+    dx.api("/admin/daedalus/playground/api/skill-creator/start", {
+      method: "POST",
+      body: JSON.stringify({ idea, platform }),
+      timeoutMs: SKILL_TIMEOUT_MS,
+    }).then((data) => {
+      if (!data || data.ok !== true) {
+        const detail = data && (data.error || data.detail);
+        finishSkill(dx.t("studio.skillNotOk") + (detail ? ": " + detail : ""), true);
+        return;
+      }
+      acceptSkillView(data);
+      skillGenerateRefused = false;
+      finishSkill(describeSkillStart(data), false);
+    }).catch((err) => skillCaught("start", err));
+  }
+
+  function refineSkill() {
+    if (skillOp || currentPanel !== "review" || !skillView || !skillView.session_id) return;
+    const message = ($("skill-message").value || "").trim();
+    if (!message) {
+      showStatus("skill-status", dx.t("studio.skillNeedMessage"), true);
+      return;
+    }
+    const id = skillView.session_id;
+    if (!window.confirm(dx.t("studio.skillRefineConfirm", { id }))) return;
+    if (skillOp || currentPanel !== "review") return;
+    skillOp = { action: "refine", state: "pending" };
+    syncSkillButtons();
+    showStatus("skill-status", dx.t("studio.skillRefinePending"), true);
+    dx.api("/admin/daedalus/playground/api/skill-creator/refine", {
+      method: "POST",
+      body: JSON.stringify({ session_id: id, message }),
+      timeoutMs: SKILL_TIMEOUT_MS,
+    }).then((data) => {
+      if (!data || data.ok !== true) {
+        const detail = data && (data.error || data.detail);
+        finishSkill(dx.t("studio.skillNotOk") + (detail ? ": " + detail : ""), true);
+        return;
+      }
+      acceptSkillView(data);
+      skillGenerateRefused = false;
+      finishSkill(skillLines([
+        dx.t("studio.skillRefined", { id: String(data.session_id || id) }),
+        skillPhaseLine(data),
+        skillFiles ? dx.t("studio.skillFilesKept") : "",
+      ]), false);
+    }).catch((err) => skillCaught("refine", err));
+  }
+
+  function generateSkill(force) {
+    if (skillOp || currentPanel !== "review" || !skillView || !skillView.session_id) return;
+    if (!force && skillView.ready_for_generation !== true) return;
+    const id = skillView.session_id;
+    const question = force
+      ? dx.t("studio.skillForceConfirm", { id })
+      : dx.t("studio.skillGenerateConfirm", { id });
+    if (!window.confirm(question)) return;
+    if (skillOp || currentPanel !== "review") return;
+    skillOp = { action: "generate", state: "pending" };
+    syncSkillButtons();
+    showStatus("skill-status", dx.t("studio.skillGeneratePending"), true);
+    const requestBody = force
+      ? JSON.stringify({ session_id: id, force: true })
+      : JSON.stringify({ session_id: id });
+    dx.api("/admin/daedalus/playground/api/skill-creator/generate", {
+      method: "POST",
+      body: requestBody,
+      timeoutMs: SKILL_TIMEOUT_MS,
+    }).then((data) => {
+      if (!data || data.ok !== true) {
+        skillGenerateRefused = true;
+        const detail = data && (data.error || data.detail);
+        finishSkill(dx.t("studio.skillNotOk") + (detail ? ": " + detail : ""), true);
+        return;
+      }
+      const kept = !takeSkillFiles(data);
+      acceptSkillView(data);
+      skillGenerateRefused = false;
+      const warnings = (skillView.validation_warnings || []).map((item) => String(item)).join("\n");
+      finishSkill(skillLines([
+        kept ? dx.t("studio.skillNoFiles") : dx.t("studio.skillFilesReturned"),
+        kept && skillFiles ? dx.t("studio.skillFilesKept") : "",
+        skillPhaseLine(data),
+        warnings,
+      ]), kept);
+    }).catch((err) => skillCaught("generate", err));
+  }
+
+  function downloadText(filename, content, mime) {
+    const blob = new Blob([content], { type: mime || "text/plain;charset=utf-8" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(link.href);
+  }
+
+  function downloadSkillMd() {
+    const path = skillMdPath();
+    if (!path || !skillFiles) return;
+    downloadText(path.split("/").pop() || "SKILL.md", skillFiles.files[path], "text/markdown;charset=utf-8");
+  }
+
+  function downloadSkillBundle() {
+    if (!skillFiles || !skillFileNames().length) return;
+    let bundle = "# Skill bundle: " + (skillFiles.skillName || "skill") + "\n\n";
+    skillFileNames().forEach((path) => {
+      bundle += "\n--- " + path + " ---\n" + skillFiles.files[path] + "\n";
+    });
+    downloadText((skillFiles.skillName || "skill") + "-bundle.txt", bundle, "text/plain;charset=utf-8");
+  }
+
+  function refVisible() {
+    return currentPanel === "review";
+  }
+
+  function refIsStub(data) {
+    const mechanics = data && data.mechanics;
+    return !!(data
+      && String(data.summary || "") === ("Референция: " + String(data.reference || "") + ". Вдъхнови се от механиките и визията.")
+      && String(data.visual_style || "") === "match reference game art style"
+      && String(data.scope_hints || "") === "Core loop first, polish later"
+      && Array.isArray(mechanics) && mechanics.length === 0);
+  }
+
+  function showRefStatus() {
+    if (!refVisible()) return;
+    if (refOp === "unknown") {
+      showStatus("ref-status", dx.t("studio.refUnknown"), true);
+      return;
+    }
+    if (refOp === "pending") {
+      showStatus("ref-status", dx.t("studio.refPending"), true);
+      return;
+    }
+    if (refNote) showStatus("ref-status", refNote, refNoteBad);
+    else showStatus("ref-status", "", false);
+  }
+
+  function paintRef() {
+    if (!refVisible()) return;
+    showRefStatus();
+    const box = $("ref-brief");
+    if (!box) return;
+    box.replaceChildren();
+    if (!refResult) {
+      syncRefButtons();
+      return;
+    }
+    const add = (text) => {
+      const row = document.createElement("p");
+      row.textContent = text;
+      box.appendChild(row);
+    };
+    add(dx.t("studio.refUnverified"));
+    if (refIsStub(refResult)) add(dx.t("studio.refStub"));
+    add(String(refResult.title || ""));
+    add(String(refResult.summary || ""));
+    (Array.isArray(refResult.mechanics) ? refResult.mechanics : []).forEach((item) => add(String(item)));
+    if (refResult.visual_style) add(String(refResult.visual_style));
+    if (refResult.scope_hints) add(String(refResult.scope_hints));
+    (Array.isArray(refResult.sources) ? refResult.sources : []).forEach((item) => {
+      if (!item || typeof item !== "object") return;
+      const bits = [item.title, item.url].filter((value) => typeof value === "string" && value);
+      if (bits.length) add(bits.join(" "));
+    });
+    syncRefButtons();
+  }
+
+  function syncRefButtons() {
+    const scout = $("ref-scout");
+    if (scout) scout.disabled = refOp !== null;
+  }
+
+  function scoutReference() {
+    if (refOp || currentPanel !== "review") return;
+    const reference = ($("ref-input").value || "").trim();
+    if (!reference) {
+      showStatus("ref-status", dx.t("studio.refNeed"), true);
+      return;
+    }
+    if (!window.confirm(dx.t("studio.refConfirm", { reference }))) return;
+    if (refOp || currentPanel !== "review") return;
+    refOp = "pending";
+    syncRefButtons();
+    showStatus("ref-status", dx.t("studio.refPending"), true);
+    dx.api("/admin/daedalus/playground/api/reference-scout", {
+      method: "POST",
+      body: JSON.stringify({ reference }),
+      timeoutMs: REF_TIMEOUT_MS,
+    }).then((data) => {
+      if (!data || data.ok !== true) {
+        refOp = null;
+        const detail = data && (data.error || data.detail);
+        refNote = dx.t("studio.refNotOk") + (detail ? ": " + detail : "");
+        refNoteBad = true;
+        if (refVisible()) paintRef();
+        else syncRefButtons();
+        return;
+      }
+      refOp = null;
+      refResult = data;
+      refNote = dx.t("studio.refReturned");
+      refNoteBad = !!refIsStub(data);
+      if (refVisible()) paintRef();
+      else syncRefButtons();
+    }).catch((err) => {
+      if (reviewUnresolved(err)) {
+        refOp = "unknown";
+        if (refVisible()) paintRef();
+        else syncRefButtons();
+        return;
+      }
+      refOp = null;
+      refNote = reviewFail(err, "studio.refUnknown");
+      refNoteBad = true;
+      if (refVisible()) paintRef();
+      else syncRefButtons();
+    });
+  }
+
   async function reviewAct(act, id, button) {
     await runAction(button, "review-status", async () => {
       let path = "";
@@ -2369,7 +2796,11 @@
 
   document.addEventListener("daedalus:langchange", () => {
     renderAssetJobs(null);
-    if (currentPanel === "review") loadReview(currentTab);
+    if (currentPanel === "review") {
+      loadReview(currentTab);
+      paintSkill();
+      paintRef();
+    }
     if (currentPanel === "settings") loadSettings();
     if (currentPanel === "build") loadWorkspace(dx.getSlug());
     loadFiles(dx.getSlug());
@@ -2437,6 +2868,22 @@
   if (discoveryRefresh) discoveryRefresh.addEventListener("click", () => loadDiscoveries());
   const discoveryFilter = $("discovery-filter");
   if (discoveryFilter) discoveryFilter.addEventListener("change", () => loadDiscoveries());
+  const skillStart = $("skill-start");
+  if (skillStart) skillStart.addEventListener("click", startSkill);
+  const skillRefine = $("skill-refine");
+  if (skillRefine) skillRefine.addEventListener("click", refineSkill);
+  const skillGenerate = $("skill-generate");
+  if (skillGenerate) skillGenerate.addEventListener("click", () => generateSkill(false));
+  const skillForce = $("skill-force");
+  if (skillForce) skillForce.addEventListener("click", () => generateSkill(true));
+  const skillDownload = $("skill-download");
+  if (skillDownload) skillDownload.addEventListener("click", downloadSkillMd);
+  const skillBundle = $("skill-bundle");
+  if (skillBundle) skillBundle.addEventListener("click", downloadSkillBundle);
+  const refScout = $("ref-scout");
+  if (refScout) refScout.addEventListener("click", scoutReference);
+  syncSkillButtons();
+  syncRefButtons();
 
   const opening = readQuery();
   showPanel(opening.panel, opening.tab);
