@@ -716,9 +716,10 @@ def test_asset_functions_resolve_the_model_at_call_time(gw):
 
     from daedalus import playground_assets as pa
 
+    # generate_asset's "model" is the IMAGE model (sdxl); only the text-planning functions are in scope.
     with_model = [
         fn for _n, fn in inspect.getmembers(pa, inspect.iscoroutinefunction)
-        if "model" in inspect.signature(fn).parameters
+        if "model" in inspect.signature(fn).parameters and fn.__name__ != "generate_asset"
     ]
     assert len(with_model) >= 4
     for fn in with_model:
