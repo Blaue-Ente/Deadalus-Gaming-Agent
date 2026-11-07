@@ -5,12 +5,23 @@ secret is ever returned (a key is reported only as "set"), and every model call 
 budget gate, the typed errors and the ledger all apply."""
 from __future__ import annotations
 
+import asyncio
 import time
 from pathlib import Path
 from typing import Any
 
 
 # ---- workers ---------------------------------------------------------------------------------------------
+_inflight: set[str] = set()          # one billed test of each kind at a time: a double click or a script cannot drain the budget
+
+
+def _keyless_ok(cfg: dict[str, Any]) -> bool:
+    """No key stored, but the gateway would still call (a local or loopback provider takes none)."""
+    from . import gateway as gw
+
+    return (not cfg.get("api_key")) and gw.has_credentials(cfg)
+
+
 def workers_view() -> dict[str, Any]:
     from ..llm_config import get_config
     from ..workers import WORKER_SLOTS, get_worker_config
@@ -21,7 +32,8 @@ def workers_view() -> dict[str, Any]:
         master = {"error": str(exc)[:120]}
     rows = [{"slot": "master", "label": "master", "provider": str(master.get("provider") or ""),
              "model": str(master.get("model") or ""), "enabled": bool(master.get("model")),
-             "source": str(master.get("source") or ""), "key_set": bool(master.get("api_key"))}]
+             "source": str(master.get("source") or ""), "key_set": bool(master.get("api_key")),
+             "keyless_ok": _keyless_ok(master)}]
     try:
         cfg = get_worker_config()
     except Exception:
@@ -32,7 +44,8 @@ def workers_view() -> dict[str, Any]:
             continue
         rows.append({"slot": slot, "label": str(meta.get("label") or slot), "provider": str(sc.get("provider") or ""),
                      "model": str(sc.get("model") or ""), "enabled": bool(sc.get("enabled", True)),
-                     "source": str(sc.get("source") or ""), "key_set": bool(sc.get("api_key"))})
+                     "source": str(sc.get("source") or ""), "key_set": bool(sc.get("api_key")),
+                     "keyless_ok": _keyless_ok(sc)})
     return {"ok": True, "slots": rows}
 
 
@@ -42,6 +55,17 @@ async def test_provider(slot: str = "master") -> dict[str, Any]:
     from . import gateway as gw
 
     slot = (slot or "master").strip()
+    key = "provider:" + slot
+    if key in _inflight:
+        return {"ok": False, "slot": slot, "error": {"type": "busy", "message": "a test is already running"}}
+    _inflight.add(key)
+    try:
+        return await _test_provider(gw, slot)
+    finally:
+        _inflight.discard(key)
+
+
+async def _test_provider(gw: Any, slot: str) -> dict[str, Any]:
     route = None
     if slot != "master":
         from ..workers import get_worker_config
@@ -51,7 +75,7 @@ async def test_provider(slot: str = "master") -> dict[str, Any]:
             return {"ok": False, "slot": slot, "error": {"type": "not_configured", "message": "no model for this slot"}}
         if not sc.get("enabled", True):
             return {"ok": False, "slot": slot, "error": {"type": "disabled", "message": "slot is disabled"}}
-        if not sc.get("api_key") and sc.get("provider") not in {"ollama", "lmstudio", "llamacpp", "vllm"}:
+        if not gw.has_credentials(sc):
             return {"ok": False, "slot": slot, "error": {"type": "not_configured", "message": "no key for this slot"}}
         route = gw.route_for(str(sc.get("provider") or ""), str(sc["model"]), str(sc.get("api_key") or ""),
                              str(sc.get("base_url") or ""), str(sc.get("sdk") or "openai"))
@@ -62,7 +86,7 @@ async def test_provider(slot: str = "master") -> dict[str, Any]:
             cfg = get_config()
         except Exception as exc:
             return {"ok": False, "slot": slot, "error": {"type": "not_configured", "message": str(exc)[:120]}}
-        if not cfg.get("model") or (not cfg.get("api_key") and cfg.get("provider") not in {"ollama", "lmstudio", "llamacpp", "vllm"}):
+        if not cfg.get("model") or not gw.has_credentials(cfg):
             return {"ok": False, "slot": slot, "error": {"type": "not_configured", "message": "no model or key"}}
     res = await gw.call("test", [{"role": "user", "content": "Reply with exactly: OK"}], max_tokens=16,
                         temperature=0.0, route=route, use_cache=False, client_id="daedalus/settings-test",
@@ -79,28 +103,25 @@ async def test_provider(slot: str = "master") -> dict[str, Any]:
 
 # ---- git connections -------------------------------------------------------------------------------------
 def _code(result: dict[str, Any]) -> str:
-    if result.get("ok"):
-        return "ok"
-    if not result.get("configured"):
-        return "not_configured"
-    err = str(result.get("error") or "")
-    if "401" in err:
-        return "invalid_token"
-    if "403" in err:
-        return "forbidden"
-    if "API " in err:
-        return "api_error"
-    return "network"
+    """The connector tests report a structured ``code``; prose is never parsed back into one."""
+    code = str(result.get("code") or "")
+    if code in {"ok", "not_configured", "invalid_token", "forbidden", "api_error", "network"}:
+        return code
+    return "ok" if result.get("ok") else ("network" if result.get("configured") else "not_configured")
+
+
+def _run_blocking(coro_fn: Any) -> dict[str, Any]:
+    return asyncio.run(coro_fn())              # the connector tests use blocking HTTP: run them on their own loop
 
 
 async def test_git(target: str) -> dict[str, Any]:
     from .. import connectors_config as cc
 
     if target == "github":
-        raw = await cc.test_github_connection()
+        raw = await asyncio.to_thread(_run_blocking, cc.test_github_connection)
         extra = {"login": raw.get("login"), "can_push": raw.get("can_push"), "source": raw.get("source")}
     elif target == "gitlab":
-        raw = await cc.test_gitlab_connection()
+        raw = await asyncio.to_thread(_run_blocking, cc.test_gitlab_connection)
         extra = {"username": raw.get("username"), "host": raw.get("host")}
     else:
         raise KeyError(target)
@@ -122,9 +143,11 @@ def set_mcp(addon_id: str, enabled: bool) -> dict[str, Any]:
     """Catalog servers only: the browser can never name a command to run."""
     from .. import addons
 
-    known = {r["id"] for r in addons.catalog() if r.get("kind") == "mcp"}
-    if addon_id not in known:
+    rows = {r["id"]: r for r in addons.catalog() if r.get("kind") == "mcp"}
+    if addon_id not in rows:
         raise KeyError(addon_id)
+    if enabled and rows[addon_id].get("blocked_offline"):
+        return {"ok": False, "id": addon_id, "error": "blocked_offline"}      # the UI disables the button; the server holds too
     res = addons.enable(addon_id) if enabled else addons.disable(addon_id)
     if not res.get("ok"):
         return {"ok": False, "id": addon_id, "error": str(res.get("error") or "failed")[:160]}
@@ -138,13 +161,18 @@ async def durability_view() -> dict[str, Any]:
     from ..connectors_config import storage_status
 
     projects = await pg.list_projects()
-    empty = 0
-    for p in projects:
-        try:
-            if backup.workspace_file_count(str(p.get("slug") or "")) == 0:
-                empty += 1
-        except Exception:
-            continue
+
+    def count_empty() -> int:
+        empty = 0
+        for p in projects:
+            try:
+                if backup.workspace_file_count(str(p.get("slug") or "")) == 0:
+                    empty += 1
+            except Exception:
+                continue
+        return empty
+
+    empty = await asyncio.to_thread(count_empty)      # a recursive scan per project: not on the event loop
     published = 0
     try:
         from ..playground_publish import list_published
@@ -161,6 +189,17 @@ async def durability_view() -> dict[str, Any]:
 async def vision_test() -> dict[str, Any]:
     """Render a random label, ask the CURRENT mentor model to read it (one model call through the gateway) and store
     the verdict. The label is not returned; ``answer`` is what the model said."""
+    if "vision" in _inflight:
+        return {"ok": False, "perceived": False, "error": "busy", "recorded": False, "provider": "", "model": "",
+                "answer": "", "latency_ms": 0}
+    _inflight.add("vision")
+    try:
+        return await _vision_test()
+    finally:
+        _inflight.discard("vision")
+
+
+async def _vision_test() -> dict[str, Any]:
     import tempfile
 
     from .. import mentor_helm

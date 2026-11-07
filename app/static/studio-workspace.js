@@ -2268,12 +2268,21 @@
   // ---- A6.1b: workers, provider test, connections, MCP, durability, vision test ----------------------------------
   const ERR_KEYS = { auth: "studio.errAuth", quota: "studio.errQuota", timeout: "studio.errTimeout",
     budget_blocked: "studio.errBudget", provider_error: "studio.errProvider", unsupported_modality: "studio.errModality",
-    not_configured: "studio.errNotConfigured", disabled: "studio.errDisabled", routing: "studio.errRouting" };
+    not_configured: "studio.errNotConfigured", disabled: "studio.errDisabled", routing: "studio.errRouting",
+    busy: "studio.errBusy" };
   const GIT_CODE_KEYS = { not_configured: "studio.codeNotConfigured", invalid_token: "studio.codeInvalid",
     forbidden: "studio.codeForbidden", api_error: "studio.codeApi", network: "studio.codeNetwork" };
 
   // One row: a name, a short state, one or more buttons, and a note under the row that carries the outcome.
   // A button's ``run`` returns {text, bad} to show, or null when there is nothing to say (declined, or row repainted).
+  const lastNotes = {};                // row id -> last outcome, so a repaint never hides the result of a (billed) test
+  function showNote(item, res) {
+    const note = item.querySelector(".cfg-note");
+    note.textContent = res.text;
+    note.hidden = false;
+    item.dataset.state = res.bad ? "error" : "ok";
+  }
+
   function actionRow(o) {
     const item = document.createElement("div");
     item.className = "cfg-row";
@@ -2303,15 +2312,17 @@
         note.hidden = true;
         await runAction(btn, "harness-status", async () => {
           const res = await def.run();
-          if (!res || !item.isConnected) return;
-          note.textContent = res.text;
-          note.hidden = false;
-          item.dataset.state = res.bad ? "error" : "ok";
+          if (!res) return;
+          lastNotes[o.id] = res;
+          // the row may have been repainted while the call ran: show the outcome on whichever copy is on screen now
+          const live = item.isConnected ? item : document.querySelector(".cfg-row[data-id='" + o.id + "']");
+          if (live) showNote(live, res);
         });
       });
       actions.appendChild(btn);
     });
     item.append(name, info, actions, note);
+    if (lastNotes[o.id]) showNote(item, lastNotes[o.id]);
     return item;
   }
 
@@ -2334,7 +2345,8 @@
         id: "worker-" + w.slot,
         title: w.slot,
         sub: (w.provider ? w.provider + ":" : "") + (w.model || ""),
-        info: !w.enabled ? dx.t("studio.workerOff") : (w.key_set ? dx.t("studio.workerKeySet") : dx.t("studio.workerNoKey")),
+        info: !w.enabled ? dx.t("studio.workerOff")
+          : (w.key_set ? dx.t("studio.workerKeySet") : (w.keyless_ok ? dx.t("studio.workerKeyless") : dx.t("studio.workerNoKey"))),
         buttons: [{ label: dx.t("studio.workerTest"), run: () => testWorker(w.slot) }],
       }));
     });
@@ -2364,7 +2376,11 @@
   async function toggleMcp(row, enable) {
     if (enable && !window.confirm(dx.t("studio.mcpConfirm", { id: row.id }))) return null;
     const data = await postJson("/api/v1/harness/mcp", { id: row.id, enabled: enable });
-    paintMcp(data.servers || []);
+    if (!data || data.ok === false || !Array.isArray(data.servers)) {            // a refused toggle must not empty the list
+      showStatus("harness-status", dx.t("studio.requestFailed") + (data && data.error ? ": " + data.error : ""), true);
+      return null;
+    }
+    paintMcp(data.servers);
     showStatus("harness-status", dx.t("studio.saved"), false);
     return null;
   }
@@ -2407,9 +2423,11 @@
       if (line) line.textContent = visionLine(eng.vision || {});
     } catch (err) { /* the note below still tells the truth */ }
     if (!r.ok) {
-      return { text: r.error === "no_mentor_model" ? dx.t("studio.visionNoModel") : dx.t("studio.visionFailed", { why: r.error || "?" }), bad: true };
+      const why = r.error === "busy" ? dx.t("studio.errBusy") : (r.error || "?");
+      return { text: r.error === "no_mentor_model" ? dx.t("studio.visionNoModel") : dx.t("studio.visionFailed", { why }), bad: true };
     }
-    return r.perceived ? { text: dx.t("studio.visionPerceived"), bad: false } : { text: dx.t("studio.visionNotPerceived"), bad: true };
+    if (!r.perceived) return { text: dx.t("studio.visionNotPerceived"), bad: true };
+    return r.recorded ? { text: dx.t("studio.visionPerceived"), bad: false } : { text: dx.t("studio.visionNotSaved"), bad: true };
   }
 
   async function loadHarnessSettings() {

@@ -308,12 +308,14 @@ async def harness_connections() -> dict[str, Any]:
     from daedalus.harness import connections
 
     out: dict[str, Any] = {"ok": True}
-    for key, fn in (("mcp", lambda: connections.mcp_view()), ("durability", connections.durability_view)):
-        try:
-            val = fn()
-            out[key] = await val if asyncio.iscoroutine(val) else val
-        except Exception as exc:   # one broken section must not hide the others
-            out[key] = {"ok": False, "error": type(exc).__name__}
+    try:
+        out["mcp"] = await asyncio.to_thread(connections.mcp_view)
+    except Exception as exc:   # one broken section must not hide the other
+        out["mcp"] = {"ok": False, "error": type(exc).__name__}
+    try:
+        out["durability"] = await connections.durability_view()
+    except Exception as exc:
+        out["durability"] = {"ok": False, "error": type(exc).__name__}
     return out
 
 
@@ -322,7 +324,8 @@ def harness_mcp(body: McpBody) -> Any:
     from daedalus.harness import connections
 
     try:
-        return connections.set_mcp(body.id, body.enabled)
+        res = connections.set_mcp(body.id, body.enabled)
+        return JSONResponse(res, status_code=409) if res.get("error") == "blocked_offline" else res
     except KeyError:
         return JSONResponse({"ok": False, "error": "unknown_server", "id": body.id}, status_code=404)
 

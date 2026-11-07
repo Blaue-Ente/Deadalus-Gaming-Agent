@@ -109,12 +109,15 @@ def test_unconfigured_or_disabled_slots_are_refused_before_any_call(client, monk
 
 # ------------------------------------------------------------------------------------------------ git tests
 @pytest.mark.parametrize("raw,code", [
-    ({"ok": True, "configured": True, "login": "me", "can_push": True, "source": "env"}, "ok"),
-    ({"ok": False, "configured": False, "error": "GITHUB_TOKEN не е зададен"}, "not_configured"),
-    ({"ok": False, "configured": True, "error": "Токенът е невалиден или изтекъл (401)"}, "invalid_token"),
-    ({"ok": False, "configured": True, "error": "Достъпът е отказан (403) — липсва scope repo"}, "forbidden"),
-    ({"ok": False, "configured": True, "error": "GitHub API 502"}, "api_error"),
-    ({"ok": False, "configured": True, "error": "ConnectError: timed out"}, "network"),
+    ({"ok": True, "code": "ok", "configured": True, "login": "me", "can_push": True, "source": "env"}, "ok"),
+    ({"ok": False, "code": "not_configured", "configured": False, "error": "GITHUB_TOKEN не е зададен"}, "not_configured"),
+    ({"ok": False, "code": "invalid_token", "configured": True, "error": "Токенът е невалиден или изтекъл (401)"}, "invalid_token"),
+    ({"ok": False, "code": "forbidden", "configured": True, "error": "Достъпът е отказан (403) — липсва scope repo"}, "forbidden"),
+    ({"ok": False, "code": "api_error", "configured": True, "error": "GitHub API 502"}, "api_error"),
+    ({"ok": False, "code": "network", "configured": True, "error": "ConnectError: timed out"}, "network"),
+    # the prose is never parsed: a network error that happens to mention 401 stays a network error
+    ({"ok": False, "code": "network", "configured": True, "error": "connect to 10.0.0.401:403 failed"}, "network"),
+    ({"ok": False, "configured": True, "error": "Токенът е невалиден или изтекъл (401)"}, "network"),     # no code: not guessed
 ])
 def test_git_test_answers_a_code_not_a_bulgarian_sentence(client, monkeypatch, raw, code):
     async def fake():
@@ -124,6 +127,46 @@ def test_git_test_answers_a_code_not_a_bulgarian_sentence(client, monkeypatch, r
     out = client.post("/api/v1/harness/connections/test", json={"target": "github"}).json()
     assert out["code"] == code and out["ok"] is raw["ok"]
     assert "error" not in out and "hint" not in out                          # prose stays on the server
+
+
+def test_the_real_connector_tests_report_structured_codes(a0_tmp, monkeypatch):  # noqa: F811
+    from daedalus import connectors_config as cc
+
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+    monkeypatch.delenv("GITLAB_TOKEN", raising=False)
+    assert asyncio.run(cc.test_github_connection())["code"] == "not_configured"
+    assert asyncio.run(cc.test_gitlab_connection())["code"] == "not_configured"
+    monkeypatch.setenv("GITHUB_TOKEN", "t")
+
+    class R:
+        def __init__(self, status):
+            self.status_code, self.headers = status, {}
+
+        def json(self):
+            return {"login": "u"}
+
+    for status, code in ((401, "invalid_token"), (403, "forbidden"), (500, "api_error")):
+        monkeypatch.setattr("httpx.get", lambda *a, _s=status, **k: R(_s))
+        assert asyncio.run(cc.test_github_connection())["code"] == code, status
+    monkeypatch.setattr("httpx.get", lambda *a, **k: (_ for _ in ()).throw(OSError("unreachable")))
+    assert asyncio.run(cc.test_github_connection())["code"] == "network"
+
+
+def test_the_git_test_does_not_block_the_event_loop(client, monkeypatch):
+    import threading
+    import time as _t
+
+    main = threading.get_ident()
+    seen = {}
+
+    async def slow():
+        seen["thread"] = threading.get_ident()
+        _t.sleep(0.05)                                                          # what blocking httpx would do
+        return {"ok": True, "code": "ok", "configured": True, "login": "x"}
+
+    monkeypatch.setattr("daedalus.connectors_config.test_github_connection", slow)
+    assert client.post("/api/v1/harness/connections/test", json={"target": "github"}).json()["ok"] is True
+    assert seen["thread"] != main
 
 
 def test_gitlab_test_and_unknown_target(client, monkeypatch):
@@ -459,4 +502,162 @@ def test_new_sections_fit_and_their_buttons_are_really_clickable(studio_server, 
                          ".cfg-row[data-id='mcp-git'] button", ".cfg-row[data-id='vision-test'] button"):
             page.locator(selector).scroll_into_view_if_needed()
             _hit(page, selector)
+        browser.close()
+
+
+# ------------------------------------------------------------------------------------------------ review fixes
+def test_a_second_billed_test_of_the_same_kind_is_refused_while_one_runs(client, monkeypatch):
+    from daedalus.harness import connections
+
+    async def scenario():
+        started = asyncio.Event()
+        release = asyncio.Event()
+
+        class Client:
+            def __init__(self, **kw):
+                self.chat = types.SimpleNamespace(completions=types.SimpleNamespace(create=self.create))
+
+            async def create(self, **kw):
+                started.set()
+                await release.wait()
+                msg = types.SimpleNamespace(content="OK")
+                return types.SimpleNamespace(choices=[types.SimpleNamespace(message=msg)], usage=None)
+
+        monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(AsyncOpenAI=Client))
+        first = asyncio.create_task(connections.test_provider("master"))
+        await started.wait()
+        second = await connections.test_provider("master")
+        release.set()
+        return await first, second
+
+    first, second = asyncio.run(scenario())
+    assert first["ok"] is True
+    assert second["ok"] is False and second["error"]["type"] == "busy"
+    assert connections._inflight == set()                                       # released, even after the refusal
+
+
+def test_vision_test_is_single_flight_and_releases_on_failure(client, monkeypatch):
+    from daedalus.harness import connections
+
+    async def boom(path, label):
+        raise RuntimeError("provider down")
+
+    monkeypatch.setattr("daedalus.mentor_helm.probe_vision", boom)
+    connections._inflight.add("vision")
+    busy = asyncio.run(connections.vision_test())
+    assert busy["ok"] is False and busy["error"] == "busy"
+    connections._inflight.discard("vision")
+    with pytest.raises(RuntimeError):
+        asyncio.run(connections.vision_test())
+    assert "vision" not in connections._inflight                                # a failure never leaves it stuck
+
+
+def test_a_local_provider_needs_no_key_and_is_not_called_unconfigured(client, monkeypatch):
+    monkeypatch.setattr("daedalus.llm_config.get_config", lambda: {
+        "provider": "ollama", "model": "llama3", "api_key": "", "base_url": "http://127.0.0.1:11434/v1", "sdk": "openai", "source": "env"})
+    rec = _install_openai(monkeypatch)
+    rows = {r["slot"]: r for r in client.get("/api/v1/harness/workers").json()["slots"]}
+    assert rows["master"]["key_set"] is False and rows["master"]["keyless_ok"] is True
+    out = client.post("/api/v1/harness/test-provider", json={"slot": "master"}).json()
+    assert out["ok"] is True and rec["calls"] == 1
+
+
+def test_a_cloud_provider_without_a_key_is_still_unconfigured(client, monkeypatch):
+    monkeypatch.setattr("daedalus.llm_config.get_config", lambda: {
+        "provider": "openrouter", "model": "m", "api_key": "", "base_url": "http://x", "sdk": "openai", "source": "env"})
+    rec = _install_openai(monkeypatch)
+    rows = {r["slot"]: r for r in client.get("/api/v1/harness/workers").json()["slots"]}
+    assert rows["master"]["key_set"] is False and rows["master"]["keyless_ok"] is False
+    out = client.post("/api/v1/harness/test-provider", json={"slot": "master"}).json()
+    assert out["ok"] is False and out["error"]["type"] == "not_configured" and rec["calls"] == 0
+
+
+def test_the_server_refuses_to_enable_an_mcp_server_that_offline_mode_blocks(client, monkeypatch):
+    monkeypatch.setenv("DAEDALUS_OFFLINE", "1")
+    view = {r["id"]: r for r in client.get("/api/v1/harness/connections").json()["mcp"]["servers"]}
+    blocked = [i for i, r in view.items() if r["blocked_offline"]]
+    assert blocked, "the catalog has at least one server that needs the network"
+    res = client.post("/api/v1/harness/mcp", json={"id": blocked[0], "enabled": True})
+    assert res.status_code == 409 and res.json()["error"] == "blocked_offline"
+    from daedalus import mcp_client
+    assert blocked[0] not in mcp_client.load_servers()                          # nothing was written
+
+
+def test_a_refused_mcp_toggle_keeps_the_list_and_does_not_say_saved(studio_server):
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        _stub_remote(page)
+        page.route("**/api/v1/harness/mcp", lambda r: _fulfill(r, 200, {"ok": False, "id": "git", "error": "mcp.json unreadable"}))
+        _open_links(page, studio_server)
+        before = page.locator(".cfg-row[data-id^='mcp-']").count()
+        assert before >= 2
+        page.once("dialog", lambda d: d.accept())
+        page.locator(".cfg-row[data-id='mcp-git'] button").click()
+        page.wait_for_function("() => /mcp.json unreadable/.test(document.getElementById('harness-status').textContent)")
+        assert page.locator(".cfg-row[data-id^='mcp-']").count() == before            # the list is still there
+        assert page.locator(".cfg-row[data-id='mcp-git'] button").inner_text() == "Enable"
+        assert "Saved" not in page.inner_text("#harness-status")
+        browser.close()
+
+
+def test_a_verdict_that_could_not_be_saved_is_not_shown_as_verified(studio_server):
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        _stub_remote(page, probe={"ok": True, "perceived": True, "provider": "p", "model": "m", "recorded": False})
+        _open_links(page, studio_server)
+        page.locator(".cfg-row[data-id='vision-test'] button").click()
+        page.wait_for_function("() => document.querySelector(\".cfg-row[data-id='vision-test'] .cfg-note:not([hidden])\") !== null")
+        note = page.inner_text(".cfg-row[data-id='vision-test'] .cfg-note")
+        assert "could not be saved" in note and "Vision is verified" not in note
+        assert page.locator(".cfg-row[data-id='vision-test']").get_attribute("data-state") == "error"
+        browser.close()
+
+
+def test_a_local_slot_says_no_key_is_needed(studio_server):
+    from playwright.sync_api import sync_playwright
+
+    workers = {"ok": True, "slots": [{"slot": "master", "label": "master", "provider": "ollama", "model": "llama3", "enabled": True,
+                                      "source": "env", "key_set": False, "keyless_ok": True}]}
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        _stub_remote(page)
+        page.route("**/api/v1/harness/workers", lambda r: _fulfill(r, 200, workers))
+        _open_links(page, studio_server)
+        text = page.inner_text(".cfg-row[data-id='worker-master']")
+        assert "no key needed" in text and "no key\n" not in text + "\n"
+        browser.close()
+
+
+def test_a_test_that_finishes_after_settings_was_reopened_still_shows_its_result(studio_server):
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        _stub_remote(page)
+        held = {}
+
+        def slow_provider(route):
+            held["route"] = route                                              # answer it later, after the repaint
+
+        page.route("**/api/v1/harness/test-provider", slow_provider)
+        _open_links(page, studio_server)
+        page.locator(".cfg-row[data-id='worker-master'] button").click()
+        page.wait_for_function("() => true")
+        page.wait_for_timeout(200)
+        page.locator("#workspace-nav button[data-panel=chat]").click()
+        page.locator("#workspace-nav button[data-panel=settings]").click()       # the rows are rebuilt
+        page.wait_for_selector(".cfg-row[data-id='worker-master']")
+        page.wait_for_timeout(400)
+        _fulfill(held["route"], 200, {"ok": True, "slot": "master", "provider": "openrouter", "model": "owner/pick",
+                                      "latency_ms": 7, "reply": "OK"})
+        page.wait_for_function("() => document.querySelector(\".cfg-row[data-id='worker-master'] .cfg-note:not([hidden])\") !== null")
+        assert "Works: owner/pick" in page.inner_text(".cfg-row[data-id='worker-master'] .cfg-note")
         browser.close()

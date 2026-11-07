@@ -408,6 +408,11 @@ def _api_key(cfg: dict[str, Any]) -> str:
     return ""
 
 
+def has_credentials(cfg: dict[str, Any]) -> bool:
+    """True when a call with this config would carry a key: a real one, or the dummy a local/loopback provider takes."""
+    return bool(_api_key(cfg))
+
+
 async def _execute(cfg: dict[str, Any], system: str, messages: list[dict[str, Any]], *, max_tokens: int,
                    temperature: float | None, json_mode: bool, use_cache: bool,
                    timeout: float | None, reasoning: bool = False) -> tuple[str, Any]:
