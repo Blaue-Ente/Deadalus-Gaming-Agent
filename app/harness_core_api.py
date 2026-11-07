@@ -61,15 +61,22 @@ def harness_intents() -> dict[str, Any]:
             # The mentor keeps its own choice (Studio header); this view reports it and POST delegates to it.
             from daedalus import mentor_helm
 
-            choice = mentor_helm.get_choice()
-            row.update({"owner_choice": choice.get("id"), "resolved": {
-                "provider": choice.get("provider"), "model": choice.get("model"),
-                "source": "mentor-choice" if choice.get("source") != "env" else "env-lock",
-                "locked": choice.get("source") == "env"}})
+            try:
+                choice = mentor_helm.get_choice()
+                row.update({"owner_choice": choice.get("id"), "resolved": {
+                    "provider": choice.get("provider"), "model": choice.get("model"),
+                    "source": "mentor-choice" if choice.get("source") != "env" else "env-lock",
+                    "locked": choice.get("source") == "env"}})
+            except Exception as exc:  # same rule as the other tasks: report it, do not fail the list
+                row.update({"owner_choice": None, "resolved": {"provider": "", "model": "", "source": "unconfigured",
+                                                               "error": str(exc)[:160]}})
         else:
-            res = gw.resolve(intent)
+            try:
+                resolved = gw.resolve(intent).public()
+            except Exception as exc:  # nothing configured yet: say so, never fail the whole list (fresh installs)
+                resolved = {"provider": "", "model": "", "source": "unconfigured", "error": str(exc)[:160]}
             row.update({"owner_choice": overrides.get(sel), "default": gw.INTENT_DEFAULTS.get(intent),
-                        "resolved": res.public()})
+                        "resolved": resolved})
         rows.append(row)
     return {"ok": True, "env_locked": gw.model_locked_by_env(), "intents": rows}
 
@@ -132,6 +139,38 @@ def harness_config_set(body: ConfigBody) -> Any:
     except (ValueError, TypeError) as exc:
         return JSONResponse({"ok": False, "error": "invalid_value", "detail": str(exc)[:160]}, status_code=400)
     return {"ok": True, "setting": row, **{k: v for k, v in config_payload().items() if k == "settings"}}
+
+
+@router.get("/api/v1/harness/engines")
+def harness_engines() -> dict[str, Any]:
+    """Which game engine and tools this machine has for native play, how many sessions it may run, and the proof
+    levels reachable here. Local paths are shown (owner's machine); no secrets."""
+    import sys
+
+    from daedalus.harness import proof
+    from daedalus.harness.play_worker import engines
+    from daedalus.harness.play_worker.backend import platform_cap
+    from daedalus.harness.play_worker.manager import max_sessions
+
+    status = engines.tools_status()
+    vision: dict[str, Any] = {"provider": "", "model": "", "verified": None}
+    try:
+        from daedalus import mentor_helm
+        from daedalus.harness import perception
+
+        endpoint = mentor_helm._resolve_endpoint()
+        if endpoint:
+            provider, model = endpoint
+            row = perception.verified_for(provider, model)
+            vision = {"provider": provider, "model": model, "verified": (bool(row.get("ok")) if row else None)}
+    except Exception:
+        pass
+    return {
+        "ok": True, "platform": sys.platform, "engine": status["engine"], "tools": status["tools"],
+        "ready": status["ready"], "max_sessions": max_sessions(), "platform_cap": platform_cap(),
+        "vision": vision,
+        "proof_levels": proof.describe(native_ready=bool(status["ready"]), vision_verified=vision["verified"]),
+    }
 
 
 @router.get("/api/v1/harness/runs")
