@@ -2,232 +2,181 @@
 
 Status: **written spec, waiting for Nikolay's review.** User approved the bounded design on 2026-11-07 (manual refresh in Studio Settings, retain last good cache on error, warn when selected model is missing from cache, **no** automatic model swap). **This file does not authorize implementation** or an implementation plan.
 
-Base of this branch: `origin/main` at `c9c4f62` (includes MR125 checkpoint/stream diagnostics). **Out of scope for this spec branch:** MR126 (radar/journal), MR114, build-stream product race fix, dynamic catalog work on other branches.
+Base of this branch: `origin/main` at `c9c4f62` (includes MR125 checkpoint/stream diagnostics). **Out of scope:** MR126 product merge, MR114, build-stream race fix, implementation code.
 
 ## Problem
 
-Today, model pickers are fed from **static Python lists** (`PRESET_MODELS` in `daedalus/llm_config.py`, `CATALOG` in `daedalus/mentor_helm.py`, plus `preset_extras()`). OpenRouter and other gateways add, rename, and retire model ids faster than the repo. The owner sees ids that may no longer exist, with **no** way to refresh from the **configured** provider without editing code.
+Model pickers use **static Python lists** (`PRESET_MODELS` in `daedalus/llm_config.py`, mentor `CATALOG` in `daedalus/mentor_helm.py`, plus `preset_extras()`). Gateway ids drift faster than the repo. Local backends probe `GET /v1/models` briefly (`daedalus/local_llm.py`, `/api/v1/llm/local`). Cloud gateways have no owner-driven refresh. Studio Settings today only shows **effective** brain text via `GET /api/v1/llm/status` (`paintBrain` in `studio-workspace.js`); **brain model is not chosen or saved in Settings** — only on Connectors (`POST /admin/daedalus/llm-config`).
 
-Local backends already expose a short-lived probe (`daedalus/local_llm.py` → `GET /v1/models`, ~20s TTL) via `/api/v1/llm/local/models`. Cloud gateways have **no** equivalent refresh path. Connectors (`/admin/daedalus/llm-config`) and Studio Settings (`paintBrain` via `/api/v1/llm/status`) show **effective** provider/model but do not list live catalog data.
-
-A failed static id fails only at completion time. There is no advisory when the saved model is absent from a successful provider listing. There is no distinction in the UI between **pinned static suggestions**, **live cached catalog rows**, and the **owner's current selection**.
+There is no distinction between **live cached** provider ids, **repo pins**, and **saved selection**, and no advisory when the saved model is absent from a successful list response.
 
 ## Goals
 
-1. **Manual refresh only** — owner clicks **Refresh model catalog** in **Studio → Settings** (primary). Optional read-only mirror on Connectors may reuse the same API; Settings is canonical for discoverability.
-2. **Server-side keys only** — refresh uses `resolve_provider_api_key` / env; never accept API keys from the browser for catalog fetch.
-3. **Last good cache** — a failed, empty, or malformed refresh **must not** erase the last successful catalog snapshot for the same cache scope.
-4. **Selection integrity** — if the saved brain or mentor model is **not** in the last good cache, show a **warning**; do **not** auto-change `get_config()` / DB / mentor KV.
-5. **Honest provider matrix** — document which providers get a list adapter in v1 vs manual custom entry only; do not assume Novita/AllToken/OpenAI list APIs work until verified in implementation behind mocks + optional live smoke (smoke is **not** CI).
+1. **Manual refresh** in **Studio → Settings** (primary UX); Connectors may reuse the same read APIs later.
+2. **Settings v1 includes explicit brain model choice** — pick from cached list or type a manual id; **Save** uses the **existing** brain write API (below). **Refresh never saves.**
+3. **Server-side keys only** for catalog fetch; no API keys from the browser on refresh.
+4. **Last good cache** — failed/empty/malformed refresh does not erase `last_success` for that scope.
+5. **Selection integrity** — warn when saved model ∉ last good cache; **never** auto-swap `get_config()` / DB / mentor KV.
+6. **Honest provider matrix** — OpenRouter first with verified list contract; other cloud providers **manual_only** in v1 unless a future adapter is approved.
 
 ## Non-goals
 
-- No automatic refresh on page load, timer, or deploy.
-- No paid **completion** probing as part of catalog refresh (`POST /admin/daedalus/test-provider` stays separate and manual).
-- No change to `get_config()` / `get_brain_config()` priority chain or runtime provider defaults.
-- No new external catalog service (ToolsMaster or other); this repo owns cache + APIs.
-- No "clear cache" admin action in v1 unless added later with explicit review.
-- No broad refactor of `PRESET_MODELS`, mentor `CATALOG`, or wardrobe.
-- No arbitrary `custom` `base_url` remote discovery until an explicit secure opt-in (separate env/flag + host allowlist extension); v1 uses default endpoints only for custom provider refresh.
-- No implementation or task plan in this document.
+- No auto-refresh on load, timer, or deploy.
+- No completion probe inside refresh (`POST /admin/daedalus/test-provider` stays manual).
+- No change to `get_config()` / `get_brain_config()` **priority chain** or env/DB resolution rules.
+- No external catalog service; no implementation plan in this file.
+- No `clear cache` v1; no broad `PRESET_MODELS` / wardrobe refactor.
+- No remote list fetch for arbitrary `custom` `base_url` until a separate secure opt-in (v1: manual id only for custom).
+- Keys stay on Connectors secrets (`POST /admin/daedalus/connectors/secrets`); catalog feature does not add browser key fields.
 
-## Current surfaces (baseline)
+## Resolved defaults (no open questions)
 
-| Surface | Model list source today | Refresh |
-|---------|-------------------------|---------|
-| Studio Settings `#settings-brain` | Read-only effective provider · model (`GET /api/v1/llm/status`) | None |
-| Studio header Mentor | `GET /api/v1/daedalus/mentor` → `catalog` + datalist from presets | None |
-| Connectors #brain | `GET /admin/daedalus/llm-config` → `list_preset_models()` | None |
-| Local wardrobe / health pills | `GET /api/v1/llm/local` → `probe_all()` | Implicit 20s probe TTL |
+| Topic | Decision |
+|-------|----------|
+| Settings brain save v1 | **Required** — explicit **Save** via existing `POST /admin/daedalus/llm-config`. |
+| Refresh vs save | **Refresh** updates catalog cache only; **Save** updates brain model/provider/base_url/use_cache via `set_config` only. |
+| Draft vs live | UI holds **draft** provider/model until Save; banner shows **effective** (`get_brain_config`) vs draft when they differ. |
+| Stale 7 days | **Informational badge only** — does not refuse pick, save, or refresh. |
+| Failed last attempt | If `last_attempt.ok` is false, UI shows **catalog may be outdated** even when `last_success` is younger than 7 days. |
+| Mentor | Same `GET /api/v1/llm/catalog` for datalist/search; **curated `CATALOG` pins stay separate**; picking a cached id still requires explicit `POST /api/v1/daedalus/mentor` — **no** automatic director change on refresh. |
+| Repo pins | Always labeled **not confirmed on provider** unless the id also appears in `last_success` for the active scope. |
 
-Runtime LLM calls: `llm_client.complete()` → `get_config()`; keys from env + DB (`daedalus/llm_config.py`).
+## Existing write and read APIs (do not invent)
 
-## Decision
+Implementation **must** reuse these contracts; no parallel brain-write route.
 
-Ship a **canonical server-side catalog cache** plus **Settings-first manual refresh**. UI merges:
+| Action | Method | Path | Server handler |
+|--------|--------|------|----------------|
+| Read brain + presets + drift warnings | `GET` | `/admin/daedalus/llm-config` | `describe_effective_config()`, `list_preset_models()` — response strips `api_key` |
+| **Save brain** (master model) | `POST` | `/admin/daedalus/llm-config` | `llm_config.set_config(model, api_key, provider, base_url, use_cache)` inside `router_write_context()` in `admin_compat.set_llm_config` |
+| Read effective (Studio summary) | `GET` | `/api/v1/llm/status` | `get_brain_config()` + turn overlays |
+| Read mentor + catalog rows | `GET` | `/api/v1/daedalus/mentor` | `mentor.status()` → `llm.catalog`, choices |
+| **Save mentor director** | `POST` | `/api/v1/daedalus/mentor` | `choice_id` and/or `provider`+`model` → `mentor_helm.set_choice` (KV `adn:daedalus_mentor_choice`) — **separate** from brain `set_config` |
+| Apply preset combo | `POST` | `/admin/daedalus/llm-presets/{id}/apply` | `apply_preset` under `router_write_context()` |
+| Store secrets | `POST` | `/admin/daedalus/connectors/secrets` | unchanged |
+| Manual completion test | `POST` | `/admin/daedalus/test-provider` | **Out of scope** for catalog refresh |
 
-1. **Live cached models** (from last successful refresh for scoped provider/base URL).
-2. **Static fallback pins** (existing preset rows), clearly labeled **not verified live** when a good cache exists and the id is missing from cache.
-3. **Owner selection** (always shown), with advisory if missing from last good cache.
+**Write guard:** `set_config` calls `require_llm_write_permission()`, satisfied when the request runs inside `router_write_context()` (the llm-config handler already does this). Middleware treats `/admin/daedalus/…` POST paths as router-write paths; Studio Save must call the same endpoints Connectors uses.
 
-Unsupported providers: refresh returns honest `unsupported` / `manual_only`; owner keeps **manual model id** entry (existing custom paths). Listing never implies account entitlement or capability (tools, vision, etc.).
+**New catalog routes (v1):**
+
+| Method | Path | Writes brain DB? |
+|--------|------|------------------|
+| `GET` | `/api/v1/llm/catalog` | No — read merge for UI |
+| `POST` | `/api/v1/llm/catalog/refresh` | No — only cache file; **must not** call `set_config` or mentor setters |
+
+`POST /api/v1/llm/catalog/refresh` lives under `/api/v1/llm` prefix (middleware may enable write **context** for other llm routes); implementation must still **only** touch catalog cache storage, not `adn:daedalus_llm_config`.
 
 ## Provider adapters (v1)
 
-Implementation must treat this table as the contract. **Do not** ship a adapter until its list endpoint is verified (fixture tests + doc link in code comment).
+| Provider | Refresh | UI copy when active brain provider |
+|----------|---------|----------------------------------|
+| **openrouter** | **Supported** — `GET https://openrouter.ai/api/v1/models` ([docs](https://openrouter.ai/docs/api-reference/models/get-models)); use `openai_compat_headers()` on the server client | Normal refresh + cache labels |
+| **ollama**, **lmstudio**, **llamacpp**, **vllm**, local | **Supported** — `local_llm.probe_endpoint` | Normal refresh |
+| **omniroute** on loopback | **Supported** if `LOOPBACK_GATEWAYS` | Normal refresh |
+| **novita**, **alltoken**, **poolside**, **nvidia**, **groq**, **openai**, **gemini**, **anthropic**, **custom** | **`manual_only`** — refresh handler returns `reason: unsupported_provider`, **no outbound list HTTP** | **Must not** claim “refreshed from your provider.” Show: *Manual model id only; list refresh not available for this provider in v1.* Owner may still **Save** a typed id via `POST /admin/daedalus/llm-config`. |
 
-| Provider | List strategy v1 | Notes |
-|----------|------------------|-------|
-| **openrouter** | **Supported** — `GET https://openrouter.ai/api/v1/models` | First adapter; pagination/fields per [OpenRouter models API](https://openrouter.ai/docs/api-reference/models/get-models) at implementation time. Use existing `openai_compat_headers()` for the HTTP client if applicable. |
-| **ollama**, **lmstudio**, **llamacpp**, **vllm**, **local** | **Supported** — reuse `local_llm.probe_endpoint` / existing `/v1/models` | Not subject to cloud SSRF rules; loopback/link-local allowed per existing local rules. |
-| **omniroute** | **Supported** if `base_url` is loopback gateway in `LOOPBACK_GATEWAYS` | Same as local OpenAI-compat probe. |
-| **novita**, **alltoken**, **poolside**, **nvidia**, **groq**, **openai**, **gemini**, **anthropic**, **custom** (non-opt-in URL) | **Unsupported for auto-list v1** | Return `ok: false`, `reason: "unsupported_provider"`, `manual_entry: true`. Do **not** assume `GET /v1/models` works. Future adapters are separate approved changes. |
-| **custom** with saved `base_url` | **Blocked for remote discovery v1** | Manual model id only unless owner later enables explicit opt-in (out of v1). |
+Do **not** assume Novita/AllToken/etc. expose a working OpenAI-style `/models` until a separate adapter MR verifies with fixtures.
 
-Refresh uses **effective brain** provider + resolved base URL from `get_brain_config()` unless the request body names an allowed provider override (same provider family only; no cross-tenant URLs).
+Refresh default scope: `get_brain_config().provider` + normalized default `base_url` from `PROVIDER_DEFAULTS` / DB (not draft-only fields).
 
-## Cache identity and storage
+## Cache storage
 
-**Path:** `{DAEDALUS_DATA}/catalog/llm_models.json` (or KV key `adn:llm_model_catalog` — pick one at implementation; spec prefers **file** under data root for atomic replace).
+- **File:** `{DAEDALUS_DATA}/catalog/llm_models.json` (atomic `os.replace`).
+- **Scope key:** `{provider}:{base_url_normalized}` (scheme+host+/v1, no secrets in query).
+- **Per scope:** `last_success` + `last_attempt` (separate).
+- **Bounds:** ≤2000 models/success; file ≤2 MiB; reject oversize writes (keep prior `last_success`).
+- **Retention:** success with ≥1 id updates `last_success`; failure updates `last_attempt` only; never replace good cache with empty/error payload.
 
-**Scope key:** `{provider_normalized}:{base_url_normalized}` where `base_url_normalized` is scheme + host + path through `/v1` (no query, no userinfo). Separate scopes do not overwrite each other.
+## Catalog freshness (UI)
 
-**Schema (version 1):**
+Three independent indicators:
 
-```json
-{
-  "version": 1,
-  "scope": "openrouter:https://openrouter.ai/api/v1",
-  "provider": "openrouter",
-  "base_url": "https://openrouter.ai/api/v1",
-  "last_success": {
-    "fetched_at": "ISO-8601 UTC",
-    "source": "openrouter/models",
-    "model_count": 0,
-    "models": [{"id": "string", "name": "string", "context_length": null}]
-  },
-  "last_attempt": {
-    "at": "ISO-8601 UTC",
-    "ok": false,
-    "error": "human-safe string",
-    "http_status": null
-  }
-}
-```
+1. **`last_success.fetched_at`** — “Last refreshed …”
+2. **Age > 7 days** — informational “stale” badge only (still show list; still allow Save).
+3. **`last_attempt.ok === false`** — “Last refresh failed; list may be outdated” (even if `last_success` is recent).
 
-**Bounds:**
+None of these block Save, manual id entry, or picking a row.
 
-- `models` max **2000** entries per success (truncate with `truncated: true` if provider returns more).
-- Per-model string fields capped (e.g. id 256, name 256).
-- Full file max **2 MiB**; reject write if exceeded (keep previous `last_success`).
-- **Atomic write:** write temp file in same directory + `os.replace`.
+## Studio Settings UX (v1, canonical)
 
-**Retention policy:**
+Extend `loadSettings` / `#settings-brain` block:
 
-- On refresh **success** with **≥1** parsed model id: update `last_success`, set `last_attempt.ok: true`, clear prior attempt error.
-- On refresh **failure**, **timeout**, **empty parse**, or **invalid JSON**: update `last_attempt` only; **`last_success` unchanged** (may be absent on first-ever refresh).
-- Never write `last_success` with `model_count: 0` from a failed call.
+1. **Effective** line — from `GET /api/v1/llm/status` (unchanged semantics).
+2. **Draft** — provider select (values from `PROVIDER_DEFAULTS` keys already used on Connectors), model field, optional `base_url` when provider requires it (mirror Connectors rules), `use_cache` for anthropic only when applicable.
+3. **Refresh catalog** — `POST /api/v1/llm/catalog/refresh` using **effective** brain provider for scope (not draft unless implementation adds explicit “refresh draft provider” later — **v1: effective only**).
+4. **Browse** — cached models from `GET /api/v1/llm/catalog`:
+   - **Search/filter** (required for large OpenRouter lists): typeahead filter by id/name, min 1 character, case-insensitive; **do not** render all 2000 rows in DOM — show filtered subset (cap displayed rows e.g. 100) with “refine search” hint.
+   - **i18n EN + BG** for all new strings (`app/static/i18n.js`), including search placeholder, stale/outdated/failed refresh, manual_only, missing_from_cache warning, pin vs cached labels, Save/Refresh buttons, `aria-label` on search and listbox.
+5. **Repo pins** — separate group; hint if pin ∉ cache when `last_success` exists.
+6. **Save brain** — explicit button → `POST /admin/daedalus/llm-config` with draft fields; **empty `api_key` in body** (server keeps env/DB key). On success, reload effective line and catalog warnings.
+7. **Warnings** — `missing_from_cache` for **saved** model (effective), not draft, unless draft equals effective.
 
-## HTTP API (server-only)
+**Refresh never** calls `llm-config` POST or mentor POST.
 
-All routes require existing **owner auth** (same as Connectors / Studio admin), not public.
+## Mentor header (same release)
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| `GET` | `/api/v1/llm/catalog` | Merged view for UI: `scopes[]` summary, active scope, `last_success` metadata (no secrets), `static_pins[]`, `selection` + `selection_warnings[]`. |
-| `POST` | `/api/v1/llm/catalog/refresh` | Manual refresh. Body optional: `{ "provider": "openrouter" }`. Default provider = `get_brain_config().provider`. **No** completion call. |
+- `GET /api/v1/llm/catalog` adds rows to mentor custom datalist / search (provider+model id).
+- **`CATALOG` curated optgroups unchanged** in purpose; static pins keep “not confirmed live” hint when cache exists.
+- **`POST /api/v1/daedalus/mentor`** only on user picking mentor choice / custom dialog — refresh does not change `choice_id`.
 
-Response must never include: `api_key`, raw `Authorization`, query tokens, `owner.token`, full request URLs with secrets.
-
-**Timeouts:** catalog HTTP client **15s** total; **no** retries in v1 (owner can click refresh again).
-
-**Redaction:** log provider, scope, counts, http status — not response bodies.
-
-## SSRF and URL policy
-
-- Catalog fetch allowed only to hosts matching `PROVIDER_DEFAULTS[provider].base_url` host for that provider, or loopback for local/omniroute providers per `local_llm` / `LOOPBACK_GATEWAYS`.
-- **Block:** private IPs, link-local (except local providers), metadata IPs, and non-HTTP(S) schemes for cloud providers.
-- **Do not** follow redirects to a different host (or treat redirect as failure).
-- Local probes: use existing `local_llm` code paths; **do not** apply cloud SSRF rules in a way that blocks valid `127.0.0.1` Ollama/LM Studio URLs.
-
-`custom` provider remote list: **disabled** in v1 (manual id only).
-
-## Studio Settings UX (canonical)
-
-**Panel:** Settings (`loadSettings` in `studio-workspace.js`).
-
-Add a **Model catalog** block below or beside existing brain summary:
-
-1. Shows **effective** brain provider · model (existing).
-2. **Refresh from provider** button → `POST /api/v1/llm/catalog/refresh` (confirm not required; action is read-only on provider side except OpenRouter list quota).
-3. Status line: `Last refreshed: {time} · {count} models` or `No successful refresh yet` / `Last refresh failed: {error}` (use i18n EN + BG).
-4. **Picker aid** (v1 minimal): expandable list or datalist populated from `GET /api/v1/llm/catalog` **cached ids** for active scope; static pins in a separate group **Suggested (repo pins)** with subtitle when cache is fresh: *"Not confirmed on provider unless also listed above."*
-5. If `selection_warnings` contains `missing_from_cache`: show **warning** banner; do **not** change saved model.
-6. **Manual model id** field remains for unsupported providers and custom ids (wired to existing brain/mentor save flows when those exist in Settings; if only Connectors saves brain today, Settings refresh still stands alone and warns — **implementation** may add "copy id" only in v1 without new save path; spec allows read-only catalog in Settings + save still via Connectors/Mentor if needed — prefer single save path in implementation MR after review).
-
-**Mentor header:** May consume the same `GET /api/v1/llm/catalog` to enrich datalist; not required for spec approval but **same canonical cache**. No separate mentor cache file.
-
-**No auto-refresh** when opening Settings or switching provider.
-
-## Static pins vs live cache (presentation rules)
-
-| UI label | Meaning |
-|----------|---------|
-| **From provider (cached)** | Id present in `last_success` for active scope |
-| **Repo pin** | From `PRESET_MODELS` / mentor `CATALOG` |
-| **Your selection** | Effective saved model |
-
-Rules:
-
-- If `last_success` exists and is younger than a configured stale threshold (default **7 days**, show stale badge only — still usable), repo pins that are **not** in cache show **"Not in last provider list"** hint (not hidden).
-- Do **not** present a static pin as **"confirmed current on provider"** unless it also appears in `last_success`.
-- Deprecated provider metadata (if OpenRouter returns it) may show optional `deprecated` badge; no auto-removal from selection.
-
-## Selection and warnings
+## Selection warnings
 
 On `GET /api/v1/llm/catalog`:
 
-- `selection`: `{ provider, model, source }` from `get_brain_config()` and mentor choice (mentor warnings may be a second block).
-- If `last_success` exists and `selection.model` not in cached ids (normalize case/provider rules at implementation): append `selection_warnings: [{ "code": "missing_from_cache", "model": "...", "scope": "..." }]`.
-- **Do not** disable custom valid ids solely due to missing cache.
-- **Do not** auto-call `set_config` or mentor `set_choice`.
+- `effective_selection` from `get_brain_config()`.
+- `mentor_selection` from mentor helm (read-only).
+- `warnings[]` e.g. `missing_from_cache` when `last_success` exists and effective model id ∉ cached set (normalization rules in implementation).
+- **No** auto `set_config` / `set_choice`.
 
-Listing is **not entitlement**: warning text must state that visibility does not guarantee API access, routing, or tool support.
+**Listing ≠ entitlement** — copy in EN/BG states list visibility does not guarantee routing, tools, or account access.
 
-## Security
+## SSRF / URL policy
 
-- Secrets only server-side; browser never sends keys on refresh.
-- Catalog responses and logs: no secrets in URLs (strip query per `studio_stream_diag` patterns where relevant).
-- Auth: same session/owner token as other Studio admin APIs.
+- Fetch only to hosts allowed for the provider: `PROVIDER_DEFAULTS[provider].base_url` host, or loopback for local/omniroute via existing `local_llm` paths.
+- Block private/metadata hosts for cloud adapters; no cross-host redirects.
+- Local providers: must not break valid `127.0.0.1` probes under generic SSRF rules.
 
-## Test matrix (implementation MR; mock HTTP only in CI)
+## Test matrix (implementation; mock HTTP in CI)
 
 | Case | Expectation |
 |------|-------------|
-| OpenRouter refresh success | Mock `GET /models` fixture; `last_success` updated; `last_attempt.ok` true |
-| OpenRouter timeout / 5xx | `last_attempt` error; prior `last_success` unchanged |
-| Malformed JSON / empty data array | No `last_success` update; prior cache kept |
-| First refresh failure, no prior cache | No `last_success`; UI shows manual-only state |
-| Provider switch | Scope B refresh does not delete scope A cache |
-| Unsupported provider refresh | `unsupported_provider`; no HTTP call; manual entry still allowed |
-| Local ollama refresh | Mock loopback `/v1/models`; not blocked by cloud SSRF helper |
-| `GET /api/v1/llm/catalog` | No `api_key` in JSON |
-| Selection missing from cache | Warning present; no DB write |
-| Atomic write | Simulated partial write does not corrupt prior file |
-| UI wiring | Playwright or DOM test: Settings refresh button calls POST once (intercepted) |
-| Persist selection | After failed refresh, effective model unchanged (config read) |
+| Refresh success (OpenRouter fixture) | `last_success` updated; `last_attempt.ok` true |
+| Refresh failure | `last_attempt` set; prior `last_success` kept |
+| Settings Save (intercepted) | `POST /admin/daedalus/llm-config` with model; **no** refresh POST in same action |
+| Refresh only | `POST /api/v1/llm/catalog/refresh`; **no** `llm-config` POST |
+| `manual_only` provider | refresh returns unsupported; UI shows manual-only copy; Save still allowed with typed id |
+| `last_attempt` failed + young `last_success` | API exposes `catalog_outdated: true`; UI warning |
+| 7d+ `last_success` | `stale_hint: true`; pick/save still allowed |
+| Mentor refresh | catalog GET enriches list; mentor KV unchanged without POST |
+| Secrets | catalog GET/refresh responses omit `api_key` |
+| Settings i18n | EN/BG keys present for new UI strings |
 
-**CI:** no live OpenRouter/Novita/network list calls.
-
-**Explicitly out of test scope for this feature:** changing `get_config()` priority tests, automatic `test-provider`, completion-based discovery.
+No live provider HTTP in CI. Do not add automatic `test-provider` to refresh flow.
 
 ## Acceptance criteria
 
-1. Owner can trigger catalog refresh from **Studio Settings** without putting API keys in the browser.
-2. Successful refresh stores timestamp, provider scope, and model ids server-side; Settings shows count + time.
-3. Failed, empty, or invalid refresh leaves **last successful** cache intact for that scope.
-4. Saved model absent from last good cache shows a **visible warning**; runtime model is **unchanged**.
-5. Static repo pins and live cached rows are **visually distinct**; static-only ids are not labeled as provider-confirmed when a fresh cache exists.
-6. OpenRouter is the first implemented cloud list adapter, documented against verified API shapes.
-7. Unsupported providers return honest manual-only status; no assumed list API.
-8. No automatic refresh, no completion probe, no external catalog service.
-9. SSRF policy: default provider hosts only; local providers use existing probes; custom remote URL discovery off in v1.
-10. All CI tests use mocked HTTP; full suite remains green.
+1. Settings: **Refresh** (cache only) + **Save** (existing `llm-config` POST) + pick from cache or manual id.
+2. Refresh never persists brain or mentor selection.
+3. Failed refresh never wipes last good cache.
+4. Missing effective model from cache → visible warning; runtime unchanged until Save.
+5. Pins vs cached rows visually distinct; pins never labeled provider-confirmed without cache membership.
+6. OpenRouter list adapter verified against documented API; unsupported providers honest `manual_only`.
+7. Large list searchable (EN/BG); no requirement to paint full catalog in DOM.
+8. `get_config()` priority chain untouched; no auto completion probe in refresh.
+9. SSRF policy as above; locals still probed via existing code paths.
 
-## Open questions (resolve before implementation)
+## References (`main` @ `c9c4f62`)
 
-1. Whether Settings v1 includes **save brain model** or only catalog + warnings (Connectors remains save path short-term).
-2. Exact stale threshold for UI badge (default 7 days proposed).
-3. Whether mentor `CATALOG` pins get the same "not in cache" hint as `PRESET_MODELS`.
-
-## References (read-only baseline `main` @ `c9c4f62`)
-
-- `daedalus/llm_config.py` — `PRESET_MODELS`, `get_brain_config`, `PROVIDER_DEFAULTS`
-- `daedalus/mentor_helm.py` — `CATALOG`, `preset_extras()`
-- `daedalus/local_llm.py` — local `/v1/models` probe
+- `daedalus/llm_config.py` — `set_config`, `get_brain_config`, `PRESET_MODELS`, `PROVIDER_DEFAULTS`
+- `daedalus/llm_router_config.py` — `router_write_context`, `require_llm_write_permission`, write path prefixes
+- `daedalus/mentor_helm.py` — `CATALOG`, `set_choice`
+- `daedalus/local_llm.py` — `probe_endpoint`
+- `app/admin_compat.py` — `get_llm_config`, `set_llm_config`, `test_provider`
+- `app/harness_api.py` — `/api/v1/daedalus/mentor`
 - `app/static/studio-workspace.js` — `loadSettings`, `paintBrain`
-- `app/admin_compat.py` — `/admin/daedalus/llm-config`, `/admin/daedalus/test-provider` (manual completion; not part of refresh)
+- `app/static/studio.js` — mentor custom dialog → `setMentorCustom`
 
 ---
 
-*Self-review (spec author): Scope is docs-only; contradictions resolved — Settings is primary UX; Connectors optional mirror; unsupported providers explicit; custom URL discovery deferred; no implementation plan; no merge of MR126/MR114; cache failure never wipes last success; no auto swap; tests mock-only.*
+*Self-review: Settings Save uses existing `POST /admin/daedalus/llm-config` only; refresh uses new catalog POST without `set_config`; mentor unchanged unless user POSTs mentor; 7d stale is informational; failed last_attempt forces outdated UX; unsupported providers cannot imply live refresh; no open questions; docs-only; no MR126/MR114/race implementation.*
