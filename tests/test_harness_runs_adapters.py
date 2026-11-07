@@ -251,6 +251,62 @@ def test_guided_job_states_follow_checkpoints(runs):
     assert runs.get(k.run_id)["state"] == "stopped"
 
 
+def test_guided_milestone_complete_path_closes_the_run(runs, monkeypatch):
+    """continue_job's milestone-complete branch sets status done without starting a task: it must sync itself."""
+    from daedalus import guided_jobs as gj
+
+    async def go():
+        job = gj.GuidedJob("ms", "d", {"stages": [{"id": "a", "status": "pending"}]})
+        job.milestone_scope = "M1"
+        job.run_id = runs.open_run("guided", slug="ms")
+        await job.enter_checkpoint({"stage": 0})
+        assert runs.get(job.run_id)["state"] == "paused"
+        async with job.cond:
+            job.status = "done"
+        runs.sync_job(job, "guided")   # the exact call continue_job's branch makes
+        return job
+
+    job = run(go())
+    assert runs.get(job.run_id)["state"] == "succeeded"
+    src = open(gj.__file__, encoding="utf-8").read()
+    branch = src.split('job.status = "done"', 2)[1]
+    assert "_runs.sync_job(job, \"guided\")" in branch.split("await job.append_event", 1)[0]
+
+
+def test_a_resumed_guided_job_after_restart_is_tracked_by_a_new_linked_run(runs, monkeypatch):
+    from daedalus import guided_jobs as gj
+
+    job = gj.GuidedJob("rs", "desc", {"stages": []})
+    job.run_id = runs.open_run("guided", slug="rs", ref=f"guided:{job.id}")
+    runs.recover_orphans()                                              # the server restarted
+    seen = {}
+
+    async def fake_project(slug):
+        seen["run"] = runs.current_run_id()
+        return None                                                     # makes _run_guided_step fail fast
+
+    monkeypatch.setattr(gj.pg, "get_project", fake_project)
+    run(gj._run_guided_step(job))
+    assert job.run_id and runs.get(job.run_id)["parent_id"] and seen["run"] == job.run_id
+    assert runs.get(job.run_id)["state"] == "failed"                    # tracked to its own end, not left untracked
+
+
+def test_final_event_is_recorded_before_the_run_turns_terminal(runs):
+    """So a streaming client that sees 'terminal' has already been able to read the done/error event."""
+    from daedalus import autopilot_jobs as aj
+
+    async def go():
+        job = aj.start_autopilot("order", "x", _gen(("phase", {"n": 1}), ("error", {"message": "late boom"})))
+        await _drive(job)
+        return job
+
+    job = run(go())
+    evs = runs.events(job.run_id)
+    err_seq = next(e["seq"] for e in evs if e["type"] == "error")
+    failed_seq = next(e["seq"] for e in evs if e["type"] == "state" and e["payload"]["to"] == "failed")
+    assert err_seq < failed_seq
+
+
 def test_start_guided_opens_a_run_and_continue_reuses_it(runs, monkeypatch):
     from daedalus import guided_jobs as gj
 

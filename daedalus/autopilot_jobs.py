@@ -158,8 +158,8 @@ class AutopilotJob:
             self.updated = _now()
             self.cond.notify_all()
         self._persist(force=True)
-        _runs.sync_job(self, "autopilot")
         self._durable("done", {"files": files, "assets": assets})
+        _runs.sync_job(self, "autopilot")  # after the final event, so a streaming client never misses it
 
     async def fail(self, error: str) -> None:
         async with self.cond:
@@ -173,8 +173,8 @@ class AutopilotJob:
             self.updated = _now()
             self.cond.notify_all()
         self._persist(force=True)
-        _runs.sync_job(self, "autopilot")
         self._durable("error", {"message": error})
+        _runs.sync_job(self, "autopilot")
 
     async def mark_interrupted(self, reason: str) -> None:
         async with self.cond:
@@ -186,8 +186,8 @@ class AutopilotJob:
             self.updated = _now()
             self.cond.notify_all()
         self._persist(force=True)
-        _runs.sync_job(self, "autopilot")
         self._durable("interrupted", {"message": reason})
+        _runs.sync_job(self, "autopilot")
 
     async def pause(self) -> bool:
         async with self.cond:

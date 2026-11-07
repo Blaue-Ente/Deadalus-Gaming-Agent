@@ -411,8 +411,12 @@ async def _run_guided_step(job: GuidedJob) -> None:
     from .game_platform_guide import is_likely_game
     from . import playground_assets as pa
 
+    # A job resumed after a restart (or whose run was closed) gets a fresh linked run; otherwise a continue
+    # after a checkpoint moves the existing run back to running.
+    job.run_id = _runs.ensure_job_run(job, "guided", slug=job.slug, ref=f"guided:{job.id}",
+                                      summary=job.description)
     _runs.bind(job.run_id)
-    _runs.sync_job(job, "guided")  # a continue after a checkpoint moves the run back to running
+    _runs.sync_job(job, "guided")
     try:
         proj = await pg.get_project(job.slug)
         if not proj:
@@ -870,6 +874,7 @@ async def continue_job(
                 job.status = "done"
                 job.updated = _now()
                 job.cond.notify_all()
+            _runs.sync_job(job, "guided")  # no task follows this path, so close the ledger run here
             await job.append_event("log", {
                 "line": f"✅ Milestone {job.milestone_scope} завършен",
                 "level": "ok",

@@ -9,7 +9,14 @@ States: queued, running, paused, stopping | stopped, succeeded, failed, unknown 
 A lost or timed-out run is ``unknown``; nothing here ever invents a success.
 
 Storage: tables ``harness_runs`` and ``harness_run_events`` in the standalone ``daedalus.sqlite``
-(additive, own connection, created on first use).
+(additive, own connection, created on first use). Writes are small synchronous commits (milestone events
+only, not every stream chunk).
+
+Assumptions: Daedalus runs as ONE server process per data directory (the desktop launcher and the
+container both do). ``recover_orphans`` therefore treats every live run at startup as lost; with several
+workers sharing one data directory a starting worker would wrongly mark another's live runs ``unknown``.
+The job systems stay the executors: the ledger records, it does not cancel. A newer run only supersedes an
+older one of the SAME kind, which is what each job system actually cancels itself.
 """
 from __future__ import annotations
 
@@ -86,6 +93,7 @@ def _conn() -> sqlite3.Connection:
             conn = sqlite3.connect(path, check_same_thread=False, timeout=10)
             conn.row_factory = sqlite3.Row
             conn.execute("PRAGMA busy_timeout = 5000")
+            conn.execute("PRAGMA synchronous = NORMAL")  # this connection only; keeps per-event commits cheap
             conn.executescript(_SCHEMA)
             conn.commit()
             _conns[path] = conn
@@ -155,16 +163,21 @@ def open_run(kind: str, *, slug: str = "", ref: str = "", summary: str = "", eff
         conn.commit()
     event(run_id, "state", {"from": None, "to": state, "reason": "opened"})
     if kind in BUILD_KINDS and slug:
-        _supersede(slug, keep=run_id)
+        _supersede(slug, keep=run_id, kind=kind)
     return run_id
 
 
-def _supersede(slug: str, *, keep: str) -> None:
-    """One owner per slug: an older live build-type run is stopped when a newer one opens."""
+def _supersede(slug: str, *, keep: str, kind: str) -> None:
+    """A newer run of the same kind on a slug replaces the older live one.
+
+    Only the same kind: that is what each job system cancels itself (start_autopilot cancels autopilot,
+    start_guided cancels guided, ...). Different kinds can still run together; ``owner_of`` reports the
+    latest live one, and the ledger does not claim to have stopped a job it cannot stop.
+    """
     with _lock:
         rows = _conn().execute(
-            "SELECT id FROM harness_runs WHERE slug=? AND id<>? AND state IN ('queued','running','paused','stopping') "
-            "AND kind IN ('build','autopilot','guided','full_autopilot')", (slug, keep)).fetchall()
+            "SELECT id FROM harness_runs WHERE slug=? AND id<>? AND kind=? "
+            "AND state IN ('queued','running','paused','stopping')", (slug, keep, kind)).fetchall()
     for r in rows:
         try:
             set_state(r["id"], "stopped", reason=f"superseded by {keep}")
@@ -221,7 +234,15 @@ def event(run_id: str, type: str, payload: dict[str, Any] | None = None, *, arti
         conn = _conn()
         seq = (conn.execute("SELECT COALESCE(MAX(seq),0)+1 FROM harness_run_events WHERE run_id=?",
                             (run_id,)).fetchone()[0])
+        if seq > MAX_EVENTS_PER_RUN + 200:
+            return 0  # hard ceiling, even for state events
         if seq > MAX_EVENTS_PER_RUN and type != "state":
+            if seq == MAX_EVENTS_PER_RUN + 1:  # say once that later events were dropped
+                conn.execute("INSERT INTO harness_run_events (run_id, seq, ts, type, payload, artifact_path) "
+                             "VALUES (?,?,?,?,?,?)",
+                             (run_id, seq, _now(), "truncated",
+                              json.dumps({"reason": f"event cap {MAX_EVENTS_PER_RUN} reached"}), ""))
+                conn.commit()
             return 0
         conn.execute("INSERT INTO harness_run_events (run_id, seq, ts, type, payload, artifact_path) VALUES (?,?,?,?,?,?)",
                      (run_id, seq, _now(), type, body, artifact_path or ""))
@@ -331,6 +352,18 @@ STATUS_MAP: dict[str, dict[str, str]] = {
 }
 
 
+def ensure_job_run(job: Any, kind: str, *, slug: str, ref: str, summary: str = "") -> str:
+    """The job's live run id, opening a new linked run when it has none or its run already finished.
+
+    A guided job resumed after a restart (its old run is ``unknown``) must not run untracked.
+    """
+    run_id = getattr(job, "run_id", "") or ""
+    cur = safe(get, run_id) if run_id else None
+    if cur and cur.get("live"):
+        return run_id
+    return safe_open(kind, slug=slug, ref=ref, summary=summary, parent_id=run_id or None) or run_id
+
+
 def sync_job(job: Any, kind: str) -> None:
     """Bring the run in line with the job's own status (idempotent, exception-safe)."""
     run_id = getattr(job, "run_id", "") if not isinstance(job, dict) else job.get("run_id", "")
@@ -360,13 +393,17 @@ def on_task_done(job: Any, kind: str) -> Callable[[Any], None]:
                 safe_state(run_id, "stopped", reason="task cancelled")
             elif task.exception() is not None:
                 safe_state(run_id, "failed", error=str(task.exception())[:300])
+            else:  # the task ended but the job never reached a terminal status: never claim success
+                safe_state(run_id, "unknown", reason="task ended without a terminal job status",
+                           error="task ended without a terminal job status")
     return _cb
 
 
 # ---- gateway trace sink ------------------------------------------------------------------------------
 def _gateway_sink(ev: dict[str, Any]) -> None:
     run_id = ev.get("run_id") or ""
-    if run_id:
+    # A task spawned inside a run inherits its id; once that run is finished its calls are not its events.
+    if run_id and (safe(get, run_id) or {}).get("live"):
         keep = ("intent", "provider", "model", "source", "ok", "error_type", "budget_stopped", "latency_ms",
                 "prompt_tokens", "completion_tokens", "cost_usd", "cost_known", "image_sha256")
         safe_event(run_id, "llm", {k: ev.get(k) for k in keep})

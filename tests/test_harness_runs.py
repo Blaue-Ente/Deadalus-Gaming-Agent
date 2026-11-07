@@ -72,18 +72,76 @@ def test_large_payload_is_truncated_not_stored_whole(runs):
     assert payload["truncated"] is True and len(str(payload)) < 4200
 
 
-def test_one_owner_per_slug_for_build_kinds(runs):
+def test_a_newer_run_supersedes_only_the_same_kind_on_a_slug(runs):
+    """The ledger only claims to stop what each job system really cancels: same kind, same slug."""
     a = runs.open_run("autopilot", slug="game")
     assert runs.owner_of("game")["id"] == a
     chat = runs.open_run("chat", slug="game")                         # chat is not build-type: no effect
-    assert runs.get(a)["state"] == "running"
     other = runs.open_run("autopilot", slug="other")                  # other slug untouched
-    b = runs.open_run("guided", slug="game")                          # a newer build run takes the slug
-    assert runs.get(a)["state"] == "stopped"
+    assert runs.get(a)["state"] == "running" and runs.get(chat)["state"] == "running"
+    guided = runs.open_run("guided", slug="game")                     # different kind: both really run
+    assert runs.get(a)["state"] == "running" and runs.owner_of("game")["id"] == guided
+    b = runs.open_run("autopilot", slug="game")                       # same kind: the job system cancels the old one
+    assert runs.get(a)["state"] == "stopped" and runs.get(guided)["state"] == "running"
     assert any(e["payload"].get("reason") == f"superseded by {b}" for e in runs.events(a))
-    assert runs.owner_of("game")["id"] == b and runs.get(chat)["state"] == "running"
-    assert runs.get(other)["state"] == "running"
-    assert runs.owner_of("nothing") is None
+    assert runs.owner_of("game")["id"] == b
+    assert runs.get(other)["state"] == "running" and runs.owner_of("nothing") is None
+
+
+def test_event_cap_leaves_one_truncation_marker_and_a_hard_ceiling(runs, monkeypatch):
+    monkeypatch.setattr(runs, "MAX_EVENTS_PER_RUN", 5)
+    rid = runs.open_run("build", slug="s")                            # seq 1 (state)
+    for i in range(10):
+        runs.event(rid, "phase", {"n": i})
+    kinds = [e["type"] for e in runs.events(rid)]
+    assert kinds.count("truncated") == 1 and kinds[-1] == "truncated" and len(kinds) == 6
+    for _ in range(250):
+        runs.set_state(rid, "paused"); runs.set_state(rid, "running")
+    assert len(runs.events(rid)) <= 5 + 200                           # state events cannot grow without bound
+
+
+def test_gateway_sink_ignores_runs_that_have_finished(runs):
+    rid = runs.open_run("chat", slug="s")
+    runs._gateway_sink({"run_id": rid, "intent": "persona", "ok": True})
+    runs.set_state(rid, "succeeded")
+    runs._gateway_sink({"run_id": rid, "intent": "persona", "ok": True})   # e.g. a task spawned by the run, later
+    assert [e["type"] for e in runs.events(rid)].count("llm") == 1
+
+
+def test_ensure_job_run_opens_a_linked_run_when_the_old_one_is_finished(runs):
+    class Job:
+        run_id = ""
+        id = "j1"
+
+    job = Job()
+    first = runs.ensure_job_run(job, "guided", slug="g", ref="guided:j1", summary="d")
+    job.run_id = first
+    assert runs.ensure_job_run(job, "guided", slug="g", ref="guided:j1") == first   # live: reused
+    runs.recover_orphans()                                                          # restart: it is unknown
+    second = runs.ensure_job_run(job, "guided", slug="g", ref="guided:j1", summary="d")
+    assert second != first and runs.get(second)["parent_id"] == first and runs.get(second)["live"]
+
+
+def test_a_task_that_ends_while_the_job_is_still_running_is_unknown_not_success(runs):
+    class Job:
+        status = "running"
+        error = None
+        run_id = ""
+
+    async def go():
+        job = Job()
+        job.run_id = runs.open_run("guided", slug="s")
+
+        async def body():
+            return None  # ends normally but never set a terminal status
+        task = asyncio.create_task(body())
+        task.add_done_callback(runs.on_task_done(job, "guided"))
+        await task
+        await asyncio.sleep(0)
+        return runs.get(job.run_id)
+
+    row = asyncio.run(go())
+    assert row["state"] == "unknown" and "terminal job status" in row["error"]
 
 
 def test_recover_orphans_marks_live_runs_unknown_never_success(runs):

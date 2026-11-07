@@ -158,6 +158,11 @@ async def harness_run_events(run_id: str, after: int = 0, last_event_id: str | N
                 continue  # drain fully before deciding the stream is finished
             row = await asyncio.to_thread(runs.get, run_id)
             if row is None or not row["live"]:
+                # One more read after a short grace: a writer may record its last event just after the state flip.
+                await asyncio.sleep(0.05)
+                tail = await asyncio.to_thread(runs.events, run_id, after=cursor, limit=500)
+                if tail:
+                    continue
                 yield _sse(None, "end", {"state": row["state"] if row else "unknown", "last_seq": cursor})
                 return
             if max_seconds and asyncio.get_event_loop().time() - started >= max_seconds:
