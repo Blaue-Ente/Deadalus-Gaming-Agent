@@ -1,0 +1,185 @@
+{% extends "_shell.html" %}
+{% set page = 'skills' %}
+{% set daedalus_tab = 'skills' %}
+{% block eyebrow %}<span data-i18n="skills.eyebrow">Daedalus · Skills</span>{% endblock %}
+{% block heading %}<span data-i18n="skills.heading">Skills</span>{% endblock %}
+{% block mob_title %}Skills{% endblock %}
+{% block eyebrow_mob %}Daedalus{% endblock %}
+{% block heading_mob %}Skills{% endblock %}
+
+{% block content %}
+{% include "_daedalus_nav.html" %}
+<div class="space-y-6">
+
+  <div class="bg-purple-500/5 border border-purple-500/30 rounded-lg p-5">
+    <div class="flex items-start gap-3">
+      <div class="text-purple-300 text-xl shrink-0">🔐</div>
+      <div class="text-[13px] text-slate-300 leading-relaxed space-y-2">
+        <p data-i18n="skills.p1">
+          Skills are standing gates — which categories of code change Daedalus may propose (by path patterns). A disabled skill means no proposal in that category.
+        </p>
+        <p data-i18n-html data-i18n="skills.p2">
+          Permissions are session grants — runtime actions (web search, workers, INSERT…) with a TTL. Manage them from Studio or classic chat → Permissions.
+        </p>
+        <p class="text-[12px] text-argos-dim" data-i18n="skills.p3">
+          Nothing is applied automatically — patches wait for Approve in Proposals.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex flex-wrap items-center gap-2 text-[11px] font-mono">
+    <span class="text-argos-dim uppercase tracking-wider" data-i18n="skills.layer1">Layer 1 · Standing</span>
+    <span class="text-purple-300" data-i18n="skills.here">Skills (here)</span>
+    <span class="text-argos-dim">→</span>
+    <span class="text-argos-dim uppercase tracking-wider" data-i18n="skills.layer2">Layer 2 · Session</span>
+    <a href="/admin/daedalus?panel=permissions" class="text-emerald-300 hover:text-white underline">Permissions ↗</a>
+  </div>
+
+  <div class="space-y-2" id="skills-list">
+    <div class="text-center text-argos-dim py-12 text-sm" data-i18n="skills.loading">Loading skills…</div>
+  </div>
+
+  <!-- Hard blocks info -->
+  <div class="bg-argos-panel border border-argos-border rounded-lg p-5">
+    <h3 class="text-sm font-semibold text-white uppercase tracking-wider mb-3" data-i18n="skills.blocks">Hard blocks (always on)</h3>
+    <p class="text-[12px] text-argos-dim mb-3" data-i18n="skills.blocksHint">These paths can never be touched, even if every skill is enabled:</p>
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-1.5 font-mono text-[11px] text-red-300">
+      <div>• .env / *.key / *.pem</div>
+      <div>• secrets/</div>
+      <div>• .git/</div>
+      <div>• private_key</div>
+      <div>• self_improve.py (core)</div>
+      <div>• data/daedalus/proposals/</div>
+      <div>• data/daedalus/backups/</div>
+      <div>• data/daedalus/skills.json</div>
+    </div>
+  </div>
+  <!-- Learned skill drafts (F5) — not the self_improve path gates above -->
+  <div class="bg-argos-panel border border-argos-border rounded-lg p-5 space-y-3">
+    <h3 class="text-sm font-semibold text-white uppercase tracking-wider" data-i18n="skills.lessons">Lessons · learned SKILL.md</h3>
+    <p class="text-[12px] text-argos-dim" data-i18n="skills.lessonsHint">
+      Drafts from failure/success wait for Approve. The agent sees them in the catalog only after Approve. It cannot approve itself.
+    </p>
+    <div id="learned-pending" class="space-y-2 text-[13px] text-slate-300">
+      <div class="text-argos-dim" data-i18n="skills.loadingDrafts">Loading drafts…</div>
+    </div>
+  </div>
+</div>
+
+<script>
+function t(key, vars) {
+  return (window.DaedalusI18n && DaedalusI18n.t) ? DaedalusI18n.t(key, vars) : key;
+}
+const RISK_COLORS = {
+  low:    'border-emerald-500/40 text-emerald-300 bg-emerald-500/5',
+  medium: 'border-yellow-500/40 text-yellow-300 bg-yellow-500/5',
+  high:   'border-red-500/40 text-red-300 bg-red-500/5',
+};
+
+function escHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function loadSkills() {
+  const el = document.getElementById('skills-list');
+  let data;
+  try {
+    const r = await fetch('/admin/daedalus/skills/api', { credentials: 'same-origin' });
+    if (r.status === 303 || r.redirected) {
+      el.innerHTML = '<div class="text-center text-red-400 py-8 text-sm">' + t('skills.expired') + ' — <a href="/admin/login" class="underline">login</a>.</div>';
+      return;
+    }
+    data = await r.json();
+  } catch (e) {
+    el.innerHTML = `<div class="text-center text-red-400 py-8 text-sm">⚠ ${t('skills.loadErr')}: ${escHtml(e.message)}</div>`;
+    return;
+  }
+  const skills = data.skills || [];
+  if (!skills.length) {
+    el.innerHTML = '<div class="text-center text-argos-dim py-12 text-sm">' + t('skills.empty') + '</div>';
+    return;
+  }
+  el.innerHTML = skills.map(s => `
+    <div class="bg-argos-panel border border-argos-border rounded-lg p-4 flex items-start gap-4">
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 flex-wrap mb-1">
+          <h3 class="text-sm font-semibold text-white">${escHtml(s.label)}</h3>
+          <span class="px-2 py-0.5 rounded text-[10px] font-mono uppercase border ${RISK_COLORS[s.risk] || ''}">${escHtml(s.risk)} risk</span>
+          <span class="text-[10px] font-mono text-argos-dim">${escHtml(s.name)}</span>
+        </div>
+        <p class="text-[12px] text-slate-300">${escHtml(s.description)}</p>
+        <div class="mt-2 flex flex-wrap gap-1">
+          ${(s.patterns || []).map(p => `<code class="text-[10px] font-mono text-purple-300 bg-argos-bg border border-argos-border rounded px-1.5 py-0.5">${escHtml(p)}</code>`).join('')}
+        </div>
+      </div>
+      <button type="button" data-skill-toggle="${escHtml(s.name)}" class="skill-toggle shrink-0 relative inline-flex h-6 w-11 items-center rounded-full transition ${s.enabled ? 'bg-emerald-500' : 'bg-argos-border'}">
+        <span class="inline-block h-4 w-4 transform rounded-full bg-white transition ${s.enabled ? 'translate-x-6' : 'translate-x-1'}"></span>
+      </button>
+    </div>
+  `).join('');
+  el.querySelectorAll('[data-skill-toggle]').forEach((btn) => {
+    btn.addEventListener('click', () => toggle(btn.getAttribute('data-skill-toggle')));
+  });
+}
+
+async function toggle(name) {
+  try {
+    const r = await fetch(`/admin/daedalus/skills/${encodeURIComponent(name)}/toggle`, { method: 'POST', credentials: 'same-origin' });
+    const d = await r.json();
+    if (!d.ok) { alert(t('common.error') + ': ' + d.error); return; }
+    await loadSkills();
+  } catch (e) {
+    alert(t('common.network') + ': ' + e.message);
+  }
+}
+
+loadSkills();
+loadLessons();
+
+async function loadLessons() {
+  const el = document.getElementById('learned-pending');
+  if (!el) return;
+  try {
+    const r = await fetch('/api/v1/daedalus/learned-skills', { credentials: 'same-origin' });
+    const data = await r.json();
+    const pending = data.pending || [];
+    if (!pending.length) {
+      el.innerHTML = '<div class="text-argos-dim">' + t('skills.noDrafts') + '</div>';
+      return;
+    }
+    el.innerHTML = pending.map(it => `
+      <div class="flex items-start justify-between gap-3 border border-argos-border rounded p-3">
+        <div>
+          <div class="text-white font-semibold">${escHtml(it.name || it.id)}</div>
+          <div class="text-[12px] text-argos-dim">${escHtml(it.description || it.origin || '')}</div>
+        </div>
+        <div class="flex gap-2 shrink-0">
+          <button type="button" data-lesson-ok="${escHtml(it.id)}" class="px-2 py-1 rounded bg-emerald-600 text-white text-[11px]">${t('studio.approve')}</button>
+          <button type="button" data-lesson-no="${escHtml(it.id)}" class="px-2 py-1 rounded border border-argos-border text-[11px]">${t('studio.reject')}</button>
+        </div>
+      </div>
+    `).join('');
+    el.querySelectorAll('[data-lesson-ok]').forEach((btn) => {
+      btn.addEventListener('click', () => approveLesson(btn.getAttribute('data-lesson-ok')));
+    });
+    el.querySelectorAll('[data-lesson-no]').forEach((btn) => {
+      btn.addEventListener('click', () => rejectLesson(btn.getAttribute('data-lesson-no')));
+    });
+  } catch (e) {
+    el.innerHTML = '<div class="text-red-400">' + t('skills.lessonsFail') + '</div>';
+  }
+}
+
+async function approveLesson(id) {
+  await fetch('/api/v1/daedalus/learned-skills/' + encodeURIComponent(id) + '/approve', { method: 'POST', credentials: 'same-origin' });
+  await loadLessons();
+}
+
+async function rejectLesson(id) {
+  await fetch('/api/v1/daedalus/learned-skills/' + encodeURIComponent(id) + '/reject', { method: 'POST', credentials: 'same-origin' });
+  await loadLessons();
+}
+document.addEventListener('daedalus:langchange', () => { loadSkills(); loadLessons(); });
+</script>
+{% endblock %}

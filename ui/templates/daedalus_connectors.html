@@ -1,0 +1,434 @@
+{% extends "_shell.html" %}
+{% set page = 'daedalus_connectors' %}
+{% set daedalus_tab = 'connectors' %}
+{% block title %}Connectors — Daedalus{% endblock %}
+{% block eyebrow %}<span data-i18n="conn.eyebrow">Daedalus · outside world</span>{% endblock %}
+{% block heading %}<span data-i18n="conn.title">Connectors</span>{% endblock %}
+{% block mob_title %}Connectors{% endblock %}
+
+{% block content %}
+{% include "_daedalus_nav.html" %}
+
+<div class="space-y-6 max-w-4xl">
+  <p class="text-sm text-argos-dim" data-i18n="conn.intro" data-i18n-html>
+    One place for everything that enters and leaves Daedalus: the brain (Ollama or cloud), GitHub/GitLab, publish, MCP, mesh, lab. The same brain drives Studio, Command Center, workers, and autopilot. Values go to <code class="text-argos-accent">$DAEDALUS_DATA/secrets.env</code> — never git. The UI never shows the full key.
+  </p>
+
+  <section id="brain" class="bg-argos-panel border border-argos-accent/30 rounded-xl p-5 space-y-3">
+    <h2 class="text-sm font-semibold text-white" data-i18n="conn.brainTitle">Brain — one for all of Daedalus</h2>
+    <p class="text-xs text-argos-dim" data-i18n="conn.brainHint">
+      Ollama is the local LLM for the whole app, not only Studio. Cloud uses the keys in the section below. Switching takes effect immediately.
+    </p>
+    <div id="brain-status" class="text-sm font-mono text-argos-dim" data-i18n="conn.loading">Loading…</div>
+    <div class="flex flex-wrap gap-2">
+      <button type="button" id="btn-brain-local" onclick="brainLocal()"
+        class="px-3 py-1.5 rounded-lg text-xs bg-argos-accent/20 hover:bg-argos-accent/30 text-argos-accent2">Ollama</button>
+      <button type="button" id="btn-brain-cloud" onclick="brainCloud()"
+        class="px-3 py-1.5 rounded-lg text-xs bg-gray-800 hover:bg-gray-700 text-gray-200" data-i18n="studio.cloud">Cloud</button>
+      <button type="button" id="btn-brain-off" onclick="brainOffline()"
+        class="px-3 py-1.5 rounded-lg text-xs bg-amber-900/80 hover:bg-amber-800 text-amber-100" data-i18n="studio.offlineKit">Offline kit</button>
+    </div>
+    <div id="brain-catalog" class="grid grid-cols-1 sm:grid-cols-2 gap-2"></div>
+  </section>
+
+  <section id="rec-box" class="bg-argos-panel border border-argos-accent/30 rounded-xl p-5 space-y-2">
+    <h2 class="text-sm font-semibold text-white" data-i18n="conn.choose">What to choose</h2>
+    <p class="text-xs text-argos-dim" data-i18n="conn.loading">Loading…</p>
+  </section>
+
+  <div id="groups" class="space-y-5"></div>
+
+  <section class="bg-argos-panel border border-argos-border rounded-xl p-5">
+    <div class="flex items-center justify-between gap-3 mb-4">
+      <h2 class="text-sm font-semibold text-white" data-i18n="conn.gitTitle">GitHub · GitLab</h2>
+      <div class="flex gap-2">
+        <button type="button" onclick="testGithub()" id="btn-test-gh"
+          class="px-3 py-1.5 rounded-lg text-xs bg-indigo-700 hover:bg-indigo-600 text-white" data-i18n="conn.testGithub">Test GitHub</button>
+        <button type="button" onclick="testGitlab()" id="btn-test-gl"
+          class="px-3 py-1.5 rounded-lg text-xs bg-orange-800 hover:bg-orange-700 text-white" data-i18n="conn.testGitlab">Test GitLab</button>
+      </div>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm font-mono">
+      <div id="gh-card" class="text-argos-dim">…</div>
+      <div id="gl-card" class="text-argos-dim">…</div>
+    </div>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm mt-4">
+      <label class="block">
+        <span class="text-argos-dim text-xs" data-i18n="conn.gitProvider">Git provider on push</span>
+        <select id="pref-provider" onchange="savePrefs()"
+          class="mt-1 w-full px-3 py-2 rounded bg-gray-900 border border-gray-700 text-white text-sm">
+          <option value="auto">auto (GitLab → GitHub)</option>
+          <option value="github">GitHub only</option>
+          <option value="gitlab">GitLab only</option>
+        </select>
+      </label>
+      <label class="block">
+        <span class="text-argos-dim text-xs">Default branch</span>
+        <input id="pref-branch" value="main" onchange="savePrefs()"
+          class="mt-1 w-full px-3 py-2 rounded bg-gray-900 border border-gray-700 text-white text-sm">
+      </label>
+      <label class="flex items-center gap-2 text-gray-300">
+        <input type="checkbox" id="pref-backup-revive" checked onchange="savePrefs()">
+        Auto-backup after Revive
+      </label>
+      <label class="flex items-center gap-2 text-gray-300">
+        <input type="checkbox" id="pref-backup-publish" checked onchange="savePrefs()">
+        Auto-backup after Publish
+      </label>
+    </div>
+  </section>
+
+  <section class="bg-argos-panel border border-argos-border rounded-xl p-5">
+    <h2 class="text-sm font-semibold text-white mb-2" data-i18n="conn.mcp">MCP servers</h2>
+    <p class="text-xs text-argos-dim mb-4" data-i18n="conn.mcpHint">
+      Native tools (files, shell, git_forge, web_read) are enough to build games. Turn on MCP only for a specific gap. Server keys inherit from the fields above, or you type them here.
+    </p>
+    <div id="mcp-list" class="space-y-3"></div>
+    <details class="mt-4 text-xs text-argos-dim">
+      <summary class="cursor-pointer text-gray-300" data-i18n="conn.addMcp">Add custom MCP</summary>
+      <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <input id="mcp-name" placeholder="name (github-extra)" class="px-3 py-2 rounded bg-gray-900 border border-gray-700 text-white">
+        <input id="mcp-cmd" placeholder="command (npx)" class="px-3 py-2 rounded bg-gray-900 border border-gray-700 text-white">
+        <input id="mcp-args" placeholder="args, space-separated" class="px-3 py-2 rounded bg-gray-900 border border-gray-700 text-white sm:col-span-2">
+        <input id="mcp-url" placeholder="or HTTP url" class="px-3 py-2 rounded bg-gray-900 border border-gray-700 text-white sm:col-span-2">
+        <button type="button" onclick="addCustomMcp()" class="px-3 py-2 rounded bg-gray-800 hover:bg-gray-700 text-white" data-i18n="conn.save">Save</button>
+      </div>
+    </details>
+  </section>
+
+  <section class="bg-argos-panel border border-emerald-700/40 rounded-xl p-5">
+    <h2 class="text-sm font-semibold text-argos-accent2 mb-2" data-i18n="conn.durability">App durability</h2>
+    <p class="text-xs text-argos-dim mb-4" data-i18n="conn.durabilityHint">How to keep projects alive after a redeploy:</p>
+    <div id="storage-card" class="text-sm font-mono text-argos-dim mb-4">…</div>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4" id="dur-summary"></div>
+    <div id="dur-projects" class="space-y-2 max-h-64 overflow-auto text-xs"></div>
+    <div class="mt-4 p-3 rounded-lg bg-emerald-950/30 border border-emerald-800/40 text-xs text-emerald-200/80 space-y-1">
+      <p data-i18n="conn.pubApps"><strong>Publish to /apps/</strong> — most reliable on this machine</p>
+      <p data-i18n="conn.pubGit"><strong>Push to GitLab/GitHub</strong> — the code also lives remote (PR/MR from the project menu)</p>
+      <p data-i18n="conn.pubHttps"><strong>Netlify / Pages</strong> — public https from Studio → Live</p>
+    </div>
+  </section>
+
+  <div class="flex gap-3">
+    <a href="/admin/daedalus/playground"
+      class="px-4 py-2 rounded-lg text-sm bg-emerald-700 hover:bg-emerald-600 text-white">→ Playground</a>
+    <a href="/apps/" target="_blank"
+      class="px-4 py-2 rounded-lg text-sm bg-gray-800 hover:bg-gray-700 text-gray-300">↗ /apps/</a>
+  </div>
+</div>
+
+<script>
+function t(key, vars) {
+  return (window.DaedalusI18n && DaedalusI18n.t) ? DaedalusI18n.t(key, vars) : key;
+}
+function loc(key, fallback) {
+  return (window.DaedalusI18n && DaedalusI18n.loc) ? DaedalusI18n.loc(key, fallback) : (fallback || key);
+}
+async function api(url, opts) {
+  const r = await fetch(url, Object.assign({headers: {'Content-Type': 'application/json'}}, opts || {}));
+  return r.json();
+}
+function $(id) { return document.getElementById(id); }
+function esc(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function statusBadge(ok, label) {
+  const cls = ok ? 'text-emerald-400' : 'text-red-400';
+  const icon = ok ? '✅' : '❌';
+  return `<span class="${cls}">${icon} ${esc(label)}</span>`;
+}
+
+function recLevel(level) {
+  if (level === 'high') return 'border-red-700/50 text-red-200';
+  if (level === 'medium') return 'border-amber-700/50 text-amber-200';
+  if (level === 'ok') return 'border-emerald-700/50 text-emerald-200';
+  return 'border-gray-700 text-gray-300';
+}
+
+async function loadOverview() {
+  const d = await api('/admin/daedalus/connectors/overview');
+  const recs = d.recommendations || [];
+  $('rec-box').innerHTML = `
+    <h2 class="text-sm font-semibold text-white mb-2">${t('conn.chooseNow')}</h2>
+    ${recs.map(r => `
+      <div class="p-3 rounded-lg border ${recLevel(r.level)} bg-gray-950/40 text-sm">
+        <div class="font-medium">${esc(loc('conn.rec.' + r.id + '.title', r.title))}</div>
+        <p class="text-xs text-argos-dim mt-1">${esc(loc('conn.rec.' + r.id + '.body', r.body))}</p>
+      </div>`).join('')}
+    <p class="text-[11px] text-gray-500 mt-2">${t('conn.file')}: <code>${esc(d.secrets_file || '')}</code></p>`;
+
+  renderBrain(d);
+  $('groups').innerHTML = (d.groups || []).filter(g => g.id !== 'mcp').map(g => {
+    const main = (g.fields || []).filter(f => !f.advanced);
+    const adv = (g.fields || []).filter(f => f.advanced);
+    return `
+    <section class="bg-argos-panel border border-argos-border rounded-xl p-5" id="grp-${esc(g.id)}">
+      <h2 class="text-sm font-semibold text-white">${esc(loc('conn.group.' + g.id + '.title', g.title))}</h2>
+      <p class="text-xs text-argos-dim mt-1">${esc(loc('conn.group.' + g.id + '.blurb', g.blurb))}</p>
+      <p class="text-xs text-argos-accent2/80 mt-2">${esc(loc('conn.group.' + g.id + '.pick', g.pick))}</p>
+      <div class="mt-4 space-y-3">
+        ${main.map(f => fieldRow(f)).join('')}
+      </div>
+      ${adv.length ? `
+      <details class="mt-3">
+        <summary class="cursor-pointer text-xs text-gray-400">${t('conn.advanced')} (${adv.length})</summary>
+        <div class="mt-3 space-y-3">${adv.map(f => fieldRow(f)).join('')}</div>
+      </details>` : ''}
+    </section>`;
+  }).join('');
+
+  renderGit(d);
+  renderMcp(d);
+  const prefs = d.prefs || {};
+  $('pref-provider').value = prefs.preferred_git_provider || 'auto';
+  $('pref-branch').value = prefs.default_github_branch || 'main';
+  $('pref-backup-revive').checked = prefs.auto_backup_on_revive !== false;
+  $('pref-backup-publish').checked = prefs.auto_backup_on_publish !== false;
+  const st = d.storage || {};
+  $('storage-card').innerHTML = `
+    ${statusBadge(st.configured, st.configured ? 'Object Storage on' : 'Object Storage missing')}
+    <div class="text-xs text-gray-500 mt-2">${esc(st.hint || '')}</div>`;
+}
+
+function fieldRow(f) {
+  const rec = f.recommend ? `<span class="text-[10px] text-argos-accent ml-1">${t('conn.recommended')}</span>` : '';
+  const src = f.set ? `<span class="text-[10px] text-gray-500">${esc(f.source)} · ${esc(f.mask)}</span>` : `<span class="text-[10px] text-gray-600">${t('conn.empty')}</span>`;
+  const docs = f.docs ? `<a href="${esc(f.docs)}" target="_blank" class="text-indigo-400 underline">docs</a>` : '';
+  const type = f.secret ? 'password' : 'text';
+  return `
+    <div class="border border-gray-800 rounded-lg p-3">
+      <div class="flex items-center justify-between gap-2">
+        <label class="text-sm text-white" for="f-${esc(f.key)}">${esc(f.label)}${rec}</label>
+        ${src}
+      </div>
+      <p class="text-[11px] text-argos-dim mt-1">${esc(f.why)} ${docs}</p>
+      <div class="mt-2 flex gap-2">
+        <input id="f-${esc(f.key)}" data-key="${esc(f.key)}" type="${type}" autocomplete="off"
+          placeholder="${esc(f.placeholder || (f.set ? t('conn.leaveBlank') : ''))}"
+          class="flex-1 px-3 py-1.5 rounded bg-gray-900 border border-gray-700 text-white text-sm">
+        <button type="button" class="px-3 py-1.5 rounded bg-emerald-800 hover:bg-emerald-700 text-white text-xs"
+          onclick="saveKey('${esc(f.key)}')">${t('conn.save')}</button>
+        ${f.set ? `<button type="button" class="px-3 py-1.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs" onclick="clearKey('${esc(f.key)}')">${t('conn.clear')}</button>` : ''}
+      </div>
+    </div>`;
+}
+
+async function saveKey(key) {
+  const el = document.getElementById('f-' + key);
+  const val = (el && el.value || '').trim();
+  if (!val) { alert(t('conn.leaveBlank')); return; }
+  const r = await api('/admin/daedalus/connectors/secrets', {
+    method: 'POST', body: JSON.stringify({ secrets: { [key]: val } }),
+  });
+  if (el) el.value = '';
+  if (!r.ok) { alert(r.error || t('common.error')); return; }
+  await loadOverview();
+}
+
+async function clearKey(key) {
+  if (!confirm('Remove ' + key + ' from secrets.env?')) return;
+  await api('/admin/daedalus/connectors/secrets', {
+    method: 'POST', body: JSON.stringify({ clear: [key] }),
+  });
+  await loadOverview();
+}
+
+function renderGit(d) {
+  const gh = d.github || {};
+  const gl = d.gitlab || {};
+  $('gh-card').innerHTML = `
+    <div class="space-y-1">
+      ${statusBadge(gh.ok, gh.configured ? t('conn.configured') : t('conn.notConfigured'))}
+      ${gh.login ? `<div>Login: <span class="text-white">${esc(gh.login)}</span></div>` : ''}
+      ${gh.source && gh.source !== 'none' ? `<div>Source: <span class="text-indigo-300">${esc(gh.source)}</span></div>` : ''}
+      ${gh.can_push === false ? '<div class="text-amber-400 font-medium">⚠ No push/PR rights — classic PAT with repo scope</div>' : (gh.ok ? '<div class="text-emerald-400">✅ Push + PR OK</div>' : '')}
+      ${gh.error ? `<div class="text-red-400">${esc(gh.error)}</div>` : ''}
+      ${gh.hint ? `<div class="text-gray-500 text-xs mt-2 whitespace-pre-line">${esc(gh.hint)}</div>` : ''}
+    </div>`;
+  $('gl-card').innerHTML = `
+    <div class="space-y-1">
+      ${statusBadge(gl.ok, gl.configured ? t('conn.configured') : t('conn.notConfigured'))}
+      ${gl.username ? `<div>User: <span class="text-white">${esc(gl.username)}</span></div>` : ''}
+      ${gl.host ? `<div>Host: <span class="text-gray-400">${esc(gl.host)}</span></div>` : ''}
+      ${gl.ok ? '<div class="text-emerald-400">✅ Clone + push + MR</div>' : ''}
+      ${gl.error ? `<div class="text-red-400">${esc(gl.error)}</div>` : ''}
+      ${gl.hint ? `<div class="text-gray-500 text-xs mt-2">${esc(gl.hint)}</div>` : ''}
+    </div>`;
+}
+
+function renderMcp(d) {
+  const addons = (d.addons || []).filter(a => a.kind === 'mcp' || a.id === 'mirofish');
+  $('mcp-list').innerHTML = addons.map(a => `
+    <div class="border border-gray-800 rounded-lg p-3 text-sm">
+      <div class="flex items-center justify-between gap-2">
+        <div>
+          <span class="text-white">${esc(a.label)}</span>
+          ${a.enabled && a.kind === 'mcp' ? `<span class="text-[10px] text-emerald-400 ml-2">${t('conn.enabled')}</span>` : ''}
+        </div>
+        ${a.kind === 'mcp' ? `<button type="button" class="px-2 py-1 rounded text-xs ${a.enabled ? 'bg-gray-800 text-gray-300' : 'bg-emerald-800 text-white'}"
+          onclick="toggleMcp('${esc(a.id)}', ${a.enabled ? 'false' : 'true'})">${a.enabled ? t('conn.disable') : t('conn.enable')}</button>` : ''}
+      </div>
+      <p class="text-[11px] text-argos-dim mt-1">${esc(a.blurb)}</p>
+      ${a.recommend ? `<p class="text-[11px] text-cyan-200/80 mt-1">${esc(a.recommend)}</p>` : ''}
+    </div>`).join('') || '<p class="text-gray-500 text-sm">' + t('conn.noMcp') + '</p>';
+}
+
+async function toggleMcp(id, on) {
+  const r = await api('/admin/daedalus/connectors/mcp', {
+    method: 'POST', body: JSON.stringify({ id, enabled: on }),
+  });
+  if (!r.ok && r.error) alert(r.error);
+  await loadOverview();
+}
+
+async function addCustomMcp() {
+  const name = ($('mcp-name').value || '').trim();
+  const command = ($('mcp-cmd').value || '').trim();
+  const args = ($('mcp-args').value || '').trim().split(/\s+/).filter(Boolean);
+  const url = ($('mcp-url').value || '').trim();
+  if (!name || (!command && !url)) { alert('Name + command or url'); return; }
+  const r = await api('/admin/daedalus/connectors/mcp', {
+    method: 'POST', body: JSON.stringify({ custom: true, id: name, command, args, url }),
+  });
+  if (!r.ok) { alert(r.error || t('common.error')); return; }
+  await loadOverview();
+}
+
+async function testGithub() {
+  const btn = $('btn-test-gh');
+  btn.disabled = true; btn.textContent = '⏳…';
+  await api('/admin/daedalus/connectors/test-github', {method:'POST'});
+  await loadOverview();
+  btn.disabled = false; btn.textContent = t('conn.testGithub');
+}
+async function testGitlab() {
+  const btn = $('btn-test-gl');
+  btn.disabled = true; btn.textContent = '⏳…';
+  await api('/admin/daedalus/connectors/test-gitlab', {method:'POST'});
+  await loadOverview();
+  btn.disabled = false; btn.textContent = t('conn.testGitlab');
+}
+async function savePrefs() {
+  await api('/admin/daedalus/connectors/config', {method:'POST', body: JSON.stringify({
+    preferred_git_provider: $('pref-provider').value,
+    default_github_branch: $('pref-branch').value.trim() || 'main',
+    auto_backup_on_revive: $('pref-backup-revive').checked,
+    auto_backup_on_publish: $('pref-backup-publish').checked,
+  })});
+}
+async function loadDurability() {
+  const d = await api('/admin/daedalus/playground/api/durability/status');
+  if (!d.ok) return;
+  const s = d.summary || {};
+  $('dur-summary').innerHTML = `
+    <div class="p-3 rounded bg-gray-900 border border-gray-800 text-center">
+      <div class="text-2xl font-bold text-white">${s.total || 0}</div>
+      <div class="text-[10px] text-gray-500">${t('conn.projects')}</div>
+    </div>
+    <div class="p-3 rounded bg-gray-900 border border-emerald-800/40 text-center">
+      <div class="text-2xl font-bold text-emerald-400">${s.published || 0}</div>
+      <div class="text-[10px] text-gray-500">${t('conn.published')}</div>
+    </div>
+    <div class="p-3 rounded bg-gray-900 border border-amber-800/40 text-center">
+      <div class="text-2xl font-bold text-amber-400">${s.empty_workspace || 0}</div>
+      <div class="text-[10px] text-gray-500">${t('conn.emptyWs')}</div>
+    </div>`;
+  $('dur-projects').innerHTML = (d.projects || []).map(p => `
+    <div class="flex items-center justify-between p-2 rounded bg-gray-900 border border-gray-800">
+      <span class="text-gray-300 truncate">${esc(p.name || p.slug)}</span>
+      <span class="shrink-0 flex gap-2">
+        ${p.published ? '<span class="text-emerald-400">📦 pub</span>' : ''}
+        ${p.workspace_empty ? '<span class="text-red-400">⚠ empty</span>' : `<span class="text-gray-500">${p.workspace_files}f</span>`}
+      </span>
+    </div>`).join('') || '<p class="text-gray-500">' + t('conn.noProjects') + '</p>';
+}
+loadOverview();
+loadDurability();
+if (location.hash === '#brain' || location.hash === '#llm') {
+  document.getElementById('brain')?.scrollIntoView({behavior: 'smooth', block: 'start'});
+}
+document.addEventListener('daedalus:langchange', () => { loadOverview(); loadDurability(); });
+
+function renderBrain(d) {
+  const b = d.brain || {};
+  const eff = b.effective || {};
+  const ol = b.ollama || {};
+  const w = b.wardrobe || {};
+  const prof = b.profile || {};
+  const local = b.mode === 'local';
+  const ollamaOk = !!ol.ok;
+  const workers = b.workers || {};
+  const inherit = Object.values(workers).some(s => s && s.source === 'master_local');
+  const lines = [];
+  lines.push(`<div class="flex flex-wrap gap-x-4 gap-y-1 text-xs">`);
+  lines.push(`<span>${local ? '<span class="text-argos-accent2">' + t('conn.brainLocal') + '</span>' : '<span class="text-amber-200">' + t('conn.brainCloud') + '</span>'}</span>`);
+  lines.push(`<span class="text-white">${esc(eff.provider || '?')} · ${esc(eff.model || '?')}</span>`);
+  lines.push(`<span class="text-gray-500">${esc(eff.source || '')}</span>`);
+  lines.push(`</div>`);
+  const olLabel = ollamaOk ? t('conn.ollamaUp') : (ol.bin ? t('conn.ollamaDown') : t('conn.ollamaMissing'));
+  lines.push(`<div class="text-xs mt-2">${statusBadge(ollamaOk, olLabel)}</div>`);
+  if (!ol.bin) {
+    lines.push(`<p class="text-[11px] text-argos-dim mt-1">${t('conn.ollamaInstall')} <a href="https://ollama.com/download" target="_blank" class="text-indigo-400 underline">ollama.com/download</a></p>`);
+  }
+  if (eff.warning) lines.push(`<p class="text-[11px] text-amber-300 mt-1">${esc(eff.warning)}</p>`);
+  if (prof.class) lines.push(`<p class="text-[11px] text-gray-500 mt-1">${t('conn.machine')}: ${esc(prof.class)} · RAM ${esc(prof.ram_gb || '?')}G${prof.note ? ' · ' + esc(prof.note) : ''}</p>`);
+  if (local && inherit) {
+    lines.push(`<p class="text-[11px] text-argos-accent2/80 mt-1">${t('conn.workersFollow')}</p>`);
+  }
+  const slotBits = Object.keys(workers).slice(0, 4).map(k => {
+    const s = workers[k] || {};
+    return `${esc(k)}=${esc(s.provider || '?')}`;
+  });
+  if (slotBits.length) {
+    lines.push(`<p class="text-[11px] text-gray-500 mt-1">${t('conn.slots')}: ${slotBits.join(' · ')}</p>`);
+  }
+  $('brain-status').innerHTML = lines.join('');
+  $('btn-brain-off').textContent = w.offline ? t('conn.offlineOn') : t('studio.offlineKit');
+
+  const box = $('brain-catalog');
+  const catalog = b.catalog || [];
+  box.innerHTML = catalog.map(row => {
+    const mark = row.installed ? t('conn.locally') : (row.fits ? t('conn.fits') : t('conn.heavy'));
+    const rec = row.recommended ? ' <span class="text-argos-accent2">' + t('conn.recommended') + '</span>' : '';
+    const on = w.active && row.ollama && String(w.active).indexOf(row.ollama) >= 0;
+    return `<button type="button" class="text-left border ${on ? 'border-argos-accent' : 'border-gray-800'} rounded-lg p-3 hover:border-argos-accent/60"
+      onclick='brainActivate(${JSON.stringify(row.id)}, ${row.installed ? 'true' : 'false'}, ${JSON.stringify(row.ollama || '')}, ${ol.bin ? 'true' : 'false'})'>
+      <div class="text-sm text-white">${esc(row.label || row.id)}${rec}</div>
+      <div class="text-[11px] text-argos-dim mt-1">${esc(row.role)} · ${esc(row.ollama)} · ${esc(mark)}</div>
+      <div class="text-[11px] text-gray-500 mt-1">${esc(row.blurb || '')}</div>
+    </button>`;
+  }).join('') || '<p class="text-xs text-argos-dim">' + t('conn.noCatalog') + '</p>';
+  if (!local) {
+    box.insertAdjacentHTML('afterbegin',
+      '<p class="text-xs text-argos-dim sm:col-span-2">' + t('conn.cloudHint') + '</p>');
+  }
+}
+
+async function brainLocal() {
+  const r = await api('/api/v1/llm/wardrobe/local', {method:'POST', body: JSON.stringify({backend:'ollama'})});
+  if (r && r.ok === false && r.error) alert(r.error);
+  await loadOverview();
+}
+async function brainCloud() {
+  await api('/api/v1/llm/wardrobe/cloud', {method:'POST'});
+  await loadOverview();
+}
+async function brainOffline() {
+  const on = ($('btn-brain-off').textContent || '').indexOf(t('conn.offlineOn')) >= 0 || ($('btn-brain-off').textContent || '').indexOf('ВКЛ') >= 0;
+  await api('/api/v1/daedalus/offline', {method:'POST', body: JSON.stringify({offline: !on})});
+  await loadOverview();
+}
+async function brainActivate(id, installed, ollamaName, haveBin) {
+  if (!installed && haveBin) {
+    if (!confirm(t('conn.pullConfirm').replace('{model}', ollamaName))) return;
+    $('brain-status').innerHTML = '<span class="text-argos-accent2">' + t('conn.pulling') + ' ' + esc(ollamaName) + '…</span>';
+    await api('/api/v1/llm/wardrobe/pull', {method:'POST', body: JSON.stringify({id, confirm:true})});
+  } else if (!installed && !haveBin) {
+    alert(t('conn.installFirst') + '\nollama pull ' + ollamaName);
+    return;
+  }
+  await api('/api/v1/llm/wardrobe/activate', {method:'POST', body: JSON.stringify({id})});
+  await loadOverview();
+}
+</script>
+{% endblock %}

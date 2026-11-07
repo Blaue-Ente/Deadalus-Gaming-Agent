@@ -1,0 +1,428 @@
+"""Live publish — one button: play here, then a public https link.
+
+Practical order (auto):
+  1. Always materialize ``/apps/{slug}/`` (this machine, instant).
+  2. Netlify with ``NETLIFY_AUTH_TOKEN`` — durable ``*.netlify.app`` in seconds.
+  3. GitLab Pages with ``GITLAB_TOKEN`` — durable ``*.gitlab.io`` (CI ~1–2 min).
+  4. Netlify anonymous — instant URL, claim within 1 hour or it vanishes.
+  5. Local only if offline or no npx/git host.
+
+Static / vite / expo-web only. FastAPI/Unity stay local (or Git push).
+"""
+from __future__ import annotations
+
+import json
+import logging
+import os
+import re
+import shutil
+import time
+from pathlib import Path
+from typing import Any, Awaitable, Callable
+
+from .capability_registry import allows_static_live_publish
+
+log = logging.getLogger(__name__)
+PAGES_CI = """pages:
+  stage: deploy
+  script:
+    - test -f public/index.html
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+"""
+
+
+def _data_file() -> Path:
+    from .paths import data_root
+    path = data_root() / "live_sites.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def load_sites() -> dict[str, Any]:
+    path = _data_file()
+    try:
+        if path.exists():
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if isinstance(data, dict):
+                sites = data.get("sites")
+                if isinstance(sites, dict):
+                    return data
+    except Exception:
+        pass
+    return {"sites": {}}
+
+
+def save_sites(data: dict[str, Any]) -> None:
+    _data_file().write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+
+
+def record_site(slug: str, row: dict[str, Any]) -> dict[str, Any]:
+    data = load_sites()
+    sites = data.setdefault("sites", {})
+    prev = sites.get(slug) or {}
+    merged = {**prev, **row, "slug": slug, "updated_at": time.time()}
+    sites[slug] = merged
+    save_sites(data)
+    return merged
+
+
+def get_site(slug: str) -> dict[str, Any] | None:
+    row = (load_sites().get("sites") or {}).get(slug)
+    return dict(row) if isinstance(row, dict) else None
+
+
+def netlify_token() -> str:
+    return (
+        os.environ.get("NETLIFY_AUTH_TOKEN")
+        or os.environ.get("NETLIFY_TOKEN")
+        or ""
+    ).strip()
+
+
+def _npx() -> str | None:
+    name = "npx.cmd" if os.name == "nt" else "npx"
+    return shutil.which(name) or shutil.which("npx")
+
+
+def parse_json_blob(text: str) -> dict[str, Any]:
+    """Netlify CLI prints logs then a JSON object — take the last object."""
+    start = text.rfind("{")
+    end = text.rfind("}")
+    if start < 0 or end <= start:
+        return {}
+    try:
+        data = json.loads(text[start : end + 1])
+    except json.JSONDecodeError:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def extract_https(text: str) -> str | None:
+    found = re.findall(r"https://[a-zA-Z0-9._/-]+\.(?:netlify\.app|gitlab\.io)[a-zA-Z0-9._/-]*", text or "")
+    return found[-1].rstrip(").,") if found else None
+
+
+def pages_url(namespace: str, project: str, host: str = "gitlab.com") -> str:
+    ns = (namespace or "").strip().split("/")[-1].lower()
+    proj = (project or "").strip().split("/")[-1]
+    if host and host not in ("gitlab.com", "www.gitlab.com"):
+        # self-managed: https://pages.example.com/ns/proj
+        return f"https://{ns}.{host}/{proj}/"
+    return f"https://{ns}.gitlab.io/{proj}/"
+
+
+def pick_chain(requested: str = "auto") -> list[str]:
+    from .offline import enabled as offline_on
+
+    want = (requested or "auto").strip().lower()
+    if offline_on():
+        return ["local"]
+    if want not in ("", "auto"):
+        return [want]
+    chain: list[str] = []
+    if _npx() and netlify_token():
+        chain.append("netlify")
+    try:
+        from .playground_gitlab import is_configured
+        if is_configured():
+            chain.append("gitlab_pages")
+    except Exception:
+        pass
+    if _npx() and "netlify_anon" not in chain:
+        chain.append("netlify_anon")
+    return chain
+
+
+def capabilities() -> dict[str, Any]:
+    from .offline import enabled as offline_on
+    from .playground_git_push import remote_status
+
+    git = remote_status()
+    return {
+        "ok": True,
+        "offline": offline_on(),
+        "npx": bool(_npx()),
+        "netlify_token": bool(netlify_token()),
+        "gitlab": git.get("gitlab") or {},
+        "chain": pick_chain("auto"),
+        "sites": list((load_sites().get("sites") or {}).values()),
+    }
+
+
+async def ensure_local(slug: str) -> dict[str, Any]:
+    """Build (if vite/expo) and materialize /apps/{slug}/."""
+    from . import playground as pg
+    from . import playground_publish as pub
+
+    proj = await pg.get_project(slug)
+    if not proj:
+        return {"ok": False, "error": f"project '{slug}' not found"}
+    kind = (proj.get("kind") or "static").lower()
+    if not allows_static_live_publish(kind):
+        return {
+            "ok": False,
+            "static": False,
+            "kind": kind,
+            "error": (
+                f"{kind} is not a static live-publish target. "
+                "Godot/Expo/Capacitor need a hashed immutable artifact; "
+                "web preview does not replace device_smoke."
+            ),
+        }
+    published = await pub.publish(slug, icon="🎮")
+    dest = pub.app_dir(slug)
+    index = dest / "index.html"
+    if not index.is_file():
+        src = pg.project_dir(slug) / "index.html"
+        if src.is_file():
+            dest.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, index)
+    if not index.is_file():
+        return {
+            "ok": False,
+            "error": "няма index.html след publish — играта не е static",
+            "published": published,
+        }
+    return {
+        "ok": True,
+        "static": True,
+        "kind": published.get("kind") or kind,
+        "dir": dest,
+        "local_url": f"/apps/{slug}/",
+        "published": published,
+    }
+
+
+def _stage_pages(static_dir: Path, slug: str) -> Path:
+    from .paths import data_root
+
+    dest = data_root() / "live_export" / slug
+    if dest.exists():
+        shutil.rmtree(dest, ignore_errors=True)
+    public = dest / "public"
+    shutil.copytree(static_dir, public, ignore=shutil.ignore_patterns(".git", "node_modules"))
+    (dest / ".gitlab-ci.yml").write_text(PAGES_CI, encoding="utf-8")
+    (dest / "README.md").write_text(
+        f"# {slug}\n\nPublished by Дедал. GitLab Pages serves ``public/``.\n",
+        encoding="utf-8",
+    )
+    return dest
+
+
+async def _run(args: list[str], *, cwd: Path | None = None, timeout: int = 180,
+               extra_env: dict[str, str] | None = None) -> tuple[int, str]:
+    import asyncio
+
+    env = dict(os.environ)
+    if extra_env:
+        env.update(extra_env)
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    env["CI"] = "1"
+    proc = await asyncio.create_subprocess_exec(
+        *args,
+        cwd=str(cwd) if cwd else None,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.STDOUT,
+        env=env,
+    )
+    try:
+        raw, _ = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+    except asyncio.TimeoutError:
+        proc.kill()
+        return 124, f"timeout after {timeout}s"
+    text = (raw or b"").decode("utf-8", errors="replace")
+    tok = netlify_token()
+    if tok:
+        text = text.replace(tok, "***")
+    return proc.returncode or 0, text
+
+
+async def deploy_netlify(static_dir: Path, slug: str, *, anonymous: bool = False) -> dict[str, Any]:
+    npx = _npx()
+    if not npx:
+        raise RuntimeError("npx липсва — инсталирай Node.js, за да качваме на Netlify")
+    args = [npx, "-y", "netlify-cli", "deploy", "--dir", str(static_dir), "--json"]
+    extra: dict[str, str] = {}
+    prev = get_site(slug) or {}
+    if anonymous:
+        args.append("--allow-anonymous")
+    else:
+        token = netlify_token()
+        if not token:
+            raise RuntimeError("NETLIFY_AUTH_TOKEN липсва")
+        extra["NETLIFY_AUTH_TOKEN"] = token
+        args.extend(["--prod", "--auth", token])
+        site_id = prev.get("site_id") if prev.get("backend") in ("netlify",) else None
+        if site_id:
+            args.extend(["--site", str(site_id)])
+    code, out = await _run(args, timeout=180, extra_env=extra)
+    blob = parse_json_blob(out)
+    url = (
+        blob.get("url")
+        or blob.get("ssl_url")
+        or blob.get("deploy_url")
+        or extract_https(out)
+    )
+    if code != 0 and not url:
+        raise RuntimeError(f"netlify deploy failed: {out[-500:]}")
+    if not url:
+        raise RuntimeError(f"netlify не върна URL: {out[-400:]}")
+    return {
+        "ok": True,
+        "backend": "netlify_anon" if anonymous else "netlify",
+        "url": url,
+        "site_id": blob.get("site_id") or prev.get("site_id"),
+        "expires": "1h claim" if anonymous else None,
+        "log_tail": out[-240:],
+    }
+
+
+async def deploy_gitlab_pages(static_dir: Path, slug: str) -> dict[str, Any]:
+    from . import playground_gitlab as gl
+
+    if not gl.is_configured():
+        raise RuntimeError(gl.gitlab_error_hint("GITLAB_TOKEN not configured"))
+    stage = _stage_pages(static_dir, slug)
+    ns = gl.default_namespace()
+    if not ns:
+        ns = await _gitlab_username()
+    project_path = f"daedalus-{slug}"
+    full_name = f"{ns}/{project_path}" if ns else project_path
+    created = None
+    try:
+        created = await gl.create_project(
+            project_path,
+            private=False,
+            description=f"Дедал live / {slug}",
+            namespace=ns,
+        )
+        full_name = created.get("full_name") or full_name
+    except Exception as extra:
+        log.info("live: gitlab project may already exist (%s)", extra)
+
+    repo_url = f"https://{gl.gitlab_host()}/{full_name}.git"
+    auth = gl._auth_url(repo_url)
+    steps = [
+        ["git", "init", "-q"],
+        ["git", "-c", "user.email=daedalus@local", "-c", "user.name=Дедал", "checkout", "-B", "main"],
+        ["git", "add", "-A"],
+        ["git", "-c", "user.email=daedalus@local", "-c", "user.name=Дедал",
+         "commit", "-q", "-m", f"Дедал live {slug}"],
+    ]
+    for step in steps:
+        code, out = await gl._run(step, cwd=stage)
+        if code != 0 and "nothing to commit" not in out.lower():
+            raise RuntimeError(gl.gitlab_error_hint(f"git {' '.join(step[:2])} failed: {out[-300:]}"))
+    code, out = await gl._run(["git", "remote", "add", "origin", auth], cwd=stage)
+    if code != 0:
+        await gl._run(["git", "remote", "set-url", "origin", auth], cwd=stage)
+    code, out = await gl._run(["git", "push", "-q", "-f", "-u", "origin", "main"], cwd=stage)
+    if code != 0:
+        raise RuntimeError(gl.gitlab_error_hint(f"git push failed: {out[-400:]}"))
+
+    ns_part = full_name.split("/")[0]
+    proj_part = full_name.split("/")[-1]
+    url = pages_url(ns_part, proj_part, gl.gitlab_host())
+    return {
+        "ok": True,
+        "backend": "gitlab_pages",
+        "url": url,
+        "repo": full_name,
+        "html_url": created.get("html_url") if created else f"https://{gl.gitlab_host()}/{full_name}",
+        "note": "GitLab Pages обикновено е живо след 1–2 минути (CI).",
+        "created": created,
+    }
+
+
+async def _gitlab_username() -> str:
+    import httpx
+    from . import playground_gitlab as gl
+
+    token = os.environ.get("GITLAB_TOKEN") or os.environ.get("GitLabToken") or ""
+    async with httpx.AsyncClient(timeout=15.0) as cx:
+        r = await cx.get(
+            f"https://{gl.gitlab_host()}/api/v4/user",
+            headers={"PRIVATE-TOKEN": token},
+        )
+    if r.status_code >= 400:
+        raise RuntimeError(gl.gitlab_error_hint(f"GitLab /user failed: {r.text[:200]}"))
+    return str((r.json() or {}).get("username") or "").strip()
+
+
+async def publish_live(
+    slug: str,
+    *,
+    backend: str = "auto",
+    local_fn: Callable[[str], Awaitable[dict[str, Any]]] | None = None,
+    deploy_fn: Callable[..., Awaitable[dict[str, Any]]] | None = None,
+) -> dict[str, Any]:
+    """Local /apps/ plus the first public backend that works."""
+    ensure = local_fn or ensure_local
+    local = await ensure(slug)
+    if not local.get("ok"):
+        return {"ok": False, **local}
+
+    result: dict[str, Any] = {
+        "ok": True,
+        "slug": slug,
+        "local_url": local.get("local_url"),
+        "url": None,
+        "backend": "local",
+        "chain": pick_chain(backend),
+        "note": "Играта е в /apps/ на тази машина.",
+    }
+    static_dir = local.get("dir")
+    if isinstance(static_dir, str):
+        static_dir = Path(static_dir)
+    if backend.strip().lower() == "local" or not static_dir:
+        record_site(slug, result)
+        return result
+
+    errors: list[str] = []
+    for name in pick_chain(backend):
+        if name == "local":
+            continue
+        try:
+            if deploy_fn:
+                remote = await deploy_fn(name, static_dir, slug)
+            elif name == "netlify":
+                remote = await deploy_netlify(static_dir, slug, anonymous=False)
+            elif name == "netlify_anon":
+                remote = await deploy_netlify(static_dir, slug, anonymous=True)
+            elif name == "gitlab_pages":
+                remote = await deploy_gitlab_pages(static_dir, slug)
+            else:
+                errors.append(f"unknown backend {name}")
+                continue
+        except Exception as extra:
+            log.warning("live: %s failed: %s", name, extra)
+            errors.append(f"{name}: {extra}")
+            continue
+        result.update({
+            "url": remote.get("url"),
+            "backend": remote.get("backend") or name,
+            "site_id": remote.get("site_id"),
+            "repo": remote.get("repo"),
+            "expires": remote.get("expires"),
+            "note": remote.get("note") or "Публичният линк е готов.",
+            "html_url": remote.get("html_url"),
+        })
+        record_site(slug, {k: v for k, v in result.items() if k != "chain"})
+        if errors:
+            result["fallback_errors"] = errors
+        return result
+
+    result["ok"] = True
+    result["note"] = (
+        "Локално е готово. За публичен линк сложи NETLIFY_AUTH_TOKEN "
+        "(https://app.netlify.com/user/applications#personal-access-tokens) "
+        "или GITLAB_TOKEN, или инсталирай Node.js (npx) за едночасов Netlify preview."
+    )
+    if errors:
+        result["errors"] = errors
+    record_site(slug, {k: v for k, v in result.items() if k != "chain"})
+    return result

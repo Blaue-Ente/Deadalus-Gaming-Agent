@@ -1,0 +1,30 @@
+# render.com — Blueprint for this repository.
+services:
+  - type: web
+    name: daedalus
+    runtime: docker
+    plan: starter
+    healthCheckPath: /health
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    envVars:
+      - key: DAEDALUS_STANDALONE
+        value: "1"
+      - key: DAEDALUS_DATA
+        value: /var/lib/daedalus
+      - key: DAEDALUS_PLAYGROUND
+        value: /var/lib/daedalus/playground
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: "8787"
+      - key: DAEDALUS_TOKEN
+        generateValue: true
+      - key: ALLTOKEN_API_KEY
+        sync: false
+      - key: IYVERIS_MESH_KEY
+        generateValue: true
+    disk:
+      name: daedalus-data
+      mountPath: /var/lib/daedalus
+      sizeGB: 2

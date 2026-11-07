@@ -1,0 +1,45 @@
+{# Shared top nav — Studio | Playground | Game Studio | Proposals | Setup #}
+{# Set `daedalus_tab` before include: hub | playground | game_studio | proposals | skills | bundles | connectors | config | chat #}
+<link rel="stylesheet" href="/admin/static/daedalus-ui.css?v=5" />
+<script src="/static/owner-auth.js"></script>
+<script src="/admin/static/daedalus-ui.js?v=5" defer></script>
+{% set _dx_tab = daedalus_tab|default('hub') %}
+{% set _dx_setup = _dx_tab in ('config', 'bundles', 'connectors', 'skills', 'chat') %}
+<nav class="adn-section-nav daedalus-section-nav" data-i18n-aria="nav.aria" aria-label="Main">
+  <div class="adn-nav-row">
+    <a href="/"
+      class="adn-nav-link dx-nav-tab text-argos-dim hover:text-white">
+      <span data-i18n="nav.studio">Studio</span>
+    </a>
+    <a href="/admin/daedalus/playground"
+      class="adn-nav-link dx-nav-tab {% if _dx_tab == 'playground' %}adn-nav-active border-b-2{% else %}text-argos-dim hover:text-white{% endif %}">
+      <span data-i18n="nav.playground">Playground</span>
+    </a>
+    <a href="/admin/daedalus/game-studio"
+      class="adn-nav-link dx-nav-tab {% if _dx_tab == 'game_studio' %}adn-nav-active border-b-2{% else %}text-argos-dim hover:text-white{% endif %}">
+      <span data-i18n="nav.gameStudio">Game Studio</span>
+    </a>
+    <a href="/admin/daedalus/proposals"
+      class="adn-nav-link dx-nav-tab {% if _dx_tab == 'proposals' %}adn-nav-active border-b-2{% else %}text-argos-dim hover:text-white{% endif %}">
+      <span data-i18n="nav.proposals">Proposals</span>
+    </a>
+    <div class="adn-nav-dropdown {% if _dx_setup %}adn-nav-dropdown--open{% endif %}" id="dx-config-dropdown">
+      <button type="button"
+        class="adn-nav-tab adn-nav-dropdown-btn {% if _dx_setup %}adn-nav-active border-b-2{% else %}text-argos-dim hover:text-white{% endif %}"
+        aria-haspopup="true" aria-expanded="false" aria-controls="dx-config-menu">
+        <span data-i18n="nav.setup">Setup</span> ▾
+      </button>
+      <div id="dx-config-menu" class="adn-nav-dropdown-menu" role="menu">
+        <a href="/admin/daedalus/connectors" role="menuitem" class="adn-nav-dropdown-item" data-i18n="nav.connectors">Connectors</a>
+        <a href="/admin/daedalus/connectors#brain" role="menuitem" class="adn-nav-dropdown-item" data-i18n="nav.llm">Brain</a>
+        <a href="/admin/daedalus/bundles" role="menuitem" class="adn-nav-dropdown-item" data-i18n="nav.bundles">Bundles</a>
+        <a href="/admin/daedalus/skills" role="menuitem" class="adn-nav-dropdown-item" data-i18n="nav.skills">Skills</a>
+        <a href="/admin/daedalus" role="menuitem" class="adn-nav-dropdown-item" data-i18n="nav.classicChat">Classic chat</a>
+      </div>
+    </div>
+    <div class="dx-lang dx-lang--nav" role="group" data-i18n-aria="lang.aria" aria-label="Language">
+      <button type="button" data-lang="en" aria-pressed="true">EN</button>
+      <button type="button" data-lang="bg" aria-pressed="false">BG</button>
+    </div>
+  </div>
+</nav>

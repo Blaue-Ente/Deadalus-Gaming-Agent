@@ -1,0 +1,66 @@
+# CI for Daedalus — this directory is the product root.
+stages: [test, build]
+
+ruff:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - pip install --no-cache-dir ruff
+    - ruff check daedalus/tool_protocol.py daedalus/model_router.py daedalus/run_engine.py daedalus/need_scan.py daedalus/game_build_contract.py daedalus/game_agent_bench.py daedalus/engine_runners.py daedalus/quality_gate.py daedalus/playtest_scenario.py daedalus/balance_sim.py daedalus/playground_gameplay_verify.py daedalus/game_studio_gates.py daedalus/world_runtime.py daedalus/world_kit.py daedalus/png_codec.py daedalus/atlas.py daedalus/sfx_kit.py daedalus/mesh_jobs.py daedalus/asset_pipeline.py daedalus/learned_skills.py daedalus/production_layer.py daedalus/unity_runtime.py daedalus/chat_jobs.py tests/test_harness_kernel.py tests/test_gameplay_bot.py tests/test_world_runtime.py tests/test_asset_pipeline.py tests/test_skill_memory.py tests/test_production_layer.py tests/test_unity_runtime.py tests/test_game_agent_bench.py tests/test_studio_hardening.py
+    - ruff check --select E9,F63,F7,F82 --exclude daedalus/agent.py daedalus app tests
+  rules:
+    - if: $CI_COMMIT_BRANCH
+
+mypy:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - pip install --no-cache-dir mypy
+    - python3 -m mypy daedalus/game_build_contract.py daedalus/game_agent_bench.py daedalus/engine_runners.py daedalus/quality_gate.py daedalus/model_router.py daedalus/run_engine.py daedalus/tool_protocol.py
+  rules:
+    - if: $CI_COMMIT_BRANCH
+
+uv-lock:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - pip install --no-cache-dir uv
+    - python3 -m uv lock --check
+  rules:
+    - if: $CI_COMMIT_BRANCH
+
+pytest:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - pip install --no-cache-dir -e ".[dev]"
+    - python3 -m playwright install-deps chromium
+    - python3 -m playwright install chromium
+    - python3 -m pytest tests -q --cov=daedalus --cov-report=term-missing --cov-fail-under=0
+  artifacts:
+    when: on_failure
+    expire_in: 3 days
+    paths:
+      - test-results/stream-diag/
+  rules:
+    - if: $CI_COMMIT_BRANCH
+
+build-image:
+  stage: build
+  image: docker:24
+  services:
+    - docker:24-dind
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+  script:
+    - docker build -t daedalus:ci .
+    - |
+      if [ -n "${CI_REGISTRY:-}" ] && [ -n "${CI_REGISTRY_USER:-}" ]; then
+        docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD" "$CI_REGISTRY"
+        docker tag daedalus:ci "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA"
+        docker tag daedalus:ci "$CI_REGISTRY_IMAGE:latest"
+        docker push "$CI_REGISTRY_IMAGE:$CI_COMMIT_SHA"
+        docker push "$CI_REGISTRY_IMAGE:latest"
+      fi
+  rules:
+    - if: $CI_COMMIT_BRANCH

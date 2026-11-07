@@ -1,0 +1,16 @@
+.env
+owner.token
+__pycache__/
+*.pyc
+.pytest_cache/
+test-results/
+data/
+workspace/
+playground/
+*.sqlite
+.venv/
+*.egg-info/
+dist/
+build/
+packaging/windows/redist/*.nupkg
+packaging/windows/runtime/

@@ -1,0 +1,64 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "daedalus"
+version = "0.3.8"
+description = "Daedalus — independent coding agent (games first, apps second, verify while building)"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Daedalus Contributors" }]
+keywords = ["daedalus", "coding-agent", "games", "godot", "playground"]
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "httpx>=0.28.0",
+    "pydantic>=2.0.0",
+    "chromadb>=1.0.0",
+    "openai>=1.30.0",
+    "jinja2>=3.1.0",
+    "python-multipart>=0.0.9",
+]
+
+[project.urls]
+Homepage = "https://gitlab.com/Blaue-Ente/deadalus-agent-0"
+Issues = "https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/issues"
+Changelog = "https://gitlab.com/Blaue-Ente/deadalus-agent-0/-/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+playwright = ["playwright>=1.60.0"]
+computer = ["smolvm>=0.0.30"]
+gui = ["pywebview>=5.0"]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.6.0",
+    "mypy>=1.11.0",
+    "pytest-cov>=5.0.0",
+    "playwright>=1.60.0",
+]
+
+[project.scripts]
+daedalus = "app.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["daedalus*", "app*"]
+
+[tool.setuptools.package-data]
+daedalus = ["skills/*.md", "knowledge/*.md"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82"]
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+check_untyped_defs = false
+warn_unused_ignores = false
+follow_imports = "skip"

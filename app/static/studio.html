@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title data-i18n="studio.title">Daedalus</title>
+  <link rel="icon" href="/static/favicon.ico" sizes="any" />
+  <link rel="icon" href="/static/daedalus-mark.png" type="image/png" />
+  <link rel="stylesheet" href="/static/studio.css" />
+  <script src="/static/i18n.js"></script>
+  <script src="/static/owner-auth.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <header class="app">
+      <img class="mark" src="/static/daedalus-mark.png" alt="Daedalus" />
+      <div class="brand">
+        <h1 data-i18n="studio.headerName">Game Studio</h1>
+        <div class="sub">
+          <span data-i18n="studio.tagline">Games first · speak plainly</span>
+          · <button type="button" class="textlink" id="open-review" data-i18n="nav.proposals">Proposals</button>
+          · <a href="/admin/daedalus" data-i18n="studio.classicLink">Classic</a>
+        </div>
+      </div>
+      <button type="button" class="chip empty" id="projchip" data-i18n="studio.noProject">No project selected</button>
+      <div class="effort" role="group" data-i18n-aria="studio.effortAria" aria-label="Effort">
+        <button type="button" data-effort="auto" aria-pressed="true" data-i18n="studio.effort.auto">Auto</button>
+        <button type="button" data-effort="whisper" aria-pressed="false" data-i18n="studio.effort.whisper">Whisper</button>
+        <button type="button" data-effort="craft" aria-pressed="false" data-i18n="studio.effort.craft">Craft</button>
+        <button type="button" data-effort="epic" aria-pressed="false" data-i18n="studio.effort.epic">Epic</button>
+      </div>
+      <div class="assist" role="group" data-i18n-aria="studio.assistAria" aria-label="Writer assist">
+        <button type="button" data-assist="auto" aria-pressed="false" data-i18n="studio.assist.auto">Auto</button>
+        <button type="button" data-assist="off" aria-pressed="false" data-i18n="studio.assist.off">Off</button>
+        <button type="button" data-assist="kernel-scaffold" aria-pressed="false" data-i18n="studio.assist.kernel">Kernel</button>
+      </div>
+      <div class="budget" role="group" data-i18n-aria="studio.budgetAria" aria-label="Run budget">
+        <button type="button" data-budget="0" aria-pressed="false" data-i18n="studio.budget.off">Off</button>
+        <button type="button" data-budget="5" aria-pressed="false">$5</button>
+        <button type="button" data-budget="20" aria-pressed="false">$20</button>
+        <button type="button" data-budget="50" aria-pressed="false">$50</button>
+      </div>
+      <span id="budget-spend" class="budget-spend" title=""></span>
+      <div class="mentor-wrap">
+        <div class="mentor" role="group" data-i18n-aria="studio.mentorAria" aria-label="Mentor">
+          <button type="button" data-mentor="on" aria-pressed="false" data-i18n="studio.mentor.on">ON</button>
+          <button type="button" data-mentor="off" aria-pressed="false" data-i18n="studio.mentor.off">OFF</button>
+        </div>
+        <label class="sr-only" for="mentor-choice" data-i18n="studio.mentorChoiceAria">Mentor model</label>
+        <select id="mentor-choice" class="mentor-choice" data-i18n-aria="studio.mentorChoiceAria" aria-label="Mentor model"></select>
+        <button type="button" id="mentor-custom" class="mentor-custom" data-i18n-aria="studio.mentorCustomAria" aria-label="Custom mentor model" title="Custom model">⋯</button>
+        <span id="mentor-spend" class="mentor-spend" title=""></span>
+      </div>
+      <div class="dx-lang" role="group" data-i18n-aria="lang.aria" aria-label="Language">
+        <button type="button" data-lang="en" aria-pressed="true">EN</button>
+        <button type="button" data-lang="bg" aria-pressed="false">BG</button>
+      </div>
+      <button type="button" id="settings-link" class="chip" data-i18n="studio.settings">Settings</button>
+      <p id="header-status" class="header-status" role="status" hidden></p>
+      <div class="pills" id="pills"></div>
+    </header>
+
+    <aside>
+      <div>
+        <p class="kicker" data-i18n="studio.project">Project</p>
+        <p class="hint" data-i18n="studio.projectHint">Epic writes a world kit. Craft is one slice. The name is the game, not the pitch deck.</p>
+        <label class="sr-only" for="pname" data-i18n="studio.nameAria">Project name</label>
+        <input id="pname" data-i18n-placeholder="studio.namePh" placeholder="Game / app name" autocomplete="off" data-i18n-aria="studio.nameAria" aria-label="Game or app name" />
+        <label class="sr-only" for="pdesc" data-i18n="studio.descAria">Description</label>
+        <textarea id="pdesc" rows="2" data-i18n-placeholder="studio.descPh" placeholder="What are you building? Tone, player, first slice. Epic reads this." data-i18n-aria="studio.descAria" aria-label="Project description"></textarea>
+        <div class="row tight">
+          <label class="sr-only" for="pkind" data-i18n="studio.kindAria">Project kind</label>
+          <select id="pkind" data-i18n-aria="studio.kindAria" aria-label="Project kind">
+            <option value="auto" data-i18n="studio.kind.auto">auto — Daedalus chooses</option>
+            <option value="static" data-i18n="studio.kind.static">game / static</option>
+            <option value="vite">vite</option>
+            <option value="vite-react">vite-react</option>
+            <option value="fastapi">fastapi</option>
+            <option value="streamlit">streamlit</option>
+            <option value="expo">expo</option>
+            <option value="node">node</option>
+            <option value="godot">godot</option>
+            <option value="unity">unity</option>
+          </select>
+          <button class="primary" id="pcreate" type="button" data-i18n="studio.new">New</button>
+        </div>
+        <div class="row">
+          <button id="pcapsule" type="button" disabled data-i18n="studio.capsule">Capsule</button>
+          <button id="ppub" type="button" disabled>/apps/</button>
+          <button class="primary" id="plive" type="button" disabled data-i18n="studio.live">Live</button>
+        </div>
+        <div class="kind-filter" id="kind-filter" role="group" data-i18n-aria="studio.filterAria" aria-label="Project filter">
+          <button type="button" data-filter="all" aria-pressed="true" data-i18n="studio.filter.all">All</button>
+          <button type="button" data-filter="games" aria-pressed="false" disabled data-i18n="studio.filter.games">Games</button>
+          <button type="button" data-filter="apps" aria-pressed="false" disabled data-i18n="studio.filter.apps">Apps</button>
+        </div>
+        <div class="list" id="plist"></div>
+        <div class="files">
+          <p class="kicker" data-i18n="studio.files">Files</p>
+          <p id="file-status" class="workspace-status" role="status" hidden></p>
+          <div class="list" id="filelist"></div>
+          <pre id="fileview"></pre>
+          <p class="kicker" data-i18n="studio.assets">Assets</p>
+          <div class="asset-controls" id="asset-controls">
+            <p id="asset-status" class="workspace-status" role="status" hidden></p>
+            <label><span data-i18n="studio.assetPath">Path</span>
+              <input id="asset-path" value="assets/custom.png" autocomplete="off" spellcheck="false" data-i18n-aria="studio.assetPath" aria-label="Path" />
+            </label>
+            <label><span data-i18n="studio.assetPrompt">Prompt</span>
+              <input id="asset-prompt" autocomplete="off" data-i18n-aria="studio.assetPrompt" aria-label="Prompt" />
+            </label>
+            <label><span data-i18n="studio.assetSize">Size</span>
+              <select id="asset-size" data-i18n-aria="studio.assetSize" aria-label="Size">
+                <option value="512x512">512x512</option>
+                <option value="1024x768">1024x768</option>
+                <option value="1024x1024">1024x1024</option>
+              </select>
+            </label>
+            <button id="asset-generate" type="button" data-i18n="studio.assetGenerate">Generate</button>
+            <label><span data-i18n="studio.assetDesc">Description</span>
+              <textarea id="asset-desc" rows="2" data-i18n-aria="studio.assetDesc" aria-label="Description"></textarea>
+            </label>
+            <button id="asset-autopack" type="button" data-i18n="studio.assetAutopack">Auto-pack</button>
+            <label><span data-i18n="studio.assetAction">Pipeline</span>
+              <select id="asset-action" data-i18n-aria="studio.assetAction" aria-label="Pipeline">
+                <option value="status" selected>status</option>
+                <option value="providers">providers</option>
+                <option value="atlas">atlas</option>
+                <option value="tileset">tileset</option>
+                <option value="sfx">sfx</option>
+                <option value="font">font</option>
+                <option value="greybox">greybox</option>
+                <option value="music">music</option>
+                <option value="mesh">mesh</option>
+              </select>
+            </label>
+            <label id="asset-mesh-prompt-field" hidden><span data-i18n="studio.assetMeshPrompt">Mesh prompt</span>
+              <textarea id="asset-mesh-prompt" rows="2" data-i18n-aria="studio.assetMeshPrompt" aria-label="Mesh prompt"></textarea>
+            </label>
+            <label id="asset-mesh-name-field" hidden><span data-i18n="studio.assetMeshName">Name</span>
+              <input id="asset-mesh-name" value="hero" autocomplete="off" spellcheck="false" data-i18n-aria="studio.assetMeshName" aria-label="Name" />
+            </label>
+            <label id="asset-mesh-provider-field" hidden><span data-i18n="studio.assetMeshProvider">Provider</span>
+              <select id="asset-mesh-provider" data-i18n-aria="studio.assetMeshProvider" aria-label="Provider">
+                <option value="auto" selected>auto</option>
+                <option value="fal">fal</option>
+                <option value="tripo">tripo</option>
+                <option value="meshy">meshy</option>
+              </select>
+            </label>
+            <label id="asset-job-field"><span data-i18n="studio.assetJob">Job</span>
+              <select id="asset-job" data-i18n-aria="studio.assetJob" aria-label="Job">
+                <option value="" selected data-i18n="studio.assetJobLocal">Local list</option>
+              </select>
+            </label>
+            <p class="hint" id="asset-kit-note" hidden data-i18n="studio.assetKitNote">Atlas and tileset write the built-in kit only. The API accepts custom source images. This control does not send them.</p>
+            <button id="asset-pipeline" type="button" data-i18n="studio.assetRun">Run</button>
+            <p class="hint" id="asset-backend-note" data-i18n="studio.assetBackendNote">Cancel on the question sends nothing. After a request is sent, leaving this page does not stop the server.</p>
+          </div>
+          <div class="list" id="assetlist"></div>
+        </div>
+        <details id="git-menu">
+          <summary data-i18n="studio.gitMenu">Git</summary>
+          <label><span data-i18n="studio.gitUrl">Remote URL</span>
+            <input id="git-url" autocomplete="off" data-i18n-aria="studio.gitUrl" aria-label="Remote URL" />
+          </label>
+          <div class="row tight">
+            <button id="git-clone" type="button" data-i18n="studio.clone">Clone</button>
+            <button id="git-revive" type="button" data-i18n="studio.revive">Revive</button>
+          </div>
+          <div class="row tight">
+            <button id="git-push" type="button" data-i18n="studio.push">Push</button>
+            <button id="git-pr" type="button" data-i18n="studio.pullRequest">Pull request</button>
+            <button id="project-delete" type="button" data-i18n="studio.delete">Delete</button>
+          </div>
+          <p id="git-status" class="workspace-status" role="status" hidden></p>
+        </details>
+      </div>
+      <div class="prefs">
+        <p class="kicker" data-i18n="studio.prefs">Preferences</p>
+        <p class="hint" data-i18n="studio.prefsHint">Or in chat: “remember I prefer Phaser”.</p>
+        <input id="preftext" data-i18n-placeholder="studio.prefPh" placeholder="Remember…" data-i18n-aria="studio.prefAria" aria-label="New preference" />
+        <div class="row tight"><button id="prefadd" type="button" data-i18n="studio.save">Save</button></div>
+        <div class="list" id="preflist"></div>
+      </div>
+      <div class="session-skills">
+        <p class="kicker" data-i18n="studio.sessionSkills">Session skills</p>
+        <p class="hint" data-i18n="studio.sessionSkillsHint">Pinned for this chat. + adds a skill for one turn.</p>
+        <label class="sr-only" for="skillpick" data-i18n="studio.ctxSkills">Skills</label>
+        <select id="skillpick" data-i18n-aria="studio.ctxSkills" aria-label="Skills"></select>
+        <div class="row tight"><button id="skillpin" type="button" data-i18n="studio.pin">Pin</button></div>
+        <div class="list" id="skillpins"></div>
+      </div>
+      <div class="lessons">
+        <p class="kicker" data-i18n="studio.lessons">Lessons</p>
+        <p class="hint" data-i18n="studio.lessonsHint" data-i18n-html>Failures wait for <b>Approve</b>. The agent does not inject them into the next turn.</p>
+        <div class="list" id="lessonlist"></div>
+      </div>
+    </aside>
+
+    <main>
+      <nav id="workspace-nav" class="workspace-nav" role="tablist" data-i18n-aria="studio.navAria" aria-label="Workspace">
+        <button type="button" data-panel="chat" aria-selected="true" data-i18n="studio.panel.chat">Chat</button>
+        <button type="button" data-panel="build" aria-selected="false" data-i18n="studio.panel.build">Build</button>
+        <button type="button" data-panel="preview" aria-selected="false" data-i18n="studio.panel.preview">Preview</button>
+        <button type="button" data-panel="review" aria-selected="false" data-i18n="studio.panel.review">Review</button>
+        <button type="button" data-panel="settings" aria-selected="false" data-i18n="studio.panel.settings">Settings</button>
+        <button type="button" data-panel="world" aria-selected="false" data-i18n="studio.panel.world">World</button>
+        <button type="button" data-panel="tools" aria-selected="false" data-i18n="studio.panel.tools">Tools</button>
+      </nav>
+      <p id="workspace-status" class="workspace-status" role="status" hidden></p>
+      <div id="panel-chat" class="workspace-panel" data-panel="chat">
+      <p class="kicker" data-i18n="studio.chat">Chat</p>
+      <div class="msgs" id="msgs"></div>
+      <div class="composer">
+        <div class="chip-row" id="ctxchips" hidden></div>
+        <div class="compose-row">
+          <button type="button" class="ctx-plus" id="ctxplus" data-i18n-aria="studio.plusAria" aria-label="Add context">+</button>
+          <textarea id="prompt" data-i18n-placeholder="studio.promptPh" placeholder="Write freely. Shift+Enter for a new line. Auto picks whisper / craft / epic." data-i18n-aria="studio.promptAria" aria-label="Message to Daedalus"></textarea>
+        </div>
+        <div class="meta-row">
+          <span class="effort-note" id="effortnote"></span>
+          <div class="row">
+            <button id="build" type="button" disabled data-i18n="studio.flightBtn">Flight</button>
+            <button id="stop" type="button" hidden data-i18n="studio.stop">Stop</button>
+            <button class="primary" id="send" type="button" data-i18n="studio.send">Send</button>
+          </div>
+        </div>
+        <div class="ctx-sheet" id="ctxsheet" hidden>
+          <div class="ctx-head">
+            <button type="button" class="ctx-x" id="ctxclose" data-i18n-aria="studio.ctxClose" aria-label="Close">×</button>
+            <h2 data-i18n="studio.context">Context</h2>
+          </div>
+          <p class="kicker" data-i18n="studio.ctxMode">Mode</p>
+          <p class="hint" id="ctxmode"></p>
+          <p class="kicker" data-i18n="studio.ctxAdd">Add</p>
+          <div class="ctx-menu">
+            <button type="button" data-ctx="skills"><span data-i18n="studio.ctxSkills">Skills</span> <em id="ctxskilln">0</em></button>
+            <button type="button" data-ctx="files"><span data-i18n="studio.ctxFiles">Files</span></button>
+            <button type="button" data-ctx="images"><span data-i18n="studio.ctxImages">Images</span></button>
+            <button type="button" data-ctx="project"><span data-i18n="studio.ctxProject">Project file</span></button>
+            <button type="button" data-ctx="mcp"><span data-i18n="studio.ctxMcp">MCP Servers</span> <em id="ctxmcpn">0</em></button>
+          </div>
+          <div class="ctx-sub" id="ctxsub" hidden></div>
+        </div>
+        <input type="file" id="ctxfile" class="sr-only" multiple
+          accept=".txt,.md,.py,.js,.ts,.jsx,.tsx,.json,.csv,.yaml,.yml,.xml,.html,.css,.sql,.sh,.toml,.ini,.log,.gd,.svg" />
+        <input type="file" id="ctximage" class="sr-only" multiple accept="image/png,image/jpeg,image/gif,image/webp,.png,.jpg,.jpeg,.gif,.webp" />
+      </div>
+      </div>
+      <section id="panel-build" class="workspace-panel" data-panel="build" hidden>
+        <p class="kicker" data-i18n="studio.panel.build">Build</p>
+        <p class="hint" id="build-slug"></p>
+        <label><span data-i18n="studio.buildIdea">Idea</span>
+          <textarea id="build-idea" rows="3" data-i18n-aria="studio.buildIdea" aria-label="Idea"></textarea>
+        </label>
+        <div class="row">
+          <label class="grow"><span data-i18n="studio.genre">Genre</span>
+            <select id="build-genre" data-i18n-aria="studio.genre" aria-label="Genre"></select>
+          </label>
+          <label class="grow"><span data-i18n="studio.audience">Audience</span>
+            <select id="build-audience" data-i18n-aria="studio.audience" aria-label="Audience"></select>
+          </label>
+          <label class="grow"><span data-i18n="studio.platform">Platform</span>
+            <select id="build-platform" data-i18n-aria="studio.platform" aria-label="Platform"></select>
+          </label>
+          <label class="grow"><span data-i18n="studio.buildMode">Mode</span>
+            <select id="build-mode" data-i18n-aria="studio.buildMode" aria-label="Mode"></select>
+          </label>
+        </div>
+        <div class="row">
+          <button id="build-brainstorm" type="button" data-i18n="studio.brainstorm">Brainstorm</button>
+          <button id="build-gdd" type="button" data-i18n="studio.gdd">GDD</button>
+          <button class="primary" id="build-start" type="button" data-i18n="studio.startProject">Start</button>
+        </div>
+        <p id="build-status" class="workspace-status" role="status" hidden></p>
+        <pre id="build-out"></pre>
+        <div id="build-checkpoint" class="checkpoint" hidden>
+          <p class="kicker" data-i18n="studio.checkpoint">Checkpoint</p>
+          <p id="build-cp-review" data-cp-review></p>
+          <label><span data-i18n="studio.checkpointNotes">Notes</span>
+            <textarea id="build-cp-notes" rows="2" data-i18n-aria="studio.checkpointNotes" aria-label="Notes"></textarea>
+          </label>
+          <div class="row" id="build-cp-options" data-cp-options></div>
+        </div>
+        <div class="row">
+          <button id="build-guided" type="button" disabled data-i18n="studio.guided">Guided</button>
+          <button id="build-autopilot" type="button" disabled data-i18n="studio.autopilot">Autopilot</button>
+          <button id="build-stop" type="button" hidden data-i18n="studio.stop">Stop</button>
+          <button id="build-gates" type="button" disabled data-i18n="studio.gates">Gates</button>
+          <button id="build-verify" type="button" disabled data-i18n="studio.verify">Verify</button>
+          <button id="build-advance" type="button" disabled data-i18n="studio.advance">Advance</button>
+        </div>
+        <ul id="build-milestones"></ul>
+        <div class="ship-controls" id="ship-controls">
+          <p class="kicker" data-i18n="studio.shipTitle">Init and export</p>
+          <p id="ship-status" class="workspace-status" role="status" hidden></p>
+          <label><span data-i18n="studio.shipTemplate">Unity template</span>
+            <select id="ship-template" data-i18n-aria="studio.shipTemplate" aria-label="Unity template">
+              <option value="daedalus_minimal" selected>daedalus_minimal</option>
+              <option value="unity_game_framework">unity_game_framework</option>
+              <option value="daedalus_ugf">daedalus_ugf</option>
+            </select>
+          </label>
+          <label><span data-i18n="studio.shipPreset">Studio preset</span>
+            <select id="ship-preset" data-i18n-aria="studio.shipPreset" aria-label="Studio preset">
+              <option value="custom" selected>custom</option>
+              <option value="action">action</option>
+              <option value="rpg_collection">rpg_collection</option>
+              <option value="puzzle">puzzle</option>
+              <option value="strategy">strategy</option>
+              <option value="survival">survival</option>
+              <option value="platformer">platformer</option>
+              <option value="racing">racing</option>
+              <option value="godot_2d">godot_2d</option>
+              <option value="godot_3d">godot_3d</option>
+              <option value="open_world">open_world</option>
+              <option value="multiplayer">multiplayer</option>
+              <option value="hybrid_mobile">hybrid_mobile</option>
+              <option value="backend_api">backend_api</option>
+            </select>
+          </label>
+          <label><span data-i18n="studio.shipFirebaseProject">Firebase project id</span>
+            <input id="ship-firebase-project" autocomplete="off" spellcheck="false" data-i18n-aria="studio.shipFirebaseProject" aria-label="Firebase project id" />
+          </label>
+          <label><span data-i18n="studio.shipBundle">Bundle id</span>
+            <input id="ship-bundle" autocomplete="off" spellcheck="false" data-i18n-aria="studio.shipBundle" aria-label="Bundle id" />
+          </label>
+          <div class="row">
+            <button id="ship-unity-init" type="button" data-i18n="studio.shipUnityInit">Init Unity</button>
+            <button id="ship-unity-build" type="button" data-i18n="studio.shipUnityBuild">Build scripts</button>
+            <button id="ship-firebase" type="button" data-i18n="studio.shipFirebase">Firebase</button>
+            <button id="ship-hybrid-init" type="button" hidden data-i18n="studio.shipHybridInit">Init hybrid</button>
+            <button id="ship-hybrid-export" type="button" hidden data-i18n="studio.shipHybridExport">Export hybrid</button>
+            <button id="ship-cap-init" type="button" hidden data-i18n="studio.shipCapInit">Init Capacitor</button>
+            <button id="ship-cap-export" type="button" hidden data-i18n="studio.shipCapExport">Export Capacitor</button>
+          </div>
+          <p class="hint" id="ship-overwrite" data-i18n="studio.shipOverwrite">Scaffold and hybrid files are written only when missing. Build scripts, Firebase files, both export manifests, and Capacitor package.json are overwritten.</p>
+          <p class="hint" id="ship-note" data-i18n="studio.shipNote">Cancel on the question sends nothing. After a request is sent, leaving this page does not stop the server. A timed-out call is not retried.</p>
+        </div>
+      </section>
+      <section id="panel-preview" class="workspace-panel" data-panel="preview" hidden>
+        <p class="kicker" data-i18n="studio.panel.preview">Preview</p>
+        <div class="row">
+          <button class="primary" id="preview-run" type="button" data-i18n="studio.previewRun">Run</button>
+          <button id="preview-stop" type="button" data-i18n="studio.previewStop">Stop</button>
+          <button id="preview-logs" type="button" data-i18n="studio.previewLogs">Logs</button>
+          <button id="preview-show" type="button" data-i18n="studio.showPreview">Show preview</button>
+        </div>
+        <p id="preview-status" class="workspace-status" role="status" hidden></p>
+        <div class="computer-frame"><iframe id="preview-frame" title="Preview" data-i18n-title="studio.showPreview"></iframe></div>
+        <div class="row">
+          <button id="preview-local" type="button" data-i18n="studio.publishLocal">Local copy</button>
+          <button id="preview-live" type="button" data-i18n="studio.liveBtn">Live</button>
+          <button id="preview-capsule" type="button" data-i18n="studio.capsuleBtn">Capsule</button>
+        </div>
+      </section>
+      <section id="panel-review" class="workspace-panel" data-panel="review" hidden>
+        <p class="kicker" data-i18n="studio.panel.review">Review</p>
+        <div id="review-tabs" class="workspace-nav" role="tablist">
+          <button type="button" data-tab="proposals" aria-selected="true" data-i18n="studio.review.proposals">Proposals</button>
+          <button type="button" data-tab="skills" aria-selected="false" data-i18n="studio.review.skills">Skills</button>
+          <button type="button" data-tab="bundles" aria-selected="false" data-i18n="studio.review.bundles">Bundles</button>
+          <button type="button" data-tab="permissions" aria-selected="false" data-i18n="studio.review.permissions">Permissions</button>
+          <button type="button" data-tab="outbox" aria-selected="false" data-i18n="studio.review.outbox">Outbox</button>
+        </div>
+        <p class="hint" data-i18n="studio.classicRemain">The classic page stays available until the old routes redirect. These controls call the same admin routes.</p>
+        <p id="review-status" class="workspace-status" role="status" hidden></p>
+        <div id="review-list"></div>
+        <div class="blocker-controls" id="blocker-controls">
+          <p class="kicker" data-i18n="studio.blockerTitle">Blockers</p>
+          <p id="blocker-status" class="workspace-status" role="status" hidden></p>
+          <div id="blocker-list"></div>
+          <label>
+            <span data-i18n="studio.blockerNote">Note</span>
+            <input id="blocker-note" type="text" autocomplete="off" data-i18n-aria="studio.blockerNote" aria-label="Note" />
+          </label>
+          <div class="row">
+            <button id="blocker-refresh" type="button" data-i18n="studio.blockerRefresh">Refresh</button>
+          </div>
+          <p class="hint" data-i18n="studio.blockerHint">This list is a local read. Resolve only marks a blocker resolved. It does not grant a permission or change a project kind.</p>
+        </div>
+        <div class="plan-controls" id="plan-controls">
+          <p class="kicker" data-i18n="studio.planTitle">Plans</p>
+          <p id="plan-status" class="workspace-status" role="status" hidden></p>
+          <label>
+            <span data-i18n="studio.planGoal">Goal</span>
+            <textarea id="plan-goal" rows="3" data-i18n-aria="studio.planGoal" aria-label="Goal"></textarea>
+          </label>
+          <div class="row">
+            <button id="plan-generate" type="button" data-i18n="studio.planGenerate">Generate draft</button>
+            <button id="plan-refresh" type="button" data-i18n="studio.planRefresh">Refresh</button>
+          </div>
+          <div id="plan-list"></div>
+          <p class="hint" data-i18n="studio.planHint">Plans are global. Generate writes a draft with one agent turn. Approve creates tasks and does not run them. Delete removes the plan and its steps and keeps tasks.</p>
+        </div>
+        <div class="discovery-controls" id="discovery-controls">
+          <p class="kicker" data-i18n="studio.discoveryTitle">Discoveries</p>
+          <p id="discovery-status" class="workspace-status" role="status" hidden></p>
+          <label>
+            <span data-i18n="studio.discoveryFilter">Status</span>
+            <select id="discovery-filter" data-i18n-aria="studio.discoveryFilter" aria-label="Status">
+              <option value="pending" selected data-i18n="studio.discoveryPending">pending</option>
+              <option value="approved" data-i18n="studio.discoveryApproved">approved</option>
+              <option value="rejected" data-i18n="studio.discoveryRejected">rejected</option>
+            </select>
+          </label>
+          <div class="row">
+            <button id="discovery-refresh" type="button" data-i18n="studio.discoveryRefresh">Refresh</button>
+          </div>
+          <div id="discovery-list"></div>
+          <p class="hint" data-i18n="studio.discoveryHint">Discoveries are global. Approve writes a lesson and schedules a model call. Reject only changes status.</p>
+        </div>
+        <div class="skill-controls" id="skill-controls">
+          <p class="kicker" data-i18n="studio.skillTitle">Skill draft</p>
+          <p id="skill-status" class="workspace-status" role="status" hidden></p>
+          <label>
+            <span data-i18n="studio.skillPlatform">Skill format</span>
+            <select id="skill-platform" data-i18n-aria="studio.skillPlatform" aria-label="Skill format">
+              <option value="generic" selected data-i18n="studio.skillPlatformGeneric">Universal (skills/)</option>
+              <option value="cursor" data-i18n="studio.skillPlatformCursor">Cursor IDE (.cursor/skills/)</option>
+              <option value="claude" data-i18n="studio.skillPlatformClaude">Claude Code (.claude/skills/)</option>
+              <option value="codex" data-i18n="studio.skillPlatformCodex">Codex (.agents/skills/)</option>
+              <option value="harness" data-i18n="studio.skillPlatformHarness">Harness plugin (skills/)</option>
+            </select>
+          </label>
+          <label>
+            <span data-i18n="studio.skillIdea">Idea</span>
+            <textarea id="skill-idea" rows="3" data-i18n-aria="studio.skillIdea" aria-label="Idea"></textarea>
+          </label>
+          <label>
+            <span data-i18n="studio.skillMessage">Refine message</span>
+            <textarea id="skill-message" rows="2" data-i18n-aria="studio.skillMessage" aria-label="Refine message"></textarea>
+          </label>
+          <div class="row">
+            <button id="skill-start" type="button" data-i18n="studio.skillStart">Start draft</button>
+            <button id="skill-refine" type="button" data-i18n="studio.skillRefine">Refine</button>
+            <button id="skill-generate" type="button" data-i18n="studio.skillGenerate">Generate</button>
+            <button id="skill-force" type="button" data-i18n="studio.skillForce">Generate anyway</button>
+          </div>
+          <p id="skill-phase"></p>
+          <p id="skill-research"></p>
+          <div id="skill-questions"></div>
+          <div id="skill-warnings"></div>
+          <div id="skill-files"></div>
+          <div class="row">
+            <button id="skill-download" type="button" data-i18n="studio.skillDownload" hidden>Download SKILL.md</button>
+            <button id="skill-bundle" type="button" data-i18n="studio.skillBundle" hidden>Download text bundle</button>
+          </div>
+          <p class="hint" data-i18n="studio.skillHint">Skills are global. Start sends one configured-provider call and does not search the web. Generate returns files in that response. Nothing is published.</p>
+        </div>
+        <div class="ref-controls" id="ref-controls">
+          <p class="kicker" data-i18n="studio.refTitle">Reference brief</p>
+          <p id="ref-status" class="workspace-status" role="status" hidden></p>
+          <label>
+            <span data-i18n="studio.refField">Reference</span>
+            <textarea id="ref-input" rows="2" data-i18n-aria="studio.refField" aria-label="Reference"></textarea>
+          </label>
+          <div class="row">
+            <button id="ref-scout" type="button" data-i18n="studio.refScout">Scout</button>
+          </div>
+          <div id="ref-brief"></div>
+          <p class="hint" data-i18n="studio.refHint">A reference brief is global. Scout searches DuckDuckGo and calls alltoken:deepseek-v3.2. It does not use the Studio provider and it does not save a project file.</p>
+        </div>
+      </section>
+      <section id="panel-settings" class="workspace-panel" data-panel="settings" hidden>
+        <p class="kicker" data-i18n="studio.panel.settings">Settings</p>
+        <p id="settings-status" class="workspace-status" role="status" hidden></p>
+        <p class="kicker" data-i18n="studio.settingsBrain">Brain</p>
+        <div id="settings-brain"></div>
+        <form id="settings-prefs">
+          <label><span data-i18n="studio.gitProvider">Git provider</span>
+            <select id="settings-provider" data-i18n-aria="studio.gitProvider" aria-label="Git provider">
+              <option value="auto">auto</option>
+              <option value="github">github</option>
+              <option value="gitlab">gitlab</option>
+            </select>
+          </label>
+          <label><span data-i18n="studio.gitBranch">Default branch</span>
+            <input id="settings-branch" autocomplete="off" data-i18n-aria="studio.gitBranch" aria-label="Default branch" />
+          </label>
+          <button class="primary" type="submit" data-i18n="studio.settingsSave">Save</button>
+        </form>
+        <p class="kicker" data-i18n="studio.settingsConnectors">Connectors</p>
+        <div id="settings-fields"></div>
+        <form id="settings-secret">
+          <p class="hint" data-i18n="studio.settingsSecretHint">Write-only. The value is not shown again.</p>
+          <label><span data-i18n="studio.settingsSecret">Key</span>
+            <select id="secret-key" data-i18n-aria="studio.settingsSecret" aria-label="Key"></select>
+          </label>
+          <input id="secret-value" type="password" autocomplete="off" data-i18n-aria="studio.settingsSecret" aria-label="Key" />
+          <button class="primary" type="submit" data-i18n="studio.settingsSave">Save</button>
+        </form>
+        <p class="hint"><a href="/admin/daedalus/connectors" data-i18n="studio.settingsLegacy">Previous connectors page</a></p>
+      </section>
+    </main>
+
+    <section class="rail">
+      <div class="tabs" role="tablist" data-i18n-aria="studio.railAria" aria-label="Side panels">
+        <button class="on" data-pane="shell" type="button" role="tab" aria-selected="true" data-i18n="studio.tab.shell">Shell</button>
+        <button data-pane="flight" type="button" role="tab" aria-selected="false" data-i18n="studio.tab.flight">Flight</button>
+        <button data-pane="llm" type="button" role="tab" aria-selected="false" data-i18n="studio.tab.llm">Brain</button>
+        <button data-pane="evo" type="button" role="tab" aria-selected="false" data-i18n="studio.tab.evo">Evolution</button>
+        <button data-pane="world" type="button" role="tab" aria-selected="false" data-i18n="studio.tab.world">World</button>
+      </div>
+      <div class="pane on" id="pane-shell">
+        <p class="kicker" data-i18n="studio.commands">Commands</p>
+        <p class="hint" data-i18n="studio.shellHint">Jail: product / playground / data. A selected project changes cwd. Keys never enter the process.</p>
+        <p class="cwd" id="cwd" data-i18n="studio.cwdProduct">cwd · product</p>
+        <input id="shcmd" data-i18n-placeholder="studio.shellPh" placeholder="ls · pytest · python -m compileall" data-i18n-aria="studio.shellAria" aria-label="Shell command" />
+        <div class="row tight"><button class="primary" id="shrun" type="button" data-i18n="studio.run">Run</button></div>
+        <pre id="shout" data-i18n="studio.ready">Ready.</pre>
+      </div>
+      <div class="pane" id="pane-flight">
+        <p class="kicker" data-i18n="studio.flight">Flight</p>
+        <p class="hint" data-i18n="studio.flightHint">Log of the current flight. Epic writes the bible first, then a slice.</p>
+        <pre id="log" data-i18n="studio.noAutopilot">No active autopilot.</pre>
+        <div id="flight-checkpoint" class="checkpoint" hidden>
+          <p class="kicker" data-i18n="studio.checkpoint">Checkpoint</p>
+          <p id="flight-cp-review" data-cp-review></p>
+          <label><span data-i18n="studio.checkpointNotes">Notes</span>
+            <textarea id="flight-cp-notes" rows="2" data-i18n-aria="studio.checkpointNotes" aria-label="Notes"></textarea>
+          </label>
+          <div class="row" id="flight-cp-options" data-cp-options></div>
+        </div>
+      </div>
+      <div class="pane" id="pane-llm">
+        <p class="kicker" data-i18n="studio.wardrobe">Wardrobe</p>
+        <p class="hint" data-i18n="studio.wardrobeHint" data-i18n-html>Same brain for chat, flight, workers, and Command Center. Full keys: <a href="/admin/daedalus/connectors#brain">Connectors</a>.</p>
+        <div class="row tight">
+          <button id="uselocal" type="button">Ollama</button>
+          <button id="usecloud" type="button" data-i18n="studio.cloud">Cloud</button>
+          <button id="offon" type="button" data-i18n="studio.offlineKit">Offline kit</button>
+        </div>
+        <div id="wardrobe"></div>
+        <pre id="llmbox" data-i18n="studio.loading">Loading…</pre>
+      </div>
+      <div class="pane" id="pane-evo">
+        <p class="kicker" data-i18n="studio.evolution">Evolution</p>
+        <p class="hint" data-i18n="studio.evoHint">Off by default. Patches wait for Approve.</p>
+        <div class="row">
+          <button class="primary" id="evoon" type="button" data-i18n="studio.enable">Enable</button>
+          <button id="evocycle" type="button" data-i18n="studio.oneCycle">One cycle</button>
+        </div>
+        <label class="field-num"><span data-i18n="studio.interval">Interval (sec, min 300)</span>
+          <input id="evointerval" type="number" min="300" max="86400" step="300" value="1800" />
+        </label>
+        <label class="hint"><input id="evoclone" type="checkbox" /> <span data-i18n="studio.shallowClone">Shallow clone into data/</span></label>
+        <pre id="evobox" data-i18n="studio.loading">Loading…</pre>
+      </div>
+      <div class="pane" id="pane-world">
+        <p class="kicker" data-i18n="studio.worldKit">World kit</p>
+        <p class="hint" data-i18n="studio.worldHint">Epic is a folder + runtime: save, quest, dialog, graph. Empty JSON is not a campaign. M0–M3 is a prototype — empty systems.json is not a production layer. Unity is Hub or MCP, not Editor in this cloud. Honesty is a suite on this harness, not a bake-off against other products.</p>
+        <div class="list" id="worldkit"></div>
+        <p class="kicker stack-mt" data-i18n="studio.channels">Channels</p>
+        <p class="hint" data-i18n="studio.channelsHint">Reach · MiroFish sidecar · MCP · playtest · dissection · computer.</p>
+        <div class="row">
+          <button id="cxrefresh" type="button" data-i18n="studio.refresh">Refresh</button>
+          <button class="primary" id="ptest" type="button" disabled data-i18n="studio.playtest">Playtest</button>
+        </div>
+        <p class="kicker stack-mt" data-i18n="studio.computer">Computer</p>
+        <p class="hint" data-i18n="studio.computerHint">Same lab as dissection. Local HTTP always. SmolVM (optional) is a guest browser you can watch.</p>
+        <div class="row tight">
+          <button id="pcputer" type="button" data-i18n="studio.watchBuild">Watch build</button>
+          <button id="pcputerstop" type="button" data-i18n="studio.computerStop">Stop</button>
+        </div>
+        <div id="computerbox" class="computer-box"></div>
+        <p class="kicker stack-mt" data-i18n="studio.dissect">Dissection</p>
+        <p class="hint" data-i18n="studio.dissectHint">Name, link, or path. The lab is Daedalus’s virtual machine for the specimen.</p>
+        <input id="dissectsrc" data-i18n-placeholder="studio.dissectPh" placeholder="Flappy Bird · https://itch.io/… · path to zip" data-i18n-aria="studio.dissectAria" aria-label="Dissection source" />
+        <div class="row tight">
+          <button class="primary" id="dissectbtn" type="button" disabled data-i18n="studio.dissect">Dissection</button>
+          <button id="labbtn" type="button" data-i18n="studio.lab">Lab</button>
+        </div>
+        <pre id="worldbox" data-i18n="studio.loading">Loading…</pre>
+      </div>
+    </section>
+  </div>
+  <dialog id="mentor-custom-dlg" class="mentor-dlg">
+    <form method="dialog" id="mentor-custom-form">
+      <p class="kicker" data-i18n="studio.mentorCustomTitle">Director model</p>
+      <p class="hint" data-i18n="studio.mentorCustomHint">Any OpenRouter / AllToken / Novita id. Mentor still caps tokens.</p>
+      <label class="sr-only" for="mentor-prov" data-i18n="studio.mentorProvider">Provider</label>
+      <select id="mentor-prov" aria-label="Provider">
+        <option value="openrouter">openrouter</option>
+        <option value="alltoken">alltoken</option>
+        <option value="novita">novita</option>
+        <option value="openai">openai</option>
+        <option value="nvidia">nvidia</option>
+        <option value="anthropic">anthropic</option>
+      </select>
+      <label class="sr-only" for="mentor-model" data-i18n="studio.mentorModel">Model</label>
+      <input id="mentor-model" list="mentor-model-list" autocomplete="off" placeholder="anthropic/claude-fable-5.1" />
+      <datalist id="mentor-model-list"></datalist>
+      <div class="row tight">
+        <button type="submit" class="primary" id="mentor-custom-apply" data-i18n="studio.mentorCustomApply">Use this</button>
+        <button type="button" id="mentor-custom-cancel" data-i18n="studio.mentorCustomCancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
+  <script src="/static/studio.js"></script>
+  <script src="/static/studio-workspace.js"></script>
+</body>
+</html>

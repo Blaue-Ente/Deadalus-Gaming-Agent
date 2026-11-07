@@ -1,0 +1,41 @@
+name: ci
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install and test
+        run: |
+          pip install -e ".[dev]"
+          python3 -m pytest tests -q
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t daedalus:ci .
+      - name: Health from image
+        run: |
+          docker run -d --name daedalus-ci -p 8787:8787 \
+            -e DAEDALUS_STANDALONE=1 \
+            -e DAEDALUS_TOKEN=ci-health-token \
+            daedalus:ci
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            if curl -fsS http://127.0.0.1:8787/health >/tmp/daedalus-health.json; then
+              python3 -c 'import json; h=json.load(open("/tmp/daedalus-health.json")); assert h.get("ok") is True; assert h.get("standalone") is True; assert "/var/lib/daedalus" in (h.get("sqlite") or ""); assert "/var/lib/daedalus" in (h.get("chroma") or "")'
+              exit 0
+            fi
+            sleep 2
+          done
+          docker logs daedalus-ci
+          exit 1
