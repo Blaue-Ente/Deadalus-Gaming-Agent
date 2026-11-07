@@ -367,6 +367,19 @@
         <p class="hint" data-i18n="studio.classicRemain">The classic page stays available until the old routes redirect. These controls call the same admin routes.</p>
         <p id="review-status" class="workspace-status" role="status" hidden></p>
         <div id="review-list"></div>
+        <div class="blocker-controls" id="blocker-controls">
+          <p class="kicker" data-i18n="studio.blockerTitle">Blockers</p>
+          <p id="blocker-status" class="workspace-status" role="status" hidden></p>
+          <div id="blocker-list"></div>
+          <label>
+            <span data-i18n="studio.blockerNote">Note</span>
+            <input id="blocker-note" type="text" autocomplete="off" data-i18n-aria="studio.blockerNote" aria-label="Note" />
+          </label>
+          <div class="row">
+            <button id="blocker-refresh" type="button" data-i18n="studio.blockerRefresh">Refresh</button>
+          </div>
+          <p class="hint" data-i18n="studio.blockerHint">This list is a local read. Resolve only marks a blocker resolved. It does not grant a permission or change a project kind.</p>
+        </div>
       </section>
       <section id="panel-settings" class="workspace-panel" data-panel="settings" hidden>
         <p class="kicker" data-i18n="studio.panel.settings">Settings</p>

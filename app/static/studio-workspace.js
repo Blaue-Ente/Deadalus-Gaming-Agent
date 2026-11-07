@@ -23,11 +23,15 @@
   let shipGen = 0;
   let shipFlight = 0;
   let shipSlug = null;
+  let blockerGen = 0;
+  let blockerSeq = 0;
+  let blockerFlight = 0;
   const ASSET_GENERATE_TIMEOUT_MS = 120000;
   const ASSET_AUTOPACK_TIMEOUT_MS = 660000;
   const ASSET_PIPELINE_TIMEOUT_MS = 60000;
   const SHIP_TIMEOUT_MS = 60000;
   const SHIP_UNITY_TIMEOUT_MS = 240000;
+  const BLOCKER_TIMEOUT_MS = 20000;
 
   function $(id) { return document.getElementById(id); }
 
@@ -77,6 +81,10 @@
 
   function showPanel(panel, tab) {
     if (PANELS.indexOf(panel) < 0) panel = "chat";
+    if (currentPanel === "review" && panel !== "review") {
+      blockerGen += 1;
+      blockerFlight = 0;
+    }
     currentPanel = panel;
     if (tab && TABS.indexOf(tab) >= 0) currentTab = tab;
     const shell = document.querySelector(".shell");
@@ -96,7 +104,10 @@
     });
     if (panel === "build") loadWorkspace(dx.getSlug());
     if (panel === "preview") loadPreviewStatus(dx.getSlug());
-    if (panel === "review") loadReview(currentTab);
+    if (panel === "review") {
+      loadReview(currentTab);
+      loadBlockers();
+    }
     if (panel === "settings") loadSettings();
     if (queryReady) writeQuery();
   }
@@ -651,6 +662,129 @@
     buttons.forEach((btn) => actions.appendChild(btn));
     el.append(b, s, actions);
     return el;
+  }
+
+  function blockerStill(gen) {
+    return gen === blockerGen && currentPanel === "review";
+  }
+
+  function syncBlockerButtons() {
+    const locked = blockerFlight !== 0;
+    const refresh = $("blocker-refresh");
+    if (refresh) refresh.disabled = locked;
+    document.querySelectorAll("#blocker-list button").forEach((btn) => { btn.disabled = locked; });
+  }
+
+  function blockerFail(err) {
+    const message = String((err && err.message) || err || "");
+    if (err && (err.name === "AbortError" || /aborted|timed out|timeout|изтекло|изтече/i.test(message))) {
+      return dx.t("studio.blockerUnknown");
+    }
+    return dx.t("studio.requestFailed") + ": " + dx.errText(err);
+  }
+
+  function renderBlockers(rows, gen) {
+    const list = $("blocker-list");
+    list.replaceChildren();
+    if (!rows.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = dx.t("studio.blockerNone");
+      list.appendChild(empty);
+      return;
+    }
+    rows.forEach((item) => {
+      if (!item || typeof item !== "object") return;
+      const id = String(item.id || "");
+      const el = document.createElement("div");
+      el.className = "item";
+      const title = document.createElement("b");
+      title.textContent = id;
+      const sub = document.createElement("small");
+      sub.textContent = [item.status, item.reason, item.tried, item.next_steps, item.file_path, item.resolution_note]
+        .filter((value) => typeof value === "string" && value)
+        .join("\n");
+      const actions = document.createElement("div");
+      actions.className = "row tight";
+      if (item.status !== "resolved" && id) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.dataset.gen = String(gen);
+        btn.dataset.id = id;
+        btn.textContent = dx.t("studio.blockerResolve");
+        btn.addEventListener("click", () => resolveBlocker(id, gen, btn));
+        actions.appendChild(btn);
+      }
+      el.append(title, sub, actions);
+      list.appendChild(el);
+    });
+  }
+
+  async function loadBlockers(opts) {
+    if (currentPanel !== "review") return;
+    if (blockerFlight) return;
+    const gen = blockerGen;
+    const flight = ++blockerSeq;
+    blockerFlight = flight;
+    syncBlockerButtons();
+    try {
+      const data = await dx.api("/admin/daedalus/blockers", { timeoutMs: BLOCKER_TIMEOUT_MS });
+      if (!blockerStill(gen) || flight !== blockerFlight) return;
+      if (!data || !Array.isArray(data.blockers)) {
+        showStatus("blocker-status", dx.t("studio.blockerNotOk"), true);
+        $("blocker-list").replaceChildren();
+        return;
+      }
+      renderBlockers(data.blockers, gen);
+      if (!opts || !opts.keepStatus) showStatus("blocker-status", "", false);
+    } catch (err) {
+      if (!blockerStill(gen) || flight !== blockerFlight) return;
+      showStatus("blocker-status", blockerFail(err), true);
+      $("blocker-list").replaceChildren();
+    }     finally {
+      if (blockerFlight === flight) {
+        blockerFlight = 0;
+        syncBlockerButtons();
+      }
+    }
+  }
+
+  function resolveBlocker(id, gen, btn) {
+    if (blockerFlight) return;
+    if (currentPanel !== "review" || !btn.isConnected) return;
+    if (btn.dataset.gen !== String(blockerGen) || gen !== blockerGen) return;
+    const note = ($("blocker-note").value || "").trim();
+    if (!window.confirm(dx.t("studio.blockerConfirm", { id }))) return;
+    if (currentPanel !== "review" || !btn.isConnected) return;
+    if (btn.dataset.gen !== String(blockerGen) || gen !== blockerGen) return;
+    const flight = ++blockerSeq;
+    blockerFlight = flight;
+    syncBlockerButtons();
+    const body = note ? { note } : {};
+    let refresh = false;
+    dx.api("/admin/daedalus/blockers/" + encodeURIComponent(id) + "/resolve", {
+      method: "POST",
+      body: JSON.stringify(body),
+      timeoutMs: BLOCKER_TIMEOUT_MS,
+    }).then((data) => {
+      if (!blockerStill(gen) || flight !== blockerFlight) return;
+      if (!data || data.ok !== true) {
+        const detail = data && (data.error || data.detail);
+        showStatus("blocker-status", dx.t("studio.blockerNotOk") + (detail ? ": " + detail : ""), true);
+        return;
+      }
+      showStatus("blocker-status", dx.t("studio.blockerResolved", { id }), false);
+      refresh = true;
+    }).catch((err) => {
+      if (!blockerStill(gen) || flight !== blockerFlight) return;
+      showStatus("blocker-status", blockerFail(err), true);
+    }).finally(() => {
+      if (blockerFlight === flight) {
+        blockerFlight = 0;
+        syncBlockerButtons();
+      }
+      if (refresh && blockerStill(gen)) loadBlockers({ keepStatus: true });
+    });
   }
 
   async function loadReview(tab) {
@@ -1763,6 +1897,8 @@
   });
   syncShipButtons();
   syncShipVisibility();
+  const blockerRefresh = $("blocker-refresh");
+  if (blockerRefresh) blockerRefresh.addEventListener("click", () => loadBlockers());
 
   const opening = readQuery();
   showPanel(opening.panel, opening.tab);
