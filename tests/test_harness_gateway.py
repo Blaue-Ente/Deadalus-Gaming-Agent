@@ -568,3 +568,128 @@ def test_every_raw_provider_client_in_the_chat_path_sits_behind_a_gateway_flag(g
         if not guarded:
             unguarded.append(call.lineno)
     assert unguarded == []
+
+
+# ---- migrations 4-5: mentor director and worker slots ---------------------------------------------------------------
+
+def test_mentor_director_goes_through_the_gateway_with_json_mode(gw, monkeypatch):
+    from daedalus import mentor_helm
+
+    monkeypatch.setattr("daedalus.llm_config.resolve_provider_api_key", lambda p: "mkey")
+    record = _install_openai(monkeypatch, text='{"action": "continue"}')
+    out = run(mentor_helm._complete_director("openrouter", "mentor/model", '{"digest": 1}'))
+    assert out == '{"action": "continue"}'
+    body = record["body"]
+    assert body["model"] == "mentor/model" and body["temperature"] == 0.1
+    assert body["response_format"] == {"type": "json_object"}
+    assert body["messages"][0]["role"] == "system" and body["messages"][1] == {"role": "user", "content": '{"digest": 1}'}
+    assert record["init"]["base_url"] == "https://openrouter.ai/api/v1"  # the provider's default endpoint
+
+
+def test_mentor_brain_choice_uses_the_configured_endpoint(gw, monkeypatch):
+    from daedalus import mentor_helm
+
+    monkeypatch.setattr(mentor_helm, "get_choice", lambda: {"id": "brain"})
+    record = _install_openai(monkeypatch)
+    run(mentor_helm._complete_director("openrouter", "owner/pick", "{}"))
+    assert record["init"]["base_url"] == "http://x" and record["init"]["api_key"] == "k"  # BRAIN config, not the default URL
+
+
+def test_mentor_receives_frames_as_real_image_parts(gw, monkeypatch):
+    from daedalus import mentor_helm
+
+    monkeypatch.setattr("daedalus.llm_config.resolve_provider_api_key", lambda p: "mkey")
+    record = _install_openai(monkeypatch, text="{}")
+    run(mentor_helm._complete_director("openrouter", "m/m", '{"digest": 1}', frames=[gw.image_part(data=PNG_B64)]))
+    content = record["body"]["messages"][1]["content"]
+    assert content[0] == {"type": "text", "text": '{"digest": 1}'}
+    assert base64.b64decode(content[1]["image_url"]["url"].split(",", 1)[1]) == PNG
+
+
+def test_mentor_budget_stop_raises_and_flag_restores_old_path(gw, monkeypatch):
+    from daedalus import mentor_helm, run_budget
+
+    monkeypatch.setattr("daedalus.llm_config.resolve_provider_api_key", lambda p: "mkey")
+    monkeypatch.setenv("DAEDALUS_RUN_BUDGET", "5")
+    run_budget.note_usage({"cost_usd": 6, "cost_known": True}, model="m", role="writer")
+    with pytest.raises(gw.GatewayCallError) as info:
+        run(mentor_helm._complete_director("openrouter", "m/m", "{}"))
+    assert info.value.error.type == "budget_blocked"
+
+    monkeypatch.setenv("DAEDALUS_RUN_BUDGET", "0")
+    monkeypatch.setenv("DAEDALUS_GATEWAY_MENTOR", "0")
+    record = _install_openai(monkeypatch, text="legacy")
+    assert run(mentor_helm._complete_director("openrouter", "m/m", "{}")) == "legacy"
+    assert record["body"]["response_format"] == {"type": "json_object"}
+
+
+def _slot(model="worker/m", provider="openrouter"):
+    return {"model": model, "provider": provider, "sdk": "openai", "api_key": "wk", "base_url": "http://w", "max_tokens": 500}
+
+
+def test_worker_direct_branch_goes_through_the_gateway(gw, monkeypatch):
+    from daedalus import daedalus_mesh as dm, workers
+
+    monkeypatch.setattr(dm, "should_route_worker_via_mesh", lambda provider, model: False)
+    record = _install_openai(monkeypatch, text="worker answer")
+    out = run(workers._call_worker_single("deep", "do it", _slot()))
+    assert out["ok"] is True and out["result"] == "worker answer"
+    assert record["body"]["max_tokens"] == 500 and record["init"]["base_url"] == "http://w"
+    assert record["body"]["messages"][1] == {"role": "user", "content": "do it"}
+
+    run(workers._call_worker_single("analysis", "think", _slot("o3-mini")))
+    assert record["body"]["max_completion_tokens"] == 2000 and "max_tokens" not in record["body"]  # reasoning budget
+
+
+def test_worker_rate_limit_retries_then_succeeds_and_failure_is_not_ok(gw, monkeypatch):
+    from daedalus import daedalus_mesh as dm, workers
+
+    monkeypatch.setattr(dm, "should_route_worker_via_mesh", lambda provider, model: False)
+    sleeps = []
+
+    async def fake_sleep(s):
+        sleeps.append(s)
+
+    monkeypatch.setattr(workers.asyncio, "sleep", fake_sleep)
+    attempts = {"n": 0}
+
+    class Client:
+        def __init__(self, **kw):
+            self.chat = types.SimpleNamespace(completions=types.SimpleNamespace(create=self.create))
+
+        async def create(self, **kw):
+            attempts["n"] += 1
+            if attempts["n"] < 3:
+                raise RuntimeError("Error 429: rate limit")
+            msg = types.SimpleNamespace(content="finally")
+            return types.SimpleNamespace(choices=[types.SimpleNamespace(message=msg)], usage=None)
+
+    monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(AsyncOpenAI=Client))
+    out = run(workers._call_worker_single("deep", "t", _slot()))
+    assert out["ok"] and out["result"] == "finally" and sleeps == [8, 16] and attempts["n"] == 3
+
+    _install_openai(monkeypatch, exc=RuntimeError("boom"))
+    bad = run(workers._call_worker_single("deep", "t", _slot()))
+    assert bad["ok"] is False and "boom" in bad["result"]
+
+
+def test_worker_obeys_the_run_budget_and_flag_restores_old_path(gw, monkeypatch):
+    from daedalus import daedalus_mesh as dm, run_budget, workers
+
+    monkeypatch.setattr(dm, "should_route_worker_via_mesh", lambda provider, model: False)
+    monkeypatch.setenv("DAEDALUS_RUN_BUDGET", "5")
+    run_budget.note_usage({"cost_usd": 6, "cost_known": True}, model="m", role="writer")
+
+    class Boom:
+        def __init__(self, *a, **k):
+            raise AssertionError("no provider call once the budget is spent")
+
+    monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(AsyncOpenAI=Boom))
+    out = run(workers._call_worker_single("deep", "t", _slot()))
+    assert out["ok"] is False and "blocked" in out["result"]
+
+    monkeypatch.setenv("DAEDALUS_RUN_BUDGET", "0")
+    monkeypatch.setenv("DAEDALUS_GATEWAY_WORKERS", "0")
+    record = _install_openai(monkeypatch, text="old path")
+    assert run(workers._call_worker_single("deep", "t", _slot()))["result"] == "old path"
+    assert record["body"]["max_tokens"] == 500

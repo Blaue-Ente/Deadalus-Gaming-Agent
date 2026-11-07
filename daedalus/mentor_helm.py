@@ -730,8 +730,44 @@ def skip_reason(inspect: dict[str, Any], rules_steer: dict[str, Any], *, turn_ca
     return None
 
 
-async def _complete_director(provider: str, model: str, user: str) -> str:
-    """One-shot JSON call on the chosen provider — does not mutate Studio Brain."""
+async def _complete_director_gateway(provider: str, model: str, user: str,
+                                     frames: list[dict[str, Any]] | None = None) -> str:
+    from .harness import gateway as gw
+    from .llm_config import PROVIDER_DEFAULTS, resolve_provider_api_key
+    from .local_llm import dummy_api_key, is_local_provider
+
+    # "brain" means the Studio brain: use its configured endpoint (the old code used the provider default
+    # URL even then). Any other choice is an explicit provider/model with that provider's default endpoint.
+    if get_choice().get("id") == "brain":
+        cfg = dict(llm_config.get_config())
+        cfg.update({"provider": provider, "model": model})
+        route = cfg
+    else:
+        pd = PROVIDER_DEFAULTS.get(provider) or PROVIDER_DEFAULTS["openai"]
+        key = resolve_provider_api_key(provider) or ""
+        if not key and is_local_provider(provider):
+            key = dummy_api_key(provider)
+        route = gw.route_for(provider, model, key, str(pd.get("base_url") or ""), str(pd.get("sdk") or "openai"))
+    content: Any = user
+    if frames:  # real image parts for the mentor (A5c); never summarised into text
+        content = [gw.text_part(user), *frames]
+    result = await gw.call("mentor", [{"role": "user", "content": content}], system=SYSTEM_PROMPT,
+                           max_tokens=max_out_tokens(), temperature=0.1, json_mode=True,
+                           route=route, timeout=llm_timeout_s(), use_cache=False, client_id="daedalus/mentor")
+    if not result.ok:
+        raise gw.GatewayCallError(result.error or gw.GatewayError("provider_error", "mentor call failed"))
+    return result.text
+
+
+async def _complete_director(provider: str, model: str, user: str,
+                             frames: list[dict[str, Any]] | None = None) -> str:
+    """One-shot JSON call on the chosen provider — does not mutate Studio Brain.
+
+    Goes through the harness gateway; ``DAEDALUS_GATEWAY_MENTOR=0`` restores the original code below.
+    """
+    from .harness import gateway as _gw
+    if _gw.path_enabled("mentor"):
+        return await _complete_director_gateway(provider, model, user, frames)
     from .llm_config import (
         PROVIDER_DEFAULTS,
         openai_compat_extra_body,

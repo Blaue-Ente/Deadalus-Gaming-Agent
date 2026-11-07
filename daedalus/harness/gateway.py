@@ -383,7 +383,7 @@ def _api_key(cfg: dict[str, Any]) -> str:
 
 async def _execute(cfg: dict[str, Any], system: str, messages: list[dict[str, Any]], *, max_tokens: int,
                    temperature: float | None, json_mode: bool, use_cache: bool,
-                   timeout: float | None) -> tuple[str, Any]:
+                   timeout: float | None, reasoning: bool = False) -> tuple[str, Any]:
     """One provider call. Returns (text, raw response). Raises on provider failure."""
     from ..llm_config import openai_compat_extra_body, openai_compat_headers
 
@@ -418,7 +418,9 @@ async def _execute(cfg: dict[str, Any], system: str, messages: list[dict[str, An
     client = AsyncOpenAI(api_key=api_key, base_url=base_url or None, max_retries=1,
                          default_headers=openai_compat_headers(provider) or None)
     oa = _to_openai(msgs, system)
-    body: dict[str, Any] = {"model": model, "messages": oa, "max_tokens": max_tokens}
+    # Reasoning models spend hidden tokens: OpenAI-compatible APIs take max_completion_tokens for them.
+    body: dict[str, Any] = {"model": model, "messages": oa,
+                            ("max_completion_tokens" if reasoning else "max_tokens"): max_tokens}
     if temperature is not None:
         body["temperature"] = temperature
     if json_mode:
@@ -433,7 +435,14 @@ async def _execute(cfg: dict[str, Any], system: str, messages: list[dict[str, An
 
     # A model without image input fails with a typed ``unsupported_modality`` error; the caller decides
     # whether to retry without frames (nothing is silently dropped here).
-    resp = await _once(body)
+    try:
+        resp = await _once(body)
+    except Exception:
+        if not json_mode:
+            raise
+        # Some backends reject response_format; retry once without it (the mentor relied on this).
+        body.pop("response_format", None)
+        resp = await _once(body)
     choice = resp.choices[0] if getattr(resp, "choices", None) else None
     text = (getattr(getattr(choice, "message", None), "content", None) or "") if choice else ""
     if isinstance(text, list):
@@ -454,6 +463,7 @@ async def call(
     overlay: dict[str, Any] | None = None,
     use_cache: bool = True,
     timeout: float | None = None,
+    reasoning: bool = False,
     client_id: str = "",
     slug: str | None = None,
     run_id: str | None = None,
@@ -499,7 +509,8 @@ async def call(
             "auth", f"No API key for provider {res.provider!r}; set the key or use a local model.")))
     try:
         text, raw = await _execute(cfg, system, norm, max_tokens=max_tokens, temperature=temperature,
-                                   json_mode=json_mode, use_cache=use_cache, timeout=timeout)
+                                   json_mode=json_mode, use_cache=use_cache, timeout=timeout,
+                                   reasoning=reasoning)
     except Exception as exc:
         return _finish(GatewayResult(False, error=classify_error(exc)))
     parsed = parse_usage(getattr(raw, "usage", None), raw)
