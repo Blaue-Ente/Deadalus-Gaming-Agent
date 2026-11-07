@@ -155,6 +155,96 @@ def test_mesh_poll_with_mock_transport(tmp_path, monkeypatch):
     assert "post" in calls and "get_bytes" in calls
 
 
+def test_mesh_prompt_and_explicit_status_stay_on_the_stub(tmp_path, monkeypatch):
+    """The rail's body is what run_action already accepts.
+
+    A configured provider rejects an empty prompt before any remote call.
+    Status without job_id only reads assets/_jobs.json. Status with that
+    id polls once and does not submit again.
+    """
+    monkeypatch.setenv("DAEDALUS_DATA", str(tmp_path / "data"))
+    monkeypatch.setenv("DAEDALUS_PLAYGROUND", str(tmp_path / "projects"))
+    monkeypatch.setenv("FAL_KEY", "test-not-a-real-key")
+    for key in ("FAL_API_KEY", "TRIPO_API_KEY", "MESHY_API_KEY", "SUNO_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
+    from daedalus.paths import data_root, playground_projects_dir
+    data_root.cache_clear()
+    playground_projects_dir.cache_clear()
+    slug = "lantern"
+    root = playground_projects_dir() / slug
+    root.mkdir(parents=True)
+    posts: list[str] = []
+    gets: list[str] = []
+    phase = {"status": "IN_PROGRESS"}
+
+    def post_json(url, headers, body):
+        posts.append(str(body.get("prompt") or ""))
+        assert "fal.run" in url
+        assert "test-not-a-real-key" in headers.get("Authorization", "")
+        assert url.startswith("https://queue.fal.run/")
+        return {
+            "request_id": "req-lantern",
+            "status_url": "https://queue.fal.run/status/req-lantern",
+            "response_url": "https://queue.fal.run/res/req-lantern",
+        }
+
+    def get_json(url, headers):
+        gets.append(url)
+        assert "test-not-a-real-key" in headers.get("Authorization", "")
+        if phase["status"] != "COMPLETED":
+            return {"status": phase["status"]}
+        if url.endswith("/res/req-lantern"):
+            return {"model_mesh": {"url": "https://cdn.example/lantern.glb"}}
+        return {"status": "COMPLETED"}
+
+    def get_bytes(url, headers):
+        assert url.endswith(".glb")
+        return greybox_glb_bytes()
+
+    transport = {"post_json": post_json, "get_json": get_json, "get_bytes": get_bytes}
+    refused = run_action("mesh", slug, prompt="   ", name="hero", provider="auto", transport=transport)
+    assert refused["ok"] is False
+    assert refused["error"] == "mesh prompt is empty"
+    assert posts == []
+    assert gets == []
+    listed = run_action("status", slug)
+    assert listed["ok"] is True
+    assert any(row.get("error") == "mesh prompt is empty" for row in listed["jobs"])
+    assert posts == []
+    queued = run_action(
+        "mesh",
+        slug,
+        prompt="a stone lantern",
+        name="lantern",
+        provider="auto",
+        transport=transport,
+    )
+    assert queued["ok"] is True
+    assert queued["status"] == "running"
+    assert queued["id"]
+    assert posts == ["a stone lantern"]
+    again = run_action("status", slug, transport=transport)
+    assert gets == []
+    assert any(row.get("id") == queued["id"] and row.get("status") == "running" for row in again["jobs"])
+    running = run_action("status", slug, job_id=queued["id"], transport=transport)
+    assert running["ok"] is True
+    assert running["status"] == "running"
+    assert not running.get("output")
+    assert posts == ["a stone lantern"]
+    assert len(gets) == 1
+    phase["status"] = "COMPLETED"
+    done = run_action("status", slug, job_id=queued["id"], transport=transport)
+    assert done["ok"] is True
+    assert done["status"] == "done"
+    assert done["output"] == "assets/lantern.glb"
+    assert (root / "assets" / "lantern.glb").is_file()
+    assert posts == ["a stone lantern"]
+    repeat = run_action("status", slug, job_id=queued["id"], transport=transport)
+    assert repeat["status"] == "done"
+    assert repeat["output"] == "assets/lantern.glb"
+    assert posts == ["a stone lantern"]
+
+
 def test_greybox_is_not_a_hero(tmp_path: Path):
     r = write_greybox(tmp_path)
     assert r["ok"] is True

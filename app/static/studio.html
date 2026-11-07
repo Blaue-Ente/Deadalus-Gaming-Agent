@@ -101,6 +101,62 @@
           <div class="list" id="filelist"></div>
           <pre id="fileview"></pre>
           <p class="kicker" data-i18n="studio.assets">Assets</p>
+          <div class="asset-controls" id="asset-controls">
+            <p id="asset-status" class="workspace-status" role="status" hidden></p>
+            <label><span data-i18n="studio.assetPath">Path</span>
+              <input id="asset-path" value="assets/custom.png" autocomplete="off" spellcheck="false" data-i18n-aria="studio.assetPath" aria-label="Path" />
+            </label>
+            <label><span data-i18n="studio.assetPrompt">Prompt</span>
+              <input id="asset-prompt" autocomplete="off" data-i18n-aria="studio.assetPrompt" aria-label="Prompt" />
+            </label>
+            <label><span data-i18n="studio.assetSize">Size</span>
+              <select id="asset-size" data-i18n-aria="studio.assetSize" aria-label="Size">
+                <option value="512x512">512x512</option>
+                <option value="1024x768">1024x768</option>
+                <option value="1024x1024">1024x1024</option>
+              </select>
+            </label>
+            <button id="asset-generate" type="button" data-i18n="studio.assetGenerate">Generate</button>
+            <label><span data-i18n="studio.assetDesc">Description</span>
+              <textarea id="asset-desc" rows="2" data-i18n-aria="studio.assetDesc" aria-label="Description"></textarea>
+            </label>
+            <button id="asset-autopack" type="button" data-i18n="studio.assetAutopack">Auto-pack</button>
+            <label><span data-i18n="studio.assetAction">Pipeline</span>
+              <select id="asset-action" data-i18n-aria="studio.assetAction" aria-label="Pipeline">
+                <option value="status" selected>status</option>
+                <option value="providers">providers</option>
+                <option value="atlas">atlas</option>
+                <option value="tileset">tileset</option>
+                <option value="sfx">sfx</option>
+                <option value="font">font</option>
+                <option value="greybox">greybox</option>
+                <option value="music">music</option>
+                <option value="mesh">mesh</option>
+              </select>
+            </label>
+            <label id="asset-mesh-prompt-field" hidden><span data-i18n="studio.assetMeshPrompt">Mesh prompt</span>
+              <textarea id="asset-mesh-prompt" rows="2" data-i18n-aria="studio.assetMeshPrompt" aria-label="Mesh prompt"></textarea>
+            </label>
+            <label id="asset-mesh-name-field" hidden><span data-i18n="studio.assetMeshName">Name</span>
+              <input id="asset-mesh-name" value="hero" autocomplete="off" spellcheck="false" data-i18n-aria="studio.assetMeshName" aria-label="Name" />
+            </label>
+            <label id="asset-mesh-provider-field" hidden><span data-i18n="studio.assetMeshProvider">Provider</span>
+              <select id="asset-mesh-provider" data-i18n-aria="studio.assetMeshProvider" aria-label="Provider">
+                <option value="auto" selected>auto</option>
+                <option value="fal">fal</option>
+                <option value="tripo">tripo</option>
+                <option value="meshy">meshy</option>
+              </select>
+            </label>
+            <label id="asset-job-field"><span data-i18n="studio.assetJob">Job</span>
+              <select id="asset-job" data-i18n-aria="studio.assetJob" aria-label="Job">
+                <option value="" selected data-i18n="studio.assetJobLocal">Local list</option>
+              </select>
+            </label>
+            <p class="hint" id="asset-kit-note" hidden data-i18n="studio.assetKitNote">Atlas and tileset write the built-in kit only. The API accepts custom source images. This control does not send them.</p>
+            <button id="asset-pipeline" type="button" data-i18n="studio.assetRun">Run</button>
+            <p class="hint" id="asset-backend-note" data-i18n="studio.assetBackendNote">Cancel on the question sends nothing. After a request is sent, leaving this page does not stop the server.</p>
+          </div>
           <div class="list" id="assetlist"></div>
         </div>
         <details id="git-menu">
