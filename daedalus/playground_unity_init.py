@@ -74,18 +74,19 @@ Unity Hub → Open → this folder
 
 async def _shallow_clone(repo_url: str, dest: Path) -> None:
     import os
+    from .git_auth import auth_env, scrub
+
     token = os.environ.get("GITHUB_TOKEN", "").strip()
-    url = repo_url
-    if token and "github.com" in repo_url:
-        url = repo_url.replace("https://github.com/", f"https://x-access-token:{token}@github.com/")
+    env = auth_env("github.com", "x-access-token", token if "github.com" in repo_url else "")
     proc = await asyncio.create_subprocess_exec(
-        "git", "clone", "--depth", "1", url, str(dest),
+        "git", "clone", "--depth", "1", repo_url, str(dest),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        env=env,
     )
     _, err = await asyncio.wait_for(proc.communicate(), timeout=180)
     if proc.returncode != 0:
-        raise RuntimeError((err or b"").decode("utf-8", errors="replace")[:400])
+        raise RuntimeError(scrub((err or b"").decode("utf-8", errors="replace"), token, "x-access-token")[:400])
 
 
 async def init_unity_project(

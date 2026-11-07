@@ -80,25 +80,21 @@ def is_configured() -> bool:
 
 
 def _auth_url(repo_url: str) -> str:
-    """Inject oauth2 token into https GitLab URL for push."""
-    tok = _token()
-    host = re.escape(_host())
-    m = re.match(rf"https://{host}/(.+)", repo_url.strip())
-    if not m or not tok:
-        return repo_url
-    return f"https://oauth2:{tok}@{_host()}/{m.group(1)}"
+    """Return the clean https URL. The token is sent via ``git_auth.auth_env`` in ``_run``,
+    never embedded in the URL, argv or ``.git/config``."""
+    return repo_url.strip()
 
 
 def _scrub_secrets(text: str) -> str:
-    tok = _token()
-    if tok:
-        text = text.replace(tok, "***")
-    return text
+    from .git_auth import scrub
+
+    return scrub(text, _token(), "oauth2")
 
 
 async def _run(args: list[str], *, cwd: Path | None = None, timeout: int = _TIMEOUT) -> tuple[int, str]:
-    env = dict(os.environ)
-    env["GIT_TERMINAL_PROMPT"] = "0"
+    from .git_auth import auth_env
+
+    env = auth_env(_host(), "oauth2", _token())
     proc = await asyncio.create_subprocess_exec(
         *args, cwd=str(cwd) if cwd else None,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,

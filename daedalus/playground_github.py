@@ -389,14 +389,9 @@ async def create_upstream_pr(
 
 
 def _auth_url(repo_url: str) -> str:
-    """Inject token into an https github URL for push/clone of private repos."""
-    tok = _token()
-    if not tok:
-        return repo_url
-    m = re.match(r"https://github\.com/(.+)", repo_url.strip())
-    if not m:
-        return repo_url
-    return f"https://x-access-token:{tok}@github.com/{m.group(1)}"
+    """Return the clean https URL. The token is sent via ``git_auth.auth_env`` in ``_run``,
+    never embedded in the URL, argv or ``.git/config``."""
+    return repo_url.strip()
 
 
 def _repo_slug_from_url(url: str) -> str:
@@ -408,8 +403,9 @@ def _repo_slug_from_url(url: str) -> str:
 
 async def _run(args: list[str], *, cwd: Path | None = None, timeout: int = _TIMEOUT) -> tuple[int, str]:
     """Run a git command, scrubbing the token from any output."""
-    env = dict(os.environ)
-    env["GIT_TERMINAL_PROMPT"] = "0"
+    from .git_auth import auth_env
+
+    env = auth_env("github.com", "x-access-token", _token())
     proc = await asyncio.create_subprocess_exec(
         *args, cwd=str(cwd) if cwd else None,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
@@ -420,10 +416,9 @@ async def _run(args: list[str], *, cwd: Path | None = None, timeout: int = _TIME
     except asyncio.TimeoutError:
         proc.kill()
         return 124, f"timeout after {timeout}s"
-    text = (out or b"").decode("utf-8", errors="replace")
-    tok = _token()
-    if tok:
-        text = text.replace(tok, "***")
+    from .git_auth import scrub
+
+    text = scrub((out or b"").decode("utf-8", errors="replace"), _token(), "x-access-token")
     return proc.returncode or 0, text
 
 
