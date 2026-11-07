@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from . import playground as pg
-from .playground_publish import _zip_dir
+from .playground_publish import _zip_dir, excluded_secret_files
 
 
 def capsule_bytes(slug: str) -> bytes:
@@ -24,10 +24,12 @@ def capsule_meta(slug: str) -> dict[str, Any]:
     root = pg.project_dir(slug)
     exists = root.is_dir()
     index = (root / "index.html").is_file() if exists else False
+    excluded = excluded_secret_files(root) if exists else []
     return {
         "ok": exists,
         "slug": slug,
         "has_index": index,
+        "excluded_secrets": len(excluded),
         "hint": (
             "Unzip and open index.html — работи без сървър."
             if index else
