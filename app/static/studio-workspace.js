@@ -708,18 +708,21 @@
       workspacePainted = "";
     }
     if (!slug) return;
+    const stamp = statusStamp["build-status"] || 0;
+    const untouched = () => (statusStamp["build-status"] || 0) === stamp;   // nothing reported here since this began
     try {
       const data = await dx.api("/admin/daedalus/game-studio/api/projects/" + slugPath(slug));
       if (mine !== workspaceSeq) return;        // a newer load owns the screen
       paintMilestones(data);
       workspacePainted = slug;
-      if (!streamingSlug && !(checkpoint && checkpoint.slug === slug)) showStatus("build-status", "", false);
+      // Clearing the status line is a write like any other: it must not erase what a click reported meanwhile.
+      if (!streamingSlug && !(checkpoint && checkpoint.slug === slug) && untouched()) showStatus("build-status", "", false);
     } catch (err) {
       if (mine !== workspaceSeq) return;
       workspacePainted = "";
       setBuildControlsDisabled();
       $("build-milestones").replaceChildren();
-      if (!streamingSlug) showStatus("build-status", failText(err), true);
+      if (!streamingSlug && untouched()) showStatus("build-status", failText(err), true);
     }
     if (!opts || !opts.quiet) resumeBuild(slug);
   }

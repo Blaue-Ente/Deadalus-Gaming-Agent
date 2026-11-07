@@ -178,3 +178,49 @@ def test_two_resume_asks_while_the_first_waits_make_one_request(studio_server):
             page.wait_for_timeout(50)
         assert any("job-live" in url for url in streams), streams      # the answer was used, not discarded
         browser.close()
+
+
+def test_a_late_workspace_refresh_does_not_erase_what_a_click_reported(studio_server):
+    """The second workspace load used to clear #build-status when it finished, wiping the message of a click made
+    while it was still loading. Hold that second load, click, release it: the message must survive."""
+    from playwright.sync_api import sync_playwright
+
+    game = studio_server["game"]
+    held, seen = [], []
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+
+        def workspace(route):
+            path = route.request.url.split("?", 1)[0].rstrip("/")
+            if route.request.method != "GET" or not path.endswith("/game-studio/api/projects/" + game):
+                route.fallback()
+                return
+            seen.append(path)
+            if len(seen) == 1:
+                _fulfill(route, 200, {"ok": True, "can_guided": True, "can_autopilot": False, "can_advance": False,
+                                      "milestone_summary": {"milestones": []}})
+            else:
+                held.append(route)                   # every later load is held until the test lets it answer
+
+        page.route(f"**/game-studio/api/projects/{game}", workspace)
+        page.route(f"**/game-studio/api/projects/{game}/build/guided",
+                   lambda route: _fulfill(route, 200, {"ok": True, "harness_check": True}))
+        page.goto(studio_server["url"] + f"/?panel=build&slug={game}", wait_until="domcontentloaded")
+        page.wait_for_function("() => !document.getElementById('build-guided').disabled")
+        page.locator("#workspace-nav button[data-panel=preview]").click()
+        page.locator("#workspace-nav button[data-panel=build]").click()      # a fresh load starts and is held
+        for _ in range(100):
+            if held:
+                break
+            page.wait_for_timeout(50)
+        assert held, "no second workspace load was started"
+        page.locator("#build-guided").click()
+        page.wait_for_function("() => document.getElementById('build-status').textContent.length > 0")
+        said = page.evaluate("() => document.getElementById('build-status').textContent")
+        for route in held:
+            _fulfill(route, 200, {"ok": True, "can_guided": True, "can_autopilot": False, "can_advance": False,
+                                  "milestone_summary": {"milestones": []}})
+        page.wait_for_timeout(800)
+        assert page.evaluate("() => document.getElementById('build-status').textContent") == said
+        browser.close()
