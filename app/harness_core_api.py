@@ -63,7 +63,11 @@ def harness_intents() -> dict[str, Any]:
 
             try:
                 choice = mentor_helm.get_choice()
-                row.update({"owner_choice": choice.get("id"), "resolved": {
+                row.update({"owner_choice": choice.get("id"),
+                            "owner_tag": (f"{choice.get('provider')}:{choice.get('model')}"
+                                          if choice.get("id") == "custom" and choice.get("provider") and choice.get("model")
+                                          else ""),
+                            "resolved": {
                     "provider": choice.get("provider"), "model": choice.get("model"),
                     "source": "mentor-choice" if choice.get("source") != "env" else "env-lock",
                     "locked": choice.get("source") == "env"}})
@@ -152,24 +156,36 @@ def harness_engines() -> dict[str, Any]:
     from daedalus.harness.play_worker.backend import platform_cap
     from daedalus.harness.play_worker.manager import max_sessions
 
-    status = engines.tools_status()
+    try:
+        status = engines.tools_status()
+    except Exception as exc:  # discovery must never take the whole Settings panel down
+        status = {"engine": {"ok": False, "error": "discovery_failed", "message": str(exc)[:160]}, "tools": {},
+                  "ready": False}
     vision: dict[str, Any] = {"provider": "", "model": "", "verified": None}
     try:
         from daedalus import mentor_helm
         from daedalus.harness import perception
 
-        endpoint = mentor_helm._resolve_endpoint()
-        if endpoint:
-            provider, model = endpoint
+        choice = mentor_helm.get_choice()                      # public API: reports the model even without a key
+        provider, model = str(choice.get("provider") or ""), str(choice.get("model") or "")
+        if model:
             row = perception.verified_for(provider, model)
             vision = {"provider": provider, "model": model, "verified": (bool(row.get("ok")) if row else None)}
+    except Exception:
+        pass
+    browser_found = False
+    try:
+        from daedalus import playground_browser
+
+        browser_found = bool(playground_browser.chromium_executable())
     except Exception:
         pass
     return {
         "ok": True, "platform": sys.platform, "engine": status["engine"], "tools": status["tools"],
         "ready": status["ready"], "max_sessions": max_sessions(), "platform_cap": platform_cap(),
         "vision": vision,
-        "proof_levels": proof.describe(native_ready=bool(status["ready"]), vision_verified=vision["verified"]),
+        "proof_levels": proof.describe(engine_found=bool(status["engine"].get("ok")), browser_found=browser_found,
+                                       native_ready=bool(status["ready"]), vision_verified=vision["verified"]),
     }
 
 

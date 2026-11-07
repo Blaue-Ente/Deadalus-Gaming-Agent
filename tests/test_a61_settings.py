@@ -33,6 +33,8 @@ def test_engines_endpoint_reports_machine_and_proof_levels(a0_tmp, monkeypatch):
     assert [p["level"] for p in body["proof_levels"]] == [0, 1, 2, 3, 4, 5]
     by = {p["level"]: p for p in body["proof_levels"]}
     assert by[0]["reachable"] is True and by[3]["reachable"] is False and by[5]["reachable"] is False   # honest
+    assert by[1]["reachable"] is False                    # L1 needs the engine, and there is none
+    assert isinstance(by[2]["reachable"], bool)           # L2 follows whether a headless browser exists
     assert 1 <= body["max_sessions"] <= body["platform_cap"] <= 3
     assert set(body["vision"]) == {"provider", "model", "verified"}
 
@@ -49,6 +51,34 @@ def test_intents_list_survives_a_fresh_install_with_no_provider(a0_tmp, monkeypa
     rows = {r["intent"]: r for r in res.json()["intents"]}
     assert sorted(rows) == sorted(INTENTS)
     assert rows["critic"]["resolved"]["source"] == "unconfigured" and rows["critic"]["selectable"] is True
+
+
+def test_engines_endpoint_survives_a_failing_probe_and_shows_a_model_without_a_key(a0_tmp, monkeypatch):  # noqa: F811
+    from app.main import app
+    from daedalus import mentor_helm
+    from daedalus.harness.play_worker import engines
+
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    mentor_helm.set_choice({"provider": "openrouter", "model": "x/vision-model"})      # chosen, but no key anywhere
+    monkeypatch.setattr(engines, "tools_status", lambda: (_ for _ in ()).throw(RuntimeError("probe hung")))
+    res = TestClient(app).get("/api/v1/harness/engines")
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["engine"]["ok"] is False and body["ready"] is False and "probe hung" in body["engine"]["message"]
+    assert body["vision"]["model"] == "x/vision-model" and body["vision"]["verified"] is None   # not 'no model set'
+
+
+def test_the_mentor_row_carries_a_real_tag_only_for_a_custom_choice(a0_tmp):  # noqa: F811
+    from app.main import app
+    from daedalus import mentor_helm
+
+    c = TestClient(app)
+    mentor_helm.set_choice({"choice_id": "rules"})
+    row = {r["intent"]: r for r in c.get("/api/v1/harness/intents").json()["intents"]}["mentor"]
+    assert row["owner_choice"] == "rules" and row["owner_tag"] == ""          # an id is not a provider:model
+    mentor_helm.set_choice({"provider": "openrouter", "model": "openai/gpt-4o"})
+    row = {r["intent"]: r for r in c.get("/api/v1/harness/intents").json()["intents"]}["mentor"]
+    assert row["owner_tag"] == "openrouter:openai/gpt-4o"
 
 
 # ---------------------------------------------------------------------------------------------- browser
@@ -212,4 +242,73 @@ def test_opening_settings_twice_does_not_duplicate_rows(studio_server):
         page.wait_for_timeout(800)
         assert page.locator(".cfg-row[data-key]").count() == len(KEYS)
         assert page.locator(".cfg-row[data-intent]").count() == len(INTENTS)
+        browser.close()
+
+
+def test_the_mentor_field_never_holds_an_internal_choice_id(studio_server):
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        _open(page, studio_server)
+        value = page.locator(".cfg-row[data-intent='mentor'] input").input_value()
+        assert value == "" or ":" in value, value               # 'rules' / 'brain' would be rejected on Save
+        browser.close()
+
+
+def test_pinned_and_shared_tasks_are_labelled_honestly(studio_server):
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        _open(page, studio_server)
+        assert "Built-in default" in page.inner_text(".cfg-row[data-intent='scout'] .cfg-note")      # not 'follows the brain'
+        assert "share one setting" in page.inner_text(".cfg-row[data-intent='persona'] .cfg-note")
+        assert "share one setting" in page.inner_text(".cfg-row[data-intent='writer'] .cfg-note")
+        page.locator(".cfg-row[data-intent='persona'] input").fill("openrouter:test/shared")
+        page.locator(".cfg-row[data-intent='persona'] .cfg-save").click()
+        page.wait_for_function("() => document.querySelector(\".cfg-row[data-intent='writer'] input\").value === 'openrouter:test/shared'")
+        page.locator(".cfg-row[data-intent='writer'] .cfg-clear").click()
+        page.wait_for_function("() => document.querySelector(\".cfg-row[data-intent='persona'] input\").value === ''")
+        browser.close()
+
+
+def test_an_empty_number_is_refused_in_the_page_and_other_edits_survive_a_save(studio_server):
+    from playwright.sync_api import sync_playwright
+
+    posts = []
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        page.on("request", lambda r: posts.append(r.url) if r.method == "POST" and "harness/config" in r.url else None)
+        _open(page, studio_server)
+        row = page.locator(".cfg-row[data-key='play.max_sessions']")
+        row.locator("input").fill("")
+        row.locator(".cfg-save").click()
+        page.wait_for_function("() => document.querySelector(\".cfg-row[data-key='play.max_sessions'] .cfg-note:not([hidden])\") !== null")
+        assert "whole number" in page.inner_text(".cfg-row[data-key='play.max_sessions'] .cfg-note") and posts == []
+        # an unsaved edit in another row is kept when a different row is saved
+        page.locator(".cfg-row[data-key='mentor.day_token_cap'] input").fill("12345")
+        row.locator("input").fill("1")
+        row.locator(".cfg-save").click()
+        page.wait_for_function("() => document.getElementById('harness-status').textContent === 'Saved.'")
+        assert page.locator(".cfg-row[data-key='mentor.day_token_cap'] input").input_value() == "12345"
+        browser.close()
+
+
+def test_one_broken_section_does_not_hide_the_others(studio_server):
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        page.route("**/api/v1/harness/intents", lambda route: _fulfill(route, 200, {"ok": True, "intents": [None]}))
+        page.route("**/api/v1/harness/engines", lambda route: _fulfill(route, 500, {"detail": "engines down"}))
+        page.add_init_script("try { localStorage.setItem('dx.lang', 'en'); } catch (e) {}")
+        page.goto(studio_server["url"] + "/?panel=settings", wait_until="domcontentloaded")
+        page.wait_for_selector(".cfg-row[data-key]")           # settings still painted
+        page.wait_for_function("() => document.getElementById('harness-status').textContent.includes('engines down')")
+        assert page.locator(".cfg-row[data-key]").count() == len(KEYS)
         browser.close()

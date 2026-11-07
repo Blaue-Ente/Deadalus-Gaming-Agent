@@ -2029,49 +2029,51 @@
     return el.value;
   }
 
+  function buildConfigRow(row) {
+    const item = document.createElement("div");
+    item.className = "cfg-row";
+    item.dataset.key = row.key;
+    item.dataset.locked = row.env_locked ? "1" : "0";
+    const name = document.createElement("div");
+    name.className = "cfg-name";
+    const b = document.createElement("b");
+    b.textContent = tOr(row.title_key, row.key);
+    const small = document.createElement("small");
+    small.textContent = row.key;
+    name.append(b, small);
+    const control = cfgControl(row);
+    const wrap = document.createElement("div");
+    wrap.className = "cfg-control";
+    wrap.appendChild(control);
+    const actions = document.createElement("div");
+    actions.className = "cfg-actions";
+    actions.appendChild(badge(row.source || "default"));
+    const note = document.createElement("p");
+    note.className = "cfg-note";
+    note.hidden = true;
+    if (row.env_locked) {
+      note.textContent = dx.t("studio.settingsLockedBy", { env: row.env || "" });
+      note.hidden = false;
+    } else if (!row.writable) {
+      note.textContent = dx.t("studio.settingsReadOnly") + (row.source === "unavailable" && row.error ? " " + row.error : "");
+      note.hidden = false;
+    }
+    if (row.writable) {
+      const save = document.createElement("button");
+      save.type = "button";
+      save.className = "primary cfg-save";
+      save.textContent = dx.t("studio.settingsSave");
+      save.addEventListener("click", () => saveConfigRow(row, control, note, item, save));
+      actions.appendChild(save);
+    }
+    item.append(name, wrap, actions, note);
+    return item;
+  }
+
   function paintConfig(rows) {
     const box = $("settings-config");
     box.replaceChildren();
-    (rows || []).forEach((row) => {
-      const item = document.createElement("div");
-      item.className = "cfg-row";
-      item.dataset.key = row.key;
-      item.dataset.locked = row.env_locked ? "1" : "0";
-      const name = document.createElement("div");
-      name.className = "cfg-name";
-      const b = document.createElement("b");
-      b.textContent = tOr(row.title_key, row.key);
-      const small = document.createElement("small");
-      small.textContent = row.key;
-      name.append(b, small);
-      const control = cfgControl(row);
-      const wrap = document.createElement("div");
-      wrap.className = "cfg-control";
-      wrap.appendChild(control);
-      const actions = document.createElement("div");
-      actions.className = "cfg-actions";
-      actions.appendChild(badge(row.source || "default"));
-      const note = document.createElement("p");
-      note.className = "cfg-note";
-      note.hidden = true;
-      if (row.env_locked) {
-        note.textContent = dx.t("studio.settingsLockedBy", { env: row.env || "" });
-        note.hidden = false;
-      } else if (!row.writable) {
-        note.textContent = dx.t("studio.settingsReadOnly") + (row.source === "unavailable" && row.error ? " " + row.error : "");
-        note.hidden = false;
-      }
-      if (row.writable) {
-        const save = document.createElement("button");
-        save.type = "button";
-        save.className = "primary cfg-save";
-        save.textContent = dx.t("studio.settingsSave");
-        save.addEventListener("click", () => saveConfigRow(row, control, note, item, save));
-        actions.appendChild(save);
-      }
-      item.append(name, wrap, actions, note);
-      box.appendChild(item);
-    });
+    (rows || []).forEach((row) => box.appendChild(buildConfigRow(row)));
   }
 
   function cfgError(note, item, text) {
@@ -2084,10 +2086,16 @@
     item.dataset.state = "";
     note.hidden = true;
     const value = cfgValue(row, control);
+    if (row.kind === "int" && !Number.isFinite(value)) {          // an empty field would be sent as null
+      cfgError(note, item, dx.t("studio.settingsNeedNumber"));
+      return;
+    }
     await runAction(button, "harness-status", async () => {
       try {
         const data = await postJson("/api/v1/harness/config", { key: row.key, value });
-        paintConfig(data.settings || []);
+        const fresh = (data.settings || []).find((r) => r.key === row.key);
+        // Replace only the saved row: edits the owner has not saved in the other rows are theirs to keep.
+        if (fresh && item.isConnected) item.replaceWith(buildConfigRow(fresh));
         showStatus("harness-status", dx.t("studio.saved"), false);
       } catch (err) {
         const msg = String((err && err.message) || "");
@@ -2104,61 +2112,73 @@
     return chosen || dx.t("studio.settingsNoModel");
   }
 
+  function intentTag(row) {
+    // The mentor reports its own choice id (brain, rules, a catalog id); only a real provider:model is a tag.
+    const raw = row.intent === "mentor" ? row.owner_tag : row.owner_choice;
+    return raw && raw !== "auto" ? String(raw) : "";
+  }
+
+  function buildIntentRow(row, data) {
+    const item = document.createElement("div");
+    item.className = "cfg-row";
+    item.dataset.intent = row.intent;
+    const locked = !!((row.resolved && row.resolved.locked) || (row.selectable && data.env_locked && row.intent !== "mentor"));
+    item.dataset.locked = locked ? "1" : "0";
+    const name = document.createElement("div");
+    name.className = "cfg-name";
+    const b = document.createElement("b");
+    b.textContent = tOr("studio.intent." + row.intent, row.intent);
+    const small = document.createElement("small");
+    small.textContent = intentModelText(row) + (row.resolved && row.resolved.source ? " · " + row.resolved.source : "");
+    name.append(b, small);
+    const wrap = document.createElement("div");
+    wrap.className = "cfg-control";
+    const actions = document.createElement("div");
+    actions.className = "cfg-actions";
+    const note = document.createElement("p");
+    note.className = "cfg-note";
+    note.hidden = true;
+    if (row.selectable) {
+      const input = document.createElement("input");
+      input.autocomplete = "off";
+      input.value = intentTag(row);
+      input.placeholder = row.default ? dx.t("studio.intentDefault", { model: row.default }) : "provider:model";
+      input.disabled = locked;
+      input.setAttribute("aria-label", tOr("studio.intent." + row.intent, row.intent));
+      wrap.appendChild(input);
+      if (locked) {
+        note.textContent = dx.t("studio.settingsLockedBy", { env: row.intent === "mentor" ? "DAEDALUS_MENTOR_MODEL" : "DAEDALUS_MODEL" });
+        note.hidden = false;
+        actions.appendChild(badge("env"));
+      } else {
+        const save = document.createElement("button");
+        save.type = "button";
+        save.className = "primary cfg-save";
+        save.textContent = dx.t("studio.settingsSave");
+        const clear = document.createElement("button");
+        clear.type = "button";
+        clear.className = "cfg-clear";
+        clear.textContent = dx.t("studio.settingsClear");
+        save.addEventListener("click", () => saveIntent(row.intent, input.value.trim(), note, item, save));
+        clear.addEventListener("click", () => saveIntent(row.intent, "", note, item, clear));
+        actions.append(save, clear);
+        if (row.intent === "persona" || row.intent === "writer") {   // both write the one writer override
+          note.textContent = dx.t("studio.intentShared");
+          note.hidden = false;
+        }
+      }
+    } else {
+      note.textContent = row.default ? dx.t("studio.intentPinned", { model: row.default }) : dx.t("studio.intentFollows");
+      note.hidden = false;
+    }
+    item.append(name, wrap, actions, note);
+    return item;
+  }
+
   function paintIntents(data) {
     const box = $("settings-intents");
     box.replaceChildren();
-    ((data && data.intents) || []).forEach((row) => {
-      const item = document.createElement("div");
-      item.className = "cfg-row";
-      item.dataset.intent = row.intent;
-      const locked = !!((row.resolved && row.resolved.locked) || (row.selectable && data.env_locked && row.intent !== "mentor"));
-      item.dataset.locked = locked ? "1" : "0";
-      const name = document.createElement("div");
-      name.className = "cfg-name";
-      const b = document.createElement("b");
-      b.textContent = tOr("studio.intent." + row.intent, row.intent);
-      const small = document.createElement("small");
-      small.textContent = intentModelText(row) + (row.resolved && row.resolved.source ? " · " + row.resolved.source : "");
-      name.append(b, small);
-      const wrap = document.createElement("div");
-      wrap.className = "cfg-control";
-      const actions = document.createElement("div");
-      actions.className = "cfg-actions";
-      const note = document.createElement("p");
-      note.className = "cfg-note";
-      note.hidden = true;
-      if (row.selectable) {
-        const input = document.createElement("input");
-        input.autocomplete = "off";
-        input.value = row.owner_choice && row.owner_choice !== "auto" ? String(row.owner_choice) : "";
-        input.placeholder = row.default ? dx.t("studio.intentDefault", { model: row.default }) : "provider:model";
-        input.disabled = locked;
-        input.setAttribute("aria-label", tOr("studio.intent." + row.intent, row.intent));
-        wrap.appendChild(input);
-        if (locked) {
-          note.textContent = dx.t("studio.settingsLockedBy", { env: row.intent === "mentor" ? "DAEDALUS_MENTOR_MODEL" : "DAEDALUS_MODEL" });
-          note.hidden = false;
-          actions.appendChild(badge("env"));
-        } else {
-          const save = document.createElement("button");
-          save.type = "button";
-          save.className = "primary cfg-save";
-          save.textContent = dx.t("studio.settingsSave");
-          const clear = document.createElement("button");
-          clear.type = "button";
-          clear.className = "cfg-clear";
-          clear.textContent = dx.t("studio.settingsClear");
-          save.addEventListener("click", () => saveIntent(row.intent, input.value.trim(), note, item, save));
-          clear.addEventListener("click", () => saveIntent(row.intent, "", note, item, clear));
-          actions.append(save, clear);
-        }
-      } else {
-        note.textContent = dx.t("studio.intentFollows");
-        note.hidden = false;
-      }
-      item.append(name, wrap, actions, note);
-      box.appendChild(item);
-    });
+    ((data && data.intents) || []).forEach((row) => box.appendChild(buildIntentRow(row, data)));
   }
 
   async function saveIntent(intent, model, note, item, button) {
@@ -2166,7 +2186,13 @@
     note.hidden = true;
     await runAction(button, "harness-status", async () => {
       try {
-        paintIntents(await postJson("/api/v1/harness/intents", { intent, model }));
+        const data = await postJson("/api/v1/harness/intents", { intent, model });
+        // Persona and Writer share one setting, so both rows are rebuilt; every other row keeps its unsaved edits.
+        ((data && data.intents) || []).forEach((fresh) => {
+          const same = fresh.intent === intent || (fresh.intent === "persona" && intent === "writer") || (fresh.intent === "writer" && intent === "persona");
+          const el = document.querySelector("#settings-intents .cfg-row[data-intent='" + fresh.intent + "']");
+          if (same && el) el.replaceWith(buildIntentRow(fresh, data));
+        });
         showStatus("harness-status", dx.t("studio.saved"), false);
       } catch (err) {
         const msg = String((err && err.message) || "");
@@ -2229,13 +2255,18 @@
   async function loadHarnessSettings() {
     const mine = ++harnessSeq;
     const calls = ["/api/v1/harness/config", "/api/v1/harness/intents", "/api/v1/harness/engines"].map((p) => dx.api(p));
-    const [config, intents, engines] = await Promise.allSettled(calls);
+    const results = await Promise.allSettled(calls);
     if (mine !== harnessSeq) return;                  // a newer load owns the screen
-    if (config.status === "fulfilled") paintConfig(config.value.settings || []);
-    if (intents.status === "fulfilled") paintIntents(intents.value);
-    if (engines.status === "fulfilled") { paintEngines(engines.value); paintProof(engines.value); }
-    const failed = [config, intents, engines].find((r) => r.status === "rejected");
-    showStatus("harness-status", failed ? dx.t("studio.requestFailed") + ": " + failText(failed.reason) : "", !!failed);
+    const problems = [];
+    const paint = (res, fn) => {
+      if (res.status === "rejected") { problems.push(failText(res.reason)); return; }
+      try { fn(res.value); } catch (err) { problems.push(failText(err)); }     // one broken section must not hide the rest
+    };
+    paint(results[0], (v) => paintConfig(v.settings || []));
+    paint(results[1], paintIntents);
+    paint(results[2], (v) => { paintEngines(v); paintProof(v); });
+    const unique = problems.filter((p, i) => problems.indexOf(p) === i);
+    showStatus("harness-status", unique.length ? dx.t("studio.requestFailed") + ": " + unique.join(" · ") : "", unique.length > 0);
   }
 
   async function loadSettings() {

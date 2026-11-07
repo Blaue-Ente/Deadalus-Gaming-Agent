@@ -14,15 +14,21 @@ LEVELS: tuple[tuple[int, str, str], ...] = (
 )
 
 
-def describe(*, native_ready: bool, vision_verified: bool | None) -> list[dict[str, Any]]:
-    """Each level and whether this machine can reach it right now. L5 is only 'verified' after a stored probe."""
+def describe(*, engine_found: bool, browser_found: bool, native_ready: bool,
+             vision_verified: bool | None) -> list[dict[str, Any]]:
+    """Each level and whether this machine can reach it right now. L1 needs the engine, L2 a headless browser,
+    L3/L4 the whole native stack, and L5 additionally a stored, positive vision probe."""
     out: list[dict[str, Any]] = []
     for level, key, produced_by in LEVELS:
-        if level in (3, 4):
-            reachable: bool | None = bool(native_ready)
-        elif level == 5:
-            reachable = bool(native_ready) and bool(vision_verified)
-        else:
+        if level == 0:
             reachable = True
+        elif level == 1:
+            reachable = bool(engine_found)
+        elif level == 2:
+            reachable = bool(browser_found)
+        elif level in (3, 4):
+            reachable = bool(native_ready)
+        else:
+            reachable = bool(native_ready) and bool(vision_verified)
         out.append({"level": level, "key": key, "produced_by": produced_by, "reachable": reachable})
     return out
