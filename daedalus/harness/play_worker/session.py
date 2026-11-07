@@ -91,6 +91,7 @@ class PlaySession:
         self.display = getattr(self.backend, "display", None)     # Linux: the Xvfb display (None on Windows)
         self.game: godot_bridge.GodotSession | None = None
         self.window_id = ""
+        self._engine_out: Path | None = None            # where a Unity player writes its own screenshots and log
         self.state = "new"           # new -> running -> stopped | failed
         self.level = 0               # proof level reached by what was OBSERVED
         self.started_at = 0.0
@@ -175,15 +176,16 @@ class PlaySession:
             built = unity.build_player(self.source, artifact_root() / "unity-cache", eng["path"],
                                        log=self.artifacts / "unity-build.log")
             self._event("built", cached=built["cached"], key=built["key"], seconds=built["build_seconds"])
+            if self.state != "new":                       # stop() ran while the build did: do not launch anything
+                raise PlayError("session_stopped", f"session was {self.state} during the build")
             self.workdir = Path(tempfile.mkdtemp(prefix=f"daedalus-play-{self.id}-"))
             self._engine_out = self.workdir / "out"
             self._engine_out.mkdir()
             backend_env = self.backend.start(self.size)
             env = {**os.environ, **backend_env, **self.env_extra}
-            self.game = unity.UnityGame(self.workdir)
-            self.game._w, self.game._h = self.size
+            self.game = unity.UnityGame(self.workdir, size=self.size, out_dir=self._engine_out)
             ping = self.game.start(binary=built["exe"], timeout=max(timeout, 60.0), env=env,
-                                   out_dir=self._engine_out, **self.backend.popen_flags())
+                                   **self.backend.popen_flags())
             if not ping.get("ok"):
                 raise PlayError("start_failed", str(ping.get("error") or "bridge did not answer"),
                                 stdout=str(ping.get("stdout", ""))[-600:])
@@ -258,7 +260,7 @@ class PlaySession:
                 shot = self.game.request("screenshot")
                 if not shot.get("ok"):
                     raise PlayError("window_missing", f"engine viewport unavailable: {shot.get('error')}")
-                base = getattr(self, "_engine_out", None) or ((self.workdir / "project") if self.workdir else None)
+                base = self._engine_out or ((self.workdir / "project") if self.workdir else None)
                 src = (base / str(shot.get("path", ""))) if base else None
                 if src is None or not src.is_file():
                     raise PlayError("window_missing", "engine screenshot file not found")

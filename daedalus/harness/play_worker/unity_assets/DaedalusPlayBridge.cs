@@ -30,8 +30,7 @@ namespace Daedalus
         readonly List<string> _errors = new List<string>();
         string _outDir = "";
         float _fps = 0f;
-        int _waitFrames = -1;
-        Dictionary<string, string> _waitReq;
+        readonly List<KeyValuePair<int, Dictionary<string, string>>> _waits = new List<KeyValuePair<int, Dictionary<string, string>>>();
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
         static void Boot()
@@ -115,10 +114,12 @@ namespace Daedalus
             Action a;
             int guard = 0;
             while (guard++ < 8 && _inbox.TryDequeue(out a)) a();
-            if (_waitFrames > 0 && --_waitFrames == 0 && _waitReq != null)
+            for (int i = _waits.Count - 1; i >= 0; i--)
             {
-                var req = _waitReq; _waitReq = null; _waitFrames = -1;
-                Reply(req, "\"waited\":" + req["n"] + ",\"fps\":" + F(_fps));
+                int left = _waits[i].Key - 1;
+                var req = _waits[i].Value;
+                if (left <= 0) { _waits.RemoveAt(i); Reply(req, "\"waited\":" + req["n"] + ",\"fps\":" + F(_fps)); }
+                else _waits[i] = new KeyValuePair<int, Dictionary<string, string>>(left, req);
             }
         }
 
@@ -131,6 +132,12 @@ namespace Daedalus
             try { req = ParseFlat(line); }
             catch (Exception) { Write("{\"ok\":false,\"error\":\"not_json_object\"}"); return; }
             string op = Get(req, "op");
+            try { Dispatch(req, op); }
+            catch (Exception e) { Fail(req, "bridge_exception: " + e.GetType().Name + ": " + e.Message); }
+        }
+
+        void Dispatch(Dictionary<string, string> req, string op)
+        {
             switch (op)
             {
                 case "ping":
@@ -145,7 +152,7 @@ namespace Daedalus
                 case "wait_frames":
                     int n = Mathf.Clamp(ParseInt(Get(req, "n"), 1), 1, 180);
                     req["n"] = n.ToString(CultureInfo.InvariantCulture);
-                    _waitReq = req; _waitFrames = n; break;
+                    _waits.Add(new KeyValuePair<int, Dictionary<string, string>>(n, req)); break;
                 case "screenshot":
                     StartCoroutine(Screenshot(req)); break;
                 case "call_method":
@@ -189,7 +196,9 @@ namespace Daedalus
                 if (comp == null) continue;
                 var m = comp.GetType().GetMethod(method, BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null);
                 if (m == null) continue;
-                object ret = m.Invoke(comp, null);
+                object ret;
+                try { ret = m.Invoke(comp, null); }
+                catch (TargetInvocationException tie) { Fail(req, "game_exception: " + (tie.InnerException ?? tie).GetType().Name + ": " + (tie.InnerException ?? tie).Message); return; }
                 string s = ret as string;
                 if (s != null && s.TrimStart().StartsWith("{")) Reply(req, "\"result_json\":" + Q(s));
                 else Reply(req, "\"result_json\":" + Q(ret == null ? "null" : Q(ret.ToString())));

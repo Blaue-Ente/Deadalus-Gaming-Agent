@@ -96,6 +96,97 @@ def test_a_godot_project_is_not_started_as_unity(tmp_path):
     assert exc.value.code in {"engine_missing", "start_failed"}      # never a started session
 
 
+# ------------------------------------------------------------------------------------------ review fixes (pure)
+def test_copy_drops_only_the_project_roots_caches_not_same_named_game_content(tmp_path):
+    src = tmp_path / "p"
+    for rel in ("Assets/Build/level.txt", "Assets/Resources/Temp/a.txt", "Assets/Logs/x.txt", "Library/junk", "Temp/t", "obj/o"):
+        f = src / rel
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text("x")
+    (src / "ProjectSettings").mkdir()
+    dst = tmp_path / "copy"
+    unity._copy_project(src, dst)
+    assert (dst / "Assets/Build/level.txt").is_file() and (dst / "Assets/Resources/Temp/a.txt").is_file()
+    assert (dst / "Assets/Logs/x.txt").is_file()
+    assert not (dst / "Library").exists() and not (dst / "Temp").exists() and not (dst / "obj").exists()
+
+
+def test_a_cached_player_without_its_completion_marker_is_not_trusted(tmp_path):
+    out = tmp_path / "k"
+    out.mkdir()
+    (out / "Game.exe").write_text("x")                      # an interrupted copy: exe present, Game_Data missing
+    assert unity._cached(out) is False
+    (out / unity._DONE).write_text("1")
+    assert unity._cached(out) is True
+
+
+def test_content_hash_streams_large_files(tmp_path):
+    proj = tmp_path / "p"
+    shutil.copytree(FIXTURE, proj)
+    big = proj / "Assets" / "big.bin"
+    big.write_bytes(b"a" * (3 << 20))
+    h = unity.content_hash(proj, "e")
+    big.write_bytes(b"a" * ((3 << 20) - 1) + b"b")
+    assert unity.content_hash(proj, "e") != h
+
+
+def test_find_unity_knows_the_linux_and_macos_hub_layouts(tmp_path, monkeypatch):
+    for var in ("UNITY_PATH", "UNITY_EDITOR"):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("USERPROFILE", str(tmp_path))
+    monkeypatch.setattr(unity.shutil, "which", lambda name: None)
+    base = tmp_path / "Unity" / "Hub" / "Editor"
+    mac = base / "6000.1.0f1" / "Unity.app" / "Contents" / "MacOS" / "Unity"
+    mac.parent.mkdir(parents=True)
+    mac.write_text("x")
+    assert unity.find_unity()["path"] == str(mac)
+    lin = base / "6000.4.11f1" / "Editor" / ("Unity.exe" if os.name == "nt" else "Unity")
+    lin.parent.mkdir(parents=True)
+    lin.write_text("x")
+    assert unity.find_unity()["path"] == str(lin)           # newest version wins
+
+
+def test_stopping_during_the_build_launches_nothing(tmp_path, monkeypatch):
+    from daedalus.harness.play_worker import session as sess_mod
+
+    class FakeBackend:
+        name = "fake"
+        stopped = 0
+        def tools(self): return {}
+        def stop(self): self.stopped += 1
+        def start(self, size): raise AssertionError("no display may start after a stop")
+        def label(self): return ""
+
+    (tmp_path / "Assets").mkdir()
+    (tmp_path / "ProjectSettings").mkdir()
+    monkeypatch.setattr(unity, "find_unity", lambda: {"ok": True, "path": "unity", "source": "env"})
+    s = sess_mod.PlaySession(tmp_path, slug="x", engine="unity", artifacts=tmp_path / "art")
+    s.backend = FakeBackend()
+
+    def slow_build(*a, **k):
+        s.stop()                                              # the owner stops the session while Unity builds
+        return {"ok": True, "exe": "never-launched.exe", "cached": False, "key": "k", "build_seconds": 1.0}
+
+    monkeypatch.setattr(unity, "build_player", slow_build)
+    with pytest.raises(PlayError) as exc:
+        s.start()
+    assert exc.value.code == "session_stopped" and s.game is None and s.workdir is None
+    assert s.state in {"stopped", "failed"} and s.status()["alive"] is False
+
+
+def test_the_player_log_is_part_of_the_diagnostics(tmp_path):
+    g = unity.UnityGame(tmp_path, out_dir=tmp_path)
+    (tmp_path / "player.log").write_text("NullReferenceException in FixtureGame\n", encoding="utf-8")
+    assert "NullReferenceException" in g.stdout_tail()
+
+
+def test_the_bridge_answers_every_request_even_when_the_game_throws():
+    src = (unity._ASSETS / "DaedalusPlayBridge.cs").read_text(encoding="utf-8")
+    assert "catch (Exception e) { Fail(req, \"bridge_exception" in src and "TargetInvocationException" in src
+    assert "_waits" in src and "_waitReq" not in src          # several wait_frames can be pending, none is dropped
+
+
 # ------------------------------------------------------------------------------------------ live (Windows only)
 def _prereq() -> tuple[bool, str]:
     if sys.platform != "win32":
