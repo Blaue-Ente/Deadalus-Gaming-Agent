@@ -260,6 +260,42 @@
       }
       spendEl.title = bits.join(" ");
     }
+    enrichMentorFromCatalog();
+  }
+
+  let mentorCatalogSeq = 0;
+
+  function enrichMentorFromCatalog() {
+    const seq = ++mentorCatalogSeq;
+    api("/api/v1/llm/catalog").then((data) => {
+      if (seq !== mentorCatalogSeq || !data) return;
+      const list = $("mentor-model-list");
+      const models = (data.last_success && data.last_success.models) || [];
+      if (list) {
+        const seen = new Set(Array.from(list.options).map((opt) => opt.value));
+        const provider = data.scope && data.scope.provider ? data.scope.provider : "";
+        models.forEach((row) => {
+          const id = row && row.id;
+          if (!id || seen.has(id)) return;
+          seen.add(id);
+          const opt = document.createElement("option");
+          opt.value = id;
+          opt.label = (row.name || id) + (provider ? " · " + provider : "");
+          list.appendChild(opt);
+        });
+      }
+      const ids = new Set(models.map((row) => row && row.id).filter(Boolean));
+      if (!(data.last_success && data.last_success.fetched_at)) return;
+      const hint = t("studio.catalogMentorUnconfirmed");
+      document.querySelectorAll("#mentor-choice option").forEach((opt) => {
+        const model = opt.dataset.model || "";
+        if (!model || ids.has(model)) return;
+        opt.dataset.catalogState = "unconfirmed";
+        if (!opt.title || opt.title.indexOf(hint) < 0) {
+          opt.title = opt.title ? opt.title + " · " + hint : hint;
+        }
+      });
+    }).catch(() => {});
   }
 
   async function loadMentor() {

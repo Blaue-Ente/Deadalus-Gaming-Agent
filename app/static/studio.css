@@ -706,6 +706,10 @@ button.item { width: 100%; text-align: left; }
 .checkpoint p { margin: 0; white-space: pre-wrap; }
 #build-milestones li[data-current] { color: var(--gold-2); }
 #settings-fields .item small { font-family: var(--font); }
+#settings-catalog { display: flex; flex-direction: column; gap: 0.45rem; margin: 0.4rem 0 0.8rem; }
+#settings-catalog label { display: flex; flex-direction: column; gap: 0.15rem; color: var(--muted); font-size: 0.72rem; }
+#catalog-list { max-height: 16rem; overflow: auto; }
+#catalog-draft-note, #catalog-warning, #catalog-manual { color: var(--warn); }
 label.grow { flex: 1; min-width: 7rem; }
 #git-menu { margin-top: 0.4rem; }
 #preview-frame { background: #000; }

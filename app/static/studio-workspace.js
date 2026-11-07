@@ -1876,6 +1876,217 @@
     });
   }
 
+  const catalogState = { seq: 0, done: 0, ready: false, payload: null };
+  const CATALOG_PROVIDER_IDS = [
+    "anthropic", "openai", "replit_openai", "groq", "gemini", "replit_gemini",
+    "novita", "openrouter", "alltoken", "poolside", "nvidia", "omniroute",
+    "ollama", "lmstudio", "llamacpp", "vllm", "custom",
+  ];
+
+  function catalogShowBase(id) {
+    return id === "custom" || id === "alltoken" || id === "novita" || id === "openrouter";
+  }
+
+  function paintCatalogDraft() {
+    const note = $("catalog-draft-note");
+    const data = catalogState.payload || {};
+    const eff = data.effective_selection || {};
+    const provider = $("catalog-provider").value;
+    const model = ($("catalog-model").value || "").trim();
+    const differ = provider !== (eff.provider || "") || model !== (eff.model || "");
+    note.hidden = !differ;
+    note.textContent = differ ? dx.t("studio.catalogDraftDiff", {
+      provider: eff.provider || "",
+      model: eff.model || "",
+    }) : "";
+    const missing = (data.warnings || []).filter((row) => row && row.code === "missing_from_cache" && row.target === "brain");
+    const warn = $("catalog-warning");
+    if (!differ && missing.length) {
+      warn.hidden = false;
+      warn.textContent = dx.t("studio.catalogMissing", { model: missing[0].model || eff.model || "" });
+    } else {
+      warn.hidden = true;
+      warn.textContent = "";
+    }
+  }
+
+  function paintCatalogChrome() {
+    const id = $("catalog-provider").value;
+    const rows = (catalogState.payload && catalogState.payload.providers) || [];
+    const meta = rows.filter((row) => row && row.id === id)[0] || {};
+    const showBase = meta.show_base != null ? !!meta.show_base : catalogShowBase(id);
+    const showCache = meta.show_cache != null ? !!meta.show_cache : id === "anthropic";
+    $("catalog-base-label").hidden = !showBase;
+    $("catalog-cache-label").hidden = !showCache;
+  }
+
+  function renderCatalogList() {
+    const list = $("catalog-list");
+    const refine = $("catalog-refine");
+    list.replaceChildren();
+    const data = catalogState.payload || {};
+    const models = (data.last_success && data.last_success.models) || [];
+    const query = ($("catalog-search").value || "").trim().toLowerCase();
+    if (!models.length) {
+      const empty = document.createElement("p");
+      empty.textContent = dx.t("studio.catalogEmpty");
+      list.appendChild(empty);
+      refine.hidden = false;
+      refine.textContent = dx.t("studio.catalogRefine");
+      return;
+    }
+    if (query.length < 1) {
+      refine.hidden = false;
+      refine.textContent = dx.t("studio.catalogRefine");
+      return;
+    }
+    const hits = models.filter((row) => {
+      const id = String((row && row.id) || "").toLowerCase();
+      const name = String((row && row.name) || "").toLowerCase();
+      return id.indexOf(query) >= 0 || name.indexOf(query) >= 0;
+    });
+    hits.slice(0, 100).forEach((row) => {
+      const el = document.createElement("div");
+      el.className = "item";
+      el.setAttribute("role", "option");
+      el.tabIndex = 0;
+      el.dataset.id = row.id || "";
+      const title = document.createElement("b");
+      title.textContent = row.id || "";
+      const sub = document.createElement("small");
+      sub.textContent = row.name && row.name !== row.id ? row.name : dx.t("studio.catalogCached");
+      el.append(title, document.createTextNode(" "), sub);
+      list.appendChild(el);
+    });
+    refine.hidden = hits.length <= 100;
+    refine.textContent = hits.length > 100 ? dx.t("studio.catalogRefine") : "";
+  }
+
+  function paintCatalogPins() {
+    const box = $("catalog-pins");
+    box.replaceChildren();
+    const pins = (catalogState.payload && catalogState.payload.pins) || [];
+    pins.forEach((pin) => {
+      const el = document.createElement("div");
+      el.className = "item";
+      const title = document.createElement("b");
+      title.textContent = pin.label || pin.id || "";
+      const sub = document.createElement("small");
+      sub.textContent = pin.confirmed ? dx.t("studio.catalogPinConfirmed") : dx.t("studio.catalogPin");
+      el.append(title, document.createTextNode(" "), sub);
+      box.appendChild(el);
+    });
+  }
+
+  function paintCatalogMeta() {
+    const data = catalogState.payload || {};
+    const parts = [];
+    const eff = data.effective_selection || {};
+    $("catalog-effective").textContent = dx.t("studio.catalogEffective") + ": " + (eff.provider || "—") + " · " + (eff.model || "—");
+    if (data.last_success && data.last_success.fetched_at) {
+      parts.push(dx.t("studio.catalogLastRefresh", { time: data.last_success.fetched_at }));
+    }
+    if (data.stale_hint) parts.push(dx.t("studio.catalogStale"));
+    if (data.catalog_outdated && data.mode !== "manual_only") parts.push(dx.t("studio.catalogOutdated"));
+    $("catalog-meta").textContent = parts.join(" ");
+    const manual = $("catalog-manual");
+    if (data.mode === "manual_only") {
+      manual.hidden = false;
+      manual.textContent = dx.t("studio.catalogManualOnly");
+    } else {
+      manual.hidden = true;
+      manual.textContent = "";
+    }
+  }
+
+  function fillCatalogProviders(selected) {
+    const sel = $("catalog-provider");
+    const rows = (catalogState.payload && catalogState.payload.providers) || [];
+    const ids = rows.length ? rows.map((row) => row.id).filter(Boolean) : CATALOG_PROVIDER_IDS.slice();
+    const keep = selected || sel.value;
+    sel.replaceChildren();
+    ids.forEach((id) => {
+      const opt = document.createElement("option");
+      opt.value = id;
+      opt.textContent = id;
+      sel.appendChild(opt);
+    });
+    if (keep && Array.from(sel.options).some((opt) => opt.value === keep)) sel.value = keep;
+  }
+
+  function paintCatalog(data, opts) {
+    catalogState.payload = data || {};
+    const keep = opts && opts.keepDraft && catalogState.ready;
+    const eff = (data && data.effective_selection) || {};
+    if (!keep) {
+      fillCatalogProviders(eff.provider || "");
+      $("catalog-model").value = eff.model || "";
+      if (data && data.scope && data.scope.base_url) $("catalog-base").value = data.scope.base_url;
+      catalogState.ready = true;
+    } else {
+      fillCatalogProviders($("catalog-provider").value);
+    }
+    const list = $("catalog-list");
+    const first = data && data.last_success && data.last_success.models && data.last_success.models[0];
+    list.dataset.paint = first && first.id ? first.id : "";
+    paintCatalogChrome();
+    paintCatalogMeta();
+    paintCatalogPins();
+    renderCatalogList();
+    paintCatalogDraft();
+  }
+
+  async function loadCatalog(keepDraft) {
+    const seq = ++catalogState.seq;
+    try {
+      const data = await dx.api("/api/v1/llm/catalog");
+      if (seq !== catalogState.seq) return;
+      paintCatalog(data, { keepDraft: keepDraft });
+    } catch (err) {
+      if (seq !== catalogState.seq) return;
+      if (!$("settings-status").dataset.state || $("settings-status").dataset.state !== "error") {
+        showStatus("settings-status", dx.t("studio.requestFailed") + ": " + failText(err), true);
+      }
+    }
+  }
+
+  async function refreshCatalogList() {
+    const seq = ++catalogState.seq;
+    try {
+      const data = await dx.api("/api/v1/llm/catalog/refresh", { method: "POST", body: "{}" });
+      catalogState.done += 1;
+      $("catalog-list").dataset.done = String(catalogState.done);
+      if (seq !== catalogState.seq) return;
+      paintCatalog(data, { keepDraft: true });
+    } catch (err) {
+      if (seq !== catalogState.seq) return;
+      showStatus("settings-status", dx.t("studio.catalogFailed") + ": " + failText(err), true);
+    }
+  }
+
+  async function saveCatalogDraft() {
+    const provider = $("catalog-provider").value;
+    const showBase = !$("catalog-base-label").hidden;
+    await dx.api("/admin/daedalus/llm-config", {
+      method: "POST",
+      body: JSON.stringify({
+        model: ($("catalog-model").value || "").trim(),
+        provider: provider,
+        base_url: showBase ? ($("catalog-base").value || "").trim() : "",
+        use_cache: provider === "anthropic" ? !!$("catalog-cache").checked : true,
+        api_key: "",
+      }),
+    });
+    showStatus("settings-status", dx.t("studio.saved"), false);
+    catalogState.ready = false;
+    try {
+      paintBrain(await dx.api("/api/v1/llm/status"));
+    } catch (err) {
+      showStatus("settings-status", dx.t("studio.requestFailed") + ": " + failText(err), true);
+    }
+    await loadCatalog(false);
+  }
+
   function paintBrain(data) {
     const box = $("settings-brain");
     box.replaceChildren();
@@ -1919,11 +2130,13 @@
     showStatus("settings-status", dx.t("studio.loading"), false);
     $("settings-brain").replaceChildren();
     $("settings-fields").replaceChildren();
+    catalogState.ready = false;
     try {
       paintBrain(await dx.api("/api/v1/llm/status"));
     } catch (err) {
       showStatus("settings-status", dx.t("studio.requestFailed") + ": " + failText(err), true);
     }
+    await loadCatalog(false);
     try {
       const overview = await dx.api("/admin/daedalus/connectors/overview");
       paintFields(overview);
@@ -2834,6 +3047,24 @@
       });
       showStatus("settings-status", dx.t("studio.saved"), false);
     });
+  });
+  $("catalog-provider").addEventListener("change", () => {
+    paintCatalogChrome();
+    paintCatalogDraft();
+  });
+  $("catalog-model").addEventListener("input", () => paintCatalogDraft());
+  $("catalog-search").addEventListener("input", () => renderCatalogList());
+  $("catalog-list").addEventListener("click", (ev) => {
+    const row = ev.target.closest("[data-id]");
+    if (!row || !$("catalog-list").contains(row)) return;
+    $("catalog-model").value = row.getAttribute("data-id") || "";
+    paintCatalogDraft();
+  });
+  $("catalog-refresh").addEventListener("click", () => {
+    refreshCatalogList();
+  });
+  $("catalog-save").addEventListener("click", () => {
+    runAction($("catalog-save"), "settings-status", () => saveCatalogDraft());
   });
   $("settings-secret").addEventListener("submit", (ev) => {
     ev.preventDefault();

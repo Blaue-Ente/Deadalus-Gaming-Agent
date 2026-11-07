@@ -468,6 +468,41 @@
         <p id="settings-status" class="workspace-status" role="status" hidden></p>
         <p class="kicker" data-i18n="studio.settingsBrain">Brain</p>
         <div id="settings-brain"></div>
+        <div id="settings-catalog">
+          <p id="catalog-effective"></p>
+          <p id="catalog-draft-note" hidden></p>
+          <label>
+            <span data-i18n="studio.catalogProvider">Provider</span>
+            <select id="catalog-provider" data-i18n-aria="studio.catalogProvider" aria-label="Provider"></select>
+          </label>
+          <label>
+            <span data-i18n="studio.catalogModel">Model</span>
+            <input id="catalog-model" autocomplete="off" spellcheck="false" data-i18n-aria="studio.catalogModel" aria-label="Model" />
+          </label>
+          <label id="catalog-base-label">
+            <span data-i18n="studio.catalogBase">Base URL</span>
+            <input id="catalog-base" autocomplete="off" spellcheck="false" data-i18n-aria="studio.catalogBase" aria-label="Base URL" />
+          </label>
+          <label id="catalog-cache-label" hidden>
+            <span data-i18n="studio.catalogUseCache">Use cache</span>
+            <input id="catalog-cache" type="checkbox" />
+          </label>
+          <label>
+            <span data-i18n="studio.catalogSearch">Search models</span>
+            <input id="catalog-search" type="search" autocomplete="off" spellcheck="false" data-i18n-placeholder="studio.catalogSearchPh" placeholder="Type a model id or name" data-i18n-aria="studio.catalogSearch" aria-label="Search models" />
+          </label>
+          <div id="catalog-list" role="listbox" data-i18n-aria="studio.catalogList" aria-label="Cached models"></div>
+          <p id="catalog-refine" class="hint" hidden></p>
+          <p id="catalog-meta"></p>
+          <p id="catalog-warning" role="status" hidden></p>
+          <p id="catalog-manual" hidden></p>
+          <div id="catalog-pins"></div>
+          <p class="hint" data-i18n="studio.catalogListing">A listed model is visible in the catalog. That does not guarantee routing, tools, or account access.</p>
+          <div class="row">
+            <button type="button" id="catalog-refresh" data-i18n="studio.catalogRefresh">Refresh list</button>
+            <button type="button" id="catalog-save" class="primary" data-i18n="studio.catalogSave">Save brain</button>
+          </div>
+        </div>
         <form id="settings-prefs">
           <label><span data-i18n="studio.gitProvider">Git provider</span>
             <select id="settings-provider" data-i18n-aria="studio.gitProvider" aria-label="Git provider">

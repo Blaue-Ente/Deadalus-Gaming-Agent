@@ -234,6 +234,26 @@ async def llm_status() -> dict:
         return {"ok": False, "error": str(exc)[:200]}
 
 
+@app.get("/api/v1/llm/catalog")
+async def llm_catalog() -> dict:
+    """Read the model catalog. Does not write brain config or mentor choice."""
+    from daedalus.model_catalog import catalog_view
+    try:
+        return await asyncio.to_thread(catalog_view)
+    except Exception:
+        return {"ok": False, "error": "catalog_failed"}
+
+
+@app.post("/api/v1/llm/catalog/refresh")
+async def llm_catalog_refresh() -> dict:
+    """Refresh the effective provider cache. The body is ignored and nothing is saved."""
+    from daedalus.model_catalog import refresh_catalog
+    try:
+        return await asyncio.to_thread(refresh_catalog)
+    except Exception:
+        return {"ok": False, "error": "catalog_failed", "wrote_success": False}
+
+
 @app.get("/api/v1/auth/bootstrap")
 async def auth_bootstrap(request: Request) -> dict:
     from daedalus.owner_auth import get_or_create_token
