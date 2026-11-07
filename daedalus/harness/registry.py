@@ -10,7 +10,6 @@ or writes state.
 from __future__ import annotations
 
 import importlib
-import re
 from dataclasses import asdict, dataclass, field
 from typing import Any, Iterable
 
@@ -52,12 +51,16 @@ def _surface(path: str) -> str:
     return "app"
 
 
-def _playbooks_for(tool: str) -> list[str]:
+def _playbook_map() -> dict[str, list[str]]:
+    """tool name -> playbook ids whose build subset contains it (core tools are in every playbook)."""
     from .. import task_playbooks as tp
 
-    core = set(getattr(tp, "_CORE", ()))
-    out = [pb.id for pb in tp.PLAYBOOKS if tool in pb.tools or tool in core]
-    return sorted(set(out))
+    core = set(tp._CORE)  # direct access on purpose: a rename must fail loudly
+    out: dict[str, set[str]] = {}
+    for pb in tp.PLAYBOOKS:
+        for tool in set(pb.tools) | core:
+            out.setdefault(tool, set()).add(pb.id)
+    return {tool: sorted(ids) for tool, ids in out.items()}
 
 
 def tool_capabilities() -> list[Capability]:
@@ -65,6 +68,7 @@ def tool_capabilities() -> list[Capability]:
 
     meta = {entry.name: entry for entry in tool_catalog.native_entries()}
     perm = getattr(native_tools, "PERM_MAP", {})
+    playbooks = _playbook_map()
     out: list[Capability] = []
     for spec in native_tools.NATIVE_TOOL_SPECS:
         name = str(spec["name"])
@@ -75,7 +79,7 @@ def tool_capabilities() -> list[Capability]:
             title=str(spec.get("description") or name).split(".")[0][:140],
             owner_module=(entry.module if entry else "daedalus.native_tools"),
             surface="brain",
-            brain={"exposed": True, "tool_name": name, "playbooks": _playbooks_for(name)},
+            brain={"exposed": True, "tool_name": name, "playbooks": playbooks.get(name, [])},
             permission_class=perm.get(name),
             proof_level_max=manifest.TOOL_PROOF.get(name),
             status="implemented",
@@ -97,14 +101,34 @@ def _api_routes(routes: Iterable[Any]) -> Iterable[tuple[str, str, Any]]:
                     yield method, route.path, route.endpoint
 
 
-def iter_routes(app: Any | None = None) -> list[tuple[str, str, Any]]:
-    """(method, path, endpoint) for every served API route, de-duplicated and sorted."""
+def _endpoint_name(endpoint: Any) -> str:
+    return getattr(endpoint, "__name__", None) or type(endpoint).__name__
+
+
+def _endpoint_owner(endpoint: Any) -> str:
+    return f"{getattr(endpoint, '__module__', '')}.{_endpoint_name(endpoint)}"
+
+
+def _title(endpoint: Any) -> str:
+    doc = (getattr(endpoint, "__doc__", None) or "").strip().split("\n")[0].strip()
+    if doc:
+        return doc[:140]
+    return _endpoint_name(endpoint).replace("_", " ")[:140]
+
+
+def iter_routes(app: Any | None = None, errors: list[str] | None = None) -> list[tuple[str, str, Any]]:
+    """(method, path, endpoint) for every served API route, de-duplicated and sorted.
+
+    A router that cannot be imported is reported in ``errors`` (when given) instead of vanishing.
+    """
     seen: dict[tuple[str, str], Any] = {}
     for mod, attr in manifest.ROUTER_SOURCES:
         try:
             router = getattr(importlib.import_module(mod), attr)
-        except Exception:
-            continue  # a router that cannot import is simply absent from the registry
+        except Exception as exc:
+            if errors is not None:
+                errors.append(f"router {mod}.{attr} failed to import: {type(exc).__name__}: {exc}"[:300])
+            continue
         for method, path, endpoint in _api_routes(getattr(router, "routes", ())):
             seen.setdefault((method, path), endpoint)
     if app is not None:
@@ -113,45 +137,40 @@ def iter_routes(app: Any | None = None) -> list[tuple[str, str, Any]]:
     return sorted(((m, p, e) for (m, p), e in seen.items()), key=lambda r: (r[1], r[0]))
 
 
-def _route_home(path: str) -> str | None:
-    for pattern, home in _ROUTE_HOMES:
-        if re.match(pattern, path):
-            return home
-    return None
+def _studio_homes() -> dict[str, str]:
+    """route ("METHOD path") -> Studio home, taken from the parity table (single source of truth).
+
+    Only routes of rows already reachable from Studio get a home; legacy-only routes get None.
+    """
+    from .parity import PARITY_ROWS
+
+    out: dict[str, str] = {}
+    for row in PARITY_ROWS:
+        if row.disposition == "in_studio" and row.home:
+            for route in row.routes:
+                out.setdefault(route, row.home)
+    return out
 
 
-# Where a route's UI lives today. Unlisted routes have no Studio home yet (ui_home None).
-_ROUTE_HOMES: tuple[tuple[str, str], ...] = (
-    (r"^/api/v1/playground/projects", "panel:rail"),
-    (r"^/api/v1/daedalus/chat", "panel:chat"),
-    (r"^/api/v1/daedalus/(mentor|writer-assist|run-budget|effort)", "panel:settings"),
-    (r"^/admin/daedalus/(proposals|skills|bundles|permissions|outbox)", "panel:review"),
-    (r"^/admin/daedalus/(blockers|planner|discoveries)", "panel:review"),
-    (r"^/admin/daedalus/connectors/(config|overview|secrets)", "panel:settings"),
-    (r"^/admin/daedalus/game-studio/", "panel:build"),
-    (r"^/admin/daedalus/playground/api/projects/\{slug\}/(guided|autopilot)", "panel:build"),
-)
-
-
-def route_capabilities(app: Any | None = None) -> list[Capability]:
+def route_capabilities(app: Any | None = None, errors: list[str] | None = None) -> list[Capability]:
+    homes = _studio_homes()
     out: list[Capability] = []
-    for method, path, endpoint in iter_routes(app):
+    for method, path, endpoint in iter_routes(app, errors):
+        key = f"{method} {path}"
         if path == manifest.CATCH_ALL_PATH:
             out.append(Capability(
-                id=f"route:{method} {path}", kind="route",
+                id=f"route:{key}", kind="route",
                 title="Catch-all for unwired /admin/daedalus/* calls (answers 404)",
-                owner_module=f"{endpoint.__module__}.{endpoint.__name__}",
-                http=(f"{method} {path}",), surface=_surface(path),
+                owner_module=_endpoint_owner(endpoint), http=(key,), surface=_surface(path),
                 status="stub", cost="none",
             ))
             continue
-        key = f"{method} {path}"
         out.append(Capability(
-            id=f"route:{key}", kind="route",
-            title=(getattr(endpoint, "__doc__", None) or endpoint.__name__).strip().split("\n")[0][:140],
-            owner_module=f"{getattr(endpoint, '__module__', '')}.{getattr(endpoint, '__name__', '')}",
-            http=(key,), ui_home=_route_home(path), surface=_surface(path),
-            status=manifest.ROUTE_STATUS.get(key, "implemented"), cost="unknown",
+            id=f"route:{key}", kind="route", title=_title(endpoint),
+            owner_module=_endpoint_owner(endpoint),
+            http=(key,), ui_home=homes.get(key), surface=_surface(path),
+            status=manifest.ROUTE_STATUS.get(key, "implemented"),
+            cost="unknown",  # honest: per-route cost is not derivable from code yet
         ))
     return out
 
@@ -168,9 +187,9 @@ def manifest_capabilities() -> list[Capability]:
     return out
 
 
-def build_registry(app: Any | None = None) -> list[Capability]:
+def build_registry(app: Any | None = None, errors: list[str] | None = None) -> list[Capability]:
     """All capabilities, sorted by (kind, id) so the output is deterministic."""
-    caps = tool_capabilities() + route_capabilities(app) + manifest_capabilities()
+    caps = tool_capabilities() + route_capabilities(app, errors) + manifest_capabilities()
     unique: dict[str, Capability] = {}
     for cap in caps:
         unique.setdefault(cap.id, cap)
@@ -178,7 +197,8 @@ def build_registry(app: Any | None = None) -> list[Capability]:
 
 
 def registry_payload(app: Any | None = None, *, kind: str = "", status: str = "") -> dict[str, Any]:
-    caps = build_registry(app)
+    errors: list[str] = []
+    caps = build_registry(app, errors)
     if kind:
         caps = [c for c in caps if c.kind == kind]
     if status:
@@ -186,4 +206,5 @@ def registry_payload(app: Any | None = None, *, kind: str = "", status: str = ""
     counts: dict[str, int] = {}
     for c in caps:
         counts[c.kind] = counts.get(c.kind, 0) + 1
-    return {"ok": True, "count": len(caps), "by_kind": counts, "capabilities": [c.as_dict() for c in caps]}
+    return {"ok": not errors, "errors": errors, "count": len(caps), "by_kind": counts,
+            "capabilities": [c.as_dict() for c in caps]}

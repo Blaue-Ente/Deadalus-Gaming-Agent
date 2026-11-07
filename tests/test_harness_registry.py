@@ -18,6 +18,7 @@ def app_and_caps(a0_tmp):
 
 
 def test_every_native_tool_is_a_brain_exposed_capability(app_and_caps):
+    from daedalus.harness.registry import COSTS
     from daedalus.native_tools import NATIVE_TOOL_SPECS, PERM_MAP
 
     _app, caps = app_and_caps
@@ -27,7 +28,7 @@ def test_every_native_tool_is_a_brain_exposed_capability(app_and_caps):
         cap = tools[f"tool:{spec['name']}"]
         assert cap.brain["exposed"] is True and cap.brain["tool_name"] == spec["name"]
         assert cap.permission_class == PERM_MAP.get(spec["name"])
-        assert cap.status == "implemented" and cap.cost in ("none", "llm", "external")
+        assert cap.status == "implemented" and cap.cost in COSTS
 
 
 def test_playbooks_listed_for_tools_match_task_playbooks(app_and_caps):
@@ -71,7 +72,11 @@ def test_catch_all_is_marked_stub_and_new_routes_present(app_and_caps):
     assert stub.status == "stub" and "404" in stub.title
     assert "route:GET /api/v1/harness/capabilities" in by_id
     assert by_id["route:POST /admin/daedalus/outbox/{item_id}/apply"].status == "partial"
-    assert by_id["route:POST /api/v1/daedalus/mentor"].ui_home == "panel:settings"
+    # ui_home comes from the parity table: in_studio rows get their home, legacy-only routes get none.
+    assert by_id["route:POST /api/v1/daedalus/mentor"].ui_home == "setting:mentor"
+    assert by_id["route:GET /admin/daedalus/memory/stats"].ui_home is None  # legacy-only until A6.2
+    assert by_id["route:POST /admin/daedalus/permissions/grant-all"].ui_home is None
+    assert by_id["route:POST /admin/daedalus/permissions/grant"].ui_home == "panel:review/permissions"
     assert by_id["route:GET /api/v1/playground/projects"].surface == "api-v1"
     assert by_id["route:GET /admin/daedalus/blockers"].surface == "legacy-admin"
 
@@ -94,6 +99,53 @@ def test_parity_detects_a_broken_row(app_and_caps, monkeypatch):
     assert any("home 'panel:nope'" in p for p in problems)
     assert any("route not served: GET /nope" in p for p in problems)
     assert any("unknown disposition" in p for p in problems)
+
+
+def test_retire_rows_skip_route_check_and_in_studio_needs_a_route(app_and_caps, monkeypatch):
+    from daedalus.harness import parity
+
+    _app, caps = app_and_caps
+    gone = parity.ParityRow("r", "r", ("classic",), None, ("POST /already/removed",), "retire:R9")
+    empty = parity.ParityRow("e", "e", ("classic",), "panel:chat", (), "in_studio")
+    monkeypatch.setattr(parity, "PARITY_ROWS", (gone, empty))
+    assert parity.check_parity(caps) == ["e: an in_studio row must name at least one route"]
+
+
+def test_manifest_tables_name_real_tools(app_and_caps):
+    """Hand-written cost/proof tables must not drift from the real tool names."""
+    from daedalus import native_tools
+    from daedalus.harness import manifest
+
+    names = {s["name"] for s in native_tools.NATIVE_TOOL_SPECS}
+    assert set(manifest.TOOL_COST) <= names
+    assert set(manifest.TOOL_PROOF) <= names
+    assert set(manifest.ROUTE_STATUS) <= {h for c in app_and_caps[1] if c.kind == "route" for h in c.http}
+
+
+def test_router_import_failure_is_reported_not_swallowed(a0_tmp, monkeypatch):
+    from app.main import app
+    from daedalus.harness import manifest
+    from daedalus.harness.registry import registry_payload
+
+    monkeypatch.setattr(manifest, "ROUTER_SOURCES", manifest.ROUTER_SOURCES + (("no.such.module", "router"),))
+    payload = registry_payload(app)
+    assert payload["ok"] is False and any("no.such.module" in e for e in payload["errors"])
+    parity = TestClient(app).get("/api/v1/harness/parity").json()
+    assert parity["ok"] is False and any("no.such.module" in p for p in parity["problems"])
+
+
+def test_route_without_name_or_doc_does_not_break_the_registry():
+    from functools import partial
+
+    from daedalus.harness import registry
+
+    class Callable_:
+        def __call__(self):  # pragma: no cover - never called
+            return None
+
+    for endpoint in (partial(print), Callable_()):
+        assert registry._endpoint_owner(endpoint)
+        assert registry._title(endpoint)
 
 
 def test_every_legacy_only_function_has_a_planned_or_held_home(app_and_caps):
@@ -138,7 +190,9 @@ def test_endpoints_serve_and_filter(a0_tmp):
     assert planned["count"] > 0 and all(c["status"] == "planned" for c in planned["capabilities"])
     parity = client.get("/api/v1/harness/parity").json()
     assert parity["ok"] is True and parity["problems"] == []
-    assert parity["by_disposition"]["in_studio"] >= 20 and parity["by_disposition"]["retire"] == 4
+    assert parity["by_disposition"]["in_studio"] >= 20
+    assert sum(v for k, v in parity["by_disposition"].items() if k.startswith("retire:")) == 4
+    assert parity["by_disposition"]["port:A6.2"] >= 1 and parity["by_disposition"]["held:MR126"] == 1
 
 
 def test_endpoints_require_the_owner_token(a0_tmp, raw_http):

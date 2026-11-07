@@ -172,6 +172,10 @@ def check_parity(capabilities: list[Any]) -> list[str]:
                 problems.append(f"{row.id}: a retired row must not name a home")
         elif row.home not in ids:
             problems.append(f"{row.id}: home {row.home!r} is not in the registry")
+        if row.disposition == "in_studio" and not row.routes:
+            problems.append(f"{row.id}: an in_studio row must name at least one route")
+        if row.disposition.startswith("retire:"):
+            continue  # retired routes disappear when the retirement is carried out
         for route in row.routes:
             if route not in routes:
                 problems.append(f"{row.id}: route not served: {route}")

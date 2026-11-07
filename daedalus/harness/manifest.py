@@ -41,7 +41,7 @@ TOOL_COST: dict[str, str] = {
     "generate_image": "llm", "spawn_subagent": "llm", "dissect_game": "llm",
     "playtest": "llm", "mirofish": "external", "mcp_call": "external",
     "git_forge": "external", "postgres_query": "external", "browser": "external",
-    "play_lab": "external", "assets": "llm", "skill": "none",
+    "play_lab": "external", "assets": "unknown",
 }
 
 # Highest proof level a tool can reach on its own (see spec 3.7).
