@@ -168,3 +168,22 @@ def test_kernel_push_not_forced_by_default(a0_tmp, monkeypatch, tmp_path):
         asyncio.run(gh.push_kernel(repo_full_name="o/r", paths=["a.txt"]))
     asyncio.run(gh.push_kernel(repo_full_name="o/r", paths=["a.txt"], force=True))
     assert any("-f" in a for a in record if a[1:2] == ["push"])
+
+
+def test_only_real_divergence_offers_force():
+    """Review fix: generic push failures (protected branch, hook, permissions) never invite a force push."""
+    from daedalus.git_auth import NonFastForward, raise_if_rejected
+
+    for text in (
+        "error: failed to push some refs to 'https://github.com/o/r.git'",
+        " ! [remote rejected] main -> main (protected branch hook declined)",
+        "remote: Permission to o/r.git denied",
+    ):
+        raise_if_rejected(text, force=False)  # not a divergence: left for the normal error path
+    for text in (
+        " ! [rejected] main -> main (non-fast-forward)",
+        " ! [rejected] main -> main (fetch first)",
+        "hint: Updates were rejected because the tip of your current branch is behind",
+    ):
+        with pytest.raises(NonFastForward):
+            raise_if_rejected(text, force=False)

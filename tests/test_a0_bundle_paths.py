@@ -123,3 +123,22 @@ def test_failed_write_rolls_back_earlier_files(root):
     assert out["ok"] is False and out.get("rolled_back") is True and out["applied"] == []
     assert (root / "a.txt").read_text(encoding="utf-8") == "original"
     assert not (root / "created.txt").exists()
+
+
+def test_rollback_removes_directories_it_created(root):
+    """Review fix: a failed apply leaves no empty directories behind."""
+    from daedalus import bundle
+
+    (root / "blocker").write_text("a file", encoding="utf-8")
+
+    async def go():
+        bid = await bundle.create_bundle("t")
+        await bundle.stage_file(bid, "newdir/deep/a.py", "create", "r", "x")
+        await bundle.stage_file(bid, "blocker/x.txt", "create", "r", "x")
+        await bundle.commit_bundle(bid, "t", "s")
+        return await bundle.apply_bundle(bid)
+
+    out = _run(go())
+    assert out["ok"] is False and out["rolled_back"] is True and out["restore_failed"] is False
+    assert not (root / "newdir").exists()
+    assert (root / "blocker").read_text(encoding="utf-8") == "a file"  # pre-existing path untouched

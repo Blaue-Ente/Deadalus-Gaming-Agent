@@ -92,8 +92,10 @@ def _scrub_secrets(text: str) -> str:
 
 
 async def _run(args: list[str], *, cwd: Path | None = None, timeout: int = _TIMEOUT) -> tuple[int, str]:
-    from .git_auth import auth_env
+    from .git_auth import GIT_TOO_OLD, auth_env, git_supports_env_config
 
+    if _token() and not git_supports_env_config():
+        return 1, GIT_TOO_OLD
     env = auth_env(_host(), "oauth2", _token())
     proc = await asyncio.create_subprocess_exec(
         *args, cwd=str(cwd) if cwd else None,

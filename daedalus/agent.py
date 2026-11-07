@@ -202,8 +202,11 @@ async def _call_claude_primary(system: str, messages: list[dict[str, Any]],
                 system=system_param,
                 messages=_to_anth_msgs(messages),
             )
-            from .llm_client import _meter
-            _meter(resp, model=model, role="writer")
+            try:
+                from .llm_client import _meter
+                _meter(resp, model=model, role="writer")
+            except Exception:
+                log.debug("persona metering skipped", exc_info=True)  # never fail a billed, successful call
             block = resp.content[0]
             return block.text if block.type == "text" else ""
 
@@ -237,8 +240,11 @@ async def _call_claude_primary(system: str, messages: list[dict[str, Any]],
             max_tokens=_MAX_TOKENS,
             messages=oa_messages,
         )
-        from .llm_client import _meter
-        _meter(resp, model=model, role="writer")
+        try:
+            from .llm_client import _meter
+            _meter(resp, model=model, role="writer")
+        except Exception:
+            log.debug("persona metering skipped", exc_info=True)  # never fail a billed, successful call
         return resp.choices[0].message.content or ""
     except Exception as exc:
         err = str(exc)[:300]

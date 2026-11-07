@@ -98,3 +98,29 @@ def test_fallback_chain_respects_spent_budget(a0_tmp, monkeypatch):
 
     out = asyncio.run(improvements.call_with_fallback(primary, "sys", []))
     assert out == rb.stop_text()
+
+
+def test_metering_failure_does_not_fail_a_successful_call(a0_tmp, monkeypatch):
+    """Review fix: a billing-store error after a good provider reply must not turn it into an error."""
+    from daedalus import agent
+
+    monkeypatch.setattr(agent, "get_config", lambda: _cfg())
+
+    def broken_meter(resp, *, model, role):
+        raise OSError("budget store unavailable")
+
+    monkeypatch.setattr("daedalus.llm_client._meter", broken_meter)
+
+    class Resp:
+        choices = [types.SimpleNamespace(message=types.SimpleNamespace(content="fine"))]
+        usage = None
+
+    class Client:
+        def __init__(self, *a, **k):
+            self.chat = types.SimpleNamespace(completions=types.SimpleNamespace(create=self.create))
+
+        async def create(self, **kw):
+            return Resp()
+
+    monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(AsyncOpenAI=Client))
+    assert asyncio.run(agent._call_claude_primary("sys", [{"role": "user", "content": "hi"}])) == "fine"

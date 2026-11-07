@@ -123,3 +123,32 @@ def test_remote_url_in_git_config_stays_clean(monkeypatch, tmp_path):
     url = gh._auth_url("https://github.com/o/r.git")
     subprocess.run(["git", "remote", "add", "origin", url], cwd=repo, check=True)
     assert TOKEN not in (repo / ".git" / "config").read_text()
+
+
+@pytest.mark.parametrize("module", ["daedalus.playground_github", "daedalus.playground_gitlab"])
+def test_old_git_is_reported_not_silently_unauthenticated(monkeypatch, module):
+    """Review fix: git < 2.31 ignores GIT_CONFIG_*; say so instead of failing with 'could not read Username'."""
+    import importlib
+
+    mod = importlib.import_module(module)
+    monkeypatch.setattr(mod, "_token", lambda: TOKEN)
+    monkeypatch.setattr("daedalus.git_auth.git_supports_env_config", lambda: False)
+
+    async def must_not_spawn(*a, **k):
+        raise AssertionError("git must not run unauthenticated")
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", must_not_spawn)
+    code, out = asyncio.run(mod._run(["git", "push"]))
+    assert code == 1 and "2.31" in out
+
+
+def test_git_version_parse(monkeypatch):
+    from daedalus import git_auth
+
+    class R:
+        def __init__(self, out): self.stdout = out
+
+    for out, expect in (("git version 2.43.0", True), ("git version 2.30.2", False), ("git version 2.31.0.windows.1", True)):
+        monkeypatch.setattr(git_auth, "_git_ok", None)
+        monkeypatch.setattr("subprocess.run", lambda *a, **k: R(out))
+        assert git_auth.git_supports_env_config() is expect

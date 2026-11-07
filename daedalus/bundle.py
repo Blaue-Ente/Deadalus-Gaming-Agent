@@ -78,7 +78,7 @@ def _safe_target(file_path: str) -> tuple[Path | None, str]:
     parts = PurePosixPath(norm).parts
     if any(part == ".." for part in parts):
         return None, "path traversal is not allowed"
-    if parts and parts[0].lower() in _BLOCKED_TOP_DIRS or any(p.lower() == ".git" for p in parts):
+    if (parts and parts[0].lower() in _BLOCKED_TOP_DIRS) or any(p.lower() == ".git" for p in parts):
         return None, "protected directory"
     if is_secret_path(norm):
         return None, "secret files are never bundled"
@@ -226,6 +226,7 @@ async def apply_bundle(bundle_id: str) -> dict[str, Any]:
     applied: list[str] = []
     errors: list[str] = []
     undo: list[tuple[Path, bytes | None]] = []
+    made_dirs: list[Path] = []
     for f, fpath in plan:
         try:
             before = fpath.read_bytes() if fpath.is_file() else None
@@ -235,7 +236,13 @@ async def apply_bundle(bundle_id: str) -> dict[str, Any]:
                 undo.append((fpath, before))
                 applied.append(f["file_path"])
             else:  # replace or create
+                missing = []
+                cur = fpath.parent
+                while not cur.exists() and cur != cur.parent:
+                    missing.append(cur)
+                    cur = cur.parent
                 fpath.parent.mkdir(parents=True, exist_ok=True)
+                made_dirs.extend(missing)  # deepest first
                 fpath.write_text(f["new_content"] or "", "utf-8")
                 undo.append((fpath, before))
                 applied.append(f["file_path"])
@@ -245,6 +252,7 @@ async def apply_bundle(bundle_id: str) -> dict[str, Any]:
 
     if errors:
         # All or nothing: put back everything already written and keep the bundle retryable.
+        restore_failed = False
         for path, before in reversed(undo):
             try:
                 if before is None:
@@ -253,10 +261,16 @@ async def apply_bundle(bundle_id: str) -> dict[str, Any]:
                 else:
                     path.write_bytes(before)
             except Exception as exc:  # pragma: no cover - best effort restore
+                restore_failed = True
                 errors.append(f"rollback {path}: {exc}")
+        for d in made_dirs:  # directories this apply created, deepest first; only if now empty
+            try:
+                d.rmdir()
+            except OSError:
+                pass
         log.warning("Bundle %s rolled back: %s", bundle_id, errors[0])
         return {"ok": False, "bundle_id": bundle_id, "applied": [], "errors": errors,
-                "rolled_back": True}
+                "rolled_back": not restore_failed, "restore_failed": restore_failed}
 
     async with pool.acquire() as conn:
         await conn.execute(

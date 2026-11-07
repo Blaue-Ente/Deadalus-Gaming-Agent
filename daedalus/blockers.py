@@ -481,6 +481,7 @@ def auto_fix_all_open(*, hours: float = 8.0) -> dict[str, Any]:
     return {
         # ok when there was nothing to fix, or at least one blocker was actually fixed.
         "ok": (not open_blockers) or bool(fixed),
+        **({"error": "no_fix_available"} if open_blockers and not fixed else {}),
         "fixed_count": len(fixed),
         "skipped_count": len(skipped),
         "fixed": fixed,

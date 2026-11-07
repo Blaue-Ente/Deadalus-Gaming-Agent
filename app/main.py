@@ -144,10 +144,9 @@ async def lifespan(_app: FastAPI):
     finally:
         if reaper is not None:
             reaper.cancel()
-            try:
+            import contextlib
+            with contextlib.suppress(asyncio.CancelledError):
                 await reaper
-            except BaseException:  # CancelledError on shutdown
-                pass
         try:
             from daedalus.evolution import stop_gardener
             await stop_gardener()

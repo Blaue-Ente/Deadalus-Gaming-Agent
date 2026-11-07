@@ -76,6 +76,7 @@ def test_auto_fix_all_not_ok_when_nothing_fixed(a0_tmp, monkeypatch):
     monkeypatch.setattr(blockers, "auto_fix_blocker", lambda bid, hours=8.0: {"ok": False, "error": "no hint"})
     out = blockers.auto_fix_all_open()
     assert out["ok"] is False and out["fixed_count"] == 0 and out["skipped_count"] == 1
+    assert out["error"] == "no_fix_available"
     monkeypatch.setattr(blockers, "auto_fix_blocker", lambda bid, hours=8.0: {"ok": True, "granted": ["x"]})
     assert blockers.auto_fix_all_open()["ok"] is True
     monkeypatch.setattr(blockers, "list_blockers", lambda status=None, enrich=False: [])
