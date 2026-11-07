@@ -119,6 +119,8 @@ func _dispatch(data: Dictionary) -> Dictionary:
 			result.merge(_send_action(str(data.get("action", "")), bool(data.get("pressed", true))), true)
 		"send_key":
 			result.merge(_send_key(str(data.get("key", "")), bool(data.get("pressed", true))), true)
+		"send_mouse":
+			result.merge(_send_mouse(float(data.get("x", 0)), float(data.get("y", 0)), str(data.get("button", "left")), str(data.get("kind", "click"))), true)
 		"wait_frames":
 			var frames := clampi(int(data.get("n", 1)), 1, 180)
 			for _i in frames:
@@ -259,6 +261,37 @@ func _send_key(key: String, pressed: bool) -> Dictionary:
 	ev.physical_keycode = code
 	Input.parse_input_event(ev)
 	return {"ok": true, "key": key, "pressed": pressed}
+
+func _mouse_button(name: String) -> int:
+	match name.strip_edges().to_lower():
+		"right": return MOUSE_BUTTON_RIGHT
+		"middle": return MOUSE_BUTTON_MIDDLE
+		_: return MOUSE_BUTTON_LEFT
+
+func _send_mouse(x: float, y: float, button: String, kind: String) -> Dictionary:
+	var pos := Vector2(x, y)
+	var idx := _mouse_button(button)
+	if kind == "move":
+		var mv := InputEventMouseMotion.new()
+		mv.position = pos
+		mv.global_position = pos
+		Input.parse_input_event(mv)
+		return {"ok": true, "kind": "move", "x": x, "y": y}
+	if kind != "click" and kind != "down" and kind != "up":
+		return {"ok": false, "error": "unknown_mouse_kind"}
+	var steps: Array = []
+	if kind == "click" or kind == "down":
+		steps.append(true)
+	if kind == "click" or kind == "up":
+		steps.append(false)
+	for pressed in steps:
+		var ev := InputEventMouseButton.new()
+		ev.position = pos
+		ev.global_position = pos
+		ev.button_index = idx
+		ev.pressed = pressed
+		Input.parse_input_event(ev)
+	return {"ok": true, "kind": kind, "x": x, "y": y, "button": button}
 
 func _key_code(key: String) -> int:
 	match key.strip_edges().to_upper():
@@ -480,22 +513,27 @@ class GodotSession:
         self._id = 0
         self.command: str = ""
 
-    def start(self, *, binary: str, timeout: float = 20.0) -> dict[str, Any]:
+    def start(
+        self,
+        *,
+        binary: str,
+        timeout: float = 20.0,
+        headless: bool = True,
+        env: dict[str, str] | None = None,
+        extra_args: tuple[str, ...] = (),
+        new_session: bool = False,
+    ) -> dict[str, Any]:
+        """Launch Godot and wait for the bridge. ``headless=False`` renders on the ``DISPLAY`` in ``env`` (the
+        play worker); ``new_session`` puts Godot in its own process group so the whole tree can be killed."""
         ensure_bridge(self.root)
         ensure_import_sidecars(self.root)
         if not self.port:
             self.port = free_port()
-        cmd = [
-            binary,
-            "--headless",
-            "--audio-driver",
-            "Dummy",
-            "--path",
-            str(self.root),
-            "--",
-            "--daedalus-bridge",
-            str(self.port),
-        ]
+        cmd = [binary]
+        if headless:
+            cmd.append("--headless")
+        cmd += ["--audio-driver", "Dummy", *extra_args, "--path", str(self.root), "--",
+                "--daedalus-bridge", str(self.port)]
         self.command = " ".join(cmd)
         try:
             self.proc = subprocess.Popen(
@@ -505,6 +543,8 @@ class GodotSession:
                 stderr=subprocess.STDOUT,
                 text=True,
                 bufsize=1,
+                env=env,
+                start_new_session=new_session,
             )
         except OSError as exc:
             return {"ok": False, "error": str(exc), "command": self.command}

@@ -26,6 +26,7 @@ class Setting:
     write: Callable[[Any], Any] | None      # None = read-only here
     secret: bool = False
     choices: Callable[[], list[str]] | None = None   # enum settings: the accepted values
+    bounds: tuple[int, int] | None = None            # int settings: inclusive (low, high)
 
 
 def _mentor_enabled() -> dict[str, Any]:
@@ -82,6 +83,18 @@ def _writer_modes() -> list[str]:
     return list(writer_assist.MODES)
 
 
+def _play_max() -> dict[str, Any]:
+    from .. import settings_file
+    from .play_worker.manager import max_sessions
+    raw = settings_file.load().get("play_max_sessions")
+    return {"effective": max_sessions(), "persisted": raw if isinstance(raw, int) else None, "default": 1}
+
+
+def _write_play_max(v: Any) -> Any:
+    from .. import settings_file
+    return settings_file.update({"play_max_sessions": int(v)})
+
+
 def _evolution() -> dict[str, Any]:
     from .. import evolution, settings_file
     persisted = settings_file.load().get("evolution_enabled")
@@ -124,6 +137,8 @@ SETTINGS: tuple[Setting, ...] = (
             choices=_writer_modes),
     Setting("evolution.enabled", "settings.evolution", "evolution", "bool", "DAEDALUS_EVOLUTION", _evolution, _write_evolution),
     Setting("auto_apply.enabled", "settings.autoApply", "evolution", "bool", "", _auto_apply, _write_auto_apply),
+    Setting("play.max_sessions", "settings.playMax", "runtime", "int", "DAEDALUS_PLAY_MAX", _play_max, _write_play_max,
+            bounds=(1, 3)),
     Setting("kv.backend", "settings.kvBackend", "storage", "enum", "DAEDALUS_KV", _kv, None),
     Setting("brain.model", "settings.brainModel", "runtime", "str", "DAEDALUS_MODEL", _brain, None),
 )
@@ -167,8 +182,9 @@ def _coerce(s: Setting, value: Any) -> Any:
         if isinstance(value, bool):
             raise ValueError(f"{s.key} expects a whole number")
         number = int(str(value).strip())      # ValueError for junk
-        if number < 0:
-            raise ValueError(f"{s.key} must be 0 or more")
+        lo, hi = s.bounds or (0, 2**31 - 1)
+        if not lo <= number <= hi:
+            raise ValueError(f"{s.key} must be between {lo} and {hi}" if s.bounds else f"{s.key} must be 0 or more")
         return number
     if s.kind == "enum" and s.choices is not None:
         text = str(value).strip().lower()
