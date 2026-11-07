@@ -59,9 +59,10 @@ class XInput:
         g = self.geometry()
         sx, sy = g.get("x", 0) + int(x), g.get("y", 0) + int(y)
         self.focus()
-        self._run("mousemove", str(sx - 2), str(sy - 2))
+        sx, sy = max(0, sx), max(0, sy)                     # a negative number would be parsed as an option
+        self._run("mousemove", "--", str(max(0, sx - 2)), str(max(0, sy - 2)))
         time.sleep(0.12)
-        self._run("mousemove", str(sx), str(sy))
+        self._run("mousemove", "--", str(sx), str(sy))
         time.sleep(0.12)
         if kind in {"down", "click"}:
             self._run("mousedown", btn)

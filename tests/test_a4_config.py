@@ -77,6 +77,7 @@ def test_play_max_sessions_is_bounded_one_to_three(a0_tmp):
     c = _client()
     row = _row(c.get("/api/v1/harness/config").json(), "play.max_sessions")
     assert row["effective"] == 1 and row["default"] == 1 and row["persisted"] is None
+    assert (row["min"], row["max"]) == (1, 3)                      # the UI can constrain its input
     for bad in (0, 4, -1, "x"):
         assert c.post("/api/v1/harness/config", json={"key": "play.max_sessions", "value": bad}).status_code == 400
     assert c.post("/api/v1/harness/config", json={"key": "play.max_sessions", "value": 3}).status_code == 200

@@ -51,6 +51,14 @@ def play_env(a0_tmp):  # noqa: F811
     return projects
 
 
+def _fake_running(self):
+    """Stand-in for PlaySession.start in manager tests: running, with a game process that reports alive."""
+    import types
+    self.state = "running"
+    self.game = types.SimpleNamespace(proc=types.SimpleNamespace(poll=lambda: None, pid=1))
+    return self.status()
+
+
 def _black_project(root: Path) -> Path:
     p = root / "dark"
     p.mkdir(parents=True)
@@ -60,6 +68,25 @@ def _black_project(root: Path) -> Path:
     (p / "main.tscn").write_text(
         '[gd_scene format=3]\n[node name="Main" type="ColorRect"]\nanchors_preset = 15\nanchor_right = 1.0\n'
         'anchor_bottom = 1.0\ncolor = Color(0, 0, 0, 1)\n', encoding="utf-8")
+    return p
+
+
+def _animated_project(root: Path) -> Path:
+    """A scene that changes every frame on its own: input cannot be told apart from the idle drift."""
+    p = root / "anim"
+    p.mkdir(parents=True)
+    (p / "project.godot").write_text(
+        'config_version=5\n[application]\nconfig/name="Anim"\nrun/main_scene="res://main.tscn"\n'
+        '[rendering]\nrenderer/rendering_method="gl_compatibility"\n', encoding="utf-8")
+    (p / "main.tscn").write_text(
+        '[gd_scene load_steps=2 format=3]\n[ext_resource type="Script" path="res://main.gd" id="1"]\n'
+        '[node name="Main" type="ColorRect"]\nanchors_preset = 15\nanchor_right = 1.0\nanchor_bottom = 1.0\n'
+        'script = ExtResource("1")\n[node name="Bar" type="ColorRect" parent="."]\noffset_right = 40.0\n'
+        'offset_bottom = 480.0\ncolor = Color(1, 1, 1, 1)\n', encoding="utf-8")
+    (p / "main.gd").write_text(
+        'extends ColorRect\nvar t := 0.0\nfunc _process(d: float) -> void:\n\tt += d\n'
+        '\tcolor = Color(0.5 + 0.5 * sin(t * 6.0), 0.5 + 0.5 * cos(t * 4.0), 0.5 + 0.5 * sin(t * 9.0))\n'
+        '\t$Bar.offset_left = fmod(t * 200.0, 600.0)\n', encoding="utf-8")
     return p
 
 
@@ -126,9 +153,8 @@ def test_manager_refuses_past_the_limit_and_unknown_engine(play_env, monkeypatch
     started = []
 
     def fake_start(self, **_k):
-        self.state = "running"
         started.append(self.id)
-        return self.status()
+        return _fake_running(self)
 
     monkeypatch.setattr(PlaySession, "start", fake_start)
     m = mgr_mod.PlayManager(limit=1)
@@ -149,7 +175,7 @@ def test_idle_reaper_stops_only_idle_sessions(play_env, monkeypatch):
     from daedalus.harness.play_worker import manager as mgr_mod
     from daedalus.harness.play_worker.session import PlaySession
 
-    monkeypatch.setattr(PlaySession, "start", lambda self, **_k: setattr(self, "state", "running") or self.status())
+    monkeypatch.setattr(PlaySession, "start", lambda self, **_k: _fake_running(self))
     stopped = []
     monkeypatch.setattr(PlaySession, "stop", lambda self: stopped.append(self.id) or setattr(self, "state", "stopped") or {"ok": True})
     m = mgr_mod.PlayManager(limit=3, idle_timeout=100)
@@ -194,6 +220,46 @@ def test_unreadable_capture_is_an_error_not_a_blank_frame(a0_tmp):  # noqa: F811
     with pytest.raises(PlayError) as exc:
         capture.describe_frame(pal)
     assert exc.value.code == "frame_unreadable"
+
+
+def test_max_sessions_unparsable_pin_falls_back_to_the_saved_value(a0_tmp, monkeypatch):  # noqa: F811
+    from daedalus import settings_file
+    from daedalus.harness.play_worker.manager import max_sessions
+
+    settings_file.update({"play_max_sessions": 3})
+    monkeypatch.setenv("DAEDALUS_PLAY_MAX", "abc")
+    assert max_sessions() == 3
+    monkeypatch.setenv("DAEDALUS_PLAY_MAX", "2")
+    assert max_sessions() == 2                                    # a valid pin wins over the saved value
+
+
+def test_manager_forgets_old_finished_sessions_but_keeps_live_ones(play_env, monkeypatch):
+    from daedalus.harness.play_worker import manager as mgr_mod
+    from daedalus.harness.play_worker.session import PlaySession
+
+    monkeypatch.setattr(PlaySession, "start", lambda self, **_k: _fake_running(self))
+    monkeypatch.setattr(PlaySession, "stop", lambda self: setattr(self, "state", "stopped") or {"ok": True})
+    monkeypatch.setattr(mgr_mod, "KEEP_FINISHED", 3)
+    m = mgr_mod.PlayManager(limit=1)
+    ids = []
+    for _ in range(8):
+        ids.append(m.start("fx", play_env / "fx")["id"])
+        m.stop(ids[-1])
+    live = m.start("fx", play_env / "fx")["id"]
+    kept = {row["id"] for row in m.list()}
+    assert live in kept and len(kept) <= 5 and ids[0] not in kept
+
+
+def test_kill_group_reaches_children_after_the_leader_was_reaped(a0_tmp):
+    """GodotSession.close() reaps the leader first; stragglers in its group must still die."""
+    from daedalus.harness.play_worker.display import _group_alive, kill_group
+
+    proc = subprocess.Popen(["sh", "-c", "sleep 60 & exit 0"], start_new_session=True,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    proc.wait(timeout=5)                                          # leader gone and reaped, `sleep` still in the group
+    assert _group_alive(proc.pid)
+    kill_group(proc, grace=1.0)
+    assert not _group_alive(proc.pid)
 
 
 def test_slug_validation_blocks_traversal(play_env):
@@ -436,3 +502,97 @@ def test_worker_process_end_to_end_and_kill_tree_on_sigterm(play_env, monkeypatc
     while time.time() < deadline and (_alive(gpid) or _alive(xpid)):
         time.sleep(0.1)
     assert gpid is not None and not _alive(gpid) and not _alive(xpid)
+
+
+# ----------------------------------------------------------------------------- review fixes (real engine)
+@needs_play
+def test_a_click_at_the_window_corner_is_not_a_window_error(play_env):
+    from daedalus.harness.play_worker.session import PlaySession
+
+    s = PlaySession(play_env / "fx", slug="fx")
+    try:
+        s.start()
+        for x, y in ((0, 0), (1, 1), (0, 5)):                     # used to become `xdotool mousemove -2 -2` -> 502
+            assert s.send(mouse={"kind": "click", "x": x, "y": y})["ok"] is True
+        assert s.game_state()["result"]["clicks"] == 3
+    finally:
+        s.stop()
+
+
+@needs_play
+def test_a_crashed_game_frees_its_slot(play_env):
+    from daedalus.harness.play_worker.manager import PlayManager
+
+    m = PlayManager(limit=1)
+    try:
+        first = m.get(m.start("fx", play_env / "fx")["id"])
+        gpid = first.game.proc.pid
+        os.killpg(os.getpgid(gpid), signal.SIGKILL)
+        first.game.proc.wait(timeout=5)
+        second = m.get(m.start("fx", play_env / "fx")["id"])       # no session_limit while the old one is dead
+        assert second.state == "running" and first.state == "failed"
+        assert not _alive(first.display.proc.pid if first.display.proc else None)   # its display was cleaned up
+    finally:
+        m.stop_all()
+
+
+@needs_play
+def test_idle_animation_is_not_credited_to_the_input(play_env):
+    from daedalus.harness.play_worker.session import PlaySession
+
+    s = PlaySession(_animated_project(play_env), slug="anim")
+    try:
+        s.start()
+        res = s.probe_input(keys=["q"])                           # nothing in this game reads input at all
+        assert res["idle_fraction"] > 0.25                        # the picture moves by itself
+        assert res["conclusive"] is False and res["reason"] == "scene_animates_on_its_own"
+        assert res["observed_change"] is False and s.level < 4
+    finally:
+        s.stop()
+
+
+@needs_play
+def test_fixture_probe_reports_a_quiet_idle_control(play_env):
+    from daedalus.harness.play_worker.session import PlaySession
+
+    s = PlaySession(play_env / "fx", slug="fx")
+    try:
+        s.start()
+        res = s.probe_input(keys=["space"])
+        assert res["idle_fraction"] < 0.002 and res["conclusive"] is True and res["observed_change"] is True
+        assert res["before"]["sha256"] == res["idle"]["sha256"]   # no input -> identical pixels
+        assert res["after"]["sha256"] != res["idle"]["sha256"]
+    finally:
+        s.stop()
+
+
+@needs_play
+def test_a_long_call_on_one_session_does_not_block_another_or_a_stop(play_env):
+    import threading
+
+    from daedalus.harness.play_worker.manager import PlayManager
+
+    m = PlayManager(limit=2)
+    try:
+        a = m.get(m.start("fx", play_env / "fx")["id"])
+        b = m.get(m.start("fx", play_env / "fx")["id"])
+        t = threading.Thread(target=lambda: _swallow(lambda: a.wait(ms=12000)))
+        t.start()
+        time.sleep(0.5)
+        t0 = time.time()
+        assert b.frame("window")["blank"] is False                # B is not queued behind A's 12 s wait
+        assert time.time() - t0 < 5
+        t0 = time.time()
+        gpid = a.game.proc.pid
+        a.stop()                                                  # and A can be stopped while it is busy
+        assert time.time() - t0 < 10 and not _alive(gpid)
+        t.join(timeout=20)
+    finally:
+        m.stop_all()
+
+
+def _swallow(fn):
+    try:
+        fn()
+    except Exception:
+        pass

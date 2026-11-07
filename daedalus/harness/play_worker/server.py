@@ -4,7 +4,6 @@ from __future__ import annotations
 import hmac
 from contextlib import asynccontextmanager
 import re
-import threading
 from pathlib import Path
 from typing import Any
 
@@ -85,8 +84,6 @@ def create_app(token: str, manager: PlayManager | None = None) -> FastAPI:
     async def _play_error(_req, exc: PlayError):
         return JSONResponse(exc.payload(), status_code=_STATUS.get(exc.code, 500))
 
-    run = threading.Lock()   # one blocking engine call at a time per worker keeps ordering simple and safe
-
     @app.get("/health")
     def health() -> dict[str, Any]:     # no token: liveness only, no paths, nothing about sessions
         return {"ok": True, "service": "daedalus-play-worker"}
@@ -97,8 +94,7 @@ def create_app(token: str, manager: PlayManager | None = None) -> FastAPI:
 
     @app.post("/v1/sessions", dependencies=[Depends(auth)])
     def start(body: StartBody) -> dict[str, Any]:
-        with run:
-            return mgr.start(body.slug, project_dir_for(body.slug), engine=body.engine, size=(body.width, body.height))
+        return mgr.start(body.slug, project_dir_for(body.slug), engine=body.engine, size=(body.width, body.height))
 
     @app.get("/v1/sessions/{sid}", dependencies=[Depends(auth)])
     def one(sid: str) -> dict[str, Any]:
@@ -106,41 +102,34 @@ def create_app(token: str, manager: PlayManager | None = None) -> FastAPI:
 
     @app.post("/v1/sessions/{sid}/frame", dependencies=[Depends(auth)])
     def frame(sid: str, body: FrameBody) -> dict[str, Any]:
-        with run:
-            return mgr.get(sid).frame(body.source)
+        return mgr.get(sid).frame(body.source)
 
     @app.post("/v1/sessions/{sid}/input", dependencies=[Depends(auth)])
     def send(sid: str, body: InputBody) -> dict[str, Any]:
         sess = mgr.get(sid)
         mouse = body.mouse.model_dump() if body.mouse else None
-        with run:
-            if body.probe:
-                return sess.probe_input(keys=body.keys, mouse=mouse, via=body.via, settle_ms=body.settle_ms, hold_ms=body.hold_ms)
-            return sess.send(keys=body.keys, mouse=mouse, via=body.via, hold_ms=body.hold_ms)
+        if body.probe:
+            return sess.probe_input(keys=body.keys, mouse=mouse, via=body.via, settle_ms=body.settle_ms, hold_ms=body.hold_ms)
+        return sess.send(keys=body.keys, mouse=mouse, via=body.via, hold_ms=body.hold_ms)
 
     @app.post("/v1/sessions/{sid}/wait", dependencies=[Depends(auth)])
     def wait(sid: str, body: WaitBody) -> dict[str, Any]:
-        with run:
-            return mgr.get(sid).wait(frames=body.frames, ms=body.ms)
+        return mgr.get(sid).wait(frames=body.frames, ms=body.ms)
 
     @app.get("/v1/sessions/{sid}/tree", dependencies=[Depends(auth)])
     def tree(sid: str) -> dict[str, Any]:
-        with run:
-            return mgr.get(sid).tree()
+        return mgr.get(sid).tree()
 
     @app.get("/v1/sessions/{sid}/errors", dependencies=[Depends(auth)])
     def errors(sid: str) -> dict[str, Any]:
-        with run:
-            return mgr.get(sid).errors()
+        return mgr.get(sid).errors()
 
     @app.get("/v1/sessions/{sid}/fps", dependencies=[Depends(auth)])
     def fps(sid: str) -> dict[str, Any]:
-        with run:
-            return mgr.get(sid).fps()
+        return mgr.get(sid).fps()
 
     @app.delete("/v1/sessions/{sid}", dependencies=[Depends(auth)])
     def stop(sid: str) -> dict[str, Any]:
-        with run:
-            return mgr.stop(sid)
+        return mgr.stop(sid)
 
     return app

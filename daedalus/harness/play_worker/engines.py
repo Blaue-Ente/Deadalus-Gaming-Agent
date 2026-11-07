@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -12,7 +11,7 @@ _KNOWN_DIRS = (
     "C:/Program Files/Godot", "C:/Program Files (x86)/Steam/steamapps/common/Godot Engine",
     "~/scoop/apps/godot/current", "~/AppData/Local/Microsoft/WinGet/Packages",
 )
-_NAMES = ("godot", "godot4", "Godot", "Godot_v4.3-stable_linux.x86_64")
+_NAMES = ("godot", "godot4", "godot4.3", "Godot_v4.3", "Godot", "Godot_v4.3-stable_linux.x86_64")
 
 
 def find_godot() -> dict[str, Any]:
@@ -39,17 +38,15 @@ def find_godot() -> dict[str, Any]:
             "message": "Godot 4.x not found. Set GODOT_BIN or put godot on PATH. Files are not a playtest."}
 
 
-def godot_version(path: str) -> str:
-    try:
-        out = subprocess.run([path, "--version"], capture_output=True, text=True, timeout=15)
-        return (out.stdout or out.stderr).strip().splitlines()[0] if (out.stdout or out.stderr).strip() else ""
-    except Exception:
-        return ""
-
-
 def tools_status() -> dict[str, Any]:
     """What a rendered session needs besides the engine; shown in Settings later (A6.1)."""
     need = {"Xvfb": shutil.which("Xvfb"), "xdotool": shutil.which("xdotool"), "import": shutil.which("import")}
     eng = find_godot()
+    if eng.get("ok"):
+        try:
+            from ...godot_first import godot_version  # the one version parser the harness already has
+            eng["version"] = godot_version(eng["path"])
+        except Exception:
+            pass
     return {"engine": eng, "tools": {k: bool(v) for k, v in need.items()},
             "ready": bool(eng.get("ok")) and all(need.values())}

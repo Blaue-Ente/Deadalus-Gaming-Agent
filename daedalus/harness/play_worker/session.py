@@ -20,6 +20,7 @@ from .inputs import XInput
 _COPY_SKIP = shutil.ignore_patterns(".git", "node_modules", "__pycache__", "studio", "*.tmp")
 MAX_FRAMES = 200          # artifacts kept per session
 CHANGE_MIN = 0.002        # share of pixels that must differ to count as an observed change
+NOISY = 0.25              # idle drift above this: the scene moves on its own, input cannot be told apart
 
 
 def _artifact_root() -> Path:
@@ -99,7 +100,10 @@ class PlaySession:
 
     def stop(self) -> dict[str, Any]:
         """Idempotent. Kills Godot's whole process group, then Xvfb's, then removes the temp copy."""
-        with self._lock:
+        # A long wait/input holds the session lock; stopping must still work, so after a short wait we kill the
+        # processes anyway (the in-flight call then fails with session_stopped) instead of blocking behind it.
+        got = self._lock.acquire(timeout=2.0)
+        try:
             was = self.state
             try:
                 if self.game is not None:
@@ -116,8 +120,17 @@ class PlaySession:
                     self.state = "stopped"
                 self._write_manifest()
             return {"ok": True, "state": self.state, "level": self.level, "artifacts": str(self.artifacts)}
+        finally:
+            if got:
+                self._lock.release()
 
     # ---- observation -----------------------------------------------------------------------------------
+    def refresh(self) -> str:
+        """Mark a session whose game process died as failed (a crash must not hold a slot)."""
+        if self.state == "running" and (self.game is None or self.game.proc is None or self.game.proc.poll() is not None):
+            self.state = "failed"
+        return self.state
+
     def _need_running(self) -> None:
         if self.state != "running" or self.game is None or self.xin is None:
             raise PlayError("session_stopped", f"session is {self.state}")
@@ -192,20 +205,29 @@ class PlaySession:
 
     def probe_input(self, *, keys: list[str] | None = None, mouse: dict[str, Any] | None = None,
                     via: str = "os", settle_ms: int = 400, hold_ms: int = 80) -> dict[str, Any]:
-        """Frame, input, frame; L4 only when the window really changed (and neither frame is blank)."""
+        """Frame, idle control, input, frame. L4 only when the input moved the picture MORE than the scene moves on
+        its own: the effect (idle frame -> after frame) must clear the idle drift (before -> idle) by a margin, and a
+        scene that animates heavily by itself is reported inconclusive instead of being credited with the input."""
         with self._lock:
             before = self.frame("window")
+            self.wait(ms=settle_ms)
+            idle = self.frame("window")                       # control: same scene, no input yet
+            idle_frac = capture.changed_fraction(self.artifacts / before["file"], self.artifacts / idle["file"])
             sent = self.send(keys=keys, mouse=mouse, via=via, hold_ms=hold_ms)
             self.wait(ms=settle_ms)
             after = self.frame("window")
-            frac = capture.changed_fraction(self.artifacts / before["file"], self.artifacts / after["file"])
-            changed = frac >= CHANGE_MIN and not before["blank"] and not after["blank"]
+            effect = capture.changed_fraction(self.artifacts / idle["file"], self.artifacts / after["file"])
+            noisy = idle_frac >= NOISY
+            blank = before["blank"] or idle["blank"] or after["blank"]
+            changed = (not noisy) and (not blank) and effect >= max(CHANGE_MIN, 2 * idle_frac)
+            reason = ("scene_animates_on_its_own" if noisy else "blank_frame" if blank else "")
             if changed and self.level < 4:
                 self.level = 4
-            self._event("probe", changed=changed, fraction=round(frac, 4), via=via,
-                        before=before["sha256"], after=after["sha256"])
-            return {"ok": True, "observed_change": changed, "changed_fraction": round(frac, 4),
-                    "before": before, "after": after, "sent": sent["sent"], "level": self.level}
+            self._event("probe", changed=changed, effect=round(effect, 4), idle=round(idle_frac, 4), via=via,
+                        conclusive=not noisy and not blank, before=before["sha256"], after=after["sha256"])
+            return {"ok": True, "observed_change": changed, "changed_fraction": round(effect, 4),
+                    "idle_fraction": round(idle_frac, 4), "conclusive": not noisy and not blank, "reason": reason,
+                    "before": before, "idle": idle, "after": after, "sent": sent["sent"], "level": self.level}
 
     def wait(self, *, frames: int = 0, ms: int = 0) -> dict[str, Any]:
         with self._lock:

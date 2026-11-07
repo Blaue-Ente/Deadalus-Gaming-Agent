@@ -203,6 +203,13 @@ def view_one(s: Setting) -> dict[str, Any]:
         "env": s.env or None, "env_locked": locked, "env_value": env_value if locked else None,
         "writable": s.write is not None and not locked,
     }
+    if s.bounds:
+        row["min"], row["max"] = s.bounds
+    if s.choices is not None:
+        try:
+            row["choices"] = s.choices()
+        except Exception:
+            pass
     try:
         got = s.read()
         row.update(effective=got.get("effective"), persisted=got.get("persisted"), default=got.get("default"))
