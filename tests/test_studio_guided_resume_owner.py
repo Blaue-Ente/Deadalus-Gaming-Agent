@@ -14,9 +14,22 @@ import time
 import urllib.request
 from pathlib import Path
 
+import importlib.util
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _diag():
+    name = "studio_stream_diag"
+    if name in sys.modules:
+        return sys.modules[name]
+    path = Path(__file__).resolve().parent / "studio_stream_diag.py"
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
 VISIBLE = """() => !document.getElementById('build-checkpoint').hidden
   && !document.getElementById('flight-checkpoint').hidden
   && document.getElementById('pane-flight').classList.contains('on')"""
@@ -366,9 +379,11 @@ def test_stop_does_not_resurrect_the_pending_guided_job(studio_server):
     from playwright.sync_api import sync_playwright
 
     game = studio_server["game"]
+    stream_diag = _diag()
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": 1280, "height": 800})
+        trace = stream_diag.attach(page)
         owned = _Owned(page)
         try:
             owned.install()
@@ -387,6 +402,17 @@ def test_stop_does_not_resurrect_the_pending_guided_job(studio_server):
             assert not any("job-7" in url for url in owned.streams)
             assert "Stopped." in page.locator("#build-status").inner_text()
             assert page.locator("#build-checkpoint").is_hidden()
+        except BaseException:
+            try:
+                stream_diag.record_failure(
+                    page,
+                    trace,
+                    "guided-resume-stop-setup",
+                    owned=owned,
+                )
+            except Exception:
+                pass
+            raise
         finally:
             owned.settle()
             browser.close()
