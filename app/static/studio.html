@@ -466,6 +466,17 @@
       <section id="panel-settings" class="workspace-panel" data-panel="settings" hidden>
         <p class="kicker" data-i18n="studio.panel.settings">Settings</p>
         <p id="settings-status" class="workspace-status" role="status" hidden></p>
+        <p class="kicker" data-i18n="studio.settingsHarness">Harness settings</p>
+        <p class="hint" data-i18n="studio.settingsHarnessHint">Each setting shows what is in effect, where it comes from, and whether an environment variable locks it.</p>
+        <p id="harness-status" class="workspace-status" role="status" hidden></p>
+        <div id="settings-config" class="cfg-list"></div>
+        <p class="kicker" data-i18n="studio.settingsModels">Models per task</p>
+        <p class="hint" data-i18n="studio.settingsModelsHint">Use provider:model, for example openrouter:openai/gpt-4o. Empty uses the default.</p>
+        <div id="settings-intents" class="cfg-list"></div>
+        <p class="kicker" data-i18n="studio.settingsEngines">Game engines and play</p>
+        <div id="settings-engines" class="cfg-block"></div>
+        <p class="kicker" data-i18n="studio.settingsProof">Proof levels</p>
+        <div id="settings-proof" class="cfg-block"></div>
         <p class="kicker" data-i18n="studio.settingsBrain">Brain</p>
         <div id="settings-brain"></div>
         <form id="settings-prefs">

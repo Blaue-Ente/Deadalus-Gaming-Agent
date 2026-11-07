@@ -1969,10 +1969,311 @@
     });
   }
 
+  // ---- Harness settings: every setting with its source and lock, models per task, engines, proof levels ----------
+  let harnessSeq = 0;
+  const SRC_KEYS = { env: "studio.srcEnv", saved: "studio.srcSaved", default: "studio.srcDefault", unavailable: "studio.srcUnavailable" };
+
+  function tOr(key, fallback) {
+    const v = dx.t(key);
+    return v === key ? (fallback || key) : v;
+  }
+
+  function badge(src) {
+    const b = document.createElement("span");
+    b.className = "badge";
+    b.dataset.src = src;
+    b.textContent = tOr(SRC_KEYS[src], src);
+    return b;
+  }
+
+  function cfgControl(row) {
+    let el;
+    if (row.kind === "bool") {
+      el = document.createElement("select");
+      [["true", "studio.settingsOn"], ["false", "studio.settingsOff"]].forEach(([value, key]) => {
+        const o = document.createElement("option");
+        o.value = value;
+        o.textContent = dx.t(key);
+        el.appendChild(o);
+      });
+      el.value = String(!!row.effective);
+    } else if (row.kind === "enum" && Array.isArray(row.choices) && row.choices.length) {
+      el = document.createElement("select");
+      row.choices.forEach((c) => {
+        const o = document.createElement("option");
+        o.value = String(c);
+        o.textContent = String(c);
+        el.appendChild(o);
+      });
+      el.value = String(row.effective);
+    } else if (row.kind === "int") {
+      el = document.createElement("input");
+      el.type = "number";
+      el.step = "1";
+      if (row.min != null) el.min = String(row.min);
+      if (row.max != null) el.max = String(row.max);
+      el.value = row.effective == null ? "" : String(row.effective);
+    } else {
+      el = document.createElement("input");
+      el.readOnly = true;
+      el.value = row.effective == null ? "" : String(row.effective);
+    }
+    el.disabled = !row.writable;
+    el.setAttribute("aria-label", tOr(row.title_key, row.key));
+    return el;
+  }
+
+  function cfgValue(row, el) {
+    if (row.kind === "bool") return el.value === "true";
+    if (row.kind === "int") return el.value === "" ? NaN : Number(el.value);
+    return el.value;
+  }
+
+  function buildConfigRow(row) {
+    const item = document.createElement("div");
+    item.className = "cfg-row";
+    item.dataset.key = row.key;
+    item.dataset.locked = row.env_locked ? "1" : "0";
+    const name = document.createElement("div");
+    name.className = "cfg-name";
+    const b = document.createElement("b");
+    b.textContent = tOr(row.title_key, row.key);
+    const small = document.createElement("small");
+    small.textContent = row.key;
+    name.append(b, small);
+    const control = cfgControl(row);
+    const wrap = document.createElement("div");
+    wrap.className = "cfg-control";
+    wrap.appendChild(control);
+    const actions = document.createElement("div");
+    actions.className = "cfg-actions";
+    actions.appendChild(badge(row.source || "default"));
+    const note = document.createElement("p");
+    note.className = "cfg-note";
+    note.hidden = true;
+    if (row.env_locked) {
+      note.textContent = dx.t("studio.settingsLockedBy", { env: row.env || "" });
+      note.hidden = false;
+    } else if (!row.writable) {
+      note.textContent = dx.t("studio.settingsReadOnly") + (row.source === "unavailable" && row.error ? " " + row.error : "");
+      note.hidden = false;
+    }
+    if (row.writable) {
+      const save = document.createElement("button");
+      save.type = "button";
+      save.className = "primary cfg-save";
+      save.textContent = dx.t("studio.settingsSave");
+      save.addEventListener("click", () => saveConfigRow(row, control, note, item, save));
+      actions.appendChild(save);
+    }
+    item.append(name, wrap, actions, note);
+    return item;
+  }
+
+  function paintConfig(rows) {
+    const box = $("settings-config");
+    box.replaceChildren();
+    (rows || []).forEach((row) => box.appendChild(buildConfigRow(row)));
+  }
+
+  function cfgError(note, item, text) {
+    note.textContent = text;
+    note.hidden = false;
+    item.dataset.state = "error";
+  }
+
+  async function saveConfigRow(row, control, note, item, button) {
+    item.dataset.state = "";
+    note.hidden = true;
+    const value = cfgValue(row, control);
+    if (row.kind === "int" && !Number.isFinite(value)) {          // an empty field would be sent as null
+      cfgError(note, item, dx.t("studio.settingsNeedNumber"));
+      return;
+    }
+    await runAction(button, "harness-status", async () => {
+      try {
+        const data = await postJson("/api/v1/harness/config", { key: row.key, value });
+        const fresh = (data.settings || []).find((r) => r.key === row.key);
+        // Replace only the saved row: edits the owner has not saved in the other rows are theirs to keep.
+        if (fresh && item.isConnected) item.replaceWith(buildConfigRow(fresh));
+        showStatus("harness-status", dx.t("studio.saved"), false);
+      } catch (err) {
+        const msg = String((err && err.message) || "");
+        cfgError(note, item, msg === "env_locked" ? dx.t("studio.settingsLockedBy", { env: row.env || "" }) : failText(err));
+      }
+    });
+  }
+
+  function intentModelText(row) {
+    const r = row.resolved || {};
+    if (r.model) return (r.provider ? r.provider + ":" : "") + r.model;
+    // Nothing resolves yet (for example no API key), but the owner may already have chosen one: show the choice.
+    const chosen = row.owner_choice && row.owner_choice !== "auto" ? String(row.owner_choice) : "";
+    return chosen || dx.t("studio.settingsNoModel");
+  }
+
+  function intentTag(row) {
+    // The mentor reports its own choice id (brain, rules, a catalog id); only a real provider:model is a tag.
+    const raw = row.intent === "mentor" ? row.owner_tag : row.owner_choice;
+    return raw && raw !== "auto" ? String(raw) : "";
+  }
+
+  function buildIntentRow(row, data) {
+    const item = document.createElement("div");
+    item.className = "cfg-row";
+    item.dataset.intent = row.intent;
+    const locked = !!((row.resolved && row.resolved.locked) || (row.selectable && data.env_locked && row.intent !== "mentor"));
+    item.dataset.locked = locked ? "1" : "0";
+    const name = document.createElement("div");
+    name.className = "cfg-name";
+    const b = document.createElement("b");
+    b.textContent = tOr("studio.intent." + row.intent, row.intent);
+    const small = document.createElement("small");
+    small.textContent = intentModelText(row) + (row.resolved && row.resolved.source ? " · " + row.resolved.source : "");
+    name.append(b, small);
+    const wrap = document.createElement("div");
+    wrap.className = "cfg-control";
+    const actions = document.createElement("div");
+    actions.className = "cfg-actions";
+    const note = document.createElement("p");
+    note.className = "cfg-note";
+    note.hidden = true;
+    if (row.selectable) {
+      const input = document.createElement("input");
+      input.autocomplete = "off";
+      input.value = intentTag(row);
+      input.placeholder = row.default ? dx.t("studio.intentDefault", { model: row.default }) : "provider:model";
+      input.disabled = locked;
+      input.setAttribute("aria-label", tOr("studio.intent." + row.intent, row.intent));
+      wrap.appendChild(input);
+      if (locked) {
+        note.textContent = dx.t("studio.settingsLockedBy", { env: row.intent === "mentor" ? "DAEDALUS_MENTOR_MODEL" : "DAEDALUS_MODEL" });
+        note.hidden = false;
+        actions.appendChild(badge("env"));
+      } else {
+        const save = document.createElement("button");
+        save.type = "button";
+        save.className = "primary cfg-save";
+        save.textContent = dx.t("studio.settingsSave");
+        const clear = document.createElement("button");
+        clear.type = "button";
+        clear.className = "cfg-clear";
+        clear.textContent = dx.t("studio.settingsClear");
+        save.addEventListener("click", () => saveIntent(row.intent, input.value.trim(), note, item, save));
+        clear.addEventListener("click", () => saveIntent(row.intent, "", note, item, clear));
+        actions.append(save, clear);
+        if (row.intent === "persona" || row.intent === "writer") {   // both write the one writer override
+          note.textContent = dx.t("studio.intentShared");
+          note.hidden = false;
+        }
+      }
+    } else {
+      note.textContent = row.default ? dx.t("studio.intentPinned", { model: row.default }) : dx.t("studio.intentFollows");
+      note.hidden = false;
+    }
+    item.append(name, wrap, actions, note);
+    return item;
+  }
+
+  function paintIntents(data) {
+    const box = $("settings-intents");
+    box.replaceChildren();
+    ((data && data.intents) || []).forEach((row) => box.appendChild(buildIntentRow(row, data)));
+  }
+
+  async function saveIntent(intent, model, note, item, button) {
+    item.dataset.state = "";
+    note.hidden = true;
+    await runAction(button, "harness-status", async () => {
+      try {
+        const data = await postJson("/api/v1/harness/intents", { intent, model });
+        // Persona and Writer share one setting, so both rows are rebuilt; every other row keeps its unsaved edits.
+        ((data && data.intents) || []).forEach((fresh) => {
+          const same = fresh.intent === intent || (fresh.intent === "persona" && intent === "writer") || (fresh.intent === "writer" && intent === "persona");
+          const el = document.querySelector("#settings-intents .cfg-row[data-intent='" + fresh.intent + "']");
+          if (same && el) el.replaceWith(buildIntentRow(fresh, data));
+        });
+        showStatus("harness-status", dx.t("studio.saved"), false);
+      } catch (err) {
+        const msg = String((err && err.message) || "");
+        cfgError(note, item, msg === "env_locked" ? dx.t("studio.settingsLockedBy", { env: "DAEDALUS_MODEL" }) : failText(err));
+      }
+    });
+  }
+
+  function listItem(left, right) {
+    const li = document.createElement("li");
+    const a = document.createElement("span");
+    a.textContent = left;
+    const c = document.createElement("span");
+    c.textContent = right;
+    li.append(a, c);
+    return li;
+  }
+
+  function paintEngines(data) {
+    const box = $("settings-engines");
+    box.replaceChildren();
+    if (!data || data.ok === false) return;
+    const engine = data.engine || {};
+    const p1 = document.createElement("p");
+    p1.textContent = engine.ok ? dx.t("studio.engineFound", { path: engine.path || "" }) : dx.t("studio.engineMissing");
+    box.appendChild(p1);
+    const ul = document.createElement("ul");
+    Object.keys(data.tools || {}).sort().forEach((name) => {
+      ul.appendChild(listItem(name, data.tools[name] ? dx.t("studio.toolOk") : dx.t("studio.toolMissing")));
+    });
+    const head = document.createElement("p");
+    head.className = "kicker";
+    head.textContent = dx.t("studio.engineTools");
+    box.append(head, ul);
+    const p2 = document.createElement("p");
+    p2.textContent = dx.t("studio.engineSessions", { n: data.max_sessions, cap: data.platform_cap });
+    box.appendChild(p2);
+    const v = data.vision || {};
+    const p3 = document.createElement("p");
+    p3.textContent = v.model
+      ? dx.t("studio.visionState", { model: (v.provider ? v.provider + ":" : "") + v.model,
+          state: v.verified ? dx.t("studio.visionVerified") : dx.t("studio.visionUnverified") })
+      : dx.t("studio.visionNone");
+    box.appendChild(p3);
+  }
+
+  function paintProof(data) {
+    const box = $("settings-proof");
+    box.replaceChildren();
+    const ul = document.createElement("ul");
+    ((data && data.proof_levels) || []).forEach((lv) => {
+      const li = listItem(tOr(lv.key, "L" + lv.level), lv.reachable ? dx.t("studio.proofReach") : dx.t("studio.proofNoReach"));
+      li.dataset.level = String(lv.level);
+      li.dataset.reachable = lv.reachable ? "1" : "0";
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+  }
+
+  async function loadHarnessSettings() {
+    const mine = ++harnessSeq;
+    const calls = ["/api/v1/harness/config", "/api/v1/harness/intents", "/api/v1/harness/engines"].map((p) => dx.api(p));
+    const results = await Promise.allSettled(calls);
+    if (mine !== harnessSeq) return;                  // a newer load owns the screen
+    const problems = [];
+    const paint = (res, fn) => {
+      if (res.status === "rejected") { problems.push(failText(res.reason)); return; }
+      try { fn(res.value); } catch (err) { problems.push(failText(err)); }     // one broken section must not hide the rest
+    };
+    paint(results[0], (v) => paintConfig(v.settings || []));
+    paint(results[1], paintIntents);
+    paint(results[2], (v) => { paintEngines(v); paintProof(v); });
+    const unique = problems.filter((p, i) => problems.indexOf(p) === i);
+    showStatus("harness-status", unique.length ? dx.t("studio.requestFailed") + ": " + unique.join(" · ") : "", unique.length > 0);
+  }
+
   async function loadSettings() {
     showStatus("settings-status", dx.t("studio.loading"), false);
     $("settings-brain").replaceChildren();
     $("settings-fields").replaceChildren();
+    loadHarnessSettings();
     try {
       paintBrain(await dx.api("/api/v1/llm/status"));
     } catch (err) {
