@@ -37,6 +37,11 @@ pytest:
     - python3 -m playwright install-deps chromium
     - python3 -m playwright install chromium
     - python3 -m pytest tests -q --cov=daedalus --cov-report=term-missing --cov-fail-under=0
+  artifacts:
+    when: on_failure
+    expire_in: 3 days
+    paths:
+      - test-results/stream-diag/
   rules:
     - if: $CI_COMMIT_BRANCH
 

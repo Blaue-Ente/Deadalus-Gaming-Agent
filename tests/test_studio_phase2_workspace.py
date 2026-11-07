@@ -1,6 +1,7 @@
 """Phase 2 Game Studio shell: real panels, same slug, honest failures."""
 from __future__ import annotations
 
+import importlib.util
 import json
 import shutil
 import socket
@@ -11,6 +12,21 @@ import urllib.request
 from pathlib import Path
 
 import pytest
+
+
+def _diag():
+    name = "studio_stream_diag"
+    if name in sys.modules:
+        return sys.modules[name]
+    path = Path(__file__).resolve().parent / "studio_stream_diag.py"
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+diag = _diag()
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML = (ROOT / "app" / "static" / "studio.html").read_text(encoding="utf-8")
@@ -519,15 +535,19 @@ def test_build_progress_and_guided_stream_are_visible(studio_server):
             route, 200, {"active": False},
         ))
         page.route(f"**/game-studio/api/projects/{game}", workspace)
+        trace = diag.attach(page)
         page.goto(studio_server["url"] + f"/?panel=build&slug={game}", wait_until="domcontentloaded")
         page.wait_for_selector("#build-milestones li[data-current]")
         assert "1/4" in page.locator("#build-milestones").inner_text()
         assert "Boot" in page.locator("#build-milestones").inner_text()
         page.locator("#build-guided").click()
-        page.wait_for_function(
+        diag.wait(
+            page,
+            trace,
             """() => document.getElementById('build-out').textContent.includes('compile-slice-ready')
               && document.getElementById('log').textContent.includes('compile-slice-ready')
-              && document.getElementById('pane-flight').classList.contains('on')"""
+              && document.getElementById('pane-flight').classList.contains('on')""",
+            "build-stream-progress",
         )
         page.screenshot(path="/opt/cursor/artifacts/phase2-build-progress.png")
         browser.close()
@@ -573,16 +593,20 @@ def test_build_stream_failure_and_cancel_are_visible(studio_server):
             route, 200, {"ok": True, "cancelled": True},
         ))
         page.route(f"**/game-studio/api/projects/{game}", workspace)
+        trace = diag.attach(page)
         page.goto(studio_server["url"] + f"/?panel=build&slug={game}", wait_until="domcontentloaded")
         page.locator("#build-guided").click()
-        page.wait_for_function(
+        diag.wait(
+            page,
+            trace,
             """() => {
               const status = document.getElementById('build-status');
               return status.dataset.state === 'error'
                 && status.textContent.includes('build broke')
                 && document.getElementById('pane-flight').classList.contains('on')
                 && document.getElementById('log').textContent.includes('build broke');
-            }"""
+            }""",
+            "build-stream-failure",
         )
         assert "Started." not in page.locator("#build-status").inner_text()
         page.locator("#build-guided").click()

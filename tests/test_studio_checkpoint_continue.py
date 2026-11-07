@@ -1,6 +1,7 @@
 """Checkpoint continue in the shell. Streams and continue calls are intercepted."""
 from __future__ import annotations
 
+import importlib.util
 import json
 import socket
 import subprocess
@@ -10,6 +11,21 @@ import urllib.request
 from pathlib import Path
 
 import pytest
+
+
+def _diag():
+    name = "studio_stream_diag"
+    if name in sys.modules:
+        return sys.modules[name]
+    path = Path(__file__).resolve().parent / "studio_stream_diag.py"
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+diag = _diag()
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML = (ROOT / "app" / "static" / "studio.html").read_text(encoding="utf-8")
@@ -164,13 +180,22 @@ def _arm(page, game, bodies, continue_for):
 
 
 def _open(page, server, game):
+    trace = diag.attach(page)
     page.goto(server["url"] + f"/?panel=build&slug={game}", wait_until="domcontentloaded")
-    page.wait_for_function("() => !document.getElementById('build-guided').disabled")
+    diag.wait(
+        page,
+        trace,
+        "() => !document.getElementById('build-guided').disabled",
+        "checkpoint-guided-enabled",
+    )
     page.locator("#build-guided").click()
-    page.wait_for_function(
+    diag.wait(
+        page,
+        trace,
         """() => !document.getElementById('build-checkpoint').hidden
           && !document.getElementById('flight-checkpoint').hidden
-          && document.getElementById('pane-flight').classList.contains('on')"""
+          && document.getElementById('pane-flight').classList.contains('on')""",
+        "checkpoint-open",
     )
 
 
