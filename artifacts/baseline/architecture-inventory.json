@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-07T22:15:02.410224+00:00",
+  "generated_at": "2026-11-07T23:10:19.581265+00:00",
   "package_version": "0.3.8",
-  "git_commit": "c0e9dbd3d0abcbb64fed33fc1e120db868b06882",
+  "git_commit": "dd85e5d1a119e56ebe72df43f1f4a8e11042b21b",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -130,8 +130,8 @@
     ]
   },
   "tests": {
-    "modules": 100,
-    "functions": 1009
+    "modules": 101,
+    "functions": 1042
   },
   "modules": {
     "daedalus": [
@@ -210,8 +210,10 @@
       "daedalus/guided_jobs.py",
       "daedalus/harness/__init__.py",
       "daedalus/harness/config_view.py",
+      "daedalus/harness/connections.py",
       "daedalus/harness/context.py",
       "daedalus/harness/gateway.py",
+      "daedalus/harness/label_image.py",
       "daedalus/harness/manifest.py",
       "daedalus/harness/parity.py",
       "daedalus/harness/perception.py",

@@ -507,3 +507,37 @@ def test_guided_error_and_timeout_do_not_resurrect_a_stale_job(studio_server):
         finally:
             owned.settle()
             browser.close()
+
+
+def test_an_open_checkpoint_is_not_resumed_over_when_the_project_is_loaded_again(studio_server):
+    """The stream of a paused guided job ends at its checkpoint. Loading the same project again (the page does it at
+    startup, and every time the owner comes back to the Build panel) used to follow the job again from the start:
+    a second stream, every log line twice, and the decision the owner was looking at cleared and drawn again."""
+    from playwright.sync_api import sync_playwright
+
+    game = studio_server["game"]
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        owned = _Owned(page)
+        owned.active_now = {"active": True, "job_id": "job-live"}
+        try:
+            owned.install()
+            _open(page, studio_server, game)
+            page.wait_for_function(VISIBLE)
+            page.wait_for_function("() => document.getElementById('log').textContent.includes('stale job checkpoint')")
+            first = len(owned.streams)
+            for _ in range(2):                                   # leave the Build panel and come back, twice
+                page.locator("#workspace-nav button[data-panel=chat]").click()
+                page.locator("#workspace-nav button[data-panel=build]").click()
+                page.wait_for_function("() => !document.getElementById('build-guided').disabled")
+                _pump(page)
+            time.sleep(0.4)
+            assert len(owned.streams) == first == 1, owned.streams
+            assert not page.locator("#build-checkpoint").is_hidden()
+            assert page.locator("#build-cp-review").inner_text() == "stale job checkpoint"
+            log = page.locator("#log").inner_text()
+            assert log.count("stale-line") == 1 and log.count("stale job checkpoint") == 1, log
+        finally:
+            owned.settle()
+            browser.close()

@@ -140,6 +140,7 @@ async def test_github_connection() -> dict[str, Any]:
     if not tok:
         return {
             "ok": False,
+            "code": "not_configured",
             "configured": False,
             "source": "none",
             "error": "GITHUB_TOKEN не е зададен",
@@ -161,6 +162,7 @@ async def test_github_connection() -> dict[str, Any]:
         if r.status_code == 401:
             return {
                 "ok": False,
+                "code": "invalid_token",
                 "configured": True,
                 "source": github_token_source(),
                 "error": "Токенът е невалиден или изтекъл (401)",
@@ -169,6 +171,7 @@ async def test_github_connection() -> dict[str, Any]:
         if r.status_code == 403:
             return {
                 "ok": False,
+                "code": "forbidden",
                 "configured": True,
                 "source": github_token_source(),
                 "error": "Достъпът е отказан (403) — липсва scope repo",
@@ -178,6 +181,7 @@ async def test_github_connection() -> dict[str, Any]:
         if r.status_code != 200:
             return {
                 "ok": False,
+                "code": "api_error",
                 "configured": True,
                 "source": github_token_source(),
                 "error": f"GitHub API {r.status_code}",
@@ -191,6 +195,7 @@ async def test_github_connection() -> dict[str, Any]:
             can_push, push_detail = probe_github_can_create_repo(tok)
         return {
             "ok": True,
+            "code": "ok",
             "configured": True,
             "source": github_token_source(),
             "login": user.get("login"),
@@ -205,6 +210,7 @@ async def test_github_connection() -> dict[str, Any]:
     except Exception as exc:
         return {
             "ok": False,
+            "code": "network",
             "configured": True,
             "source": github_token_source(),
             "error": str(exc)[:300],
@@ -216,6 +222,7 @@ async def test_gitlab_connection() -> dict[str, Any]:
     if not gl.is_configured():
         return {
             "ok": False,
+            "code": "not_configured",
             "configured": False,
             "error": "GITLAB_TOKEN не е зададен",
             "hint": "Добави GITLAB_TOKEN в Studio → Свързаност (scope api, write_repository).",
@@ -227,18 +234,22 @@ async def test_gitlab_connection() -> dict[str, Any]:
             headers={"PRIVATE-TOKEN": gl._token()},
             timeout=10.0,
         )
+        if r.status_code in (401, 403):
+            return {"ok": False, "code": "invalid_token" if r.status_code == 401 else "forbidden",
+                    "configured": True, "error": f"GitLab API {r.status_code}"}
         if r.status_code != 200:
-            return {"ok": False, "configured": True, "error": f"GitLab API {r.status_code}"}
+            return {"ok": False, "code": "api_error", "configured": True, "error": f"GitLab API {r.status_code}"}
         u = r.json()
         return {
             "ok": True,
+            "code": "ok",
             "configured": True,
             "username": u.get("username"),
             "host": gl.gitlab_host(),
             "namespace": gl.default_namespace(),
         }
     except Exception as exc:
-        return {"ok": False, "configured": True, "error": str(exc)[:300]}
+        return {"ok": False, "code": "network", "configured": True, "error": str(exc)[:300]}
 
 
 def storage_status() -> dict[str, Any]:
