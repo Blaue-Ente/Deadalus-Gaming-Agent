@@ -153,6 +153,65 @@ def discovery_paths(discoveries: list) -> list[str]:
     return [safe_path(str(u)) for u in (discoveries or [])[:24]]
 
 
+def _utf8_len(text: str) -> int:
+    return len(text.encode("utf-8"))
+
+
+def _serialize_bounded(payload: dict, *, cap: int | None = None) -> str:
+    """JSON that always parses; size bounded by UTF-8 byte length (not char slice)."""
+    cap = FILE_CAP if cap is None else cap
+    work: dict = dict(payload)
+    work.pop("truncated", None)
+    work.pop("events_omitted", None)
+    for _ in range(256):
+        text = json.dumps(work, ensure_ascii=False, indent=2)
+        if _utf8_len(text) <= cap:
+            return text
+        trimmed = False
+        events = work.get("events")
+        if isinstance(events, list) and events:
+            work["events"] = events[:-1]
+            work["truncated"] = True
+            work["events_omitted"] = int(work.get("events_omitted") or 0) + 1
+            trimmed = True
+        elif isinstance(work.get("leaked_sample"), list) and work["leaked_sample"]:
+            work["leaked_sample"] = work["leaked_sample"][:-1]
+            work["truncated"] = True
+            trimmed = True
+        elif isinstance(work.get("discoveries_paths"), list) and work["discoveries_paths"]:
+            work["discoveries_paths"] = work["discoveries_paths"][:-1]
+            work["truncated"] = True
+            trimmed = True
+        elif isinstance(work.get("call_sequence"), list) and work["call_sequence"]:
+            work["call_sequence"] = work["call_sequence"][:-1]
+            work["truncated"] = True
+            trimmed = True
+        frame = work.get("frame")
+        if not trimmed and isinstance(frame, dict) and frame:
+            key = max(frame, key=lambda k: len(str(frame[k])))
+            work["frame"] = {k: v for k, v in frame.items() if k != key}
+            work["truncated"] = True
+            trimmed = True
+        if not trimmed:
+            break
+    minimal = {
+        "label": work.get("label", "unknown"),
+        "truncated": True,
+        "reason": "payload_exceeded_file_cap",
+        "held_len": work.get("held_len"),
+        "discoveries_count": work.get("discoveries_count"),
+        "dropped_events": work.get("dropped_events"),
+        "events_omitted": work.get("events_omitted"),
+    }
+    text = json.dumps(minimal, ensure_ascii=False, indent=2)
+    if _utf8_len(text) > cap:
+        text = json.dumps(
+            {"label": str(work.get("label", "unknown"))[:80], "truncated": True, "reason": "minimal_cap"},
+            ensure_ascii=False,
+        )
+    return text
+
+
 def _prune() -> None:
     existing = sorted(ARTIFACT_DIR.glob("*.json"), key=lambda path: path.stat().st_mtime)
     while len(existing) > KEEP_ARTIFACTS:
@@ -174,7 +233,6 @@ def record_failure(
     """Write one artifact and attach a short note to the active exception (if any)."""
     payload = {
         "label": label,
-        "note": "diagnostic only; parent failure traceback was lost (pipe without pipefail)",
         "held_len": held_len,
         "discoveries_count": len(discoveries or []),
         "discoveries_paths": discovery_paths(discoveries or []),
@@ -187,17 +245,23 @@ def record_failure(
         "dropped_events": trace.dropped,
         "events": trace.events,
     }
-    text = json.dumps(payload, ensure_ascii=False, indent=2)
-    if len(text) > FILE_CAP:
-        text = text[: FILE_CAP - 1] + "…"
+    text = _serialize_bounded(payload, cap=FILE_CAP)
     ARTIFACT_DIR.mkdir(parents=True, exist_ok=True)
     global _SEQ
     _SEQ += 1
     safe = "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in label)[:48]
     path = ARTIFACT_DIR / f"{safe}-{_SEQ}.json"
-    path.write_text(text, encoding="utf-8")
-    _prune()
-    summary = f"radar-journal diag artifact: {path.relative_to(ROOT)}"
+    summary: str
+    try:
+        path.write_text(text, encoding="utf-8")
+        _prune()
+        try:
+            rel = path.relative_to(ROOT)
+        except ValueError:
+            rel = path.name
+        summary = f"radar-journal diag artifact: {rel}"
+    except OSError as io_err:
+        summary = f"radar-journal diag artifact write failed: {type(io_err).__name__}"
     import sys
 
     exc = sys.exc_info()[1]
