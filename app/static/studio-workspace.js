@@ -2036,7 +2036,7 @@
     paintCatalogDraft();
   }
 
-  async function loadCatalog(keepDraft) {
+  async function loadModelCatalog(keepDraft) {
     const seq = ++catalogState.seq;
     try {
       const data = await dx.api("/api/v1/llm/catalog");
@@ -2074,7 +2074,6 @@
         provider: provider,
         base_url: showBase ? ($("catalog-base").value || "").trim() : "",
         use_cache: provider === "anthropic" ? !!$("catalog-cache").checked : true,
-        api_key: "",
       }),
     });
     showStatus("settings-status", dx.t("studio.saved"), false);
@@ -2084,7 +2083,7 @@
     } catch (err) {
       showStatus("settings-status", dx.t("studio.requestFailed") + ": " + failText(err), true);
     }
-    await loadCatalog(false);
+    await loadModelCatalog(false);
   }
 
   function paintBrain(data) {
@@ -2136,7 +2135,7 @@
     } catch (err) {
       showStatus("settings-status", dx.t("studio.requestFailed") + ": " + failText(err), true);
     }
-    await loadCatalog(false);
+    await loadModelCatalog(false);
     try {
       const overview = await dx.api("/admin/daedalus/connectors/overview");
       paintFields(overview);

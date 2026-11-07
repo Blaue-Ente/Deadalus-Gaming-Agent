@@ -17,7 +17,7 @@
 Copied from `docs/superpowers/specs/2026-11-07-provider-model-catalog-design.md` and the owner's implementation approval.
 
 - Manual Refresh in Studio Settings. Refresh updates only `{DAEDALUS_DATA}/catalog/llm_models.json`. Refresh never calls `llm_config.set_config` or `mentor_helm.set_choice`.
-- Save uses existing `POST /admin/daedalus/llm-config` (`set_config` inside `router_write_context`). Body sends an empty `api_key` so the server keeps the env/DB key. No new browser key field.
+- Save uses existing `POST /admin/daedalus/llm-config` (`set_config` inside `router_write_context`). The body omits `api_key`. `set_llm_config` reads a missing field as `""`, and `set_config` then leaves the key unset so runtime keeps the env key. The workspace script must not contain the token `api_key` (`tests/test_studio_phase2_workspace.py`). No new browser key field. The model-catalog loader is `loadModelCatalog`; the existing `loadCatalog` still loads the game-studio genre list.
 - v1 refresh scope is the effective brain from `get_brain_config()` plus that row's `base_url`, or `PROVIDER_DEFAULTS` when the row has none. The draft provider is not the refresh scope.
 - OpenRouter list URL is exactly `https://openrouter.ai/api/v1/models`. Send `openai_compat_headers("openrouter")` and `Authorization: Bearer` only when `OPENROUTER_API_KEY` is set. `follow_redirects=False`. Any 3xx is a failure and is not followed.
 - Local providers (`ollama`, `lmstudio`, `llamacpp`, `vllm`, `local`) and `omniroute` (`LOOPBACK_GATEWAYS`) use `probe_endpoint` only after the host is loopback (`127.0.0.0/8`, `::1`, `localhost`). `probe_endpoint` itself still follows redirects; this plan does not change that function. A non-loopback base is `url_not_allowed` and is not passed to the probe.
@@ -98,7 +98,7 @@ Copied from `docs/superpowers/specs/2026-11-07-provider-model-catalog-design.md`
 - `#settings-brain` stays the effective summary from `GET /api/v1/llm/status`. Catalog controls are the next sibling, so a failed status still leaves `#settings-brain` empty.
 - Draft provider/model/base/`use_cache` (anthropic only; base field for `custom`, `alltoken`, `novita`, `openrouter`, matching the existing Connectors form). Banner when the draft differs from `effective_selection`.
 - Refresh posts `{}` to `/api/v1/llm/catalog/refresh` and does not post `llm-config`. A later response with an older sequence number does not replace the newer list.
-- Save posts the draft to `/admin/daedalus/llm-config` with `api_key: ""` and does not post refresh. A typed id is allowed. Buttons stay enabled for a `manual_only` effective provider, and the manual-only sentence is shown.
+- Save posts the draft to `/admin/daedalus/llm-config` without an `api_key` field and does not post refresh. A typed id is allowed. Buttons stay enabled for a `manual_only` effective provider, and the manual-only sentence is shown.
 - Search and listbox have `aria-label`. Empty query paints no rows. More than 100 matches paints 100 and the refine hint.
 - `missing_from_cache` for the saved model does not change the input.
 - A failed refresh leaves the previous ids on screen and shows the outdated sentence.

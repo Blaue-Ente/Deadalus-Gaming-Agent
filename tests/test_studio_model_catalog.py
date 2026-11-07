@@ -67,7 +67,7 @@ def test_catalog_strings_and_markup():
     assert "/api/v1/llm/catalog/refresh" in refresh
     assert "llm-config" not in refresh
     assert "/admin/daedalus/llm-config" in save
-    assert 'api_key: ""' in save
+    assert "api_key" not in save
     assert "catalog/refresh" not in save
     assert "enrichMentorFromCatalog" in JS
     assert "setMentorCustom" in JS
@@ -390,7 +390,7 @@ def test_manual_id_save_does_not_refresh(studio_server):
             body = json.loads(caught.value.post_data)
             assert body["model"] == "owner/typed-id"
             assert body["provider"] == "openrouter"
-            assert body["api_key"] == ""
+            assert "api_key" not in body
             assert state["refresh"] == []
             try:
                 with page.expect_request(lambda r: r.method == "POST" and "/catalog/refresh" in r.url, timeout=1000):
@@ -436,7 +436,7 @@ def test_manual_only_copy_still_allows_a_typed_save(studio_server):
             saved = json.loads(caught.value.post_data)
             assert saved["model"] == "owner/nvidia-id"
             assert saved["provider"] == "nvidia"
-            assert saved["api_key"] == ""
+            assert "api_key" not in saved
             assert state["external"] == []
         finally:
             browser.close()
