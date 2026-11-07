@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-07T21:09:44.148061+00:00",
+  "generated_at": "2026-11-07T22:12:07.391335+00:00",
   "package_version": "0.3.8",
-  "git_commit": "c98dafd5344e7dfa4f98bd5ea6b06cd36639e92d",
+  "git_commit": "781f671f42c2b96b40d38edcf32ff51fbcafcbd5",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -130,8 +130,8 @@
     ]
   },
   "tests": {
-    "modules": 99,
-    "functions": 993
+    "modules": 100,
+    "functions": 1002
   },
   "modules": {
     "daedalus": [
@@ -226,6 +226,7 @@
       "daedalus/harness/play_worker/manager.py",
       "daedalus/harness/play_worker/server.py",
       "daedalus/harness/play_worker/session.py",
+      "daedalus/harness/play_worker/unity.py",
       "daedalus/harness/play_worker/win32.py",
       "daedalus/harness/proof.py",
       "daedalus/harness/registry.py",
