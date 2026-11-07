@@ -630,10 +630,16 @@ def _extract_mesh_marker(raw: str) -> tuple[str, str, dict[str, Any]] | None:
 
 def _perm_gate(perm_class: str, tool: str) -> str | None:
     """Return denial message if permission missing, else None."""
-    from .outbox import check_permission, format_permission_denied
-    if check_permission(perm_class):
-        return None
-    return format_permission_denied(perm_class, tool=tool)
+    try:
+        from .outbox import check_permission, format_permission_denied
+        if check_permission(perm_class):
+            return None
+        return format_permission_denied(perm_class, tool=tool)
+    except Exception as exc:
+        # Fail closed: an unavailable permission check blocks the tool.
+        log.warning("permission check unavailable for %s (%s) - blocked", tool, exc)
+        from .native_tools import PERMISSION_CHECK_UNAVAILABLE
+        return PERMISSION_CHECK_UNAVAILABLE.format(tool=tool)
 
 
 def _format_mesh_call_result(target: str, action: str, mc: dict[str, Any]) -> str:
