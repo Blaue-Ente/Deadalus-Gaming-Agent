@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-07T07:46:03.441246+00:00",
+  "generated_at": "2026-11-07T07:48:36.434996+00:00",
   "package_version": "0.3.8",
-  "git_commit": "18f41d09d4acb372e63cce77b5a0e5197ed0b0ff",
+  "git_commit": "f5d498e0596c12bee5e1a2b1c1286a8fce87fc2d",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
