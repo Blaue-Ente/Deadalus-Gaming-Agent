@@ -552,8 +552,9 @@ async def push_project(
     private: bool = True,
     branch: str = "main",
     commit_msg: str = "",
+    force: bool = False,
 ) -> dict[str, Any]:
-    """Init git in the project dir and push to GitHub.
+    """Init git in the project dir and push to GitHub (non-force unless ``force``).
 
     repo_full_name: 'owner/repo'. If empty and create_if_missing, a repo named
     after the slug is created under the authenticated user.
@@ -617,13 +618,17 @@ async def push_project(
 
     for step in (
         ([_GIT, "remote", "add", "origin", auth],),
-        ([_GIT, "push", "-q", "-f", "-u", "origin", branch],),
+        ([_GIT, "push", "-q", "-f", "-u", "origin", branch] if force
+         else [_GIT, "push", "-q", "-u", "origin", branch],),
     ):
         for sub in step:
             code, out = await _run(sub, cwd=root)
             if code != 0 and sub[1] == "remote":
                 code, out = await _run([_GIT, "remote", "set-url", "origin", auth], cwd=root)
             if code != 0:
+                if sub[1] == "push":
+                    from .git_auth import raise_if_rejected
+                    raise_if_rejected(out, force=force)
                 raise RuntimeError(github_error_hint(f"git {sub[1]} failed: {out[-400:]}"))
             if out.strip():
                 log_out.append(out.strip())
@@ -728,12 +733,14 @@ async def push_kernel(
     repo_full_name: str = DEFAULT_KERNEL_REPO,
     paths: list[str] | None = None,
     branch: str = "main",
+    force: bool = False,
 ) -> dict[str, Any]:
     """Export only Дедал-relevant paths and push to the kernel repo.
 
     Creates a temporary directory, copies the selected paths (preserving
-    relative structure from workspace root), then does a fresh git init +
-    force-push so the repo always reflects the current state.
+    relative structure from workspace root), then does a fresh git init and a
+    push. The history is always fresh, so updating an existing kernel repo needs
+    ``force=True``, which the owner must confirm (a plain push is rejected).
     """
     import shutil
     import tempfile
@@ -792,7 +799,8 @@ async def push_kernel(
             [_GIT, "-c", "user.email=daedalus@argos.nexus",
              "-c", "user.name=Дедал", "commit", "-q", "-m", msg],
             [_GIT, "remote", "add", "origin", auth],
-            [_GIT, "push", "-q", "-f", "-u", "origin", branch],
+            ([_GIT, "push", "-q", "-f", "-u", "origin", branch] if force
+             else [_GIT, "push", "-q", "-u", "origin", branch]),
         ]
 
         log_lines: list[str] = []
@@ -803,6 +811,9 @@ async def push_kernel(
                     [_GIT, "remote", "set-url", "origin", auth], cwd=tmp
                 )
             if code != 0:
+                if step[1] == "push":
+                    from .git_auth import raise_if_rejected
+                    raise_if_rejected(out, force=force)
                 raise RuntimeError(f"git {step[1]} failed: {out[-400:]}")
             if out.strip():
                 log_lines.append(out.strip())

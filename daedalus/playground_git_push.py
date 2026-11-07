@@ -30,8 +30,9 @@ async def push_project_remote(
     branch: str = "main",
     commit_msg: str = "",
     namespace: str = "",
+    force: bool = False,
 ) -> dict[str, Any]:
-    """Push playground project to GitLab and/or GitHub.
+    """Push playground project to GitLab and/or GitHub (force only when confirmed).
 
     provider:
       auto   — GitLab if GITLAB_TOKEN, else GitHub if GITHUB_TOKEN
@@ -50,6 +51,7 @@ async def push_project_remote(
                 branch=branch,
                 commit_msg=commit_msg,
                 namespace=namespace,
+                force=force,
             )
         if prov == "gitlab":
             raise RuntimeError(gl.gitlab_error_hint("GITLAB_TOKEN not configured"))
@@ -64,6 +66,7 @@ async def push_project_remote(
                 private=private,
                 branch=branch,
                 commit_msg=commit_msg,
+                force=force,
             )
             res["provider"] = "github"
             return res

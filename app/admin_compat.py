@@ -1887,6 +1887,7 @@ async def playground_revive(request: Request):
 
 @router.post("/daedalus/playground/api/projects/{slug}/push")
 async def playground_push(slug: str, request: Request):
+    from daedalus.git_auth import NonFastForward
     from daedalus.playground_git_push import forge_error_hint, push_project_remote
     body = await _body(request)
     provider = str(body.get("provider") or "auto").strip().lower() or "auto"
@@ -1900,8 +1901,14 @@ async def playground_push(slug: str, request: Request):
             branch=(body.get("branch") or "main").strip(),
             commit_msg=(body.get("commit_msg") or "").strip(),
             namespace=(body.get("namespace") or "").strip(),
+            force=body.get("force") is True,
         )
         return JSONResponse({"ok": True, **(result if isinstance(result, dict) else {})})
+    except NonFastForward as extra:
+        return JSONResponse(
+            {"ok": False, "error": "non_fast_forward", "detail": str(extra), "needs_force": True},
+            status_code=409,
+        )
     except Exception as extra:
         return JSONResponse(
             {"ok": False, "error": forge_error_hint(extra, provider=provider)},
@@ -2357,6 +2364,7 @@ async def kernel_config_set(request: Request):
 @router.post("/daedalus/kernel/push")
 async def kernel_push(request: Request):
     from daedalus import playground_github as gh
+    from daedalus.git_auth import NonFastForward
     body = await _body(request)
     cfg = _kernel_cfg()
     try:
@@ -2365,8 +2373,14 @@ async def kernel_push(request: Request):
             repo_full_name=str(body.get("repo") or cfg["repo"]).strip(),
             paths=body.get("paths") or cfg["paths"],
             branch=str(body.get("branch") or cfg["branch"]).strip(),
+            force=body.get("force") is True,
         )
         return JSONResponse(result if isinstance(result, dict) else {"ok": True, "result": result})
+    except NonFastForward as extra:
+        return JSONResponse(
+            {"ok": False, "error": "non_fast_forward", "detail": str(extra), "needs_force": True},
+            status_code=409,
+        )
     except Exception as extra:
         return JSONResponse({"ok": False, "error": str(extra)[:400]}, status_code=400)
 

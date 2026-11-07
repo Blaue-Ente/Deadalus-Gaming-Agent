@@ -1945,7 +1945,17 @@
       return;
     }
     await runAction(button, "git-status", async () => {
-      const data = await postJson(path, body);
+      let data;
+      try {
+        data = await postJson(path, body);
+      } catch (err) {
+        // A plain push the remote rejected: force only after the owner confirms.
+        if (/non_fast_forward/.test(String((err && err.message) || "")) && window.confirm(dx.t("studio.confirmForce"))) {
+          data = await postJson(path, Object.assign({}, body, { force: true }));
+        } else {
+          throw err;
+        }
+      }
       if (data && data.ok === false) {
         showStatus("git-status", dx.t("studio.requestFailed") + ": " + (data.error || ""), true);
         return;
@@ -2775,7 +2785,15 @@
     const slug = dx.getSlug();
     if (!slug) return;
     runAction(button, "preview-status", async () => {
-      const data = await postJson("/api/v1/playground/projects/" + slugPath(slug) + suffix, body || {});
+      const url = "/api/v1/playground/projects/" + slugPath(slug) + suffix;
+      let data = await postJson(url, body || {});
+      const livePublic = !!(data && data.url && data.backend && data.backend !== "local");
+      if (suffix === "/live" && data && data.needs_confirm && !livePublic) {
+        // Anonymous Netlify / GitLab Pages create a public site: only after the owner confirms.
+        if (window.confirm(dx.t("studio.confirmPublic"))) {
+          data = await postJson(url, Object.assign({}, body || {}, { confirm_public: true }));
+        }
+      }
       if (data.harness_check) {
         showStatus("preview-status", dx.t("studio.harnessCheck"), false);
         return;

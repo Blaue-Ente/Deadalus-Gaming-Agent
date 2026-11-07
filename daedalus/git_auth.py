@@ -40,3 +40,28 @@ def scrub(text: str, token: str, username: str = "") -> str:
         blob = base64.b64encode(f"{user}:{tok}".encode("utf-8")).decode("ascii")
         text = text.replace(blob, "***")
     return text
+
+
+class NonFastForward(RuntimeError):
+    """A non-force push was rejected because the remote has history this tree lacks."""
+
+
+_REJECT_MARKERS = ("non-fast-forward", "fetch first", "[rejected]", "failed to push some refs")
+
+
+def push_args(branch: str, *, force: bool = False) -> list[str]:
+    """argv tail for ``git push``; ``-f`` appears only when the owner confirmed force."""
+    args = ["git", "push", "-q"]
+    if force:
+        args.append("-f")
+    return args + ["-u", "origin", branch]
+
+
+def raise_if_rejected(out: str, *, force: bool) -> None:
+    """Turn a rejected non-force push into ``NonFastForward`` (never silently force)."""
+    low = (out or "").lower()
+    if not force and any(m in low for m in _REJECT_MARKERS):
+        raise NonFastForward(
+            "non_fast_forward: the remote has commits this project does not. "
+            "Retry with force=true only after confirming it may overwrite the remote branch."
+        )

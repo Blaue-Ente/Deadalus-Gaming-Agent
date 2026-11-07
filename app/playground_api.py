@@ -265,6 +265,7 @@ async def publish_local(slug: str) -> dict:
 
 class LiveBody(BaseModel):
     backend: str = Field(default="auto", max_length=40)
+    confirm_public: bool = False
 
 
 @router.get("/projects/{slug}/live")
@@ -277,7 +278,9 @@ async def live_status(slug: str) -> dict:
 async def live_publish(slug: str, body: LiveBody = LiveBody()) -> dict:
     from daedalus.live_publish import publish_live
     backend = body.backend or "auto"
-    result = await publish_live(slug, backend=backend)
+    result = await publish_live(slug, backend=backend, confirm_public=body.confirm_public is True)
+    if result.get("error") == "confirm_required":
+        raise HTTPException(status_code=409, detail="confirm_required")
     if not result.get("ok") and not result.get("local_url"):
         raise HTTPException(status_code=400, detail=result.get("error") or "live publish failed")
     return result

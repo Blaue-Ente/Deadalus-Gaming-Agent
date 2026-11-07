@@ -189,8 +189,9 @@ async def push_project(
     branch: str = "main",
     commit_msg: str = "",
     namespace: str = "",
+    force: bool = False,
 ) -> dict[str, Any]:
-    """Init git in project dir and push to GitLab."""
+    """Init git in project dir and push to GitLab (non-force unless ``force``)."""
     if not is_configured():
         raise RuntimeError(gitlab_error_hint("GITLAB_TOKEN not configured — cannot push"))
     proj = await pg.get_project(slug)
@@ -254,13 +255,17 @@ async def push_project(
 
     for step in (
         ([_GIT, "remote", "add", "origin", auth],),
-        ([_GIT, "push", "-q", "-f", "-u", "origin", branch],),
+        ([_GIT, "push", "-q", "-f", "-u", "origin", branch] if force
+         else [_GIT, "push", "-q", "-u", "origin", branch],),
     ):
         for sub in step:
             code, out = await _run(sub, cwd=root)
             if code != 0 and sub[1] == "remote":
                 code, out = await _run([_GIT, "remote", "set-url", "origin", auth], cwd=root)
             if code != 0:
+                if sub[1] == "push":
+                    from .git_auth import raise_if_rejected
+                    raise_if_rejected(out, force=force)
                 raise RuntimeError(gitlab_error_hint(f"git {sub[1]} failed: {out[-400:]}"))
             if out.strip():
                 log_out.append(out.strip())
