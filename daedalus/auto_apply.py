@@ -17,8 +17,10 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-_DATA_ROOT   = data_root()
-_SETTINGS_FILE = _DATA_ROOT / "settings.json"
+from . import settings_file as _settings_file
+from .harness.context import legacy_paths as _legacy_paths
+
+_legacy_paths(globals(), {"_DATA_ROOT": data_root, "_SETTINGS_FILE": _settings_file.path})
 
 # Критерии за auto-apply
 AUTO_APPLY_MAX_ADDITIONS = 150   # максимален брой добавени реда
@@ -38,20 +40,7 @@ AUTO_APPLY_ALLOWED_SKILLS = {    # само LOW risk skills
 # ---------------------------------------------------------------------------
 
 def _load_settings() -> dict[str, Any]:
-    try:
-        if _SETTINGS_FILE.exists():
-            return json.loads(_SETTINGS_FILE.read_text("utf-8"))
-    except Exception as exc:
-        log.warning("auto_apply: settings read failed: %s", exc)
-    return {}
-
-
-def _save_settings(s: dict[str, Any]) -> None:
-    try:
-        _SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _SETTINGS_FILE.write_text(json.dumps(s, indent=2, ensure_ascii=False), "utf-8")
-    except Exception as exc:
-        log.warning("auto_apply: settings write failed: %s", exc)
+    return _settings_file.load()
 
 
 def is_auto_apply_enabled() -> bool:
@@ -59,9 +48,10 @@ def is_auto_apply_enabled() -> bool:
 
 
 def set_auto_apply_enabled(value: bool) -> None:
-    s = _load_settings()
-    s["auto_apply_enabled"] = value
-    _save_settings(s)
+    try:
+        _settings_file.update({"auto_apply_enabled": bool(value)})  # the single writer: no lost update
+    except Exception as exc:
+        log.warning("auto_apply: settings write failed: %s", exc)
     log.info("auto_apply: set enabled=%s", value)
 
 
@@ -129,11 +119,11 @@ def apply_proposal_sync(proposal_id: str) -> dict[str, Any]:
     import json as _json
 
     from .self_improve import (
-        BACKUPS_DIR, _resolve_safe, _audit,
+        backups_dir, _resolve_safe, _audit,
     )
 
     # Locate proposal JSON
-    proposal_path = _DATA_ROOT / "proposals" / f"{proposal_id}.json"
+    proposal_path = data_root() / "proposals" / f"{proposal_id}.json"
     if not proposal_path.exists():
         return {"ok": False, "error": f"proposal file not found: {proposal_id}"}
 
@@ -157,7 +147,7 @@ def apply_proposal_sync(proposal_id: str) -> dict[str, Any]:
     # Backup
     backup_path = None
     if target.exists():
-        backup_dir = BACKUPS_DIR / proposal_id
+        backup_dir = backups_dir() / proposal_id
         backup_dir.mkdir(parents=True, exist_ok=True)
         backup_path = backup_dir / target.name
         try:

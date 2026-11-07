@@ -215,7 +215,16 @@ async def health() -> dict:
         "sqlite": str(db_path()) if standalone_mode() else None,
         "chroma": str(chroma_dir()) if standalone_mode() else None,
         "llm": llm,
+        "kv": _kv_backend(),
     }
+
+
+def _kv_backend() -> dict:
+    try:
+        from daedalus import kv
+        return kv.backend()
+    except Exception as exc:  # health must never fail on this
+        return {"requested": "unknown", "effective": "unknown", "note": str(exc)[:120]}
 
 
 @app.get("/capabilities")

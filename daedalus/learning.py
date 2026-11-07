@@ -17,10 +17,7 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-try:
-    from replit import db as _rdb
-except Exception:
-    from .kv import db as _rdb
+from .kv import db as _rdb  # explicit backend: kv decides (DAEDALUS_KV)
 
 _LEARNING_PREFIX = "adn:daedalus_learning:"
 _LEARNING_INDEX = "adn:daedalus_learning:index"

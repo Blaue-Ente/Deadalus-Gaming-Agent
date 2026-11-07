@@ -32,10 +32,7 @@ from .harness import runs as _runs
 
 log = logging.getLogger(__name__)
 
-try:
-    from replit import db as _rdb
-except Exception:
-    from .kv import db as _rdb
+from .kv import db as _rdb  # explicit backend: kv decides (DAEDALUS_KV)
 
 # ── Tunables ──────────────────────────────────────────────────────────────────
 _KA_INTERVAL = 8.0            # seconds of silence before a keepalive ping

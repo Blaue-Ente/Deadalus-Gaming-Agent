@@ -30,9 +30,15 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-_DATA_ROOT = data_root()  # paths
-_STATE_FILE = _DATA_ROOT / "task-state.json"
-_DATA_ROOT.mkdir(parents=True, exist_ok=True)
+def _state_file():
+    root = data_root()
+    root.mkdir(parents=True, exist_ok=True)
+    return root / "task-state.json"
+
+
+from .harness.context import legacy_paths as _legacy_paths  # noqa: E402
+
+_legacy_paths(globals(), {"_DATA_ROOT": data_root, "_STATE_FILE": _state_file})
 
 # Max age of a task state before it's considered stale (48 hours)
 _MAX_AGE_SECONDS = 48 * 3600
@@ -43,10 +49,10 @@ _DONE_PHASES = frozenset({"done", "complete", "завършено", "finished", 
 
 def load() -> dict[str, Any] | None:
     """Load active task state from disk. Returns None if no active task."""
-    if not _STATE_FILE.exists():
+    if not _state_file().exists():
         return None
     try:
-        state = json.loads(_STATE_FILE.read_text("utf-8"))
+        state = json.loads(_state_file().read_text("utf-8"))
         # Stale check
         age = time.time() - state.get("updated_at", 0)
         if age > _MAX_AGE_SECONDS:
@@ -102,7 +108,7 @@ def save(
         "updated_at": time.time(),
     }
     try:
-        _STATE_FILE.write_text(json.dumps(state, indent=2, ensure_ascii=False), "utf-8")
+        _state_file().write_text(json.dumps(state, indent=2, ensure_ascii=False), "utf-8")
         log.info("task-state saved: goal=%r phase=%r remaining=%d", goal[:60], phase, len(remaining))
     except Exception as exc:
         log.warning("task-state write failed: %s", exc)
@@ -112,8 +118,8 @@ def save(
 def clear() -> None:
     """Remove active task state."""
     try:
-        if _STATE_FILE.exists():
-            _STATE_FILE.unlink()
+        if _state_file().exists():
+            _state_file().unlink()
             log.info("task-state cleared")
     except Exception as exc:
         log.debug("task-state clear failed (non-fatal): %s", exc)

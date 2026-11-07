@@ -53,28 +53,9 @@ _task: asyncio.Task[None] | None = None
 _stop: asyncio.Event | None = None
 
 
-def _settings_path() -> Path:
-    from .paths import data_root
-    p = data_root() / "settings.json"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    return p
-
-
 def _load_settings() -> dict[str, Any]:
-    path = _settings_path()
-    try:
-        if path.exists():
-            data = json.loads(path.read_text(encoding="utf-8"))
-            if isinstance(data, dict):
-                return data
-    except Exception as extra:
-        log.warning("evolution: settings read failed: %s", extra)
-    return {}
-
-
-def _save_settings(data: dict[str, Any]) -> None:
-    path = _settings_path()
-    path.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
+    from . import settings_file
+    return settings_file.load()
 
 
 def _state_dir() -> Path:
@@ -134,9 +115,8 @@ def clone_research() -> bool:
 
 
 def set_enabled(value: bool) -> dict[str, Any]:
-    data = _load_settings()
-    data["evolution_enabled"] = bool(value)
-    _save_settings(data)
+    from . import settings_file
+    settings_file.update({"evolution_enabled": bool(value)})  # the single writer: no lost update
     if value:
         start_gardener()
     return snapshot()
@@ -149,16 +129,17 @@ def set_config(
     clone: bool | None = None,
     ask_llm: bool | None = None,
 ) -> dict[str, Any]:
-    data = _load_settings()
+    from . import settings_file
+    patch: dict[str, Any] = {}
     if enabled_flag is not None:
-        data["evolution_enabled"] = bool(enabled_flag)
+        patch["evolution_enabled"] = bool(enabled_flag)
     if interval is not None:
-        data["evolution_interval_s"] = max(MIN_INTERVAL_S, min(MAX_INTERVAL_S, int(interval)))
+        patch["evolution_interval_s"] = max(MIN_INTERVAL_S, min(MAX_INTERVAL_S, int(interval)))
     if clone is not None:
-        data["evolution_clone_research"] = bool(clone)
+        patch["evolution_clone_research"] = bool(clone)
     if ask_llm is not None:
-        data["evolution_ask_llm"] = bool(ask_llm)
-    _save_settings(data)
+        patch["evolution_ask_llm"] = bool(ask_llm)
+    data = settings_file.update(patch)
     if data.get("evolution_enabled"):
         start_gardener()
     return snapshot()

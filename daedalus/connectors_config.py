@@ -79,7 +79,8 @@ def _prefs_path():
 
 def _read_db() -> dict:
     try:
-        from replit import db  # type: ignore
+        from .kv import replit_required as _replit_required
+        db = _replit_required()
         raw = db.get(_DB_KEY)
         if raw:
             return json.loads(raw) if isinstance(raw, str) else dict(raw)
@@ -96,7 +97,8 @@ def _read_db() -> dict:
 
 def _write_db(data: dict) -> None:
     try:
-        from replit import db  # type: ignore
+        from .kv import replit_required as _replit_required
+        db = _replit_required()
         db[_DB_KEY] = json.dumps(data)
         return
     except Exception:

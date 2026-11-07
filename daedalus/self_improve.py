@@ -73,14 +73,32 @@ ALLOWED_PREFIXES = frozenset({
 })
 
 # Data storage
-DATA_ROOT = data_root()
-PROPOSALS_DIR = DATA_ROOT / "proposals"
-BACKUPS_DIR = DATA_ROOT / "backups"
-SKILLS_FILE = DATA_ROOT / "skills.json"
-AUDIT_LOG = DATA_ROOT / "self_improve_audit.log"
+def proposals_dir() -> Path:
+    p = data_root() / "proposals"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
 
-PROPOSALS_DIR.mkdir(parents=True, exist_ok=True)
-BACKUPS_DIR.mkdir(parents=True, exist_ok=True)
+
+def backups_dir() -> Path:
+    p = data_root() / "backups"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+def skills_file() -> Path:
+    return data_root() / "skills.json"
+
+
+def audit_log() -> Path:
+    return data_root() / "self_improve_audit.log"
+
+
+from .harness.context import legacy_paths as _legacy_paths  # noqa: E402
+
+_legacy_paths(globals(), {
+    "DATA_ROOT": data_root, "PROPOSALS_DIR": proposals_dir, "BACKUPS_DIR": backups_dir,
+    "SKILLS_FILE": skills_file, "AUDIT_LOG": audit_log,
+})
 
 # Skill definitions — what categories of changes Daedalus may propose
 SKILLS: dict[str, dict[str, Any]] = {
@@ -184,12 +202,12 @@ def _default_skills_state() -> dict[str, bool]:
 
 def load_skills_state() -> dict[str, bool]:
     """Load owner-configured skill enable/disable state."""
-    if not SKILLS_FILE.exists():
+    if not skills_file().exists():
         state = _default_skills_state()
         save_skills_state(state)
         return state
     try:
-        data = json.loads(SKILLS_FILE.read_text("utf-8"))
+        data = json.loads(skills_file().read_text("utf-8"))
         state = _default_skills_state()
         state.update({k: bool(v) for k, v in data.items() if k in SKILLS})
         return state
@@ -199,7 +217,7 @@ def load_skills_state() -> dict[str, bool]:
 
 
 def save_skills_state(state: dict[str, bool]) -> None:
-    SKILLS_FILE.write_text(json.dumps(state, indent=2), "utf-8")
+    skills_file().write_text(json.dumps(state, indent=2), "utf-8")
 
 
 def toggle_skill(name: str) -> dict[str, Any]:
@@ -289,15 +307,15 @@ def _skill_for_path(rel_path: str) -> str | None:
 # ---------------------------------------------------------------------------
 
 def _proposal_path(proposal_id: str) -> Path:
-    return PROPOSALS_DIR / f"{proposal_id}.json"
+    return proposals_dir() / f"{proposal_id}.json"
 
 
 def _audit(event: str, data: dict[str, Any]) -> None:
     line = json.dumps({"ts": time.time(), "event": event, **data}) + "\n"
     try:
-        AUDIT_LOG.parent.mkdir(parents=True, exist_ok=True)
+        audit_log().parent.mkdir(parents=True, exist_ok=True)
 
-        with AUDIT_LOG.open("a", encoding="utf-8") as f:
+        with audit_log().open("a", encoding="utf-8") as f:
             f.write(line)
     except Exception as exc:
         log.warning("audit log write failed: %s", exc)
@@ -465,7 +483,7 @@ def list_proposals(status: str | None = None) -> list[dict[str, Any]]:
 
     # Fallback: local JSON files (dev env without DB or DB not reachable)
     out: list[dict[str, Any]] = []
-    for f in sorted(PROPOSALS_DIR.glob("prop_*.json"), reverse=True):
+    for f in sorted(proposals_dir().glob("prop_*.json"), reverse=True):
         try:
             p = json.loads(f.read_text("utf-8"))
         except Exception:
@@ -590,7 +608,7 @@ def approve_proposal(proposal_id: str, approved_by: str = "owner") -> dict[str, 
             log.warning("pre-apply git snapshot failed (non-fatal): %s", snap.get("error"))
 
         # Backup current file (if exists)
-        backup_dir = BACKUPS_DIR / proposal_id
+        backup_dir = backups_dir() / proposal_id
         backup_dir.mkdir(parents=True, exist_ok=True)
         backup_path = None
         if target.exists():
@@ -663,7 +681,7 @@ def rollback_proposal(proposal_id: str, rolled_back_by: str = "owner") -> dict[s
 
         if p.get("file_existed"):
             # Restore from backup
-            backup_dir = BACKUPS_DIR / proposal_id
+            backup_dir = backups_dir() / proposal_id
             backup_file = backup_dir / target.name
             if not backup_file.exists():
                 return {"ok": False, "error": "backup file missing — cannot rollback"}
@@ -701,7 +719,7 @@ def delete_proposal(proposal_id: str) -> dict[str, Any]:
         try:
             _proposal_path(proposal_id).unlink(missing_ok=True)
             # Clean up backup dir if it exists (from a prior rolled_back state)
-            backup_dir = BACKUPS_DIR / proposal_id
+            backup_dir = backups_dir() / proposal_id
             if backup_dir.exists():
                 shutil.rmtree(backup_dir, ignore_errors=True)
         except Exception as exc:

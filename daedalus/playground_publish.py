@@ -46,7 +46,9 @@ def published_dir() -> Path:
     return path
 
 
-PUBLISHED_DIR = published_dir()  # ADN import-time default; app_dir() re-resolves.
+from .harness.context import legacy_paths as _legacy_paths  # noqa: E402
+
+_legacy_paths(globals(), {"PUBLISHED_DIR": published_dir})  # resolved live, never frozen at import
 
 _SKIP = {".git", "node_modules", "__pycache__", ".venv", ".cache"}
 

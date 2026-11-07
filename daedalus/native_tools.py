@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import re
+from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 log = logging.getLogger(__name__)
@@ -26,15 +27,15 @@ PERM_MAP: dict[str, str | None] = {
     "code_search": None,
     "list_endpoints": None,
     "list_modules": None,
-    "run_command": None,
-    "write_file": None,
-    "edit_file": None,
+    "run_command": "run_command",
+    "write_file": "write_file",
+    "edit_file": "write_file",
     "playground_new": None,
     "generate_image": None,
     "remember": None,
     "browser": None,
     "mcp_call": None,
-    "spawn_subagent": None,
+    "spawn_subagent": "spawn_subagent",
     "playtest": None,
     "mirofish": None,
     "play_lab": None,
@@ -1031,13 +1032,30 @@ PERMISSION_CHECK_UNAVAILABLE = (
 )
 
 
-def before_tool_call(tool_name: str, *, marker_name: str | None = None) -> tuple[bool, str]:
+def _leaves_playground(args: dict[str, Any] | None) -> bool:
+    """True when a call names a working directory outside the Playground projects folder."""
+    cwd = str((args or {}).get("cwd") or "").strip()
+    if not cwd:
+        return False
+    try:
+        from .paths import playground_projects_dir
+        root = playground_projects_dir().resolve()
+        target = (Path(cwd) if Path(cwd).is_absolute() else root / cwd).resolve()
+        return root != target and root not in target.parents
+    except Exception:
+        return True  # cannot tell -> do not extend the default grant
+
+
+def before_tool_call(
+    tool_name: str, *, marker_name: str | None = None, args: dict[str, Any] | None = None,
+) -> tuple[bool, str]:
     perm = PERM_MAP.get(tool_name)
     if perm is None:
         return True, ""
     try:
         from .outbox import check_permission, format_permission_denied
-        if check_permission(perm):
+        # The default Playground grant never stretches to a directory outside the Playground.
+        if check_permission(perm, default_ok=not _leaves_playground(args)):
             return True, ""
         label = marker_name or f"native:{tool_name}"
         return False, format_permission_denied(perm, tool=label)
@@ -1055,7 +1073,7 @@ async def execute_native_tool(
     session_id: str,
     read_file_fn: Callable[..., dict],
 ) -> str:
-    allowed, denial = before_tool_call(name)
+    allowed, denial = before_tool_call(name, args=args)
     if not allowed:
         return denial
 

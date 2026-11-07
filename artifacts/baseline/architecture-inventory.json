@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-07T15:47:10.306654+00:00",
+  "generated_at": "2026-11-07T16:14:01.988932+00:00",
   "package_version": "0.3.8",
-  "git_commit": "cf2c74fa7aa234204004a4ec7e943dfa13872010",
+  "git_commit": "e8ac2a2c9b99749054230e0c87f7e8bd62310dcb",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -14,13 +14,13 @@
     },
     {
       "path": "app/admin_compat.py",
-      "lines": 3165,
+      "lines": 3166,
       "broad_excepts": 78
     },
     {
       "path": "daedalus/native_tools.py",
-      "lines": 2170,
-      "broad_excepts": 20
+      "lines": 2188,
+      "broad_excepts": 21
     },
     {
       "path": "daedalus/identity.py",
@@ -130,8 +130,8 @@
     ]
   },
   "tests": {
-    "modules": 90,
-    "functions": 871
+    "modules": 94,
+    "functions": 903
   },
   "modules": {
     "daedalus": [
@@ -209,6 +209,8 @@
       "daedalus/godot_tools.py",
       "daedalus/guided_jobs.py",
       "daedalus/harness/__init__.py",
+      "daedalus/harness/config_view.py",
+      "daedalus/harness/context.py",
       "daedalus/harness/gateway.py",
       "daedalus/harness/manifest.py",
       "daedalus/harness/parity.py",
@@ -354,6 +356,7 @@
       "daedalus/self_improve.py",
       "daedalus/session_branching.py",
       "daedalus/session_context.py",
+      "daedalus/settings_file.py",
       "daedalus/sfx_kit.py",
       "daedalus/shell_center.py",
       "daedalus/skill_acquisition.py",
