@@ -39,6 +39,14 @@ _STYLE_BIBLE_SYS = (
 )
 
 
+
+def _asset_model() -> str:
+    """The planning model for asset work: the owner's choice or the registry default (gateway)."""
+    from .harness import gateway
+
+    return gateway.model_tag_for("asset") or ""
+
+
 def max_assets_cap() -> int:
     import os
     try:
@@ -318,10 +326,11 @@ async def ensure_style_bible(
     name: str,
     description: str,
     plan: dict | None = None,
-    model: str = "alltoken:deepseek-v3.2",
+    model: str | None = None,
     client_id: str = "",
 ) -> dict[str, Any]:
     """Create or load project-wide art direction for consistent assets."""
+    model = model or _asset_model()
     existing = load_style_bible(slug)
     if existing.get("prompt_prefix"):
         return existing
@@ -461,7 +470,7 @@ async def plan_assets(
     research_notes: str = "",
     reference_notes: str = "",
     plan: dict | None = None,
-    model: str = "alltoken:deepseek-v3.2",
+    model: str | None = None,
     client_id: str = "",
     max_count: int | None = None,
     style_bible: dict[str, Any] | None = None,
@@ -470,6 +479,7 @@ async def plan_assets(
     is_game: bool = False,
 ) -> list[dict[str, Any]]:
     """LLM plans which images to generate for a project."""
+    model = model or _asset_model()
     from . import daedalus_mesh as mesh
 
     budget = max_count or compute_asset_budget(
@@ -511,7 +521,7 @@ async def plan_assets(
     manifest = None
     asset_sys = _asset_sys_for_budget(budget)
     for attempt in range(2):
-        plan_model = model if attempt == 0 else "alltoken:deepseek-v3.2"
+        plan_model = model if attempt == 0 else _asset_model()
         try:
             ares = await mesh.route(
                 messages=[
@@ -569,11 +579,12 @@ async def ensure_stage_assets(
     description: str,
     assets_built: list[str],
     style_bible: dict[str, Any] | None = None,
-    model: str = "alltoken:deepseek-v3.2",
+    model: str | None = None,
     image_model: str = DEFAULT_MODEL,
     client_id: str = "",
 ) -> list[str]:
     """Generate missing PNGs for one visual stage (ultra / guided checkpoint)."""
+    model = model or _asset_model()
     if not stage.get("uses_visuals") and stage.get("fragment_kind") not in ("entity", "level"):
         return []
 
@@ -699,7 +710,7 @@ async def auto_pack_assets(
     research_notes: str = "",
     reference_notes: str = "",
     plan: dict | None = None,
-    model: str = "alltoken:deepseek-v3.2",
+    model: str | None = None,
     image_model: str = DEFAULT_MODEL,
     client_id: str = "",
     on_progress: ProgressCb | None = None,
@@ -708,6 +719,7 @@ async def auto_pack_assets(
     is_game: bool = False,
 ) -> dict[str, Any]:
     """Plan + batch-generate assets from a game/project description."""
+    model = model or _asset_model()
     ensure_assets_dir(slug)
     proj = await _get_project_name(slug, name)
     bible = await ensure_style_bible(

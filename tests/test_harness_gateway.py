@@ -693,3 +693,33 @@ def test_worker_obeys_the_run_budget_and_flag_restores_old_path(gw, monkeypatch)
     record = _install_openai(monkeypatch, text="old path")
     assert run(workers._call_worker_single("deep", "t", _slot()))["result"] == "old path"
     assert record["body"]["max_tokens"] == 500
+
+
+# ---- migration 7: hard-coded models now come from one declaration ---------------------------------------------------------
+
+def test_scout_and_asset_models_are_declared_once(gw):
+    from pathlib import Path
+
+    from daedalus import dissection, playground_assets, reference_scout
+
+    assert gw.INTENT_DEFAULTS["scout"] == gw.INTENT_DEFAULTS["asset"] == "alltoken:deepseek-v3.2"
+    assert reference_scout._scout_model() == dissection._scout_model() == "alltoken:deepseek-v3.2"
+    assert playground_assets._asset_model() == "alltoken:deepseek-v3.2"
+    root = Path(__file__).resolve().parents[1] / "daedalus"
+    for name in ("reference_scout.py", "dissection.py", "playground_assets.py"):
+        assert "alltoken:deepseek-v3.2" not in (root / name).read_text(encoding="utf-8"), name
+
+
+def test_asset_functions_resolve_the_model_at_call_time(gw):
+    """The default used to be bound at import time; now it is resolved per call."""
+    import inspect
+
+    from daedalus import playground_assets as pa
+
+    with_model = [
+        fn for _n, fn in inspect.getmembers(pa, inspect.iscoroutinefunction)
+        if "model" in inspect.signature(fn).parameters
+    ]
+    assert len(with_model) >= 4
+    for fn in with_model:
+        assert inspect.signature(fn).parameters["model"].default is None, fn.__name__

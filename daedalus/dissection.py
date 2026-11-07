@@ -55,6 +55,14 @@ _STACK_MARKERS: tuple[tuple[str, re.Pattern[str]], ...] = (
 )
 
 
+
+def _scout_model() -> str:
+    """Model for research synthesis: the registry default (or owner choice) from the gateway."""
+    from .harness import gateway
+
+    return gateway.model_tag_for("scout") or ""
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -316,7 +324,7 @@ async def _synthesize(
         )
         res = await mesh.route(
             messages=[{"role": "system", "content": sys}, {"role": "user", "content": user}],
-            model="alltoken:deepseek-v3.2",
+            model=_scout_model(),
             intent="chat",
             max_tokens=1400,
             temperature=0.3,

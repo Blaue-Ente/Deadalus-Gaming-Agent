@@ -21,6 +21,14 @@ REFERENCE_REL = "assets/_reference.json"
 _URL_RE = re.compile(r"^https?://", re.I)
 
 
+
+def _scout_model() -> str:
+    """Model for research synthesis: the registry default (or owner choice) from the gateway."""
+    from .harness import gateway
+
+    return gateway.model_tag_for("scout") or ""
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -199,7 +207,7 @@ async def _synthesize_reference(
     try:
         res = await mesh.route(
             messages=[{"role": "system", "content": sys}, {"role": "user", "content": user}],
-            model="alltoken:deepseek-v3.2",
+            model=_scout_model(),
             intent="chat",
             max_tokens=1200,
             temperature=0.3,
