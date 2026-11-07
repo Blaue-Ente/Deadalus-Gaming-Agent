@@ -20,6 +20,7 @@ unambiguous Vite-scaffold path never spend tokens.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
@@ -955,17 +956,63 @@ async def refresh_helm(loop: Any) -> dict[str, Any] | None:
 
     inspect = inspect_digest(loop)
     rules = steer_payload(steer(loop))
-    fp = mentor_helm.digest_fingerprint(inspect)
+    slug = str(getattr(loop, "slug", "") or "")
+    frames = None
+    sig: tuple[str, ...] = ()
+    try:  # real frames of the running game, if any exist (play worker or visual proof)
+        from .harness import perception
+        sig = await asyncio.to_thread(perception.signature, slug)      # cheap: listing + stat, no decode
+        if sig:
+            frames = lambda: perception.latest_frames(slug)  # noqa: E731 - collected only if the LLM really runs
+    except Exception:
+        log.debug("mentor frames unavailable", exc_info=True)
+    fp = mentor_helm.digest_fingerprint(inspect) + ("|" + ",".join(sig) if sig else "")
     cached = getattr(loop, "mentor_steer", None)
     if isinstance(cached, dict) and cached.get("ok") and getattr(loop, "mentor_fp", None) == fp:
         return cached
     turn_calls = int(getattr(loop, "mentor_llm_calls", 0) or 0)
-    out = await mentor_helm.consult(inspect, rules, turn_calls=turn_calls)
+    out = await mentor_helm.consult(inspect, rules, turn_calls=turn_calls, frames=frames)
     loop.mentor_steer = out
     loop.mentor_fp = fp
     if out.get("source") == "llm":
         loop.mentor_llm_calls = turn_calls + 1
+        _record_perception(loop, out)
     return out
+
+
+def _record_perception(loop: Any, out: dict[str, Any]) -> None:
+    """One Run event per director call: what it saw (sha256-referenced), what it advised. No image bytes."""
+    perc = out.get("perception")
+    if not isinstance(perc, dict):
+        return
+    try:
+        from .harness import runs
+        rid = runs.current_run_id()
+        if rid:
+            runs.safe_event(rid, "mentor_perception", {
+                "observations": list(out.get("observations") or []),
+                "advice": {"action": out.get("action"), "next_tool": out.get("next_tool"), "reason": out.get("reason")},
+                "frame_sha256s": list(perc.get("frame_sha256s") or []),
+                "perception": perc, "model": out.get("llm_model"), "provider": out.get("llm_provider"),
+            })
+    except Exception:
+        log.debug("mentor perception event skipped", exc_info=True)
+
+
+def perception_lines(loop: Any) -> list[str]:
+    """Writer-facing lines about what the director was shown (empty when it did not run)."""
+    cached = getattr(loop, "mentor_steer", None) if loop is not None else None
+    if not isinstance(cached, dict) or cached.get("source") != "llm":
+        return []
+    try:
+        from .harness import perception
+        lines = perception.lines_for_writer(cached.get("perception"), cached.get("observations"))
+        # a frame-less turn is the normal case and needs no line; only an explained fallback is worth saying
+        if cached.get("perception", {}).get("reason") == "no_frames":
+            return []
+        return lines
+    except Exception:
+        return []
 
 
 def progress_next(loop: Any, *, fallback: str = "") -> str:
@@ -991,6 +1038,7 @@ def progress_next(loop: Any, *, fallback: str = "") -> str:
         lines.append("FORBID: " + ", ".join(decision.forbid_tools) + " (same error twice — change approach).")
     if decision.blockers:
         lines.extend(f"  • {b}" for b in decision.blockers[:3])
+    lines.extend(perception_lines(loop))
     return "\n".join(lines)
 
 
@@ -1021,6 +1069,7 @@ def persona_wrapup(loop: Any) -> str:
             lines.append("Do not retry: " + ", ".join(decision.forbid_tools) + ".")
         if decision.blockers:
             lines.extend(f"  • {b}" for b in decision.blockers[:3])
+    lines.extend(perception_lines(loop))
     view = inspect_project(str(getattr(loop, "slug", "") or ""), kind=str(getattr(loop, "kind", "") or ""))
     if view.scaffold_main:
         lines.append(

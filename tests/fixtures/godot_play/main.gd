@@ -7,6 +7,11 @@ var clicks: int = 0
 
 @onready var panel: ColorRect = $Panel
 @onready var status: Label = $Status
+@onready var secret: Label = $Secret
+
+func _ready() -> void:
+	# A label the harness picks per run (env), so a model can only "read" it if it really gets the image.
+	secret.text = OS.get_environment("DAEDALUS_FIXTURE_LABEL")
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:

@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-07T18:58:35.572914+00:00",
+  "generated_at": "2026-11-07T19:12:06.241189+00:00",
   "package_version": "0.3.8",
-  "git_commit": "5ca7402e9ff1f9d75c3a7a4e2ef72ef59a072b9d",
+  "git_commit": "ff067d9d3b3f3ffca5f5e62fac88ca0c4de78814",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -130,8 +130,8 @@
     ]
   },
   "tests": {
-    "modules": 96,
-    "functions": 939
+    "modules": 97,
+    "functions": 959
   },
   "modules": {
     "daedalus": [
@@ -214,6 +214,7 @@
       "daedalus/harness/gateway.py",
       "daedalus/harness/manifest.py",
       "daedalus/harness/parity.py",
+      "daedalus/harness/perception.py",
       "daedalus/harness/play_worker/__init__.py",
       "daedalus/harness/play_worker/__main__.py",
       "daedalus/harness/play_worker/capture.py",
