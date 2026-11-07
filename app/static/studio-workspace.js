@@ -12,7 +12,10 @@
   let streamGen = 0;
   let streamCtrl = null;
   let streamingSlug = "";
-  let resumeToken = 0;
+  let resumeGen = 0;
+  let explicitTicket = 0;
+  let explicitFlight = null;
+  let buildSlug = null;
   let checkpointGen = 0;
   let checkpoint = null;
   let continueInFlight = false;
@@ -477,6 +480,7 @@
     if (continueInFlight) return;
     if (!checkpoint || checkpoint.gen !== gen || checkpoint.slug !== slug || checkpoint.jobId !== jobId) return;
     if (dx.getSlug() !== slug || kind !== "guided") return;
+    const ticket = claimExplicitBuild(slug);
     continueInFlight = true;
     setCheckpointBusy(true);
     const notesEl = $(side + "-cp-notes");
@@ -488,26 +492,34 @@
         { job_id: jobId, action: action, notes: notes }
       );
     } catch (err) {
-      if (gen !== checkpointGen || dx.getSlug() !== slug) return;
-      continueInFlight = false;
-      setCheckpointBusy(false);
-      showStatus("build-status", dx.t("studio.requestFailed") + ": " + failText(err), true);
+      if (explicitCurrent(ticket, slug) && gen === checkpointGen) {
+        continueInFlight = false;
+        setCheckpointBusy(false);
+        showStatus("build-status", dx.t("studio.requestFailed") + ": " + failText(err), true);
+      }
+      finishExplicitBuild(ticket);
       return;
     }
-    if (gen !== checkpointGen || dx.getSlug() !== slug || !checkpoint || checkpoint.jobId !== jobId) return;
+    if (!explicitCurrent(ticket, slug) || gen !== checkpointGen || !checkpoint || checkpoint.jobId !== jobId) {
+      finishExplicitBuild(ticket);
+      return;
+    }
     if (!data || data.ok !== true) {
       continueInFlight = false;
       setCheckpointBusy(false);
       showStatus("build-status", dx.t("studio.requestFailed") + ": " + ((data && data.error) || ""), true);
+      finishExplicitBuild(ticket);
       return;
     }
     clearCheckpoint();
     if (data.milestone_complete === true) {
       $("build-stop").hidden = true;
       showStatus("build-status", dx.t("studio.done"), false);
+      finishExplicitBuild(ticket);
       return;
     }
     followBuild(kind, slug, jobId);
+    finishExplicitBuild(ticket);
   }
 
   function streamLine(event, data) {
@@ -587,6 +599,7 @@
   }
 
   function followBuild(kind, slug, jobId) {
+    if (dx.getSlug() !== slug) return;
     closeBuildStream();
     const gen = streamGen;
     streamingSlug = slug;
@@ -623,21 +636,46 @@
     });
   }
 
+  function invalidatePendingBuild() {
+    resumeGen += 1;
+    explicitTicket += 1;
+    explicitFlight = null;
+  }
+
+  function claimExplicitBuild(slug) {
+    resumeGen += 1;
+    explicitTicket += 1;
+    explicitFlight = { ticket: explicitTicket, slug: slug };
+    return explicitTicket;
+  }
+
+  function explicitCurrent(ticket, slug) {
+    return !!(explicitFlight && explicitFlight.ticket === ticket && explicitFlight.slug === slug && dx.getSlug() === slug);
+  }
+
+  function finishExplicitBuild(ticket) {
+    if (explicitFlight && explicitFlight.ticket === ticket) explicitFlight = null;
+  }
+
   async function resumeBuild(slug) {
     if (!slug || streamingSlug === slug) return;
-    const token = ++resumeToken;
+    if (explicitFlight && explicitFlight.slug === slug) return;
+    resumeGen += 1;
+    const gen = resumeGen;
+    const ticket = explicitTicket;
+    const current = () => gen === resumeGen && ticket === explicitTicket && !explicitFlight && !streamingSlug && dx.getSlug() === slug;
     try {
       const guided = await dx.api("/admin/daedalus/playground/api/projects/" + slugPath(slug) + "/guided/active");
-      if (token !== resumeToken || streamingSlug) return;
+      if (!current()) return;
       if (guided && guided.active && guided.job_id) {
         followBuild("guided", slug, guided.job_id);
         return;
       }
     } catch (err) { /* no guided job is not a failed build */ }
-    if (token !== resumeToken || streamingSlug) return;
+    if (!current()) return;
     try {
       const auto = await dx.api("/api/v1/playground/projects/" + slugPath(slug) + "/autopilot");
-      if (token !== resumeToken || streamingSlug) return;
+      if (!current()) return;
       const job = auto && auto.job;
       if (job && job.id && job.status === "running") followBuild("autopilot", slug, job.id);
     } catch (err) { /* no autopilot job */ }
@@ -2905,6 +2943,10 @@
     syncAssetButtons();
     syncShipButtons();
     syncShipVisibility();
+    if (next !== buildSlug) {
+      buildSlug = next;
+      invalidatePendingBuild();
+    }
     if (checkpoint && snap.slug !== checkpoint.slug) clearCheckpoint();
     if (streamingSlug && snap.slug !== streamingSlug) closeBuildStream();
     loadFiles(snap.slug);
@@ -2995,15 +3037,21 @@
     const slug = dx.getSlug();
     if (!slug) return;
     flight = "guided";
+    const ticket = claimExplicitBuild(slug);
     runAction($("build-guided"), "build-status", async () => {
-      const data = await postJson("/admin/daedalus/game-studio/api/projects/" + slugPath(slug) + "/build/guided", {});
-      if (data.ok === false) throw new Error(data.error || dx.t("studio.requestFailed"));
-      if (data.harness_check) {
-        showStatus("build-status", dx.t("studio.harnessCheck"), false);
-        return;
+      try {
+        const data = await postJson("/admin/daedalus/game-studio/api/projects/" + slugPath(slug) + "/build/guided", {});
+        if (!explicitCurrent(ticket, slug)) return;
+        if (data.ok === false) throw new Error(data.error || dx.t("studio.requestFailed"));
+        if (data.harness_check) {
+          showStatus("build-status", dx.t("studio.harnessCheck"), false);
+          return;
+        }
+        showStatus("build-status", dx.t("studio.started"), false);
+        if (data.job_id) followBuild("guided", slug, data.job_id);
+      } finally {
+        finishExplicitBuild(ticket);
       }
-      showStatus("build-status", dx.t("studio.started"), false);
-      if (data.job_id) followBuild("guided", slug, data.job_id);
     });
   });
   $("build-autopilot").addEventListener("click", () => {
@@ -3011,30 +3059,38 @@
     if (!slug) return;
     const description = ($("build-idea").value || "").trim() || slug;
     flight = "autopilot";
+    const ticket = claimExplicitBuild(slug);
     runAction($("build-autopilot"), "build-status", async () => {
-      const data = await postJson("/api/v1/playground/projects/" + slugPath(slug) + "/autopilot", {
-        description,
-        mode: "full",
-        effort: "auto",
-      });
-      if (data.harness_check) {
-        showStatus("build-status", dx.t("studio.harnessCheck"), false);
-        return;
+      try {
+        const data = await postJson("/api/v1/playground/projects/" + slugPath(slug) + "/autopilot", {
+          description,
+          mode: "full",
+          effort: "auto",
+        });
+        if (!explicitCurrent(ticket, slug)) return;
+        if (data.harness_check) {
+          showStatus("build-status", dx.t("studio.harnessCheck"), false);
+          return;
+        }
+        showStatus("build-status", dx.t("studio.started"), false);
+        const jobId = data.job && data.job.id;
+        if (jobId) followBuild("autopilot", slug, jobId);
+      } finally {
+        finishExplicitBuild(ticket);
       }
-      showStatus("build-status", dx.t("studio.started"), false);
-      const jobId = data.job && data.job.id;
-      if (jobId) followBuild("autopilot", slug, jobId);
     });
   });
   $("build-stop").addEventListener("click", () => {
     const slug = dx.getSlug();
     if (!slug) return;
+    invalidatePendingBuild();
     const path = flight === "autopilot"
       ? "/admin/daedalus/playground/api/projects/" + slugPath(slug) + "/autopilot/stop"
       : "/admin/daedalus/playground/api/projects/" + slugPath(slug) + "/guided/stop";
     runAction($("build-stop"), "build-status", async () => {
       const data = await postJson(path, {});
       if (data.ok === false) throw new Error(data.error || dx.t("studio.requestFailed"));
+      if (dx.getSlug() !== slug) return;
       closeBuildStream();
       $("build-stop").hidden = true;
       showStatus("build-status", dx.t("studio.stopped"), false);

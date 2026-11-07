@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import json
 import socket
 import subprocess
@@ -14,6 +15,18 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML = (ROOT / "app" / "static" / "studio.html").read_text(encoding="utf-8")
+
+
+def _rjdiag():
+    name = "studio_radar_journal_diag"
+    if name in sys.modules:
+        return sys.modules[name]
+    path = Path(__file__).resolve().parent / "studio_radar_journal_diag.py"
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
 WORK = (ROOT / "app" / "static" / "studio-workspace.js").read_text(encoding="utf-8")
 I18N = (ROOT / "app" / "static" / "i18n.js").read_text(encoding="utf-8")
 KEYS = (
@@ -445,10 +458,21 @@ def _hit(page, selector):
     loc.click()
 
 
+def test_radar_journal_diag_redacts_paths_and_caps():
+    rjdiag = _rjdiag()
+    trace = rjdiag.Trace()
+    trace.add("stub", method="POST", url="http://127.0.0.1/admin/daedalus/radar/scan?token=secret", body="nope")
+    row = trace.events[0]
+    assert row["url"] == "/admin/daedalus/radar/scan"
+    assert "body" not in row
+    assert "secret" not in json.dumps(trace.events)
+
+
 def test_radar_and_journal_review_flow(studio_server):
     from playwright.sync_api import TimeoutError as PlaywrightTimeout
     from playwright.sync_api import sync_playwright
 
+    rjdiag = _rjdiag()
     calls = []
     discoveries = []
     dialogs = []
@@ -509,12 +533,21 @@ def test_radar_and_journal_review_flow(studio_server):
         }],
     }
 
+    trace = None
+
     def note(route, kind):
         calls.append({
             "kind": kind,
             "method": route.request.method,
             "raw": route.request.post_data,
         })
+        if trace is not None:
+            trace.add(
+                "stub",
+                op=kind,
+                method=route.request.method,
+                url=route.request.url,
+            )
 
     def radar(route):
         path = route.request.url.split("?", 1)[0]
@@ -573,6 +606,7 @@ def test_radar_and_journal_review_flow(studio_server):
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": 1280, "height": 800})
+        trace = rjdiag.attach(page)
         leaked = _guard(page)
         page.route("**/admin/daedalus/radar/**", radar)
         page.route("**/admin/daedalus/journal/**", journal)
@@ -718,6 +752,19 @@ def test_radar_and_journal_review_flow(studio_server):
             page.wait_for_function("() => document.getElementById('radar-scan').textContent === 'Сканирай'")
             assert page.locator("#journal-load").inner_text() == "Зареди дневника"
             assert leaked == []
+        except BaseException:
+            rjdiag.record_failure(
+                page,
+                trace,
+                "review-flow",
+                calls=calls,
+                held_len=len(held),
+                discoveries=discoveries,
+                mode=dict(mode),
+                dialogs_count=len(dialogs),
+                leaked=leaked,
+            )
+            raise
         finally:
             for route in held:
                 try:

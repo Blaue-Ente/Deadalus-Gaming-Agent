@@ -1,7 +1,10 @@
 """Ordered guided/active barriers for the build stream.
 
-Diagnostics only. Held routes decide the order. These tests do not change
-timeouts, and they do not claim to be the cause of a past CI failure.
+Held routes decide the order. These tests do not change timeouts, and they
+do not claim to be the cause of a past CI failure. The third order used to
+record the resume reader taking the one-shot checkpoint body. That expectation
+is now the product rule: the explicit guided job keeps the checkpoint. The
+parent observation stays in that test's docstring.
 """
 from __future__ import annotations
 
@@ -350,11 +353,23 @@ def test_late_active_job_after_stream_start_does_not_consume_checkpoint_body(stu
             browser.close()
 
 
-def test_active_job_before_guided_post_consumes_one_shot_checkpoint_body(studio_server):
-    """An active job released before the guided POST returns starts the first followBuild.
+def test_active_job_before_guided_post_keeps_the_explicit_checkpoint(studio_server):
+    """A guided/active reply must not follow while the explicit guided POST is pending.
 
-    That reader takes the only checkpoint body. The POST's followBuild aborts it
-    and reads the next body. This records that order. It is not a product fix.
+    The body list is still the one-shot fixture: the first stream request pops
+    the checkpoint, and the next request receives surviving-log. Those two
+    bodies are not production job streams.
+
+    Observed on parent c9c4f62 with this same queue, before the ownership
+    change: releasing {active:true, job_id:job-early} opened the first reader
+    and popped the checkpoint body. Fulfilling the POST as job-7 opened a
+    second reader that received only surviving-log. Both checkpoint zones
+    stayed hidden. The log contained surviving-log and did not contain
+    "stage needs a look". That run is the parent failure. It is not the cause
+    of the earlier CI timeout.
+
+    The fixed rule is one reader. job-early is not requested, so the explicit
+    job-7 request keeps the checkpoint body. surviving-log stays unconsumed.
     """
     from playwright.sync_api import sync_playwright
 
@@ -381,35 +396,31 @@ def test_active_job_before_guided_post_consumes_one_shot_checkpoint_body(studio_
             )
             assert len(gates.posts) == 1
             assert gates.streams == []
+            gates.release_actives({"active": True, "job_id": "job-early"})
+            page.evaluate("() => 1")
+            assert gates.streams == [], _urls(gates)
+            assert gates.autopilots == []
             _barrier(
                 page,
                 gates.trace,
-                "active-before-post-early-stream",
-                lambda req: "/guided/stream" in req.url and "job-early" in req.url,
-                lambda: gates.release_actives({"active": True, "job_id": "job-early"}),
-            )
-            assert len(gates.streams) == 1
-            assert gates.streams[0]["kind"] == "checkpoint"
-            _barrier(
-                page,
-                gates.trace,
-                "active-before-post-second-stream",
+                "active-before-post-explicit-stream",
                 lambda req: "/guided/stream" in req.url and "job-7" in req.url,
                 lambda: _fulfill(gates.posts[0], 200, {"ok": True, "job_id": "job-7"}),
             )
             gates.posts.clear()
-            assert [item["kind"] for item in gates.streams] == ["checkpoint", "log"]
-            gates.fulfill_stream(1)
-            diag.wait(
-                page,
-                gates.trace,
-                """() => document.getElementById('build-checkpoint').hidden
-                  && document.getElementById('flight-checkpoint').hidden
-                  && document.getElementById('pane-flight').classList.contains('on')
-                  && document.getElementById('log').textContent.includes('surviving-log')
-                  && !document.getElementById('log').textContent.includes('stage needs a look')""",
-                "active-before-post-consumed",
-            )
+            assert len(gates.streams) == 1, _urls(gates)
+            assert "job-early" not in gates.streams[0]["url"]
+            assert gates.streams[0]["kind"] == "checkpoint"
+            assert len(gates.bodies) == 1
+            assert "surviving-log" in gates.bodies[0]
+            gates.fulfill_stream(0)
+            diag.wait(page, gates.trace, VISIBLE, "active-before-post-visible")
+            assert "stage needs a look" in page.locator("#build-cp-review").inner_text()
+            assert "stage needs a look" in page.locator("#flight-cp-review").inner_text()
+            assert "stage needs a look" in page.locator("#log").inner_text()
+            assert "compile-slice-ready" in page.locator("#log").inner_text()
+            assert "surviving-log" not in page.locator("#log").inner_text()
+            assert "on" in (page.locator("#pane-flight").get_attribute("class") or "").split()
         finally:
             gates.settle()
             browser.close()
