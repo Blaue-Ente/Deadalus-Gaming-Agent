@@ -12,7 +12,7 @@ from .playtest_scenario import (
     scenario_checks,
     write_default_if_missing,
 )
-from .playground_browser import VISUAL_KINDS, _find_chrome, _serve_static
+from .playground_browser import CHROME_ARGS, VISUAL_KINDS, _find_chrome, _serve_static
 from .playground_runtime import verify_unity_scaffold
 
 log = logging.getLogger(__name__)
@@ -241,7 +241,8 @@ async def _run_gameplay_on_url(
             browser = await p.chromium.launch(
                 headless=True,
                 executable_path=chrome,
-                args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+                # Same swiftshader/WebGL flags as browser_verify: --disable-gpu paints Phaser black.
+                args=list(CHROME_ARGS),
             )
             page = await browser.new_page(viewport={"width": 1280, "height": 800})
             await page.goto(preview_url, wait_until="domcontentloaded", timeout=25000)
