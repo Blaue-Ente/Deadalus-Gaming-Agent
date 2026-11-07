@@ -155,6 +155,8 @@ class WindowsBackend:
         u.AttachThreadInput.argtypes = [wt.DWORD, wt.DWORD, wt.BOOL]
         u.IsWindowVisible.argtypes = [wt.HWND]
         u.IsWindow.argtypes = [wt.HWND]
+        u.GetWindowTextW.argtypes = [wt.HWND, wt.LPWSTR, ctypes.c_int]
+        u.GetWindowRect.argtypes = [wt.HWND, ctypes.POINTER(wt.RECT)]
         u.GetClientRect.argtypes = [wt.HWND, ctypes.POINTER(wt.RECT)]
         u.ClientToScreen.argtypes = [wt.HWND, ctypes.POINTER(wt.POINT)]
         u.GetDC.argtypes = [wt.HWND]
@@ -256,6 +258,7 @@ class WindowsBackend:
             return True
 
         enum = enum_proto(cb)
+        last_focus: PlayError | None = None
         deadline = time.time() + timeout
         while time.time() < deadline:
             found.clear()
@@ -264,10 +267,29 @@ class WindowsBackend:
             self.u32.EnumWindows(enum, 0)
             if found:
                 self.hwnd = found[0]
-                self._focus()
-                return str(self.hwnd)
-            time.sleep(0.2)
+                try:
+                    self._focus()
+                    return str(self.hwnd)
+                except PlayError as exc:
+                    if exc.code != "focus_lost":
+                        raise
+                    last_focus = exc                    # a player still loading may not take focus yet: look again
+            time.sleep(0.3)
+        if last_focus is not None:
+            raise PlayError("focus_lost", str(last_focus), window=self._describe(self.hwnd), pid=pid)
         raise PlayError("window_missing", "the game opened no visible window", pid=pid)
+
+    def _describe(self, hwnd: int) -> dict[str, Any]:
+        buf = ctypes.create_unicode_buffer(256)
+        self.u32.GetWindowTextW(hwnd, buf, 255)
+        rect = wt.RECT()
+        self.u32.GetWindowRect(hwnd, ctypes.byref(rect))
+        fg = self.u32.GetForegroundWindow()
+        fbuf = ctypes.create_unicode_buffer(256)
+        if fg:
+            self.u32.GetWindowTextW(fg, fbuf, 255)
+        return {"title": buf.value, "rect": [rect.left, rect.top, rect.right, rect.bottom],
+                "foreground_title": fbuf.value}
 
     def _client(self) -> tuple[int, int, int, int]:
         """(screen x, screen y, width, height) of the game's client area."""
