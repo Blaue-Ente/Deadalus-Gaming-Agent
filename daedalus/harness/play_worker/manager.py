@@ -22,15 +22,18 @@ def max_sessions() -> int:
         except (TypeError, ValueError):
             return None
 
+    from .backend import platform_cap
+
+    cap = platform_cap()
     pinned = parse(os.environ.get("DAEDALUS_PLAY_MAX") or "")
     if pinned is not None:
-        return pinned                      # an unparsable pin is ignored (it does not lock), not treated as 1
+        return min(pinned, cap)            # an unparsable pin is ignored (it does not lock), not treated as 1
     try:
         from ... import settings_file
         saved = parse(settings_file.load().get("play_max_sessions"))
     except Exception:
         saved = None
-    return saved if saved is not None else 1
+    return min(saved, cap) if saved is not None else 1
 
 
 class PlayManager:
