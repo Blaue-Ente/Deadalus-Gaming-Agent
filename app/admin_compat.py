@@ -3128,7 +3128,7 @@ async def daedalus_rate_limit_stats():
     return JSONResponse(get_rate_limit_stats())
 
 
-# ── Catch-all last so copied JS never 404s ──────────────────────────────────
+# ── Catch-all last: unknown /admin/daedalus/* calls are an honest 404, not a fake 200 ─────
 
 @router.api_route("/daedalus/{rest:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE"])
 async def standalone_stub(rest: str, request: Request):
@@ -3137,6 +3137,7 @@ async def standalone_stub(rest: str, request: Request):
         "standalone": True,
         "wired": False,
         "configured": False,
+        "error": "not_wired",
         "path": f"/admin/daedalus/{rest}",
         "method": request.method,
         "projects": [],
@@ -3147,5 +3148,5 @@ async def standalone_stub(rest: str, request: Request):
         "sessions": [],
         "skills": [],
         "repos": [],
-        "message": "This ADN-hosted route is not fully wired in standalone Daedalus yet.",
-    })
+        "message": "This route does not exist in standalone Daedalus (retired or not wired).",
+    }, status_code=404)
