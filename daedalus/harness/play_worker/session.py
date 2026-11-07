@@ -65,6 +65,16 @@ def window_frames(slug: str) -> list[tuple[float, Path, str, float]]:
     return out
 
 
+def _remove_tree(path: Path, attempts: int = 12, pause: float = 0.25) -> None:
+    """Delete a directory even if the game that used it is still letting go of its files (common on Windows, where
+    an exiting process keeps its files locked for a moment). Gives up quietly: a leftover temp copy is not an error."""
+    for _ in range(attempts):
+        shutil.rmtree(path, ignore_errors=True)
+        if not path.exists():
+            return
+        time.sleep(pause)
+
+
 class PlaySession:
     def __init__(self, project_dir: Path, *, slug: str = "", size: tuple[int, int] = (640, 480),
                  session_id: str = "", artifacts: Path | None = None, env_extra: dict[str, str] | None = None) -> None:
@@ -156,7 +166,7 @@ class PlaySession:
                 self.backend.stop()
             finally:
                 if self.workdir is not None:
-                    shutil.rmtree(self.workdir, ignore_errors=True)
+                    _remove_tree(self.workdir)
                     self.workdir = None
                 if was != "failed":
                     self.state = "stopped"
