@@ -685,6 +685,9 @@ button.textlink {
 }
 button.item { width: 100%; text-align: left; }
 #build-milestones { margin: 0.2rem 0 0; padding-left: 1.1rem; }
+.checkpoint { display: flex; flex-direction: column; gap: 0.35rem; }
+.checkpoint[hidden] { display: none !important; }
+.checkpoint p { margin: 0; white-space: pre-wrap; }
 #build-milestones li[data-current] { color: var(--gold-2); }
 #settings-fields .item small { font-family: var(--font); }
 label.grow { flex: 1; min-width: 7rem; }

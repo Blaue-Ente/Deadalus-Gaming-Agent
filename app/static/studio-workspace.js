@@ -13,6 +13,9 @@
   let streamCtrl = null;
   let streamingSlug = "";
   let resumeToken = 0;
+  let checkpointGen = 0;
+  let checkpoint = null;
+  let continueInFlight = false;
 
   function $(id) { return document.getElementById(id); }
 
@@ -320,6 +323,104 @@
       try { streamCtrl.abort(); } catch (err) { /* already closed */ }
       streamCtrl = null;
     }
+    clearCheckpoint();
+  }
+
+  function clearCheckpoint() {
+    checkpointGen += 1;
+    checkpoint = null;
+    continueInFlight = false;
+    ["build-checkpoint", "flight-checkpoint"].forEach((id) => {
+      const zone = $(id);
+      if (!zone) return;
+      zone.hidden = true;
+      const review = zone.querySelector("[data-cp-review]");
+      if (review) review.textContent = "";
+      const options = zone.querySelector("[data-cp-options]");
+      if (options) options.replaceChildren();
+      const notes = zone.querySelector("textarea");
+      if (notes) notes.value = "";
+    });
+  }
+
+  function setCheckpointBusy(busy) {
+    document.querySelectorAll("#build-checkpoint button, #flight-checkpoint button, #build-cp-notes, #flight-cp-notes").forEach((el) => {
+      el.disabled = busy;
+    });
+  }
+
+  function syncCheckpointNotes(source) {
+    ["build-cp-notes", "flight-cp-notes"].forEach((id) => {
+      const el = $(id);
+      if (el && el !== source) el.value = source.value;
+    });
+  }
+
+  function showCheckpoint(slug, jobId, kind, data) {
+    const payload = data || {};
+    checkpointGen += 1;
+    const gen = checkpointGen;
+    checkpoint = { gen: gen, slug: slug, jobId: jobId, kind: kind };
+    continueInFlight = false;
+    const review = payload.review || payload.message || dx.t("studio.checkpoint");
+    const supplied = kind === "guided" && Array.isArray(payload.options) ? payload.options : [];
+    ["build", "flight"].forEach((side) => {
+      const zone = $(side + "-checkpoint");
+      zone.hidden = false;
+      zone.querySelector("[data-cp-review]").textContent = review;
+      const box = zone.querySelector("[data-cp-options]");
+      box.replaceChildren();
+      supplied.forEach((opt) => {
+        if (!opt || !opt.id) return;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.dataset.action = String(opt.id);
+        btn.textContent = String(opt.label || opt.id);
+        if (opt.hint) btn.title = String(opt.hint);
+        btn.addEventListener("click", () => {
+          continueCheckpoint(gen, slug, jobId, kind, String(opt.id), side);
+        });
+        box.appendChild(btn);
+      });
+    });
+    showStatus("build-status", review, false);
+  }
+
+  async function continueCheckpoint(gen, slug, jobId, kind, action, side) {
+    if (continueInFlight) return;
+    if (!checkpoint || checkpoint.gen !== gen || checkpoint.slug !== slug || checkpoint.jobId !== jobId) return;
+    if (dx.getSlug() !== slug || kind !== "guided") return;
+    continueInFlight = true;
+    setCheckpointBusy(true);
+    const notesEl = $(side + "-cp-notes");
+    const notes = notesEl ? notesEl.value.trim() : "";
+    let data = null;
+    try {
+      data = await postJson(
+        "/admin/daedalus/playground/api/projects/" + slugPath(slug) + "/guided/continue",
+        { job_id: jobId, action: action, notes: notes }
+      );
+    } catch (err) {
+      if (gen !== checkpointGen || dx.getSlug() !== slug) return;
+      continueInFlight = false;
+      setCheckpointBusy(false);
+      showStatus("build-status", dx.t("studio.requestFailed") + ": " + failText(err), true);
+      return;
+    }
+    if (gen !== checkpointGen || dx.getSlug() !== slug || !checkpoint || checkpoint.jobId !== jobId) return;
+    if (!data || data.ok !== true) {
+      continueInFlight = false;
+      setCheckpointBusy(false);
+      showStatus("build-status", dx.t("studio.requestFailed") + ": " + ((data && data.error) || ""), true);
+      return;
+    }
+    clearCheckpoint();
+    if (data.milestone_complete === true) {
+      $("build-stop").hidden = true;
+      showStatus("build-status", dx.t("studio.done"), false);
+      return;
+    }
+    followBuild(kind, slug, jobId);
   }
 
   function streamLine(event, data) {
@@ -356,11 +457,16 @@
     if (!res.ok) throw new Error("HTTP " + res.status);
     let buf = "";
     let terminal = "";
+    let terminalData = null;
     const apply = (block) => {
       const line = streamLine(block.event, block.data || {});
       if (line) appendBuild(line);
       if (block.event === "error") showStatus("build-status", line || dx.t("studio.streamStopped"), true);
       else if (line) showStatus("build-status", line, false);
+      if (block.event === "checkpoint" || block.event === "done" || block.event === "error" || block.event === "milestone_done") {
+        terminal = block.event;
+        terminalData = block.data || {};
+      }
       return block.event;
     };
     const take = (text, flush) => {
@@ -379,7 +485,7 @@
     const stopped = () => terminal === "checkpoint" || terminal === "done" || terminal === "error" || terminal === "milestone_done";
     if (!res.body || !res.body.getReader) {
       take((await res.text()).replace(/\r\n/g, "\n"), true);
-      return terminal;
+      return { event: terminal, data: terminalData };
     }
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
@@ -387,10 +493,10 @@
       const step = await reader.read();
       buf += decoder.decode(step.value || new Uint8Array(), { stream: !step.done }).replace(/\r\n/g, "\n");
       buf = take(buf, !!step.done);
-      if (stopped()) return terminal;
+      if (stopped()) return { event: terminal, data: terminalData };
       if (step.done) break;
     }
-    return terminal;
+    return { event: terminal, data: terminalData };
   }
 
   function followBuild(kind, slug, jobId) {
@@ -405,8 +511,14 @@
     const url = kind === "autopilot"
       ? "/api/v1/playground/projects/" + slugPath(slug) + "/autopilot/stream"
       : "/admin/daedalus/playground/api/projects/" + slugPath(slug) + "/guided/stream?job_id=" + encodeURIComponent(jobId || "") + "&from=0";
-    readBuildStream(url, gen).then(async (terminal) => {
+    readBuildStream(url, gen).then(async (result) => {
       if (gen !== streamGen) return;
+      const terminal = result && result.event;
+      if (terminal === "checkpoint") {
+        showCheckpoint(slug, jobId, kind, (result && result.data) || {});
+        return;
+      }
+      clearCheckpoint();
       if (terminal === "done" || terminal === "error" || terminal === "milestone_done") {
         $("build-stop").hidden = true;
       }
@@ -455,7 +567,7 @@
     try {
       const data = await dx.api("/admin/daedalus/game-studio/api/projects/" + slugPath(slug));
       paintMilestones(data);
-      if (!streamingSlug) showStatus("build-status", "", false);
+      if (!streamingSlug && !(checkpoint && checkpoint.slug === slug)) showStatus("build-status", "", false);
     } catch (err) {
       $("build-milestones").replaceChildren();
       if (!streamingSlug) showStatus("build-status", failText(err), true);
@@ -708,6 +820,7 @@
   }
 
   function onSlug(snap) {
+    if (checkpoint && snap.slug !== checkpoint.slug) clearCheckpoint();
     if (streamingSlug && snap.slug !== streamingSlug) closeBuildStream();
     loadFiles(snap.slug);
     syncFilter();
@@ -1005,6 +1118,12 @@
   });
   window.matchMedia("(max-width: 1100px)").addEventListener("change", () => {
     if (currentPanel === "world" || currentPanel === "tools") showPanel(currentPanel, currentTab);
+  });
+
+  ["build-cp-notes", "flight-cp-notes"].forEach((id) => {
+    const el = $(id);
+    if (!el) return;
+    el.addEventListener("input", () => syncCheckpointNotes(el));
   });
 
   const opening = readQuery();

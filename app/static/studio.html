@@ -219,6 +219,14 @@
         </div>
         <p id="build-status" class="workspace-status" role="status" hidden></p>
         <pre id="build-out"></pre>
+        <div id="build-checkpoint" class="checkpoint" hidden>
+          <p class="kicker" data-i18n="studio.checkpoint">Checkpoint</p>
+          <p id="build-cp-review" data-cp-review></p>
+          <label><span data-i18n="studio.checkpointNotes">Notes</span>
+            <textarea id="build-cp-notes" rows="2" data-i18n-aria="studio.checkpointNotes" aria-label="Notes"></textarea>
+          </label>
+          <div class="row" id="build-cp-options" data-cp-options></div>
+        </div>
         <div class="row">
           <button id="build-guided" type="button" disabled data-i18n="studio.guided">Guided</button>
           <button id="build-autopilot" type="button" disabled data-i18n="studio.autopilot">Autopilot</button>
@@ -310,6 +318,14 @@
         <p class="kicker" data-i18n="studio.flight">Flight</p>
         <p class="hint" data-i18n="studio.flightHint">Log of the current flight. Epic writes the bible first, then a slice.</p>
         <pre id="log" data-i18n="studio.noAutopilot">No active autopilot.</pre>
+        <div id="flight-checkpoint" class="checkpoint" hidden>
+          <p class="kicker" data-i18n="studio.checkpoint">Checkpoint</p>
+          <p id="flight-cp-review" data-cp-review></p>
+          <label><span data-i18n="studio.checkpointNotes">Notes</span>
+            <textarea id="flight-cp-notes" rows="2" data-i18n-aria="studio.checkpointNotes" aria-label="Notes"></textarea>
+          </label>
+          <div class="row" id="flight-cp-options" data-cp-options></div>
+        </div>
       </div>
       <div class="pane" id="pane-llm">
         <p class="kicker" data-i18n="studio.wardrobe">Wardrobe</p>
