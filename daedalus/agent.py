@@ -145,10 +145,31 @@ async def _call_claude(system: str, messages: list[dict[str, Any]],
         raise
 
 
+async def _call_claude_via_gateway(system: str, messages: list[dict[str, Any]], *,
+                                   use_cache_override: bool | None = None) -> str:
+    from .harness import gateway as gw
+
+    res = gw.resolve("persona")
+    do_cache = res.cfg.get("use_cache", True) if use_cache_override is None else use_cache_override
+    result = await gw.call("persona", messages, system=system, max_tokens=_MAX_TOKENS,
+                           use_cache=do_cache, client_id="daedalus")
+    if not result.ok and not result.budget_stopped and result.error is not None:
+        if result.error.type in ("auth", "routing") and result.error.message.startswith(("No API key", "No credentials")):
+            raise DaedalusError(result.error.message)
+    return gw.to_text_or_raise(result)
+
+
 async def _call_claude_primary(system: str, messages: list[dict[str, Any]],
                                 *,
                                 use_cache_override: bool | None = None) -> str:
-    """Direct provider call (the original logic). Used by call_with_fallback."""
+    """Direct provider call. Used by call_with_fallback.
+
+    Goes through the harness gateway (model resolution, budget, images, typed errors, trace);
+    ``DAEDALUS_GATEWAY_PERSONA=0`` restores the original provider code below.
+    """
+    from .harness import gateway as _gw
+    if _gw.path_enabled("persona"):
+        return await _call_claude_via_gateway(system, messages, use_cache_override=use_cache_override)
     import time as _t
     try:
         from argos_data_nexus.modules.llm_live_trace import record_llm_call

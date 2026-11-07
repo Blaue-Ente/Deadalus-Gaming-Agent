@@ -389,3 +389,58 @@ def test_split_messages_never_dumps_a_python_repr(gw):
         {"role": "user", "content": [{"type": "text", "text": "hello"}, {"type": "image_url", "image_url": {"url": "data:x"}}]},
     ])
     assert system == "sys" and user.startswith("hello") and "{" not in user
+
+
+# ---- migration 2: the persona path ----------------------------------------------------------------------
+
+def test_persona_path_uses_the_owner_override_and_sends_images(gw, monkeypatch):
+    from daedalus import agent
+
+    record = _install_openai(monkeypatch, text="persona reply")
+    gw.set_override("writer", "openrouter:writer/pick")
+    msgs = [{"role": "user", "content": [gw.text_part("hi"), {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{PNG_B64}"}}]}]
+    out = run(agent._call_claude_primary("persona system", msgs))
+    assert out == "persona reply"
+    assert record["body"]["model"] == "writer/pick"
+    assert record["body"]["messages"][1]["content"][1]["image_url"]["url"].endswith(PNG_B64)
+
+
+def test_persona_missing_key_still_raises_daedalus_error(gw, monkeypatch):
+    from daedalus import agent
+
+    monkeypatch.setattr("daedalus.llm_config.get_config", lambda: {**BRAIN, "api_key": ""})
+    with pytest.raises(agent.DaedalusError):
+        run(agent._call_claude_primary("s", [{"role": "user", "content": "x"}]))
+
+
+def test_persona_rate_limit_still_triggers_the_fallback_chain(gw, monkeypatch):
+    from daedalus import agent, improvements
+
+    _install_openai(monkeypatch, exc=RuntimeError("Error code: 429 rate limit exceeded"))
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("NOVITA_API_KEY", raising=False)
+    # primary fails with a 429-looking error; with no alternates configured the chain reports exhaustion
+    with pytest.raises(RuntimeError, match="Rate-limited by primary and all fallbacks failed"):
+        run(improvements.call_with_fallback(agent._call_claude_primary, "s", [{"role": "user", "content": "x"}]))
+
+
+def test_persona_no_image_model_is_retried_without_frames(gw, monkeypatch):
+    from daedalus import agent
+
+    calls = []
+
+    class Client:
+        def __init__(self, **kw):
+            self.chat = types.SimpleNamespace(completions=types.SimpleNamespace(create=self.create))
+
+        async def create(self, **kw):
+            calls.append(kw["messages"])
+            if any(isinstance(m["content"], list) for m in kw["messages"]):
+                raise RuntimeError("this model does not support image input")
+            msg = types.SimpleNamespace(content="text only ok")
+            return types.SimpleNamespace(choices=[types.SimpleNamespace(message=msg)], usage=None)
+
+    monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(AsyncOpenAI=Client))
+    msgs = [{"role": "user", "content": [gw.text_part("hi"), gw.image_part(data=PNG_B64)]}]
+    assert run(agent._call_claude("sys", msgs)) == "text only ok"
+    assert len(calls) == 2  # first with the frame, then without: explicit, one retry
