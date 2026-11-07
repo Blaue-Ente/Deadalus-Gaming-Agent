@@ -53,6 +53,45 @@ _BUNDLE_COMMIT_RE = re.compile(
 
 
 # ---------------------------------------------------------------------------
+# Path safety: a bundle may only touch ordinary files inside the product root
+# ---------------------------------------------------------------------------
+
+_BLOCKED_TOP_DIRS = frozenset({".git", "data"})
+
+
+def _safe_target(file_path: str) -> tuple[Path | None, str]:
+    """Resolve ``file_path`` under ``ADN_ROOT`` or explain why it is refused.
+
+    Refuses absolute paths, ``..``, symlink escapes, ``.git``, the data directory
+    and secret files (``.env*``, ``secrets.env``, keys).
+    """
+    from pathlib import PurePosixPath, PureWindowsPath
+
+    from .secret_paths import is_secret_path
+
+    raw = str(file_path or "").strip()
+    if not raw or "\x00" in raw:
+        return None, "empty or invalid path"
+    norm = raw.replace("\\", "/")
+    if norm.startswith("/") or PureWindowsPath(raw).is_absolute() or PureWindowsPath(raw).drive:
+        return None, "absolute paths are not allowed"
+    parts = PurePosixPath(norm).parts
+    if any(part == ".." for part in parts):
+        return None, "path traversal is not allowed"
+    if parts and parts[0].lower() in _BLOCKED_TOP_DIRS or any(p.lower() == ".git" for p in parts):
+        return None, "protected directory"
+    if is_secret_path(norm):
+        return None, "secret files are never bundled"
+    root = ADN_ROOT.resolve()
+    target = (ADN_ROOT / norm).resolve()
+    try:
+        target.relative_to(root)
+    except ValueError:
+        return None, "path resolves outside the product root"
+    return target, ""
+
+
+# ---------------------------------------------------------------------------
 # DB helpers (async, uses shared pool from db.py)
 # ---------------------------------------------------------------------------
 
@@ -84,7 +123,9 @@ async def stage_file(
     new_content: str | None,
 ) -> dict[str, Any]:
     """Add a file to the staged bundle. Reads original content for diff."""
-    abs_path = ADN_ROOT / file_path
+    abs_path, why = _safe_target(file_path)
+    if abs_path is None:
+        return {"ok": False, "error": "unsafe_path", "file_path": file_path, "reason": why}
     original = ""
     if abs_path.exists():
         try:
@@ -168,31 +209,63 @@ async def apply_bundle(bundle_id: str) -> dict[str, Any]:
             bundle_id,
         )
 
+    # Preflight: every path must be safe before anything is written.
+    plan: list[tuple[Any, Path]] = []
+    unsafe: list[str] = []
+    for f in files:
+        fpath, why = _safe_target(f["file_path"])
+        if fpath is None:
+            unsafe.append(f"{f['file_path']}: {why}")
+        else:
+            plan.append((f, fpath))
+    if unsafe:
+        log.warning("Bundle %s refused: %d unsafe path(s)", bundle_id, len(unsafe))
+        return {"ok": False, "error": "unsafe_path", "bundle_id": bundle_id,
+                "applied": [], "errors": unsafe}
+
     applied: list[str] = []
     errors: list[str] = []
-    for f in files:
-        fpath = ADN_ROOT / f["file_path"]
+    undo: list[tuple[Path, bytes | None]] = []
+    for f, fpath in plan:
         try:
+            before = fpath.read_bytes() if fpath.is_file() else None
             if f["action"] == "delete":
                 if fpath.exists():
                     fpath.unlink()
+                undo.append((fpath, before))
                 applied.append(f["file_path"])
             else:  # replace or create
                 fpath.parent.mkdir(parents=True, exist_ok=True)
                 fpath.write_text(f["new_content"] or "", "utf-8")
+                undo.append((fpath, before))
                 applied.append(f["file_path"])
         except Exception as exc:
             errors.append(f"{f['file_path']}: {exc}")
+            break
 
-    status = "applied" if not errors else "partially_applied"
+    if errors:
+        # All or nothing: put back everything already written and keep the bundle retryable.
+        for path, before in reversed(undo):
+            try:
+                if before is None:
+                    if path.exists():
+                        path.unlink()
+                else:
+                    path.write_bytes(before)
+            except Exception as exc:  # pragma: no cover - best effort restore
+                errors.append(f"rollback {path}: {exc}")
+        log.warning("Bundle %s rolled back: %s", bundle_id, errors[0])
+        return {"ok": False, "bundle_id": bundle_id, "applied": [], "errors": errors,
+                "rolled_back": True}
+
     async with pool.acquire() as conn:
         await conn.execute(
             "UPDATE daedalus_bundles SET status=$2, applied_at=NOW() WHERE id=$1",
-            bundle_id, status,
+            bundle_id, "applied",
         )
 
-    log.info("Bundle applied: %s — %d files, %d errors", bundle_id, len(applied), len(errors))
-    return {"ok": not errors, "bundle_id": bundle_id, "applied": applied, "errors": errors}
+    log.info("Bundle applied: %s — %d files", bundle_id, len(applied))
+    return {"ok": True, "bundle_id": bundle_id, "applied": applied, "errors": []}
 
 
 async def reject_bundle(bundle_id: str) -> dict[str, Any]:
