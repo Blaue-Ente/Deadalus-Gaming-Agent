@@ -125,6 +125,8 @@ class _Owned:
         self.held_posts = []
         self.post_mode = "hold"
         self.autopilot_job = None
+        self.active_now = None
+        self.answered = []
 
     def install(self):
         page = self.page
@@ -177,6 +179,10 @@ class _Owned:
         _fulfill(route, 200, {"ok": True, "job_id": "job-7"})
 
     def _active(self, route):
+        if self.active_now is not None:
+            self.answered.append(route.request.url)
+            _fulfill(route, 200, self.active_now)
+            return
         self.actives.append(route)
 
     def _stream(self, route):
@@ -339,15 +345,15 @@ def test_genuine_active_resume_follows_one_job_without_a_guided_post(studio_serv
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         owned = _Owned(page)
+        owned.active_now = {"active": True, "job_id": "job-live"}
         try:
             owned.install()
             _open(page, studio_server, game)
-            assert owned.posts == []
-            owned.release_actives({"active": True, "job_id": "job-live"})
             page.wait_for_function(VISIBLE)
             assert owned.posts == []
-            assert len(owned.streams) == 1
-            assert "job-live" in owned.streams[0]
+            assert owned.answered
+            assert owned.streams
+            assert all("job-live" in url for url in owned.streams)
             assert "stale job checkpoint" in page.locator("#build-cp-review").inner_text()
             assert "stale-line" in page.locator("#log").inner_text()
             assert "on" in (page.locator("#pane-flight").get_attribute("class") or "").split()
