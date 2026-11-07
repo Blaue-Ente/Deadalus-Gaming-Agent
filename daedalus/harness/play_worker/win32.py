@@ -68,9 +68,13 @@ def tree_pids(pairs: list[tuple[int, int]], root: int) -> set[int]:
 
 
 def normalise_absolute(x: int, y: int, left: int, top: int, width: int, height: int) -> tuple[int, int]:
-    """Screen pixel -> the 0..65535 space SendInput uses for ABSOLUTE movement over the virtual desktop."""
-    nx = int((x - left) * 65535 / max(1, width - 1))
-    ny = int((y - top) * 65535 / max(1, height - 1))
+    """Screen pixel -> the 0..65535 space SendInput uses for ABSOLUTE movement over the virtual desktop.
+
+    Windows maps a normalised value back with ``pixel = norm * size // 65536``, so the value that lands exactly on
+    ``pixel`` is ``ceil(pixel * 65536 / size)``. Truncating instead lands one pixel short, which at a window edge
+    puts the pointer outside the window."""
+    nx = -(-((x - left) * 65536) // max(1, width))
+    ny = -(-((y - top) * 65536) // max(1, height))
     return max(0, min(65535, nx)), max(0, min(65535, ny))
 
 
@@ -180,6 +184,8 @@ class WindowsBackend:
         k.Process32FirstW.argtypes = [wt.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
         k.Process32NextW.argtypes = [wt.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
         k.CloseHandle.argtypes = [wt.HANDLE]
+        u.GetCursorPos.argtypes = [ctypes.POINTER(wt.POINT)]
+        u.SetCursorPos.argtypes = [ctypes.c_int, ctypes.c_int]
 
     # ---- Backend interface ----------------------------------------------------------------------------------------
     def tools(self) -> dict[str, bool]:
@@ -382,6 +388,16 @@ class WindowsBackend:
         height = self.u32.GetSystemMetrics(79)
         nx, ny = normalise_absolute(sx, sy, left, top, width, height)
         self._send(self._mouse_event(MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK, nx, ny))
+        if self._cursor() != (sx, sy):                                  # scaling or rounding: correct it exactly
+            self.u32.SetCursorPos(sx, sy)
+            if self._cursor() != (sx, sy):
+                raise PlayError("window_missing", f"the pointer is at {self._cursor()}, not at {(sx, sy)}; "
+                                                  "input was NOT sent")
+
+    def _cursor(self) -> tuple[int, int]:
+        pt = wt.POINT()
+        self.u32.GetCursorPos(ctypes.byref(pt))
+        return pt.x, pt.y
 
     def mouse(self, kind: str, x: int, y: int, button: str, hold_ms: int) -> dict[str, Any]:
         if kind not in {"move", "down", "up", "click"}:

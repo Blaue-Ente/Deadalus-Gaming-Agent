@@ -52,13 +52,15 @@ def test_the_window_owner_is_found_through_the_process_tree():
     assert win32.tree_pids([(7, 7), (8, 7)], 7) == {7, 8}      # a self-parent entry cannot loop forever
 
 
-def test_absolute_mouse_coordinates_cover_the_virtual_desktop():
-    assert win32.normalise_absolute(0, 0, 0, 0, 1920, 1080) == (0, 0)
-    assert win32.normalise_absolute(1919, 1079, 0, 0, 1920, 1080) == (65535, 65535)
-    # a monitor to the left of the primary one (negative origin)
-    assert win32.normalise_absolute(-1920, 0, -1920, 0, 3840, 1080) == (0, 0)
-    mid = win32.normalise_absolute(0, 540, -1920, 0, 3840, 1080)
-    assert 32000 < mid[0] < 33500 and 30000 < mid[1] < 35000
+def test_absolute_mouse_coordinates_land_on_the_exact_pixel():
+    """Windows maps norm back with pixel = norm * size // 65536; every pixel must round-trip, edges included."""
+    for left, top, width, height in ((0, 0, 1920, 1080), (-1920, 0, 3840, 1080), (0, 0, 2560, 1440), (0, -1080, 1920, 2160)):
+        pts = [(left, top), (left + width - 1, top + height - 1), (left + 1, top + 1), (left + width // 2, top + height // 2),
+               (left + 40, top + 40), (left + width - 2, top + 5)]
+        for x, y in pts:
+            nx, ny = win32.normalise_absolute(x, y, left, top, width, height)
+            assert 0 <= nx <= 65535 and 0 <= ny <= 65535
+            assert left + nx * width // 65536 == x and top + ny * height // 65536 == y, (x, y, nx, ny)
     assert win32.normalise_absolute(99999, -5, 0, 0, 1920, 1080) == (65535, 0)     # clamped
 
 
