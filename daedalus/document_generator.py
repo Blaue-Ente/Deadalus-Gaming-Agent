@@ -22,9 +22,15 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-DATA_ROOT = data_root()
-DOCUMENTS_DIR = DATA_ROOT / "documents"
-DOCUMENTS_DIR.mkdir(parents=True, exist_ok=True)
+def documents_dir():
+    p = data_root() / "documents"
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
+
+from .harness.context import legacy_paths as _legacy_paths  # noqa: E402
+
+_legacy_paths(globals(), {"DATA_ROOT": data_root, "DOCUMENTS_DIR": documents_dir})
 
 
 # ---------------------------------------------------------------------------
@@ -114,7 +120,7 @@ def _generate_pdf(title: str, content: str, author: str = "Daedalus / ADN") -> P
     from reportlab.lib.enums import TA_LEFT, TA_CENTER
 
     filename = f"{uuid.uuid4().hex[:12]}_{int(time.time())}.pdf"
-    filepath = DOCUMENTS_DIR / filename
+    filepath = documents_dir() / filename
 
     doc = SimpleDocTemplate(
         str(filepath),
@@ -218,7 +224,7 @@ def _generate_docx(title: str, content: str, author: str = "Daedalus / ADN") -> 
     from docx.enum.text import WD_ALIGN_PARAGRAPH
 
     filename = f"{uuid.uuid4().hex[:12]}_{int(time.time())}.docx"
-    filepath = DOCUMENTS_DIR / filename
+    filepath = documents_dir() / filename
 
     doc = Document()
 
@@ -356,7 +362,7 @@ def generate_document(format_title_content: str) -> dict[str, Any]:
 
 def list_documents() -> list[dict[str, Any]]:
     docs = []
-    for f in sorted(DOCUMENTS_DIR.glob("*.*"), key=lambda x: x.stat().st_mtime, reverse=True):
+    for f in sorted(documents_dir().glob("*.*"), key=lambda x: x.stat().st_mtime, reverse=True):
         if f.suffix in (".pdf", ".docx"):
             docs.append({
                 "filename": f.name,

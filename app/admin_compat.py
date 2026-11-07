@@ -372,10 +372,11 @@ async def daedalus_progress_clear():
 
 @router.get("/daedalus/permissions")
 async def daedalus_permissions_list():
-    from daedalus.outbox import list_permissions, permission_catalog
+    from daedalus.outbox import default_grants, list_permissions, permission_catalog
     return JSONResponse({
         "ok": True,
         "permissions": list_permissions(),
+        "default_grants": default_grants(),
         "catalog": permission_catalog(),
     })
 

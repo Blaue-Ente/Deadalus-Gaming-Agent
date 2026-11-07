@@ -325,7 +325,8 @@ def _worker_cfg_path():
 
 def _read_worker_db() -> dict:
     try:
-        from replit import db  # type: ignore
+        from .kv import replit_required as _replit_required
+        db = _replit_required()
         raw = db.get(_DB_KEY)
         if raw:
             return json.loads(raw) if isinstance(raw, str) else dict(raw)
@@ -342,7 +343,8 @@ def _read_worker_db() -> dict:
 
 def _write_worker_db(cfg: dict) -> None:
     try:
-        from replit import db  # type: ignore
+        from .kv import replit_required as _replit_required
+        db = _replit_required()
         db[_DB_KEY] = json.dumps(cfg)
         return
     except Exception:
@@ -530,7 +532,8 @@ def clear_worker_config() -> None:
 
     require_llm_write_permission()
     try:
-        from replit import db  # type: ignore
+        from .kv import replit_required as _replit_required
+        db = _replit_required()
         del db[_DB_KEY]
     except Exception:
         pass

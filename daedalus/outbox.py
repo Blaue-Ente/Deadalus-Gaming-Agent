@@ -366,7 +366,26 @@ KNOWN_PERMISSION_CLASSES: list[dict[str, str]] = [
     {"id": "planner_auto_run",        "label": "Auto planner",   "group": "workers"},
     # Mesh
     {"id": "mesh_call",               "label": "Iyveris Mesh",   "group": "external"},
+    # Builder tools. On by default for Playground projects (see DEFAULT_GRANTED_CLASSES); revocable.
+    {"id": "run_command",             "label": "Run commands",   "group": "builder"},
+    {"id": "write_file",              "label": "Write files",    "group": "builder"},
+    {"id": "spawn_subagent",          "label": "Sub-agents",     "group": "builder"},
 ]
+
+# Classes granted by default for Playground work so a build keeps its tools without a prior click. The default
+# is shown in Permissions as an active row (granted_by "default:playground", no expiry) and the owner can revoke
+# it; revoking survives restarts. It never covers a path outside the Playground (see native_tools.before_tool_call).
+DEFAULT_GRANTED_CLASSES: frozenset[str] = frozenset({"run_command", "write_file", "spawn_subagent"})
+_DEFAULT_REVOKED_KEY = "adn:default_perm_revoked"
+
+
+def _default_revoked() -> set[str]:
+    raw = _rdb_get(_DEFAULT_REVOKED_KEY)
+    return {str(x) for x in raw} if isinstance(raw, (list, tuple)) else set()
+
+
+def default_grant_active(perm_class: str) -> bool:
+    return perm_class in DEFAULT_GRANTED_CLASSES and perm_class not in _default_revoked()
 
 # Worker slot → permission class (enforced in workers.py)
 WORKER_SLOT_PERMISSIONS: dict[str, str] = {
@@ -394,6 +413,11 @@ def grant_permission(perm_class: str, hours: float = 24.0, granted_by: str = "ow
     """
     perms: dict = _rdb_get(_PERMS_KEY) or {}
     now = int(time.time())
+    if perm_class in DEFAULT_GRANTED_CLASSES:
+        revoked = _default_revoked()
+        if perm_class in revoked:  # an explicit grant after a revoke switches the default back on
+            revoked.discard(perm_class)
+            _rdb_set(_DEFAULT_REVOKED_KEY, sorted(revoked))
     perms[perm_class] = {
         "granted_at": now,
         "expires_at": int(now + hours * 3600),
@@ -407,24 +431,33 @@ def grant_permission(perm_class: str, hours: float = 24.0, granted_by: str = "ow
 
 def revoke_permission(perm_class: str) -> bool:
     perms: dict = _rdb_get(_PERMS_KEY) or {}
+    changed = False
     if perm_class in perms:
         del perms[perm_class]
         _rdb_set(_PERMS_KEY, perms)
+        changed = True
+    if default_grant_active(perm_class):
+        revoked = _default_revoked()
+        revoked.add(perm_class)
+        _rdb_set(_DEFAULT_REVOKED_KEY, sorted(revoked))
+        changed = True
+    if changed:
         log.info("outbox: permission revoked %r", perm_class)
-        return True
-    return False
+    return changed
 
 
-def check_permission(perm_class: str) -> bool:
-    """Return True if perm_class is currently granted and not expired."""
+def check_permission(perm_class: str, *, default_ok: bool = True) -> bool:
+    """True if perm_class is granted and not expired, or covered by a still-active default grant.
+
+    ``default_ok=False`` asks for an explicit grant only (used when a call leaves the Playground).
+    """
     perms: dict = _rdb_get(_PERMS_KEY) or {}
     p = perms.get(perm_class)
-    if not p:
-        return False
-    if int(time.time()) > p.get("expires_at", 0):
-        revoke_permission(perm_class)
-        return False
-    return True
+    if p and int(time.time()) <= p.get("expires_at", 0):
+        return True
+    # An expired explicit grant is left in place (list_permissions shows it as inactive, renew replaces it): a
+    # read check must not rewrite the whole permission map and race a concurrent grant or revoke.
+    return bool(default_ok and default_grant_active(perm_class))
 
 
 def has_insert_permission(category: str) -> bool:
@@ -468,6 +501,20 @@ def list_permissions() -> list[dict]:
     return out
 
 
+def default_grants() -> list[dict]:
+    """The standing Playground defaults, listed beside (never mixed into) the owner's explicit grants."""
+    revoked = _default_revoked()
+    explicit = _rdb_get(_PERMS_KEY) or {}
+    return [
+        {
+            "perm_class": cls, "granted_by": "default:playground", "default": True,
+            "active": cls not in revoked, "expires_at": None,
+            "overridden_by_explicit_grant": cls in explicit,
+        }
+        for cls in sorted(DEFAULT_GRANTED_CLASSES)
+    ]
+
+
 def grant_permissions_bulk(
     perm_classes: list[str],
     hours: float = 24.0,
@@ -499,6 +546,8 @@ def renew_expired_permissions(hours: float = 24.0, granted_by: str = "owner") ->
     to_renew: list[str] = []
     for pid in KNOWN_PERMISSION_IDS:
         p = perms.get(pid)
+        if default_grant_active(pid) and not p:
+            continue  # the standing default already covers it; do not turn it into a 24h grant
         if not p or now >= int(p.get("expires_at", 0)):
             to_renew.append(pid)
     if not to_renew:

@@ -37,7 +37,13 @@ from .paths import playground_projects_dir, repo_root
 log = logging.getLogger(__name__)
 
 ADN_ROOT = repo_root()
-PROJECTS_DIR = playground_projects_dir()
+def _legacy_projects_dir():
+    return playground_projects_dir()  # resolved live: DAEDALUS_PLAYGROUND may change after import
+
+
+from .harness.context import legacy_paths as _legacy_paths  # noqa: E402
+
+_legacy_paths(globals(), {"PROJECTS_DIR": _legacy_projects_dir})
 
 VALID_KINDS = {"static", "fastapi", "streamlit", "vite", "vite-react", "node", "expo", "unity", "godot", "auto"}
 VALID_SOURCES = {"built", "cloned", "imported", "revived"}

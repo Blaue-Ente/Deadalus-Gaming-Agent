@@ -25,8 +25,13 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-_DATA_ROOT = data_root()  # paths
-_CUSTOM_FILE = _DATA_ROOT / "playbooks.json"
+def _custom_file():
+    return data_root() / "playbooks.json"
+
+
+from .harness.context import legacy_paths as _legacy_paths  # noqa: E402
+
+_legacy_paths(globals(), {"_DATA_ROOT": data_root, "_CUSTOM_FILE": _custom_file})
 
 # ---------------------------------------------------------------------------
 # Built-in playbook definitions
@@ -316,8 +321,8 @@ def format_for_prompt(playbooks: list[dict[str, Any]]) -> str:
 def _load_custom() -> list[dict[str, Any]]:
     """Load custom playbooks from data/daedalus/playbooks.json if it exists."""
     try:
-        if _CUSTOM_FILE.exists():
-            data = json.loads(_CUSTOM_FILE.read_text("utf-8"))
+        if _custom_file().exists():
+            data = json.loads(_custom_file().read_text("utf-8"))
             if isinstance(data, list):
                 return data
     except Exception as exc:

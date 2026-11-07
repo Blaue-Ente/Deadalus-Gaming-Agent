@@ -29,8 +29,13 @@ GITHUB_API = "https://api.github.com"
 _HEADERS = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
 
 # Where acquired skill records are stored
-DATA_ROOT = data_root()
-SKILLS_LOG = DATA_ROOT / "acquired_skills.json"
+def skills_log():
+    return data_root() / "acquired_skills.json"
+
+
+from .harness.context import legacy_paths as _legacy_paths  # noqa: E402
+
+_legacy_paths(globals(), {"DATA_ROOT": data_root, "SKILLS_LOG": skills_log})
 
 
 def _gh_get(path: str, timeout: float = 10.0) -> dict[str, Any]:
@@ -184,11 +189,11 @@ def format_skill_analysis_for_prompt(analysis: dict[str, Any]) -> str:
 def log_skill_interest(slug: str, analysis: dict[str, Any]) -> None:
     """Record that Daedalus analyzed this repo (for later reference)."""
     try:
-        DATA_ROOT.mkdir(parents=True, exist_ok=True)
+        data_root().mkdir(parents=True, exist_ok=True)
         existing: list[dict[str, Any]] = []
-        if SKILLS_LOG.exists():
+        if skills_log().exists():
             try:
-                existing = json.loads(SKILLS_LOG.read_text("utf-8"))
+                existing = json.loads(skills_log().read_text("utf-8"))
             except Exception:
                 pass
         existing.append({
@@ -200,6 +205,6 @@ def log_skill_interest(slug: str, analysis: dict[str, Any]) -> None:
             "analyzed_at": time.time(),
             "ok": analysis.get("ok", False),
         })
-        SKILLS_LOG.write_text(json.dumps(existing[-50:], indent=2), "utf-8")
+        skills_log().write_text(json.dumps(existing[-50:], indent=2), "utf-8")
     except Exception as exc:
         log.debug("skill interest log failed: %s", exc)

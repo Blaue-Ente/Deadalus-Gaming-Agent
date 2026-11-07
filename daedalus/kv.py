@@ -1,9 +1,12 @@
-"""Tiny key-value store: Replit DB when present, else JSON files.
+"""Tiny key-value store: JSON files by default, Replit DB only when asked for.
 
-Standalone Docker has no Replit DB. Command Center features that used to
-write only to Replit (tasks, blockers, outbox, playground session state)
-persist under ``DAEDALUS_DATA``. ADN is unchanged when Replit DB is
-available — that path is tried first.
+Backend selection is explicit (``DAEDALUS_KV``):
+  ``json``          JSON files under ``DAEDALUS_DATA/kv``.
+  ``replit``        Replit DB first, JSON files as the fallback for keys it does not hold.
+  ``auto``          Replit DB whenever the module imports (the behaviour before A4).
+  unset             ``json`` for the standalone product (DAEDALUS_STANDALONE=1); ``auto`` on a host that is not
+                    standalone, so a Replit-hosted install keeps seeing the data it already has.
+``backend()`` reports what is really in use and is shown in /health and Settings.
 """
 from __future__ import annotations
 
@@ -17,6 +20,54 @@ log = logging.getLogger(__name__)
 
 _SAFE = re.compile(r"[^A-Za-z0-9._-]+")
 _INDEX_NAME = "_index.json"
+
+
+def _requested() -> str:
+    import os
+    value = (os.environ.get("DAEDALUS_KV") or "").strip().lower()
+    if value in {"json", "replit", "auto"}:
+        return value
+    try:
+        from .host import standalone_mode
+        return "json" if standalone_mode() else "auto"
+    except Exception:
+        return "json"
+
+
+def _replit_db():
+    """The Replit DB handle when the selected backend allows it and it imports, else None."""
+    if _requested() == "json":
+        return None
+    try:
+        from replit import db  # type: ignore
+        return db
+    except Exception:
+        return None
+
+
+def replit_required():
+    """Replit DB handle for callers that talk to it directly; ImportError when the backend is not enabled.
+
+    Those callers already ``except Exception`` and fall back to their own JSON file, so raising keeps them
+    on the file path unless the owner opted in with ``DAEDALUS_KV=replit``.
+    """
+    rdb = _replit_db()
+    if rdb is None:
+        raise ImportError("replit kv backend not enabled")
+    return rdb
+
+
+def backend() -> dict[str, Any]:
+    """Which backend is effective, what was requested, and whether the request could be honoured."""
+    import os
+    requested = _requested()
+    replit_ok = _replit_db() is not None
+    effective = "replit+json" if replit_ok else "json"
+    out: dict[str, Any] = {"requested": requested, "effective": effective,
+                           "explicit": bool((os.environ.get("DAEDALUS_KV") or "").strip())}
+    if requested in {"replit", "auto"} and not replit_ok:
+        out["note"] = "replit module not available; using JSON files"
+    return out
 
 
 def _kv_dir() -> Path:
@@ -68,8 +119,8 @@ def _forget_key(key: str) -> None:
 
 def get(key: str) -> Any:
     try:
-        from replit import db  # type: ignore
-        raw = db.get(key)
+        rdb = _replit_db()
+        raw = rdb.get(key) if rdb is not None else None
         if raw is not None:
             if isinstance(raw, str):
                 try:
@@ -92,9 +143,10 @@ def get(key: str) -> Any:
 def set(key: str, value: Any) -> None:
     payload = json.dumps(value, ensure_ascii=False, default=str)
     try:
-        from replit import db  # type: ignore
-        db[key] = payload
-        return
+        rdb = _replit_db()
+        if rdb is not None:
+            rdb[key] = payload
+            return
     except Exception:
         pass
     path = _path(key)
@@ -104,8 +156,9 @@ def set(key: str, value: Any) -> None:
 
 def delete(key: str) -> None:
     try:
-        from replit import db  # type: ignore
-        del db[key]
+        rdb = _replit_db()
+        if rdb is not None:
+            del rdb[key]
     except Exception:
         pass
     path = _path(key)
@@ -120,8 +173,9 @@ def list_keys(prefix: str) -> list[str]:
     """Keys starting with ``prefix``. Replit prefix-scan first, then JSON files."""
     found: list[str] = []
     try:
-        from replit import db  # type: ignore
-        found.extend(str(k) for k in db.prefix(prefix))
+        rdb = _replit_db()
+        if rdb is not None:
+            found.extend(str(k) for k in rdb.prefix(prefix))
     except Exception:
         pass
     try:
@@ -165,8 +219,9 @@ class _DbFacade:
     def keys(self) -> list[str]:
         found: list[str] = []
         try:
-            from replit import db as rdb  # type: ignore
-            found.extend(str(k) for k in rdb.keys())
+            rdb = _replit_db()
+            if rdb is not None:
+                found.extend(str(k) for k in rdb.keys())
         except Exception:
             pass
         for key in list_keys(""):

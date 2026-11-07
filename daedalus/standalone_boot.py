@@ -23,8 +23,7 @@ async def startup() -> dict[str, Any]:
     from .paths import data_root, playground_projects_dir
     data_root.cache_clear()
     playground_projects_dir.cache_clear()
-    from . import playground as pg
-    pg.PROJECTS_DIR = playground_projects_dir()
+    # The project root is resolved live (harness.context.projects_dir); nothing is pinned here any more.
 
     try:
         from .store import get_sqlite_pool

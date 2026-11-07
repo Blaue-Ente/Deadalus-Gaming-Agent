@@ -102,6 +102,38 @@ def harness_intents_set(body: IntentBody) -> Any:
     return harness_intents()
 
 
+class ConfigBody(BaseModel):
+    key: str = Field(..., min_length=1, max_length=80)
+    value: Any = None
+
+
+@router.get("/api/v1/harness/config")
+def harness_config() -> dict[str, Any]:
+    """Every owner setting as {effective, persisted, env_locked, env_value, default, source}. No secrets."""
+    from daedalus.harness.config_view import config_payload
+
+    return config_payload()
+
+
+@router.post("/api/v1/harness/config")
+def harness_config_set(body: ConfigBody) -> Any:
+    """Change one setting. A setting pinned by an environment variable answers 409 and nothing is saved."""
+    from daedalus.env_lock import EnvLockedError
+    from daedalus.harness.config_view import config_payload, set_value
+
+    try:
+        row = set_value(body.key, body.value)
+    except EnvLockedError as exc:
+        return JSONResponse(exc.payload(), status_code=409)
+    except KeyError:
+        return JSONResponse({"ok": False, "error": "unknown_setting", "key": body.key}, status_code=404)
+    except PermissionError:
+        return JSONResponse({"ok": False, "error": "read_only", "key": body.key}, status_code=405)
+    except (ValueError, TypeError) as exc:
+        return JSONResponse({"ok": False, "error": "invalid_value", "detail": str(exc)[:160]}, status_code=400)
+    return {"ok": True, "setting": row, **{k: v for k, v in config_payload().items() if k == "settings"}}
+
+
 @router.get("/api/v1/harness/runs")
 def harness_runs(slug: str = "", kind: str = "", state: str = "", live: bool = False, limit: int = 50) -> dict[str, Any]:
     """Recent runs from the ledger (every job system), newest first."""
