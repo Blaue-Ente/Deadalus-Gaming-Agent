@@ -136,7 +136,10 @@ def test_unity_player_is_driven_by_real_input_and_the_picture_changes(unity_proj
         assert eng["blank"] is False
         key = s.probe_input(keys=["space"], via="os")
         assert key["conclusive"] and key["observed_change"] and s.level == 4
-        assert s.game_state()["ok"] is True
+        with pytest.raises(PlayError):
+            s.game_state()                                       # no guessing which object to ask
+        gs = s.game_state("/FixtureGame")
+        assert gs["ok"] is True and '"presses":1' in gs["result_json"]     # the game itself saw the real key press
         click = s.probe_input(mouse={"kind": "click", "x": int(info["width"]) // 2, "y": int(info["height"]) // 2}, via="os")
         assert click["observed_change"]
         with pytest.raises(PlayError):

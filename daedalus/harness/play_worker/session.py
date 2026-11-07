@@ -360,7 +360,12 @@ class PlaySession:
     def fps(self) -> dict[str, Any]:
         return self._bridge("fps_sample")
 
-    def game_state(self, path: str = "/root/Main") -> dict[str, Any]:
+    def game_state(self, path: str = "") -> dict[str, Any]:
+        """The game's own ``state()``. Godot defaults to /root/Main; a Unity game has no fixed name, so it must say which
+        GameObject carries the method (a wrong guess is an honest node_not_found, not a pass)."""
+        path = path or ("/root/Main" if self.engine == "godot" else "")
+        if not path:
+            raise PlayError("bad_request", "name the GameObject that carries state() (for example /Game)")
         return self._bridge("call_method", path=path, method="state", args=[])
 
     # ---- reporting -------------------------------------------------------------------------------------
