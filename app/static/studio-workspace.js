@@ -77,9 +77,13 @@
     return dx.errText(err);
   }
 
+  // Every write to a status line bumps its stamp. A background refresh remembers the stamp when it starts and
+  // writes only if nothing else has written since, so a slow answer can never replace a newer result.
+  const statusStamp = {};
   function showStatus(id, message, bad) {
     const el = $(id);
     if (!el) return;
+    statusStamp[id] = (statusStamp[id] || 0) + 1;
     const msg = message || "";
     el.hidden = !msg;
     el.dataset.state = bad ? "error" : "ok";
@@ -600,7 +604,7 @@
       if (terminal === "done" || terminal === "error" || terminal === "milestone_done") {
         $("build-stop").hidden = true;
       }
-      if (terminal === "done" || terminal === "milestone_done") await loadWorkspace(slug, { quiet: true });
+      if (terminal === "done" || terminal === "milestone_done") await loadWorkspace(slug, { quiet: true, force: true });
     }).catch((err) => {
       if (gen !== streamGen) return;
       if (err && err.name === "AbortError") return;
@@ -659,19 +663,55 @@
     } catch (err) { /* no autopilot job */ }
   }
 
-  async function loadWorkspace(slug, opts) {
+  // The page asks for the workspace twice at startup (panel switch and slug snapshot). Two things used to go wrong:
+  // each call greyed out every build button before its request, so the second call disabled what the first had
+  // just enabled and a click in that gap vanished with no request and no message; and whichever response arrived
+  // last painted, even if it was the older one. Now a load of the same slug that is already running is shared,
+  // controls are greyed out only when the project changed, and only the newest load paints.
+  // The startup asks arrive back to back, often with the first already finished, so a load of the same project that
+  // just finished (within WORKSPACE_BURST_MS) also counts as "already done". Resuming a build twice used to make the
+  // second resume supersede the first. A forced load (after a build step, a save) always reloads.
+  const WORKSPACE_BURST_MS = 1000;
+  let workspaceLoad = null;       // {slug, promise, doneAt} for the latest load
+  let workspaceSeq = 0;
+  let workspacePainted = "";      // the slug the build controls currently describe
+  function loadWorkspace(slug, opts) {
+    const last = workspaceLoad;
+    if (last && last.slug === slug && !(opts && opts.force)
+        && (last.doneAt === 0 || Date.now() - last.doneAt < WORKSPACE_BURST_MS)) return last.promise;
+    const run = loadWorkspaceNow(slug, opts);
+    const entry = { slug, promise: run, doneAt: 0 };
+    workspaceLoad = entry;
+    run.then(() => { entry.doneAt = Date.now(); });
+    return run;
+  }
+
+  async function loadWorkspaceNow(slug, opts) {
+    const mine = ++workspaceSeq;
     $("build-slug").textContent = slug ? dx.t("studio.project") + ": " + slug : "";
-    $("build-guided").disabled = true;
-    $("build-autopilot").disabled = true;
-    $("build-gates").disabled = true;
-    $("build-verify").disabled = true;
-    $("build-advance").disabled = true;
+    if (workspacePainted !== slug) {            // a different project: its controls are not known yet
+      $("build-guided").disabled = true;
+      $("build-autopilot").disabled = true;
+      $("build-gates").disabled = true;
+      $("build-verify").disabled = true;
+      $("build-advance").disabled = true;
+      workspacePainted = "";
+    }
     if (!slug) return;
     try {
       const data = await dx.api("/admin/daedalus/game-studio/api/projects/" + slugPath(slug));
+      if (mine !== workspaceSeq) return;        // a newer load owns the screen
       paintMilestones(data);
+      workspacePainted = slug;
       if (!streamingSlug && !(checkpoint && checkpoint.slug === slug)) showStatus("build-status", "", false);
     } catch (err) {
+      if (mine !== workspaceSeq) return;
+      workspacePainted = "";
+      $("build-guided").disabled = true;
+      $("build-autopilot").disabled = true;
+      $("build-gates").disabled = true;
+      $("build-verify").disabled = true;
+      $("build-advance").disabled = true;
       $("build-milestones").replaceChildren();
       if (!streamingSlug) showStatus("build-status", failText(err), true);
     }
@@ -705,11 +745,15 @@
       showStatus("preview-status", dx.t("studio.previewEmpty"), false);
       return;
     }
+    const stamp = statusStamp["preview-status"] || 0;
+    const stale = () => (statusStamp["preview-status"] || 0) !== stamp;   // an action reported since this began
     try {
       const data = await dx.api("/admin/daedalus/playground/api/projects/" + slugPath(slug) + "/logs");
+      if (stale()) return;
       const running = !!(data.status && typeof data.status === "object");
       showStatus("preview-status", running ? dx.t("studio.started") : dx.t("studio.previewEmpty"), false);
     } catch (err) {
+      if (stale()) return;
       showStatus("preview-status", dx.t("studio.requestFailed") + ": " + failText(err), true);
     }
   }
@@ -2639,7 +2683,7 @@
       showStatus("build-status", data.slug || dx.t("studio.saved"), false);
       if (data.slug) dx.selectSlug(data.slug);
       await loadGameIndex();
-      await loadWorkspace(data.slug || dx.getSlug());
+      await loadWorkspace(data.slug || dx.getSlug(), { force: true });
     });
   });
   $("build-guided").addEventListener("click", () => {
@@ -2722,7 +2766,7 @@
         if (data.ok === false) throw new Error(data.error || dx.t("studio.requestFailed"));
         $("build-out").textContent = paintResult(data);
         showStatus("build-status", dx.t("studio.saved"), false);
-        await loadWorkspace(slug);
+        await loadWorkspace(slug, { force: true });
       });
     });
   });
