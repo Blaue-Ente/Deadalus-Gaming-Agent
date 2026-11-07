@@ -62,6 +62,8 @@ def test_content_hash_follows_project_content_not_library(tmp_path):
 def test_the_bridge_never_pretends_to_inject_legacy_input():
     src = (unity._ASSETS / "DaedalusPlayBridge.cs").read_text(encoding="utf-8")
     assert 'Fail(req, "unsupported_input_route")' in src
+    build = (unity._ASSETS / "DaedalusBuild.cs").read_text(encoding="utf-8")
+    assert "BuildOptions.None" in build and "BuildOptions.Development" not in build.replace("// Not a Development", "")
     assert "--daedalus-bridge" in src and "IPAddress.Loopback" in src      # loopback only, only when launched by us
 
 
@@ -135,7 +137,7 @@ def test_unity_player_is_driven_by_real_input_and_the_picture_changes(unity_proj
         key = s.probe_input(keys=["space"], via="os")
         assert key["conclusive"] and key["observed_change"] and s.level == 4
         assert s.game_state()["ok"] is True
-        click = s.probe_input(mouse={"kind": "click", "x": 300, "y": 240}, via="os")
+        click = s.probe_input(mouse={"kind": "click", "x": int(info["width"]) // 2, "y": int(info["height"]) // 2}, via="os")
         assert click["observed_change"]
         with pytest.raises(PlayError):
             s.send(keys=["space"], via="bridge")                 # no pretend injection for the legacy input system

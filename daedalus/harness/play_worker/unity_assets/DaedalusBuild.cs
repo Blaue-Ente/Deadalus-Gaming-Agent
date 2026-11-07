@@ -45,7 +45,9 @@ namespace Daedalus
                 scenes = scenes.ToArray(),
                 locationPathName = Path.Combine(output, "Game.exe"),
                 target = BuildTarget.StandaloneWindows64,
-                options = BuildOptions.Development,
+                // Not a Development build: those open a profiler listener on all interfaces, which makes Windows ask
+                // the owner about the firewall and steal the foreground from the game.
+                options = BuildOptions.None,
             };
             var report = BuildPipeline.BuildPlayer(opts);
             Debug.Log("DAEDALUS_BUILD: " + report.summary.result + " errors=" + report.summary.totalErrors);
