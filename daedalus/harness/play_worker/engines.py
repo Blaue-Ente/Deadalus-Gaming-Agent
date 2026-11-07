@@ -10,7 +10,21 @@ _KNOWN_DIRS = (
     "~/.local/bin", "/usr/local/bin", "/usr/bin", "/opt/godot", "/opt/Godot", "~/Applications",
     "C:/Program Files/Godot", "C:/Program Files (x86)/Steam/steamapps/common/Godot Engine",
     "~/scoop/apps/godot/current", "~/AppData/Local/Microsoft/WinGet/Packages",
+    "~/AppData/Local/Programs/Godot",
 )
+# Windows installs are versioned folders holding Godot_v<ver>-stable_win64[_console].exe; the console build is
+# preferred because its stdout can be captured (it is launched without a console window).
+_WIN_PATTERNS = ("Godot_v*win64_console.exe", "Godot_v*win64.exe", "godot*.exe")
+
+
+def _windows_binary(base: Path) -> Path | None:
+    folders = [base] + sorted(p for p in base.glob("*") if p.is_dir())
+    for pattern in _WIN_PATTERNS:
+        for folder in folders:
+            for hit in sorted(folder.glob(pattern), reverse=True):
+                if hit.is_file():
+                    return hit
+    return None
 _NAMES = ("godot", "godot4", "godot4.3", "Godot_v4.3", "Godot", "Godot_v4.3-stable_linux.x86_64")
 
 
@@ -34,13 +48,21 @@ def find_godot() -> dict[str, Any]:
             cand = d / name
             if cand.is_file() and os.access(cand, os.X_OK):
                 return {"ok": True, "path": str(cand), "source": "known-dir"}
+        if os.name == "nt":
+            win = _windows_binary(d)
+            if win is not None:
+                return {"ok": True, "path": str(win), "source": "known-dir"}
     return {"ok": False, "error": "engine_missing", "source": "none",
             "message": "Godot 4.x not found. Set GODOT_BIN or put godot on PATH. Files are not a playtest."}
 
 
 def tools_status() -> dict[str, Any]:
     """What a rendered session needs besides the engine; shown in Settings later (A6.1)."""
-    need = {"Xvfb": shutil.which("Xvfb"), "xdotool": shutil.which("xdotool"), "import": shutil.which("import")}
+    try:
+        from .backend import get_backend
+        need = get_backend().tools()
+    except Exception as exc:                       # an unsupported platform is reported, not guessed at
+        need = {f"supported platform ({type(exc).__name__})": False}
     eng = find_godot()
     if eng.get("ok"):
         try:

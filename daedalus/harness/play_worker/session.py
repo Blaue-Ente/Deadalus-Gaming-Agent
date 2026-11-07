@@ -13,9 +13,8 @@ from typing import Any
 
 from ... import godot_bridge
 from . import capture, engines
-from .display import XvfbDisplay, kill_group
+from .backend import get_backend
 from .errors import PlayError
-from .inputs import XInput
 
 _COPY_SKIP = shutil.ignore_patterns(".git", "node_modules", "__pycache__", "studio", "*.tmp")
 MAX_FRAMES = 200          # artifacts kept per session
@@ -76,9 +75,9 @@ class PlaySession:
         self.size = (max(160, min(int(size[0]), 1920)), max(120, min(int(size[1]), 1080)))
         self.artifacts = (artifacts or (_artifact_root() / self.id))
         self.workdir: Path | None = None
-        self.display = XvfbDisplay(self.size)
+        self.backend = get_backend(self.size)       # where the game is drawn and how we look at / drive it
+        self.display = getattr(self.backend, "display", None)     # Linux: the Xvfb display (None on Windows)
         self.game: godot_bridge.GodotSession | None = None
-        self.xin: XInput | None = None
         self.window_id = ""
         self.state = "new"           # new -> running -> stopped | failed
         self.level = 0               # proof level reached by what was OBSERVED
@@ -110,24 +109,26 @@ class PlaySession:
                 imp = godot_bridge.run_import(proj, eng["path"], timeout=120)
                 if imp.get("ok") is False and imp.get("error"):
                     self._event("import_warning", error=str(imp.get("error"))[:200])
-                display = self.display.start()
-                env = {**os.environ, "DISPLAY": display, "LIBGL_ALWAYS_SOFTWARE": "1", **self.env_extra}
+                missing = [k for k, ok in self.backend.tools().items() if not ok]
+                if missing:
+                    raise PlayError("tool_missing", f"a rendered session needs: {', '.join(missing)}", tools=missing)
+                backend_env = self.backend.start(self.size)
+                env = {**os.environ, **backend_env, **self.env_extra}
                 env.pop("WAYLAND_DISPLAY", None)
                 self.game = godot_bridge.GodotSession(proj)
-                w, h = self.size
                 ping = self.game.start(
-                    binary=eng["path"], timeout=timeout, headless=False, env=env, new_session=True,
-                    extra_args=("--rendering-driver", "opengl3", "--resolution", f"{w}x{h}"),
+                    binary=eng["path"], timeout=timeout, headless=False, env=env,
+                    extra_args=self.backend.engine_args(self.size), **self.backend.popen_flags(),
                 )
                 if not ping.get("ok"):
                     raise PlayError("start_failed", str(ping.get("error") or "bridge did not answer"),
                                     stdout=str(ping.get("stdout", ""))[-600:])
-                self.xin = XInput(display, "")
-                self.window_id = self.xin.find_window(self.game.proc.pid if self.game and self.game.proc else 0)
+                self.window_id = self.backend.find_window(self.game.proc.pid if self.game and self.game.proc else 0)
                 self.state = "running"
                 self.started_at = time.time()
                 self.level = 1
-                self._event("started", engine=eng["path"], display=display, window=self.window_id,
+                self._event("started", engine=eng["path"], display=self.backend.label(), window=self.window_id,
+                            backend=self.backend.name,
                             headless=bool((self.game.request("fps_sample") or {}).get("headless")))
             except PlayError:
                 self.stop()
@@ -151,8 +152,8 @@ class PlaySession:
                     try:
                         self.game.close()          # asks the bridge to quit, then terminates
                     finally:
-                        kill_group(self.game.proc, grace=1.0)
-                self.display.stop()
+                        self.backend.kill(self.game.proc, 1.0)
+                self.backend.stop()
             finally:
                 if self.workdir is not None:
                     shutil.rmtree(self.workdir, ignore_errors=True)
@@ -173,7 +174,7 @@ class PlaySession:
         return self.state
 
     def _need_running(self) -> None:
-        if self.state != "running" or self.game is None or self.xin is None:
+        if self.state != "running" or self.game is None:
             raise PlayError("session_stopped", f"session is {self.state}")
         if self.game.proc is None or self.game.proc.poll() is not None:
             self.state = "failed"
@@ -189,7 +190,7 @@ class PlaySession:
                 raise PlayError("bad_request", f"frame limit ({MAX_FRAMES}) reached for this session")
             out = self.artifacts / f"frame_{n:04d}_{source}.png"
             if source == "window":
-                info = capture.capture_window(self.display.name, self.window_id, out)
+                info = self.backend.capture(self.window_id, out)
             elif source == "engine":
                 shot = self.game.request("screenshot")
                 if not shot.get("ok"):
@@ -215,13 +216,11 @@ class PlaySession:
             self._need_running()
             sent: list[dict[str, Any]] = []
             if via == "os":
-                assert self.xin is not None
                 for k in keys or []:
-                    sent.append(self.xin.key(str(k), hold_ms=hold_ms))
+                    sent.append(self.backend.key(str(k), hold_ms))
                 if mouse:
-                    sent.append(self.xin.mouse(str(mouse.get("kind", "click")), int(mouse.get("x", 0)),
-                                               int(mouse.get("y", 0)), button=str(mouse.get("button", "left")),
-                                               hold_ms=hold_ms))
+                    sent.append(self.backend.mouse(str(mouse.get("kind", "click")), int(mouse.get("x", 0)),
+                                                   int(mouse.get("y", 0)), str(mouse.get("button", "left")), hold_ms))
             elif via == "bridge":
                 assert self.game is not None
                 for k in keys or []:
@@ -314,7 +313,7 @@ class PlaySession:
         alive = bool(self.game and self.game.proc and self.game.proc.poll() is None)
         return {"ok": True, "id": self.id, "slug": self.slug, "state": self.state, "level": self.level,
                 "alive": alive, "size": list(self.size), "window": self.window_id,
-                "display": self.display.name if self.display.number is not None else "",
+                "display": self.backend.label(), "backend": self.backend.name,
                 "frames": len(self._frames), "uptime_s": round(time.time() - self.started_at, 1) if self.started_at else 0}
 
     def _write_manifest(self) -> None:

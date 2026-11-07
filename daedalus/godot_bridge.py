@@ -522,6 +522,7 @@ class GodotSession:
         env: dict[str, str] | None = None,
         extra_args: tuple[str, ...] = (),
         new_session: bool = False,
+        creationflags: int = 0,
     ) -> dict[str, Any]:
         """Launch Godot and wait for the bridge. ``headless=False`` renders on the ``DISPLAY`` in ``env`` (the
         play worker); ``new_session`` puts Godot in its own process group so the whole tree can be killed."""
@@ -545,6 +546,7 @@ class GodotSession:
                 bufsize=1,
                 env=env,
                 start_new_session=new_session,
+                creationflags=creationflags,
             )
         except OSError as exc:
             return {"ok": False, "error": str(exc), "command": self.command}

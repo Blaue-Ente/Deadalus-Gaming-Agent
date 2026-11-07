@@ -35,6 +35,7 @@ def _prereq() -> tuple[bool, str]:
 
 _OK, _WHY = _prereq()
 REQUIRE = os.environ.get("DAEDALUS_REQUIRE_PLAY") == "1"
+linux_only = pytest.mark.skipif(sys.platform != "linux", reason="uses Linux process groups / Xvfb / pgrep")
 needs_play = pytest.mark.skipif(not _OK and not REQUIRE, reason=f"play prerequisites missing: {_WHY}")
 
 
@@ -93,6 +94,9 @@ def _animated_project(root: Path) -> Path:
 def _alive(pid: int | None) -> bool:
     if not pid:
         return False
+    if sys.platform == "win32":      # os.kill(pid, 0) would send Ctrl-C there: ask the task list instead
+        out = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/NH"], capture_output=True, text=True).stdout
+        return str(pid) in out
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -250,6 +254,7 @@ def test_manager_forgets_old_finished_sessions_but_keeps_live_ones(play_env, mon
     assert live in kept and len(kept) <= 5 and ids[0] not in kept
 
 
+@linux_only
 def test_kill_group_reaches_children_after_the_leader_was_reaped(a0_tmp):
     """GodotSession.close() reaps the leader first; stragglers in its group must still die."""
     from daedalus.harness.play_worker.display import _group_alive, kill_group
@@ -389,6 +394,7 @@ def test_a_black_window_is_not_a_rendered_game(play_env):
         s.stop()
 
 
+@linux_only
 @needs_play
 def test_stop_kills_the_whole_tree_and_leaves_the_project_alone(play_env):
     from daedalus.harness.play_worker.session import PlaySession
@@ -417,6 +423,7 @@ def test_stop_kills_the_whole_tree_and_leaves_the_project_alone(play_env):
     assert exc.value.code == "session_stopped"
 
 
+@linux_only
 @needs_play
 def test_a_crashed_game_is_reported_not_hidden(play_env):
     from daedalus.harness.play_worker.errors import PlayError
@@ -434,6 +441,7 @@ def test_a_crashed_game_is_reported_not_hidden(play_env):
         s.stop()
 
 
+@linux_only
 @needs_play
 def test_two_sessions_are_isolated_from_each_other(play_env):
     from daedalus.harness.play_worker.manager import PlayManager
@@ -466,6 +474,7 @@ def _http(method, url, token, body=None):
         return e.code, json.loads(e.read() or b"{}")
 
 
+@linux_only
 @needs_play
 def test_worker_process_end_to_end_and_kill_tree_on_sigterm(play_env, monkeypatch):
     token = "w" * 32
@@ -519,6 +528,7 @@ def test_a_click_at_the_window_corner_is_not_a_window_error(play_env):
         s.stop()
 
 
+@linux_only
 @needs_play
 def test_a_crashed_game_frees_its_slot(play_env):
     from daedalus.harness.play_worker.manager import PlayManager
@@ -566,6 +576,7 @@ def test_fixture_probe_reports_a_quiet_idle_control(play_env):
         s.stop()
 
 
+@linux_only
 @needs_play
 def test_a_long_call_on_one_session_does_not_block_another_or_a_stop(play_env):
     import threading
