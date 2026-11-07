@@ -11,6 +11,8 @@ import time
 import uuid
 from typing import Any
 
+from .harness import runs as _runs
+
 log = logging.getLogger(__name__)
 
 _JOB_TTL_S = 30 * 60
@@ -70,10 +72,13 @@ async def start_chat(
         "task": None,
     }
     _jobs[job_id] = row
+    row["run_id"] = _runs.safe_open("chat", ref=f"chat:{job_id}", summary=message[:200], effort=effort,
+                                    owner_session=sid)
 
     async def _run() -> None:
         from daedalus.stream import clear_live, set_live
 
+        _runs.bind(row.get("run_id", ""))
         try:
             set_live(sid, "thinking", 0, "Започвам…")
             from daedalus.agent import get_daedalus
@@ -88,21 +93,26 @@ async def start_chat(
             )
             if row.get("cancelled"):
                 row["status"] = "cancelled"
+                _runs.sync_job(row, "chat")
                 return
             row["result"] = result
             row["status"] = "done"
+            _runs.sync_job(row, "chat")
         except asyncio.CancelledError:
             row["status"] = "cancelled"
             row["error"] = "спряно"
+            _runs.sync_job(row, "chat")
             raise
         except Exception as exc:
             log.exception("chat job %s failed", job_id)
             row["error"] = str(exc)[:400]
             row["status"] = "error"
+            _runs.sync_job(row, "chat")
         finally:
             clear_live(sid)
 
     row["task"] = asyncio.create_task(_run())
+    row["task"].add_done_callback(_runs.on_task_done(row, "chat"))
     await asyncio.sleep(0)
     return {"ok": True, "job_id": job_id, "session_id": sid}
 
@@ -118,6 +128,7 @@ def cancel(job_id: str) -> bool:
     if row["status"] == "running":
         row["status"] = "cancelled"
         row["error"] = row.get("error") or "спряно"
+        _runs.sync_job(row, "chat")
     return True
 
 

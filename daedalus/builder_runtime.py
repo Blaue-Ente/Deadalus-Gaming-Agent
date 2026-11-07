@@ -240,7 +240,7 @@ def _start_full_kernel_run(slug: str, description: str, *, resume: bool = False)
             log.exception("full kernel autopilot failed (%s)", slug)
             yield ("error", {"message": str(exc)[:300]})
 
-    return aj.start_autopilot(slug, description, _gen)
+    return aj.start_autopilot(slug, description, _gen, run_kind="full_autopilot")
 
 
 def job_snapshot(job_id: str) -> dict[str, Any] | None:

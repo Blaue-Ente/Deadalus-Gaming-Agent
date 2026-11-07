@@ -134,6 +134,14 @@ async def lifespan(_app: FastAPI):
         start_gardener()
     except Exception:
         log.exception("evolution gardener failed to start (non-fatal)")
+    try:
+        # No task owns a live run after a restart: mark them unknown (never success), then attach the
+        # ledger to the gateway trace.
+        from daedalus.harness import runs as _harness_runs
+        _harness_runs.recover_orphans()
+        _harness_runs.install()
+    except Exception:
+        log.exception("run ledger startup failed (non-fatal)")
     reaper = None
     try:
         from daedalus.playground_runner import start_idle_reaper

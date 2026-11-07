@@ -3,8 +3,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import APIRouter, Request
-from fastapi.responses import JSONResponse
+import asyncio
+import json
+
+from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 router = APIRouter(tags=["harness-core"])
@@ -97,3 +100,74 @@ def harness_intents_set(body: IntentBody) -> Any:
     except ValueError as exc:
         return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
     return harness_intents()
+
+
+@router.get("/api/v1/harness/runs")
+def harness_runs(slug: str = "", kind: str = "", state: str = "", live: bool = False, limit: int = 50) -> dict[str, Any]:
+    """Recent runs from the ledger (every job system), newest first."""
+    from daedalus.harness import runs
+
+    rows = runs.list_runs(slug=slug.strip(), kind=kind.strip(), state=state.strip(), live_only=live, limit=limit)
+    return {"ok": True, "count": len(rows), "runs": rows}
+
+
+@router.get("/api/v1/harness/runs/{run_id}")
+def harness_run(run_id: str) -> dict[str, Any]:
+    from daedalus.harness import runs
+
+    row = runs.get(run_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="run not found")
+    return {"ok": True, "run": row, "events": runs.events(run_id, limit=200)}
+
+
+def _sse(seq: int | None, event: str, data: Any) -> str:
+    head = f"id: {seq}\n" if seq is not None else ""
+    return f"{head}event: {event}\ndata: {json.dumps(data, ensure_ascii=False, default=str)}\n\n"
+
+
+@router.get("/api/v1/harness/runs/{run_id}/events")
+async def harness_run_events(run_id: str, after: int = 0, last_event_id: str | None = Header(default=None),
+                             poll: float = 0.5, max_seconds: float = 0.0) -> StreamingResponse:
+    """Server-sent events for one run, resumable: pass ``after=<seq>`` or the ``Last-Event-ID`` header.
+
+    Replays every stored event after the cursor, then follows the run live. When the run is terminal and
+    drained it sends ``event: end`` with the final state and closes. ``max_seconds`` bounds the stream (0 = none).
+    """
+    from daedalus.harness import runs
+
+    if await asyncio.to_thread(runs.get, run_id) is None:
+        raise HTTPException(status_code=404, detail="run not found")
+    cursor = max(int(after), 0)
+    if last_event_id and str(last_event_id).strip().isdigit():
+        cursor = max(cursor, int(last_event_id))
+    poll = min(max(poll, 0.05), 5.0)
+
+    async def gen():
+        nonlocal cursor
+        started = asyncio.get_event_loop().time()
+        idle = 0.0
+        while True:
+            batch = await asyncio.to_thread(runs.events, run_id, after=cursor, limit=500)
+            for ev in batch:
+                cursor = ev["seq"]
+                idle = 0.0
+                yield _sse(ev["seq"], ev["type"], {"ts": ev["ts"], "payload": ev["payload"],
+                                                   "artifact_path": ev["artifact_path"]})
+            if batch:
+                continue  # drain fully before deciding the stream is finished
+            row = await asyncio.to_thread(runs.get, run_id)
+            if row is None or not row["live"]:
+                yield _sse(None, "end", {"state": row["state"] if row else "unknown", "last_seq": cursor})
+                return
+            if max_seconds and asyncio.get_event_loop().time() - started >= max_seconds:
+                yield _sse(None, "end", {"state": row["state"], "last_seq": cursor, "timeout": True})
+                return
+            idle += poll
+            if idle >= 15:
+                idle = 0.0
+                yield ": ping\n\n"
+            await asyncio.sleep(poll)
+
+    return StreamingResponse(gen(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})

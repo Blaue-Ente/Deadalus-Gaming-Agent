@@ -24,6 +24,8 @@ from .playground_parallel_orchestrator import max_parallel_workers, run_parallel
 from .playground_stage_builder import StageBuildContext, StageBuildResult, build_stage
 from .playground_ultra_plan import expand_stage_ultra, finalize_ultra_plan, ultra_expand_plan
 
+from .harness import runs as _runs
+
 log = logging.getLogger(__name__)
 
 _TERMINAL = frozenset({"done", "error", "interrupted"})
@@ -66,6 +68,7 @@ class GuidedJob:
         studio_preset: str = "custom",
     ):
         self.id = uuid.uuid4().hex[:16]
+        self.run_id = ""  # run-ledger id; set by start_guided only
         self.slug = slug
         self.description = description[:500]
         self.plan = plan
@@ -147,6 +150,7 @@ class GuidedJob:
             self.updated = _now()
             self.cond.notify_all()
         self._persist(force=True)
+        _runs.sync_job(self, "guided")
 
     async def complete(self) -> None:
         async with self.cond:
@@ -154,6 +158,7 @@ class GuidedJob:
             self.updated = _now()
             self.cond.notify_all()
         self._persist(force=True)
+        _runs.sync_job(self, "guided")
 
     async def fail(self, error: str) -> None:
         async with self.cond:
@@ -162,6 +167,7 @@ class GuidedJob:
             self.updated = _now()
             self.cond.notify_all()
         self._persist(force=True)
+        _runs.sync_job(self, "guided")
 
     async def mark_interrupted(self, reason: str) -> None:
         async with self.cond:
@@ -170,6 +176,7 @@ class GuidedJob:
             self.updated = _now()
             self.cond.notify_all()
         self._persist(force=True)
+        _runs.sync_job(self, "guided")
 
 
 async def subscribe(job: GuidedJob, from_offset: int = 0) -> AsyncIterator[dict]:
@@ -404,6 +411,8 @@ async def _run_guided_step(job: GuidedJob) -> None:
     from .game_platform_guide import is_likely_game
     from . import playground_assets as pa
 
+    _runs.bind(job.run_id)
+    _runs.sync_job(job, "guided")  # a continue after a checkpoint moves the run back to running
     try:
         proj = await pg.get_project(job.slug)
         if not proj:
@@ -757,7 +766,9 @@ def start_guided(
         job.stage_index = stage_index
     _GD_JOBS[job.id] = job
     _GD_ACTIVE[slug] = job.id
+    job.run_id = _runs.safe_open("guided", slug=slug, ref=f"guided:{job.id}", summary=description)
     job.task = asyncio.create_task(_run_guided_step(job))
+    job.task.add_done_callback(_runs.on_task_done(job, "guided"))
     return job
 
 
@@ -875,6 +886,7 @@ async def continue_job(
 
     await job.append_event("log", {"line": f"▶️ {action}…", "level": "ok"})
     job.task = asyncio.create_task(_run_guided_step(job))
+    job.task.add_done_callback(_runs.on_task_done(job, "guided"))
     return {"ok": True, "action": action, "stage_index": job.stage_index}
 
 
