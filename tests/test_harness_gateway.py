@@ -724,3 +724,74 @@ def test_asset_functions_resolve_the_model_at_call_time(gw):
     assert len(with_model) >= 4
     for fn in with_model:
         assert inspect.signature(fn).parameters["model"].default is None, fn.__name__
+
+
+# ---- intents API ---------------------------------------------------------------------------------------------------------------
+
+def test_intents_api_lists_resolution_and_never_leaks_keys(gw):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    body = client.get("/api/v1/harness/intents").json()
+    assert body["ok"] is True and [r["intent"] for r in body["intents"]] == list(gw.INTENTS)
+    by = {r["intent"]: r for r in body["intents"]}
+    assert by["writer"]["selectable"] and by["critic"]["selectable"] and by["planner"]["selectable"]
+    assert by["mentor"]["selectable"] and not by["scout"]["selectable"] and not by["navigator"]["selectable"]
+    assert by["scout"]["default"] == "alltoken:deepseek-v3.2" and by["scout"]["resolved"]["source"] == "registry-default"
+    assert by["persona"]["resolved"]["model"] == "owner/pick"
+    assert '"api_key"' not in repr(body) and "base_url" not in repr(body)
+
+
+def test_intents_api_set_clear_and_errors(gw):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    ok = client.post("/api/v1/harness/intents", json={"intent": "critic", "model": "openrouter:foo/bar"})
+    assert ok.status_code == 200
+    row = {r["intent"]: r for r in ok.json()["intents"]}["critic"]
+    assert row["owner_choice"] == "openrouter:foo/bar" and row["resolved"]["model"] == "foo/bar"
+    assert gw.resolve("critic").source == "owner-override"
+    cleared = client.post("/api/v1/harness/intents", json={"intent": "critic", "model": ""})
+    assert {r["intent"]: r for r in cleared.json()["intents"]}["critic"]["resolved"]["source"] == "brain"
+    assert client.post("/api/v1/harness/intents", json={"intent": "scout", "model": "openrouter:a/b"}).status_code == 400
+    assert client.post("/api/v1/harness/intents", json={"intent": "critic", "model": "nonsense"}).status_code == 400
+
+
+def test_intents_api_env_lock_is_409_and_stores_nothing(gw, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    monkeypatch.setenv("DAEDALUS_MODEL", "pinned/model")
+    client = TestClient(app)
+    res = client.post("/api/v1/harness/intents", json={"intent": "planner", "model": "openrouter:a/b"})
+    assert res.status_code == 409 and res.json()["error"] == "env_locked" and res.json()["env"] == "DAEDALUS_MODEL"
+    assert gw.get_overrides() == {}
+    assert client.get("/api/v1/harness/intents").json()["env_locked"] is True
+
+
+def test_intents_api_mentor_delegates_to_the_mentor_choice(gw, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    seen = {}
+    monkeypatch.setattr("daedalus.mentor.apply_update", lambda body: seen.update(body) or {})
+    client = TestClient(app)
+    assert client.post("/api/v1/harness/intents", json={"intent": "mentor", "model": "openrouter:m/n"}).status_code == 200
+    assert seen == {"provider": "openrouter", "model": "m/n"}
+    assert client.post("/api/v1/harness/intents", json={"intent": "mentor", "model": "bad"}).status_code == 400
+
+
+def test_intents_endpoints_need_the_owner_token(gw, raw_http):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    client = TestClient(app)
+    assert client.get("/api/v1/harness/intents").status_code == 401
+    assert client.post("/api/v1/harness/intents", json={"intent": "critic", "model": ""}).status_code == 401
