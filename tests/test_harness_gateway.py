@@ -444,3 +444,127 @@ def test_persona_no_image_model_is_retried_without_frames(gw, monkeypatch):
     msgs = [{"role": "user", "content": [gw.text_part("hi"), gw.image_part(data=PNG_B64)]}]
     assert run(agent._call_claude("sys", msgs)) == "text only ok"
     assert len(calls) == 2  # first with the frame, then without: explicit, one retry
+
+
+# ---- migrations 3-6: fast path, navigator, continuity, reviewer -----------------------------------------------
+
+def test_cheap_route_is_provider_aware_and_none_without_keys(gw, monkeypatch):
+    for k in ("NVIDIA_API_KEY", "OPENROUTER_API_KEY", "NOVITA_API_KEY"):
+        monkeypatch.delenv(k, raising=False)
+    assert gw.cheap_route() is None
+    monkeypatch.setenv("NOVITA_API_KEY", "n")
+    r = gw.cheap_route()
+    assert (r["provider"], r["model"], r["api_key"]) == ("novita", "deepseek/deepseek-v3.2", "n")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "o")
+    assert gw.cheap_route()["provider"] == "openrouter"
+    monkeypatch.setenv("NVIDIA_API_KEY", "v")
+    assert gw.cheap_route()["model"] == "nvidia/nemotron-3.5-lightning-30b-a3b"
+
+
+def test_cheap_helpers_obey_the_run_budget(gw, monkeypatch):
+    """The wrap-up/navigator helpers used to bypass the budget; through the gateway they stop."""
+    from daedalus import navigator, run_budget
+
+    monkeypatch.setenv("NOVITA_API_KEY", "n")
+    monkeypatch.setenv("DAEDALUS_RUN_BUDGET", "5")
+    run_budget.note_usage({"cost_usd": 6, "cost_known": True}, model="m", role="writer")
+
+    class Boom:
+        def __init__(self, *a, **k):
+            raise AssertionError("no provider call once the budget is spent")
+
+    monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(AsyncOpenAI=Boom, OpenAI=Boom))
+    assert navigator._call_haiku_sync("sys", "user") == ""
+
+
+def test_navigator_cheap_call_uses_the_gateway_and_flag_restores_old_path(gw, monkeypatch):
+    from daedalus import navigator
+
+    for k in ("NVIDIA_API_KEY", "OPENROUTER_API_KEY"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.setenv("NOVITA_API_KEY", "n")
+    record = _install_openai(monkeypatch, text="nav reply")
+    assert navigator._call_haiku_sync("sys", "user text") == "nav reply"
+    assert record["body"]["model"] == "deepseek/deepseek-v3.2"
+    assert record["init"]["base_url"] == "https://api.novita.ai/v3/openai"
+
+    # rollback flag: the original sync SDK client is used instead
+    monkeypatch.setenv("DAEDALUS_GATEWAY_NAVIGATOR", "0")
+    seen = {}
+
+    class Sync:
+        def __init__(self, **kw):
+            seen["init"] = kw
+            self.chat = types.SimpleNamespace(completions=types.SimpleNamespace(create=self.create))
+
+        def create(self, **kw):
+            seen["body"] = kw
+            msg = types.SimpleNamespace(content="legacy nav")
+            return types.SimpleNamespace(choices=[types.SimpleNamespace(message=msg)])
+
+    monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(OpenAI=Sync, AsyncOpenAI=None))
+    assert navigator._call_haiku_sync("sys", "user text") == "legacy nav"
+
+
+def test_continuity_keeps_its_exact_models_through_the_gateway(gw, monkeypatch):
+    from daedalus import continuity
+
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setenv("NOVITA_API_KEY", "n")
+    record = _install_openai(monkeypatch, text="digest")
+    assert continuity._llm_call("sys", "user") == "digest"
+    assert record["body"]["model"] == "inclusionai/ling-2.6-flash" and record["body"]["max_tokens"] == 1024
+    monkeypatch.delenv("NOVITA_API_KEY")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "o")
+    continuity._llm_call("sys", "user")
+    assert record["body"]["model"] == "meta-llama/llama-3.3-70b-instruct"
+    monkeypatch.delenv("OPENROUTER_API_KEY")
+    assert continuity._llm_call("sys", "user") == ""  # no provider configured: empty, as before
+
+
+def test_review_gate_uses_the_gateway_and_skips_on_budget(gw, monkeypatch):
+    from daedalus import improvements, run_budget
+
+    monkeypatch.setenv("OPENROUTER_API_KEY", "o")
+    monkeypatch.delenv("NOVITA_API_KEY", raising=False)
+    record = _install_openai(monkeypatch, text='{"ok": false, "issue": "promised, not done", "suggested_fix": "do it"}')
+    out = run(improvements.review_gate_critique("do x", "done", [{"tool": "t", "ok": True}], 1.0))
+    assert out["ok"] is False and out["issue"] == "promised, not done"
+    assert record["body"]["model"] == "anthropic/claude-haiku-4-5"
+
+    monkeypatch.setenv("DAEDALUS_RUN_BUDGET", "5")
+    run_budget.note_usage({"cost_usd": 6, "cost_known": True}, model="m", role="writer")
+    skipped = run(improvements.review_gate_critique("do x", "done", [], 1.0))
+    assert skipped["ok"] is True and skipped["skipped"] == "budget"
+
+
+def test_every_raw_provider_client_in_the_chat_path_sits_behind_a_gateway_flag(gw):
+    """Structural guard for the fast path and wrap-up in agent.py: a raw AsyncOpenAI(...) may only remain
+    inside the rollback branches, so the gateway (budget, metering, owner model) cannot be bypassed."""
+    import ast
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parents[1] / "daedalus" / "agent.py").read_text(encoding="utf-8")
+    tree = ast.parse(src)
+    parents = {}
+    for node in ast.walk(tree):
+        for child in ast.iter_child_nodes(node):
+            parents[child] = node
+    raw = [n for n in ast.walk(tree) if isinstance(n, ast.Call) and getattr(n.func, "id", "") == "AsyncOpenAI"]
+    assert len(raw) >= 4
+    unguarded = []
+    for call in raw:
+        guarded, node = False, call
+        while node in parents:
+            node = parents[node]
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name in ("_call_claude_primary",):
+                guarded = True  # rollback body behind path_enabled("persona") at the top of the function
+                break
+            if isinstance(node, (ast.If, ast.IfExp)) and any(
+                tok in ast.unparse(node.test) for tok in ("_gw_fast", "_gw2", "path_enabled")
+            ):
+                guarded = True
+                break
+        if not guarded:
+            unguarded.append(call.lineno)
+    assert unguarded == []

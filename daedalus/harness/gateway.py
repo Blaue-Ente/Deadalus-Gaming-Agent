@@ -514,6 +514,31 @@ async def call(
                                  cost_usd=float(parsed["cost_usd"]) if known else None))
 
 
+# --- explicit routes for the cheap helper models ---------------------------------------------------------
+def route_for(provider: str, model: str, api_key: str, base_url: str, sdk: str = "openai") -> dict[str, Any]:
+    """A fully specified route (used for helper models that carry their own key and endpoint)."""
+    return {"provider": provider, "model": model, "api_key": api_key, "base_url": base_url, "sdk": sdk,
+            "source": "slot"}
+
+
+def _provider_from_url(base_url: str) -> str:
+    low = (base_url or "").lower()
+    for needle, name in (("nvidia", "nvidia"), ("openrouter", "openrouter"), ("novita", "novita")):
+        if needle in low:
+            return name
+    return ""
+
+
+def cheap_route() -> dict[str, Any] | None:
+    """The wrap-up / navigator helper model (``cheap_llm``) as a route, or None when no key is set."""
+    from ..cheap_llm import resolve_cheap_openai
+
+    cheap = resolve_cheap_openai()
+    if not cheap:
+        return None
+    return route_for(_provider_from_url(cheap["base_url"]), cheap["model"], cheap["api_key"], cheap["base_url"])
+
+
 # --- sync bridge (navigator/continuity/reviewer call sites are synchronous) -----------------------
 def call_sync(*args: Any, **kwargs: Any) -> GatewayResult:
     """``call`` for synchronous code: runs on a private loop in a helper thread when a loop is running."""
