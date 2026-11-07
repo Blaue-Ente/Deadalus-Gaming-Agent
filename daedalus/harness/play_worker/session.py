@@ -23,9 +23,47 @@ CHANGE_MIN = 0.002        # share of pixels that must differ to count as an obse
 NOISY = 0.25              # idle drift above this: the scene moves on its own, input cannot be told apart
 
 
-def _artifact_root() -> Path:
+def artifact_root() -> Path:
     from ..context import data_dir
     return data_dir() / "play"
+
+
+_artifact_root = artifact_root          # kept for existing callers
+
+
+_SESSION_META: dict[tuple[str, float], tuple[str, float]] = {}
+
+
+def window_frames(slug: str) -> list[tuple[float, Path, str, float]]:
+    """(mtime, file, session id, session start) of every window frame a session of ``slug`` wrote; the one place
+    that knows the on-disk layout (session.json + frame_NNNN_window.png) so readers do not copy it."""
+    root = artifact_root()
+    out: list[tuple[float, Path, str, float]] = []
+    if not root.is_dir():
+        return out
+    for sess in root.iterdir():
+        meta = sess / "session.json"
+        try:
+            key = (str(meta), meta.stat().st_mtime)
+        except OSError:
+            continue
+        if key not in _SESSION_META:                       # session.json never changes: read it once
+            try:
+                info = json.loads(meta.read_text(encoding="utf-8"))
+                _SESSION_META[key] = (str(info.get("slug") or ""), float(info.get("started_at") or 0.0))
+            except (OSError, ValueError, TypeError):
+                _SESSION_META[key] = ("", 0.0)
+            if len(_SESSION_META) > 512:
+                _SESSION_META.pop(next(iter(_SESSION_META)))
+        sess_slug, started = _SESSION_META[key]
+        if sess_slug != slug:
+            continue
+        for f in sess.glob("frame_*_window.png"):
+            try:
+                out.append((f.stat().st_mtime, f, sess.name, started))
+            except OSError:
+                continue
+    return out
 
 
 class PlaySession:

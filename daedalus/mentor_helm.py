@@ -739,8 +739,7 @@ def skip_reason(inspect: dict[str, Any], rules_steer: dict[str, Any], *, turn_ca
     return None
 
 
-async def _complete_director_gateway(provider: str, model: str, user: str,
-                                     frames: list[dict[str, Any]] | None = None) -> str:
+def _director_route(provider: str, model: str) -> Any:
     from .harness import gateway as gw
     from .llm_config import PROVIDER_DEFAULTS, resolve_provider_api_key
     from .local_llm import dummy_api_key, is_local_provider
@@ -750,13 +749,19 @@ async def _complete_director_gateway(provider: str, model: str, user: str,
     if get_choice().get("id") == "brain":
         cfg = dict(llm_config.get_config())
         cfg.update({"provider": provider, "model": model})
-        route = cfg
-    else:
-        pd = PROVIDER_DEFAULTS.get(provider) or PROVIDER_DEFAULTS["openai"]
-        key = resolve_provider_api_key(provider) or ""
-        if not key and is_local_provider(provider):
-            key = dummy_api_key(provider)
-        route = gw.route_for(provider, model, key, str(pd.get("base_url") or ""), str(pd.get("sdk") or "openai"))
+        return cfg
+    pd = PROVIDER_DEFAULTS.get(provider) or PROVIDER_DEFAULTS["openai"]
+    key = resolve_provider_api_key(provider) or ""
+    if not key and is_local_provider(provider):
+        key = dummy_api_key(provider)
+    return gw.route_for(provider, model, key, str(pd.get("base_url") or ""), str(pd.get("sdk") or "openai"))
+
+
+async def _complete_director_gateway(provider: str, model: str, user: str,
+                                     frames: list[dict[str, Any]] | None = None) -> str:
+    from .harness import gateway as gw
+
+    route = _director_route(provider, model)
     content: Any = user
     if frames:  # real image parts for the mentor (A5c); never summarised into text
         content = [gw.text_part(user), *frames]
@@ -866,6 +871,33 @@ async def _complete_director(provider: str, model: str, user: str,
     return (resp.choices[0].message.content if resp.choices else "") or ""
 
 
+async def probe_vision(frame_path: Any, label: str) -> dict[str, Any]:
+    """Ask the CURRENT mentor model to read a hidden label from a frame we rendered; stores the verdict.
+
+    This is the only thing that moves a model from "frames sent" to "vision verified" (spec L5)."""
+    from .harness import gateway as gw
+    from .harness import perception
+
+    endpoint = _resolve_endpoint()
+    if endpoint is None:
+        return {"ok": False, "perceived": False, "error": "no_mentor_model"}
+    provider, model = endpoint
+    route = _director_route(provider, model)
+
+    async def ask(prompt: str, parts: list[dict[str, Any]]) -> str:
+        res = await gw.call("mentor", [{"role": "user", "content": [gw.text_part(prompt), *parts]}],
+                            max_tokens=60, temperature=0.0, json_mode=True, route=route,
+                            timeout=llm_timeout_s(), use_cache=False, client_id="daedalus/mentor-probe")
+        if not res.ok:
+            raise gw.GatewayCallError(res.error or gw.GatewayError("provider_error", "probe call failed"))
+        return res.text
+
+    out = await perception.vision_probe(ask, frame_path, label)
+    out.update(provider=provider, model=model)
+    out["recorded"] = perception.record_probe(provider, model, out)
+    return out
+
+
 def _rules_fallback(rules_steer: dict[str, Any], why: str, **extra: Any) -> dict[str, Any]:
     out = dict(rules_steer)
     out.setdefault("ok", True)
@@ -901,9 +933,17 @@ async def consult(
     in_tok = estimate_tokens(SYSTEM_PROMPT) + estimate_tokens(user)
     from .harness import gateway as _gw0
     from .harness import perception as _perc
+    if callable(frames):                           # collected only now (the LLM will run), off the event loop
+        try:
+            frames = await asyncio.to_thread(frames)
+        except Exception:
+            log.debug("mentor frames unavailable", exc_info=True)
+            frames = None
     parts: list[dict[str, Any]] = []
     p_mode, p_reason = "text-only", ("no_frames" if not frames else "")
-    if frames:
+    if frames and _perc.known_no_vision(provider, model):
+        p_reason = "model_has_no_vision"           # it refused images before: do not pay for the failed attempt
+    elif frames:
         if not _gw0.path_enabled("mentor"):
             p_reason = "gateway_disabled"          # the legacy path cannot carry images
         else:
@@ -921,6 +961,7 @@ async def consult(
                 # The model cannot take images: ask again as text and SAY so (never pretend it looked).
                 log.info("mentor helm: %s/%s has no vision; retrying text-only", provider, model)
                 parts, p_mode, p_reason = [], "text-only", "model_has_no_vision"
+                _perc.note_no_vision(provider, model)
                 text = await asyncio.wait_for(
                     _complete_director(provider, model, user), timeout=llm_timeout_s() + 1.0)
             else:

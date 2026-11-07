@@ -20,6 +20,7 @@ unambiguous Vite-scaffold path never spend tokens.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
@@ -955,13 +956,17 @@ async def refresh_helm(loop: Any) -> dict[str, Any] | None:
 
     inspect = inspect_digest(loop)
     rules = steer_payload(steer(loop))
+    slug = str(getattr(loop, "slug", "") or "")
     frames = None
+    sig: tuple[str, ...] = ()
     try:  # real frames of the running game, if any exist (play worker or visual proof)
         from .harness import perception
-        frames = perception.latest_frames(str(getattr(loop, "slug", "") or "")) or None
+        sig = await asyncio.to_thread(perception.signature, slug)      # cheap: listing + stat, no decode
+        if sig:
+            frames = lambda: perception.latest_frames(slug)  # noqa: E731 - collected only if the LLM really runs
     except Exception:
         log.debug("mentor frames unavailable", exc_info=True)
-    fp = mentor_helm.digest_fingerprint(inspect) + ("|" + ",".join(frames.sha256s) if frames else "")
+    fp = mentor_helm.digest_fingerprint(inspect) + ("|" + ",".join(sig) if sig else "")
     cached = getattr(loop, "mentor_steer", None)
     if isinstance(cached, dict) and cached.get("ok") and getattr(loop, "mentor_fp", None) == fp:
         return cached
