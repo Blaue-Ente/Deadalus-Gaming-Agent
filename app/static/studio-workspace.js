@@ -26,12 +26,29 @@
   let blockerGen = 0;
   let blockerSeq = 0;
   let blockerFlight = 0;
+  let planGen = 0;
+  let planSeq = 0;
+  let planFlight = 0;
+  let planDetail = null;
+  const planApproved = new Set();
+  const planDeleted = new Set();
+  let planGenerateOp = null;
+  const planApproveOp = new Map();
+  let discoveryGen = 0;
+  let discoverySeq = 0;
+  let discoveryFlight = 0;
+  const discoveryApproved = new Set();
+  const discoveryRejected = new Set();
+  const discoveryApproveOp = new Map();
   const ASSET_GENERATE_TIMEOUT_MS = 120000;
   const ASSET_AUTOPACK_TIMEOUT_MS = 660000;
   const ASSET_PIPELINE_TIMEOUT_MS = 60000;
   const SHIP_TIMEOUT_MS = 60000;
   const SHIP_UNITY_TIMEOUT_MS = 240000;
   const BLOCKER_TIMEOUT_MS = 20000;
+  const PLAN_TIMEOUT_MS = 20000;
+  const DISCOVERY_TIMEOUT_MS = 20000;
+  const PLAN_GOAL_MAX = 2000;
 
   function $(id) { return document.getElementById(id); }
 
@@ -84,6 +101,10 @@
     if (currentPanel === "review" && panel !== "review") {
       blockerGen += 1;
       blockerFlight = 0;
+      planGen += 1;
+      planFlight = 0;
+      discoveryGen += 1;
+      discoveryFlight = 0;
     }
     currentPanel = panel;
     if (tab && TABS.indexOf(tab) >= 0) currentTab = tab;
@@ -107,6 +128,8 @@
     if (panel === "review") {
       loadReview(currentTab);
       loadBlockers();
+      loadPlans();
+      loadDiscoveries();
     }
     if (panel === "settings") loadSettings();
     if (queryReady) writeQuery();
@@ -787,6 +810,7 @@
     });
   }
 
+
   async function loadReview(tab) {
     currentTab = tab || currentTab;
     const list = $("review-list");
@@ -853,6 +877,512 @@
       list.replaceChildren();
       showStatus("review-status", dx.t("studio.requestFailed") + ": " + failText(err), true);
     }
+  }
+
+  function reviewUnresolved(err) {
+    const message = String((err && err.message) || err || "");
+    return !!(err && (err.name === "AbortError" || /aborted|timed out|timeout|failed to fetch|networkerror|err_timed_out|err_aborted|изтекло|изтече/i.test(message)));
+  }
+
+  function reviewFail(err, unknownKey) {
+    if (reviewUnresolved(err)) return dx.t(unknownKey);
+    return dx.t("studio.requestFailed") + ": " + dx.errText(err);
+  }
+
+  function planHoldMessage() {
+    let unknown = planGenerateOp === "unknown";
+    let pendingId = "";
+    planApproveOp.forEach((state, id) => {
+      if (state === "unknown") unknown = true;
+      else if (!pendingId) pendingId = id;
+    });
+    if (unknown) return dx.t("studio.planUnknown");
+    if (planGenerateOp === "pending") return dx.t("studio.planGeneratePending");
+    if (pendingId) return dx.t("studio.planApprovePending", { id: pendingId });
+    return "";
+  }
+
+  function showPlanListStatus(opts) {
+    const hold = planHoldMessage();
+    if (hold) {
+      showStatus("plan-status", hold, true);
+      return;
+    }
+    if (!opts || !opts.keepStatus) showStatus("plan-status", "", false);
+  }
+
+  function discoveryHoldMessage() {
+    let unknown = false;
+    let pendingId = "";
+    discoveryApproveOp.forEach((state, id) => {
+      if (state === "unknown") unknown = true;
+      else if (!pendingId) pendingId = id;
+    });
+    if (unknown) return dx.t("studio.discoveryUnknown");
+    if (pendingId) return dx.t("studio.discoveryApprovePending", { id: pendingId });
+    return "";
+  }
+
+  function showDiscoveryListStatus(opts) {
+    const hold = discoveryHoldMessage();
+    if (hold) {
+      showStatus("discovery-status", hold, true);
+      return;
+    }
+    if (!opts || !opts.keepStatus) showStatus("discovery-status", "", false);
+  }
+
+  function dropRowAct(listId, id, act) {
+    const list = $(listId);
+    if (!list || !id) return;
+    list.querySelectorAll("[data-id]").forEach((row) => {
+      if (row.dataset.id !== id) return;
+      row.querySelectorAll("button").forEach((btn) => {
+        if (!act || btn.dataset.act === act) btn.remove();
+      });
+    });
+  }
+
+  function planStill(gen) {
+    return gen === planGen && currentPanel === "review";
+  }
+
+  function syncPlanButtons() {
+    const listLocked = planFlight !== 0;
+    const generate = $("plan-generate");
+    const refresh = $("plan-refresh");
+    if (generate) generate.disabled = listLocked || planGenerateOp !== null;
+    if (refresh) refresh.disabled = listLocked;
+    document.querySelectorAll("#plan-list button").forEach((btn) => {
+      btn.disabled = listLocked || (btn.dataset.act === "approve" && planApproveOp.has(btn.dataset.id || ""));
+    });
+  }
+
+  function renderPlans(rows, gen) {
+    const list = $("plan-list");
+    list.replaceChildren();
+    const visible = (rows || []).filter((item) => item && typeof item === "object" && !planDeleted.has(String(item.id || "")));
+    if (!visible.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = dx.t("studio.planNone");
+      list.appendChild(empty);
+      return;
+    }
+    visible.forEach((item) => {
+      const id = String(item.id || "");
+      const el = document.createElement("div");
+      el.className = "item";
+      el.dataset.id = id;
+      el.dataset.status = String(item.status || "");
+      const title = document.createElement("b");
+      title.textContent = id;
+      const sub = document.createElement("small");
+      const lines = [item.status, item.title, item.description].filter((value) => typeof value === "string" && value);
+      if (planDetail && String(planDetail.id || "") === id && Array.isArray(planDetail.steps)) {
+        planDetail.steps.forEach((step) => {
+          if (step && typeof step.title === "string" && step.title) lines.push(step.title);
+        });
+      }
+      sub.textContent = lines.join("\n");
+      const actions = document.createElement("div");
+      actions.className = "row tight";
+      if (id && item.status === "draft" && !planApproved.has(id) && !planApproveOp.has(id)) {
+        const approve = document.createElement("button");
+        approve.type = "button";
+        approve.dataset.act = "approve";
+        approve.dataset.gen = String(gen);
+        approve.dataset.id = id;
+        approve.textContent = dx.t("studio.planApprove");
+        approve.addEventListener("click", () => approvePlan(id, gen, approve));
+        actions.appendChild(approve);
+      }
+      if (id) {
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.dataset.act = "delete";
+        remove.dataset.gen = String(gen);
+        remove.dataset.id = id;
+        remove.textContent = dx.t("studio.planDelete");
+        remove.addEventListener("click", () => deletePlan(id, gen, remove));
+        actions.appendChild(remove);
+      }
+      el.append(title, sub, actions);
+      list.appendChild(el);
+    });
+  }
+
+  async function loadPlans(opts) {
+    if (currentPanel !== "review") return;
+    if (planFlight) return;
+    const gen = planGen;
+    const flight = ++planSeq;
+    planFlight = flight;
+    syncPlanButtons();
+    try {
+      const data = await dx.api("/admin/daedalus/planner/plans", { timeoutMs: PLAN_TIMEOUT_MS });
+      if (!planStill(gen) || flight !== planFlight) return;
+      if (!data || !Array.isArray(data.plans)) {
+        if (!planHoldMessage()) showStatus("plan-status", dx.t("studio.planNotOk"), true);
+        else showPlanListStatus();
+        $("plan-list").replaceChildren();
+        return;
+      }
+      renderPlans(data.plans, gen);
+      showPlanListStatus(opts);
+    } catch (err) {
+      if (!planStill(gen) || flight !== planFlight) return;
+      if (!planHoldMessage()) showStatus("plan-status", reviewFail(err, "studio.planUnknown"), true);
+      else showPlanListStatus();
+      $("plan-list").replaceChildren();
+    } finally {
+      if (planFlight === flight) {
+        planFlight = 0;
+        syncPlanButtons();
+      }
+    }
+  }
+
+  function generatePlan() {
+    if (planFlight || planGenerateOp || currentPanel !== "review") return;
+    const goal = ($("plan-goal").value || "").trim();
+    if (!goal) {
+      showStatus("plan-status", dx.t("studio.planNeedGoal"), true);
+      return;
+    }
+    if (goal.length > PLAN_GOAL_MAX) {
+      showStatus("plan-status", dx.t("studio.planTooLong"), true);
+      return;
+    }
+    const gen = planGen;
+    if (!window.confirm(dx.t("studio.planGenerateConfirm", { goal }))) return;
+    if (!planStill(gen) || planGenerateOp) return;
+    planGenerateOp = "pending";
+    syncPlanButtons();
+    showStatus("plan-status", dx.t("studio.planGeneratePending"), true);
+    let refresh = false;
+    dx.api("/admin/daedalus/planner/plans/auto", {
+      method: "POST",
+      body: JSON.stringify({ goal }),
+      timeoutMs: PLAN_TIMEOUT_MS,
+    }).then(async (data) => {
+      if (!data || data.ok !== true) {
+        planGenerateOp = null;
+        syncPlanButtons();
+        if (!planStill(gen)) return;
+        const detail = data && (data.error || data.detail);
+        showStatus("plan-status", dx.t("studio.planNotOk") + (detail ? ": " + detail : ""), true);
+        return;
+      }
+      const id = String((data.plan && data.plan.id) || data.plan_id || "");
+      if (!id) {
+        planGenerateOp = null;
+        syncPlanButtons();
+        if (planStill(gen)) showStatus("plan-status", dx.t("studio.planNotOk"), true);
+        return;
+      }
+      planGenerateOp = null;
+      syncPlanButtons();
+      if (planStill(gen)) showStatus("plan-status", dx.t("studio.planDraft", { id }), false);
+      try {
+        const stored = await dx.api("/admin/daedalus/planner/plans/" + encodeURIComponent(id), { timeoutMs: PLAN_TIMEOUT_MS });
+        if (!planStill(gen)) return;
+        if (!stored || String(stored.id || "") !== id) {
+          showStatus("plan-status", dx.t("studio.planMissing", { id }), true);
+          return;
+        }
+        planDetail = stored;
+        refresh = true;
+      } catch (err) {
+        if (!planStill(gen)) return;
+        const message = String((err && err.message) || err || "");
+        if (/not found|404/i.test(message)) {
+          showStatus("plan-status", dx.t("studio.planMissing", { id }), true);
+          return;
+        }
+        showStatus("plan-status", reviewFail(err, "studio.planUnknown"), true);
+      }
+    }).catch((err) => {
+      if (reviewUnresolved(err)) {
+        planGenerateOp = "unknown";
+        syncPlanButtons();
+        if (planStill(gen)) showStatus("plan-status", dx.t("studio.planUnknown"), true);
+        return;
+      }
+      planGenerateOp = null;
+      syncPlanButtons();
+      if (planStill(gen)) showStatus("plan-status", reviewFail(err, "studio.planUnknown"), true);
+    }).finally(() => {
+      if (refresh && planStill(gen)) loadPlans({ keepStatus: true });
+    });
+  }
+
+  function approvePlan(id, gen, btn) {
+    if (currentPanel !== "review" || !btn.isConnected) return;
+    if (btn.dataset.gen !== String(planGen) || gen !== planGen) return;
+    if (planApproved.has(id) || planDeleted.has(id) || planApproveOp.has(id)) return;
+    if (!window.confirm(dx.t("studio.planApproveConfirm", { id }))) return;
+    if (!planStill(gen) || !btn.isConnected || btn.dataset.gen !== String(planGen)) return;
+    if (planApproved.has(id) || planApproveOp.has(id)) return;
+    planApproveOp.set(id, "pending");
+    syncPlanButtons();
+    showStatus("plan-status", dx.t("studio.planApprovePending", { id }), true);
+    let refresh = false;
+    dx.api("/admin/daedalus/planner/plans/" + encodeURIComponent(id) + "/approve", {
+      method: "POST",
+      timeoutMs: PLAN_TIMEOUT_MS,
+    }).then((data) => {
+      if (!data || data.ok !== true) {
+        planApproveOp.delete(id);
+        if (!planStill(gen)) return;
+        const detail = data && (data.error || data.detail);
+        showStatus("plan-status", dx.t("studio.planNotOk") + (detail ? ": " + detail : ""), true);
+        return;
+      }
+      planApproveOp.delete(id);
+      planApproved.add(id);
+      dropRowAct("plan-list", id, "approve");
+      if (!planStill(gen)) return;
+      const count = Array.isArray(data.tasks_created) ? data.tasks_created.length : 0;
+      showStatus("plan-status", dx.t("studio.planApproved", { id, count }), false);
+      refresh = true;
+    }).catch((err) => {
+      if (reviewUnresolved(err)) {
+        planApproveOp.set(id, "unknown");
+        if (planStill(gen)) showStatus("plan-status", dx.t("studio.planUnknown"), true);
+        return;
+      }
+      planApproveOp.delete(id);
+      if (planStill(gen)) showStatus("plan-status", reviewFail(err, "studio.planUnknown"), true);
+    }).finally(() => {
+      syncPlanButtons();
+      if (refresh && planStill(gen)) loadPlans({ keepStatus: true });
+    });
+  }
+
+  function deletePlan(id, gen, btn) {
+    if (planFlight || currentPanel !== "review" || !btn.isConnected) return;
+    if (btn.dataset.gen !== String(planGen) || gen !== planGen) return;
+    if (planDeleted.has(id)) return;
+    if (!window.confirm(dx.t("studio.planDeleteConfirm", { id }))) return;
+    if (!planStill(gen) || !btn.isConnected || btn.dataset.gen !== String(planGen)) return;
+    const flight = ++planSeq;
+    planFlight = flight;
+    syncPlanButtons();
+    let refresh = false;
+    dx.api("/admin/daedalus/planner/plans/" + encodeURIComponent(id), {
+      method: "DELETE",
+      timeoutMs: PLAN_TIMEOUT_MS,
+    }).then((data) => {
+      if (!planStill(gen) || flight !== planFlight) return;
+      if (!data || data.ok !== true) {
+        const detail = data && (data.error || data.detail);
+        showStatus("plan-status", dx.t("studio.planNotOk") + (detail ? ": " + detail : ""), true);
+        return;
+      }
+      planDeleted.add(id);
+      if (planDetail && String(planDetail.id || "") === id) planDetail = null;
+      showStatus("plan-status", dx.t("studio.planDeleted", { id }), false);
+      refresh = true;
+    }).catch((err) => {
+      if (!planStill(gen) || flight !== planFlight) return;
+      showStatus("plan-status", reviewFail(err, "studio.planUnknown"), true);
+    }).finally(() => {
+      if (planFlight === flight) {
+        planFlight = 0;
+        syncPlanButtons();
+      }
+      if (refresh && planStill(gen)) loadPlans({ keepStatus: true });
+    });
+  }
+
+  function discoveryStill(gen) {
+    return gen === discoveryGen && currentPanel === "review";
+  }
+
+  function syncDiscoveryButtons() {
+    const locked = discoveryFlight !== 0;
+    const refresh = $("discovery-refresh");
+    const filter = $("discovery-filter");
+    if (refresh) refresh.disabled = locked;
+    if (filter) filter.disabled = locked;
+    document.querySelectorAll("#discovery-list button").forEach((btn) => {
+      btn.disabled = locked || discoveryApproveOp.has(btn.dataset.id || "");
+    });
+  }
+
+  function discoveryMeta(item) {
+    const meta = item && item.metadata;
+    return meta && typeof meta === "object" ? meta : {};
+  }
+
+  function renderDiscoveries(rows, gen) {
+    const list = $("discovery-list");
+    list.replaceChildren();
+    if (!rows.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = dx.t("studio.discoveryNone");
+      list.appendChild(empty);
+      return;
+    }
+    rows.forEach((item) => {
+      if (!item || typeof item !== "object") return;
+      const id = String(item.id || "");
+      const meta = discoveryMeta(item);
+      const status = String(meta.status || "");
+      const el = document.createElement("div");
+      el.className = "item";
+      el.dataset.id = id;
+      el.dataset.status = status;
+      const title = document.createElement("b");
+      title.textContent = id;
+      const sub = document.createElement("small");
+      sub.textContent = [status, meta.title, meta.url, meta.kind, item.content]
+        .filter((value) => typeof value === "string" && value)
+        .join("\n");
+      const actions = document.createElement("div");
+      actions.className = "row tight";
+      const closed = discoveryApproved.has(id) || discoveryRejected.has(id) || discoveryApproveOp.has(id) || status === "approved" || status === "rejected";
+      if (id && !closed) {
+        const approve = document.createElement("button");
+        approve.type = "button";
+        approve.dataset.act = "approve";
+        approve.dataset.gen = String(gen);
+        approve.dataset.id = id;
+        approve.textContent = dx.t("studio.discoveryApprove");
+        approve.addEventListener("click", () => approveDiscovery(id, gen, approve, meta));
+        const reject = document.createElement("button");
+        reject.type = "button";
+        reject.dataset.act = "reject";
+        reject.dataset.gen = String(gen);
+        reject.dataset.id = id;
+        reject.textContent = dx.t("studio.discoveryReject");
+        reject.addEventListener("click", () => rejectDiscovery(id, gen, reject));
+        actions.append(approve, reject);
+      }
+      el.append(title, sub, actions);
+      list.appendChild(el);
+    });
+  }
+
+  async function loadDiscoveries(opts) {
+    if (currentPanel !== "review") return;
+    if (discoveryFlight) return;
+    const gen = discoveryGen;
+    const flight = ++discoverySeq;
+    discoveryFlight = flight;
+    syncDiscoveryButtons();
+    const filter = $("discovery-filter");
+    const status = filter && filter.value ? filter.value : "pending";
+    try {
+      const data = await dx.api(
+        "/admin/daedalus/discoveries?status=" + encodeURIComponent(status) + "&limit=100",
+        { timeoutMs: DISCOVERY_TIMEOUT_MS }
+      );
+      if (!discoveryStill(gen) || flight !== discoveryFlight) return;
+      if (!data || !Array.isArray(data.discoveries) || data.error) {
+        if (!discoveryHoldMessage()) {
+          const detail = data && data.error;
+          showStatus("discovery-status", dx.t("studio.discoveryNotOk") + (detail ? ": " + detail : ""), true);
+        } else showDiscoveryListStatus();
+        $("discovery-list").replaceChildren();
+        return;
+      }
+      renderDiscoveries(data.discoveries, gen);
+      showDiscoveryListStatus(opts);
+    } catch (err) {
+      if (!discoveryStill(gen) || flight !== discoveryFlight) return;
+      if (!discoveryHoldMessage()) showStatus("discovery-status", reviewFail(err, "studio.discoveryUnknown"), true);
+      else showDiscoveryListStatus();
+      $("discovery-list").replaceChildren();
+    } finally {
+      if (discoveryFlight === flight) {
+        discoveryFlight = 0;
+        syncDiscoveryButtons();
+      }
+    }
+  }
+
+  function approveDiscovery(id, gen, btn, meta) {
+    if (currentPanel !== "review" || !btn.isConnected) return;
+    if (btn.dataset.gen !== String(discoveryGen) || gen !== discoveryGen) return;
+    if (discoveryApproved.has(id) || discoveryRejected.has(id) || discoveryApproveOp.has(id)) return;
+    let question = dx.t("studio.discoveryApproveConfirm", { id });
+    if (meta && meta.for_self) question += "\n" + dx.t("studio.discoveryForSelf");
+    if (!window.confirm(question)) return;
+    if (!discoveryStill(gen) || !btn.isConnected || btn.dataset.gen !== String(discoveryGen)) return;
+    if (discoveryApproved.has(id) || discoveryApproveOp.has(id)) return;
+    discoveryApproveOp.set(id, "pending");
+    syncDiscoveryButtons();
+    showStatus("discovery-status", dx.t("studio.discoveryApprovePending", { id }), true);
+    let refresh = false;
+    dx.api("/admin/daedalus/discoveries/" + encodeURIComponent(id) + "/approve", {
+      method: "POST",
+      timeoutMs: DISCOVERY_TIMEOUT_MS,
+    }).then((data) => {
+      if (!data || data.approved !== true) {
+        discoveryApproveOp.delete(id);
+        syncDiscoveryButtons();
+        if (!discoveryStill(gen)) return;
+        showStatus("discovery-status", dx.t("studio.discoveryNotApproved", { id }), true);
+        return;
+      }
+      discoveryApproveOp.delete(id);
+      discoveryApproved.add(id);
+      dropRowAct("discovery-list", id);
+      if (!discoveryStill(gen)) return;
+      const key = data.plan_id === "pending" ? "studio.discoveryScheduled" : "studio.discoveryUnscheduled";
+      showStatus("discovery-status", dx.t(key, { id }), false);
+      refresh = true;
+    }).catch((err) => {
+      if (reviewUnresolved(err)) {
+        discoveryApproveOp.set(id, "unknown");
+        syncDiscoveryButtons();
+        if (discoveryStill(gen)) showStatus("discovery-status", dx.t("studio.discoveryUnknown"), true);
+        return;
+      }
+      discoveryApproveOp.delete(id);
+      syncDiscoveryButtons();
+      if (discoveryStill(gen)) showStatus("discovery-status", reviewFail(err, "studio.discoveryUnknown"), true);
+    }).finally(() => {
+      syncDiscoveryButtons();
+      if (refresh && discoveryStill(gen)) loadDiscoveries({ keepStatus: true });
+    });
+  }
+
+  function rejectDiscovery(id, gen, btn) {
+    if (discoveryFlight || currentPanel !== "review" || !btn.isConnected) return;
+    if (btn.dataset.gen !== String(discoveryGen) || gen !== discoveryGen) return;
+    if (discoveryApproved.has(id) || discoveryRejected.has(id) || discoveryApproveOp.has(id)) return;
+    if (!window.confirm(dx.t("studio.discoveryRejectConfirm", { id }))) return;
+    if (!discoveryStill(gen) || !btn.isConnected || btn.dataset.gen !== String(discoveryGen)) return;
+    const flight = ++discoverySeq;
+    discoveryFlight = flight;
+    syncDiscoveryButtons();
+    let refresh = false;
+    dx.api("/admin/daedalus/discoveries/" + encodeURIComponent(id) + "/reject", {
+      method: "POST",
+      timeoutMs: DISCOVERY_TIMEOUT_MS,
+    }).then((data) => {
+      if (!discoveryStill(gen) || flight !== discoveryFlight) return;
+      if (!data || data.rejected !== true) {
+        showStatus("discovery-status", dx.t("studio.discoveryNotOk"), true);
+        return;
+      }
+      discoveryRejected.add(id);
+      showStatus("discovery-status", dx.t("studio.discoveryRejectedDone", { id }), false);
+      refresh = true;
+    }).catch((err) => {
+      if (!discoveryStill(gen) || flight !== discoveryFlight) return;
+      showStatus("discovery-status", reviewFail(err, "studio.discoveryUnknown"), true);
+    }).finally(() => {
+      if (discoveryFlight === flight) {
+        discoveryFlight = 0;
+        syncDiscoveryButtons();
+      }
+      if (refresh && discoveryStill(gen)) loadDiscoveries({ keepStatus: true });
+    });
   }
 
   async function reviewAct(act, id, button) {
@@ -1899,6 +2429,14 @@
   syncShipVisibility();
   const blockerRefresh = $("blocker-refresh");
   if (blockerRefresh) blockerRefresh.addEventListener("click", () => loadBlockers());
+  const planGenerate = $("plan-generate");
+  if (planGenerate) planGenerate.addEventListener("click", generatePlan);
+  const planRefresh = $("plan-refresh");
+  if (planRefresh) planRefresh.addEventListener("click", () => loadPlans());
+  const discoveryRefresh = $("discovery-refresh");
+  if (discoveryRefresh) discoveryRefresh.addEventListener("click", () => loadDiscoveries());
+  const discoveryFilter = $("discovery-filter");
+  if (discoveryFilter) discoveryFilter.addEventListener("change", () => loadDiscoveries());
 
   const opening = readQuery();
   showPanel(opening.panel, opening.tab);
