@@ -1,6 +1,7 @@
 """Standalone Daedalus FastAPI service — equal Iyveris mesh peer."""
 from __future__ import annotations
 
+import asyncio
 import hmac
 import logging
 import os
@@ -26,6 +27,53 @@ from daedalus.owner_auth import OwnerAuthMiddleware, client_is_loopback_scope
 log = logging.getLogger("app.main")
 _STATIC = Path(__file__).resolve().parent / "static"
 _UI_STATIC = Path(__file__).resolve().parent.parent / "ui" / "static"
+
+
+def _health_llm_snapshot() -> dict:
+    """Sync LLM slice for /health — run via asyncio.to_thread (blocks a worker thread, not the event loop)."""
+    from daedalus.llm_config import get_brain_config, get_config
+    brain = get_brain_config()
+    cfg = get_config()
+    return {
+        "provider": cfg.get("provider"),
+        "model": cfg.get("model"),
+        "has_key": bool(cfg.get("api_key")),
+        "brain_provider": brain.get("provider"),
+        "brain_model": brain.get("model"),
+    }
+
+
+def _llm_status_payload() -> dict:
+    """Sync body for GET /api/v1/llm/status — offloaded from async handler."""
+    from daedalus.llm_config import get_brain_config, get_config
+    brain = get_brain_config()
+    cfg = get_config()
+    overlays: dict = {}
+    if isinstance(brain, dict) and isinstance(cfg, dict):
+        if cfg.get("model") != brain.get("model") or cfg.get("provider") != brain.get("provider"):
+            overlays["this_turn"] = {
+                "provider": cfg.get("provider"),
+                "model": cfg.get("model"),
+                "source": cfg.get("source"),
+            }
+        if cfg.get("run_budget_tier"):
+            overlays["run_budget_tier"] = cfg.get("run_budget_tier")
+        if cfg.get("effort"):
+            overlays["task_effort"] = cfg.get("effort")
+    return {
+        "ok": True,
+        "provider": cfg.get("provider"),
+        "model": cfg.get("model"),
+        "source": cfg.get("source"),
+        "has_key": bool(cfg.get("api_key")),
+        "brain": {
+            "provider": brain.get("provider"),
+            "model": brain.get("model"),
+            "source": brain.get("source"),
+            "has_key": bool(brain.get("api_key")),
+        },
+        "overlays": overlays,
+    }
 
 
 def _mesh_key() -> str:
@@ -133,16 +181,7 @@ async def health() -> dict:
     from daedalus.host import adn_available, standalone_mode
     from daedalus.store import db_path
     try:
-        from daedalus.llm_config import get_brain_config, get_config
-        brain = get_brain_config()
-        cfg = get_config()
-        llm = {
-            "provider": cfg.get("provider"),
-            "model": cfg.get("model"),
-            "has_key": bool(cfg.get("api_key")),
-            "brain_provider": brain.get("provider"),
-            "brain_model": brain.get("model"),
-        }
+        llm = await asyncio.to_thread(_health_llm_snapshot)
     except Exception:
         llm = {"has_key": False}
     return {
@@ -190,35 +229,7 @@ async def capabilities() -> dict:
 @app.get("/api/v1/llm/status")
 async def llm_status() -> dict:
     try:
-        from daedalus.llm_config import get_brain_config, get_config
-        brain = get_brain_config()
-        cfg = get_config()
-        overlays: dict = {}
-        if isinstance(brain, dict) and isinstance(cfg, dict):
-            if cfg.get("model") != brain.get("model") or cfg.get("provider") != brain.get("provider"):
-                overlays["this_turn"] = {
-                    "provider": cfg.get("provider"),
-                    "model": cfg.get("model"),
-                    "source": cfg.get("source"),
-                }
-            if cfg.get("run_budget_tier"):
-                overlays["run_budget_tier"] = cfg.get("run_budget_tier")
-            if cfg.get("effort"):
-                overlays["task_effort"] = cfg.get("effort")
-        return {
-            "ok": True,
-            "provider": cfg.get("provider"),
-            "model": cfg.get("model"),
-            "source": cfg.get("source"),
-            "has_key": bool(cfg.get("api_key")),
-            "brain": {
-                "provider": brain.get("provider"),
-                "model": brain.get("model"),
-                "source": brain.get("source"),
-                "has_key": bool(brain.get("api_key")),
-            },
-            "overlays": overlays,
-        }
+        return await asyncio.to_thread(_llm_status_payload)
     except Exception as exc:
         return {"ok": False, "error": str(exc)[:200]}
 
