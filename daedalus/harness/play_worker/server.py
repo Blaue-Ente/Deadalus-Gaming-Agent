@@ -19,7 +19,7 @@ _SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$")
 _STATUS = {"not_found": 404, "session_limit": 409, "bad_request": 400, "unsupported_engine": 400,
            "engine_missing": 424, "tool_missing": 424, "display_unavailable": 424,
            "session_stopped": 410, "window_missing": 502, "start_failed": 502, "frame_unreadable": 502,
-           "focus_lost": 409, "unsupported_platform": 501}
+           "focus_lost": 409, "unsupported_platform": 501, "build_failed": 502, "licence_missing": 424}
 
 
 class StartBody(BaseModel):

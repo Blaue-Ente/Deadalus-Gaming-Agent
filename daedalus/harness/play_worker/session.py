@@ -77,7 +77,9 @@ def _remove_tree(path: Path, attempts: int = 12, pause: float = 0.25) -> None:
 
 class PlaySession:
     def __init__(self, project_dir: Path, *, slug: str = "", size: tuple[int, int] = (640, 480),
-                 session_id: str = "", artifacts: Path | None = None, env_extra: dict[str, str] | None = None) -> None:
+                 session_id: str = "", artifacts: Path | None = None, env_extra: dict[str, str] | None = None,
+                 engine: str = "godot") -> None:
+        self.engine = engine
         self.env_extra = dict(env_extra or {})
         self.id = session_id or uuid.uuid4().hex[:12]
         self.slug = slug
@@ -89,6 +91,7 @@ class PlaySession:
         self.display = getattr(self.backend, "display", None)     # Linux: the Xvfb display (None on Windows)
         self.game: godot_bridge.GodotSession | None = None
         self.window_id = ""
+        self._engine_out: Path | None = None            # where a Unity player writes its own screenshots and log
         self.state = "new"           # new -> running -> stopped | failed
         self.level = 0               # proof level reached by what was OBSERVED
         self.started_at = 0.0
@@ -102,6 +105,8 @@ class PlaySession:
         with self._lock:
             if self.state != "new":
                 raise PlayError("bad_request", f"session is {self.state}")
+            if self.engine == "unity":
+                return self._start_unity(timeout)
             eng = engines.find_godot()
             if not eng.get("ok"):
                 self.state = "failed"
@@ -150,6 +155,55 @@ class PlaySession:
                 self.state = "failed"
                 raise PlayError("start_failed", f"{type(exc).__name__}: {exc}") from exc
             return self.status()
+
+    def _start_unity(self, timeout: float) -> dict[str, Any]:
+        from . import unity
+        eng = unity.find_unity()
+        if not eng.get("ok"):
+            self.state = "failed"
+            raise PlayError("engine_missing", eng.get("message", "engine missing"), source=eng.get("source"))
+        if not unity.is_unity_project(self.source):
+            self.state = "failed"
+            raise PlayError("start_failed", "not a Unity project (no Assets/ and ProjectSettings/)", slug=self.slug)
+        missing = [k for k, ok in self.backend.tools().items() if not ok]
+        if missing:
+            self.state = "failed"
+            raise PlayError("tool_missing", f"a rendered session needs: {', '.join(missing)}", tools=missing)
+        try:
+            self.artifacts.mkdir(parents=True, exist_ok=True)
+            (self.artifacts / "session.json").write_text(
+                json.dumps({"id": self.id, "slug": self.slug, "started_at": time.time(), "engine": "unity"}), encoding="utf-8")
+            built = unity.build_player(self.source, artifact_root() / "unity-cache", eng["path"],
+                                       log=self.artifacts / "unity-build.log")
+            self._event("built", cached=built["cached"], key=built["key"], seconds=built["build_seconds"])
+            if self.state != "new":                       # stop() ran while the build did: do not launch anything
+                raise PlayError("session_stopped", f"session was {self.state} during the build")
+            self.workdir = Path(tempfile.mkdtemp(prefix=f"daedalus-play-{self.id}-"))
+            self._engine_out = self.workdir / "out"
+            self._engine_out.mkdir()
+            backend_env = self.backend.start(self.size)
+            env = {**os.environ, **backend_env, **self.env_extra}
+            self.game = unity.UnityGame(self.workdir, size=self.size, out_dir=self._engine_out)
+            ping = self.game.start(binary=built["exe"], timeout=max(timeout, 60.0), env=env,
+                                   **self.backend.popen_flags())
+            if not ping.get("ok"):
+                raise PlayError("start_failed", str(ping.get("error") or "bridge did not answer"),
+                                stdout=str(ping.get("stdout", ""))[-600:])
+            self.window_id = self.backend.find_window(self.game.proc.pid if self.game.proc else 0)
+            self.state = "running"
+            self.started_at = time.time()
+            self.level = 1
+            self._event("started", engine=eng["path"], display=self.backend.label(), window=self.window_id,
+                        backend=self.backend.name, engine_kind="unity")
+        except PlayError:
+            self.stop()
+            self.state = "failed"
+            raise
+        except Exception as exc:
+            self.stop()
+            self.state = "failed"
+            raise PlayError("start_failed", f"{type(exc).__name__}: {exc}") from exc
+        return self.status()
 
     def stop(self) -> dict[str, Any]:
         """Idempotent. Kills Godot's whole process group, then Xvfb's, then removes the temp copy."""
@@ -206,7 +260,8 @@ class PlaySession:
                 shot = self.game.request("screenshot")
                 if not shot.get("ok"):
                     raise PlayError("window_missing", f"engine viewport unavailable: {shot.get('error')}")
-                src = (self.workdir / "project" / str(shot.get("path", ""))) if self.workdir else None
+                base = self._engine_out or ((self.workdir / "project") if self.workdir else None)
+                src = (base / str(shot.get("path", ""))) if base else None
                 if src is None or not src.is_file():
                     raise PlayError("window_missing", "engine screenshot file not found")
                 shutil.copyfile(src, out)
@@ -307,7 +362,12 @@ class PlaySession:
     def fps(self) -> dict[str, Any]:
         return self._bridge("fps_sample")
 
-    def game_state(self, path: str = "/root/Main") -> dict[str, Any]:
+    def game_state(self, path: str = "") -> dict[str, Any]:
+        """The game's own ``state()``. Godot defaults to /root/Main; a Unity game has no fixed name, so it must say which
+        GameObject carries the method (a wrong guess is an honest node_not_found, not a pass)."""
+        path = path or ("/root/Main" if self.engine == "godot" else "")
+        if not path:
+            raise PlayError("bad_request", "name the GameObject that carries state() (for example /Game)")
         return self._bridge("call_method", path=path, method="state", args=[])
 
     # ---- reporting -------------------------------------------------------------------------------------

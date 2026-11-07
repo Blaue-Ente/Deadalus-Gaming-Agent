@@ -15,4 +15,4 @@ class PlayError(Exception):
 
 
 # codes: engine_missing, display_unavailable, tool_missing, session_limit, not_found, start_failed,
-#        unsupported_engine, bad_request, window_missing, session_stopped
+#        unsupported_engine, bad_request, window_missing, session_stopped, build_failed, licence_missing
