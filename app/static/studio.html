@@ -394,6 +394,20 @@
             <button id="plan-generate" type="button" data-i18n="studio.planGenerate">Generate draft</button>
             <button id="plan-refresh" type="button" data-i18n="studio.planRefresh">Refresh</button>
           </div>
+          <div class="plan-manual" id="plan-manual">
+            <label>
+              <span data-i18n="studio.planManualTitle">Plan title</span>
+              <input id="plan-manual-title" type="text" autocomplete="off" data-i18n-aria="studio.planManualTitle" aria-label="Plan title" />
+            </label>
+            <label>
+              <span data-i18n="studio.planManualDesc">What it is for (optional)</span>
+              <input id="plan-manual-desc" type="text" autocomplete="off" data-i18n-aria="studio.planManualDesc" aria-label="What it is for" />
+            </label>
+            <div class="row">
+              <button id="plan-manual-create" type="button" data-i18n="studio.planManualCreate">Create manual plan</button>
+            </div>
+            <p class="hint" data-i18n="studio.planManualHint">A manual plan starts as a draft. Approve it, as with a generated one, when its steps are ready.</p>
+          </div>
           <div id="plan-list"></div>
           <p class="hint" data-i18n="studio.planHint">Plans are global. Generate writes a draft with one agent turn. Approve creates tasks and does not run them. Delete removes the plan and its steps and keeps tasks.</p>
         </div>

@@ -704,7 +704,7 @@ def test_review_confirms_plan_and_discovery_and_hides_approved_rows(studio_serve
         assert "does not write a lesson" in dialogs[-1]
         _status_has(page, "discovery-status", "No lesson was written.")
         _settled(page, "discovery-refresh")
-        assert page.locator("#discovery-list [data-id=disc_no] button").count() == 0
+        assert page.locator("#discovery-list [data-id=disc_no] button[data-act]").count() == 0
         state["disc"] = {"discoveries": [], "count": 0, "error": "disc-down"}
         _hit(page, "#discovery-refresh")
         _status_has(page, "discovery-status", "disc-down")
@@ -1006,14 +1006,14 @@ def test_unresolved_costly_actions_stay_blocked_across_navigation(studio_server)
         _hit(page, "#discovery-refresh")
         page.wait_for_function(
             """() => (document.getElementById('discovery-status').textContent || '').includes('Outcome unknown')
-              && document.querySelectorAll('#discovery-list [data-id=disc_bg] button').length === 0
+              && document.querySelectorAll('#discovery-list [data-id=disc_bg] button[data-act]').length === 0
               && document.getElementById('discovery-list').textContent.includes('disc_bg')"""
         )
         _hit(page, "#workspace-nav button[data-panel=build]")
         _hit(page, "#workspace-nav button[data-panel=review]")
         page.wait_for_function(
             """() => (document.getElementById('discovery-status').textContent || '').includes('Not safe to retry')
-              && document.querySelectorAll('#discovery-list [data-id=disc_bg] button').length === 0
+              && document.querySelectorAll('#discovery-list [data-id=disc_bg] button[data-act]').length === 0
               && document.querySelectorAll('#discovery-list [data-id=disc_pend] button[data-act=approve]').length === 0"""
         )
         assert len(kind("disc-approve")) == before + 1

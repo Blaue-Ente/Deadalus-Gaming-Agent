@@ -780,3 +780,16 @@ label.grow { flex: 1; min-width: 7rem; }
   margin: 0.4rem 0 0.2rem; padding: 0.55rem 0.65rem; max-height: 22rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
   font-family: var(--mono); font-size: 0.7rem; line-height: 1.45; color: var(--ink); background: var(--bg-deep); border: 1px solid var(--line); border-radius: var(--radius);
 }
+
+/* A6.2b: the steps manager under a plan row and the manual plan form */
+.item .manage { margin: 0.5rem 0 0.2rem; padding: 0.5rem 0.65rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-deep); }
+.item .manage .step { padding: 0.4rem 0; border-bottom: 1px solid var(--line); }
+.item .manage .step:last-of-type { border-bottom: 0; }
+.item .manage .step b { display: block; font-size: 0.84rem; font-weight: 600; }
+.item .manage .step small { display: block; color: var(--muted); font-family: var(--mono); font-size: 0.68rem; overflow-wrap: anywhere; }
+.item .manage .row > select { flex: 0 0 auto; width: auto; min-width: 6rem; }
+.item .manage .add-step { display: grid; gap: 0.35rem; margin-top: 0.5rem; }
+.item .manage .add-step select[multiple] { min-height: 3.4rem; }
+.item .manage .note { margin: 0.3rem 0 0; color: var(--muted); font-size: 0.74rem; line-height: 1.35; }
+.item .manage .note[data-state="error"] { color: var(--err); }
+.plan-manual { margin: 0.5rem 0 0.9rem; }

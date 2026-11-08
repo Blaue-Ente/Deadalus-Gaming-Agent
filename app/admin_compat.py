@@ -2698,43 +2698,12 @@ async def daedalus_planner_get(plan_id: str):
 
 @router.get("/daedalus/planner/plans/{plan_id}/progress")
 async def daedalus_planner_progress(plan_id: str):
-    from daedalus.planner import CHECKPOINT_KEYS, get_plan
+    from daedalus.harness import planner_actions
+    from daedalus.planner import get_plan
     plan = await get_plan(plan_id)
     if not plan:
         return JSONResponse({"error": "not found"}, status_code=404)
-    steps_out = []
-    for s in plan.get("steps", []):
-        cps = s.get("checkpoints") or {}
-        if isinstance(cps, str):
-            try:
-                cps = json.loads(cps)
-            except Exception:
-                cps = {}
-        passed = [k for k in CHECKPOINT_KEYS if (cps.get(k) or {}).get("passed")]
-        steps_out.append({
-            "id": s["id"],
-            "step_order": s["step_order"],
-            "title": s["title"],
-            "status": s["status"],
-            "proposal_id": s.get("proposal_id"),
-            "progress_note": s.get("progress_note"),
-            "diagnostics": s.get("diagnostics"),
-            "repair_attempts": s.get("repair_attempts") or 0,
-            "manual_override": bool(s.get("manual_override")),
-            "checkpoints": {
-                "passed": passed,
-                "passed_count": len(passed),
-                "total": len(CHECKPOINT_KEYS),
-                "all": CHECKPOINT_KEYS,
-            },
-            "error_msg": s.get("error_msg"),
-        })
-    return JSONResponse({
-        "plan_id": plan_id,
-        "plan_status": plan.get("status"),
-        "title": plan.get("title"),
-        "steps": steps_out,
-    })
+    return JSONResponse(planner_actions.plan_progress(plan))
 
 
 @router.post("/daedalus/planner/steps/{step_id}/override")
@@ -2835,6 +2804,8 @@ async def daedalus_run_background(request: Request):
     import asyncio
     import uuid
 
+    from daedalus.harness import planner_actions
+
     body = await _body(request)
     task_msg = str(body.get("task", "")).strip()
     if not task_msg:
@@ -2844,75 +2815,26 @@ async def daedalus_run_background(request: Request):
         body.get("session_id")
         or (f"task-{str(task_id)[:8]}" if task_id else f"bg-{uuid.uuid4().hex[:8]}")
     )
-    grant_perms: list = body.get("grant_perms") or []
+    asked: list = body.get("grant_perms") or []
+    # Only the server's own recommended set can be granted here; a class named in the request is ignored, not granted.
+    allowed = set(planner_actions.recommended_permissions())
+    grant_perms = [str(p) for p in asked if str(p) in allowed]
+    ignored = [str(p) for p in asked if str(p) not in allowed]
 
     from daedalus.agent import get_daedalus
     agent = get_daedalus()
     if grant_perms:
         from daedalus.outbox import grant_permission
         for perm in grant_perms:
-            grant_permission(perm_class=str(perm), hours=8.0, granted_by="bg_task_auto")
+            grant_permission(perm_class=perm, hours=8.0, granted_by="bg_task_auto")
 
-    async def _run():
-        import time as _time
-        import traceback
-        started = _time.time()
-        try:
-            result = await agent.chat(task_msg, session_id=session_id)
-            elapsed = round(_time.time() - started, 1)
-            reply = result.get("reply", "") if isinstance(result, dict) else str(result)
-            ctx = result.get("context", {}) if isinstance(result, dict) else {}
-            tc = ctx.get("tool_calls") or []
-            tools_summary = ", ".join(set(c.get("tool", "?") for c in tc)) if tc else "—"
-            from daedalus.outbox import push_outbox
-            push_outbox(
-                type="message",
-                title=f"✅ Commit: {task_msg[:55]}",
-                body=(
-                    f"**Session:** {session_id}\n"
-                    f"**Elapsed:** {elapsed}s  |  **Tools:** {tools_summary}\n\n"
-                    + reply[:1800]
-                ),
-                category="bg_commit",
-                session_id=session_id,
-                payload={"task": task_msg, "elapsed": elapsed, "tools": tools_summary,
-                         "task_id": task_id},
-            )
-            if task_id:
-                try:
-                    from daedalus import continuity
-                    continuity.update_task(task_id, status="done",
-                                           summary=f"[bg] {reply[:300]}")
-                except Exception:
-                    pass
-        except Exception as extra:
-            log.exception("background task failed")
-            from daedalus.outbox import push_outbox
-            push_outbox(
-                type="message",
-                title=f"🔴 Error: {task_msg[:50]}",
-                body=(
-                    f"**Session:** {session_id}\n\n"
-                    f"**Грешка:**\n```\n{traceback.format_exc()[-800:]}\n```"
-                ),
-                category="bg_error",
-                session_id=session_id,
-                payload={"task": task_msg, "error": str(extra), "task_id": task_id},
-            )
-            if task_id:
-                try:
-                    from daedalus import continuity
-                    continuity.update_task(task_id, status="rework",
-                                           summary=f"[bg error] {extra}")
-                except Exception:
-                    pass
-
-    asyncio.create_task(_run())
+    asyncio.create_task(planner_actions.execute_task(agent, task_msg, session_id, task_id))
     return JSONResponse({
         "ok": True,
         "session_id": session_id,
         "granted_perms": grant_perms,
-        "message": "Задачата е стартирана; резултатът ще отиде в outbox.",
+        "ignored_perms": ignored,
+        "message": "The task is running; the result goes to the outbox.",
     })
 
 
