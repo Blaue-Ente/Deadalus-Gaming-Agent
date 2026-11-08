@@ -2357,15 +2357,17 @@ async def kernel_config_get():
 
 @router.post("/daedalus/kernel/config")
 async def kernel_config_set(request: Request):
-    from daedalus import kv
+    from daedalus.harness import maintenance
     body = await _body(request)
     defaults = _kernel_defaults()
-    cfg = {
-        "repo": str(body.get("repo") or defaults["repo"]).strip(),
-        "paths": body.get("paths") or defaults["paths"],
-        "branch": str(body.get("branch") or defaults["branch"]).strip(),
-    }
-    kv.set("adn:daedalus_kernel_config", cfg)
+    try:
+        cfg = maintenance.save_kernel_config(
+            str(body.get("repo") or defaults["repo"]),
+            str(body.get("branch") or defaults["branch"]),
+            body.get("paths") or defaults["paths"],
+        )
+    except maintenance.KernelConfigError as extra:
+        return JSONResponse({"ok": False, "error": extra.code, **extra.extra}, status_code=400)
     return JSONResponse({"ok": True, "config": cfg})
 
 

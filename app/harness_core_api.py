@@ -339,9 +339,10 @@ async def harness_vision_probe() -> Any:
 
 # ---- A6.1c: kernel export and the upgrade-pool scan ---------------------------------------------------------
 class KernelConfigBody(BaseModel):
-    repo: str = Field(..., max_length=201)
-    branch: str = Field(..., max_length=80)
-    paths: list[str] = Field(..., max_length=40)
+    # no length limits here: a 422 would reach the browser as raw JSON, and validate() answers with a code
+    repo: str = ""
+    branch: str = ""
+    paths: list[str] = Field(default_factory=list)
 
 
 class KernelPushBody(BaseModel):

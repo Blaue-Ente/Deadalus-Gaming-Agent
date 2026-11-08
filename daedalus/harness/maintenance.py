@@ -18,6 +18,10 @@ from typing import Any
 _KEY = "adn:daedalus_kernel_config"
 _REPO_RE = re.compile(r"^[A-Za-z0-9_.-]{1,100}/[A-Za-z0-9_.-]{1,100}$")
 _BRANCH_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{0,79}$")
+# A branch spelled as a full ref ("refs/heads/main", "heads/main", "origin/main") can resolve to a protected branch, so
+# these never pass; and the product's own state (data stores hold saved keys) is never exportable, whatever its file names.
+_REF_PREFIXES = frozenset({"refs", "heads", "origin", "remotes", "tags"})
+_BLOCKED_TOP = frozenset({".git", "data", "playground", "projects", "node_modules", ".venv", "venv", "secrets"})
 
 
 class KernelConfigError(ValueError):
@@ -48,13 +52,15 @@ def kernel_config() -> dict[str, Any]:
 
 def validate(repo: str, branch: str, paths: Any) -> dict[str, Any]:
     from .. import playground_github as gh
-    from ..paths import repo_root
+    from ..paths import data_root, playground_projects_dir, repo_root
     from ..secret_paths import is_secret_path
 
     repo, branch = (repo or "").strip(), (branch or "").strip()
     if not _REPO_RE.match(repo):
         raise KernelConfigError("bad_repo")
     if not _BRANCH_RE.match(branch) or ".." in branch or branch.endswith(("/", ".lock")) or "//" in branch:
+        raise KernelConfigError("bad_branch")
+    if branch.split("/")[0].lower() in _REF_PREFIXES:
         raise KernelConfigError("bad_branch")
     if branch.lower() in gh.PROTECTED_KERNEL_BRANCHES:
         raise KernelConfigError("protected_branch", branch=branch)
@@ -65,11 +71,20 @@ def validate(repo: str, branch: str, paths: Any) -> dict[str, Any]:
     for raw in paths:
         rel = str(raw or "").strip().replace("\\", "/")
         pure = PurePosixPath(rel)
-        if not rel or pure.is_absolute() or ".." in pure.parts or rel.startswith("~") or ":" in rel[:3]:
+        if not rel or not pure.parts or pure.is_absolute() or ".." in pure.parts or rel.startswith("~") or ":" in rel[:3]:
             raise KernelConfigError("bad_paths", path=rel)
         if is_secret_path(rel):
             raise KernelConfigError("secret_path", path=rel)
+        if pure.parts[0].lower() in _BLOCKED_TOP:
+            raise KernelConfigError("protected_path", path=rel)
         target = (root / rel).resolve()
+        for state in (data_root(), playground_projects_dir()):        # wherever the product keeps its own state
+            try:
+                state = state.resolve()
+            except OSError:
+                continue
+            if target == state or state in target.parents or target in state.parents:
+                raise KernelConfigError("protected_path", path=rel)
         if root not in target.parents and target != root:          # a symlink or odd path that leaves the product
             raise KernelConfigError("bad_paths", path=rel)
         if target == root:
@@ -163,8 +178,12 @@ async def start_scan() -> dict[str, Any]:
     async def run() -> None:
         started = time.time()
         try:
-            await run_upgrade_pool_scan(agent, session_id=session_id)
-            _scan["last"] = {"ok": True, "finished_at": time.time(), "seconds": round(time.time() - started, 1)}
+            res = await run_upgrade_pool_scan(agent, session_id=session_id)
+            # the scanner reports its own failures in the result instead of raising: read them, never assume success
+            ok = bool(res.get("ok")) if isinstance(res, dict) else True
+            _scan["last"] = {"ok": ok, "finished_at": time.time(), "seconds": round(time.time() - started, 1)}
+            if not ok:
+                _scan["last"]["error"] = "scan_failed"
         except Exception as exc:                          # the scan itself reports through the Outbox; this is the state
             _scan["last"] = {"ok": False, "finished_at": time.time(), "error": type(exc).__name__}
 

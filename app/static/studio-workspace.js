@@ -2436,7 +2436,8 @@
 
   // ---- A6.1c: kernel export and the upgrade-pool scan -----------------------------------------------------------
   const KERNEL_ERR = { bad_repo: "studio.kerrBadRepo", bad_branch: "studio.kerrBadBranch", protected_branch: "studio.kerrProtected",
-    bad_paths: "studio.kerrBadPaths", secret_path: "studio.kerrSecret", not_configured: "studio.kerrNoToken",
+    bad_paths: "studio.kerrBadPaths", secret_path: "studio.kerrSecret", protected_path: "studio.kerrProtectedPath",
+    not_configured: "studio.kerrNoToken",
     no_files: "studio.kerrNoFiles", push_failed: "studio.kerrPushFailed", confirm_required: "studio.kerrConfirm" };
   let kernelSaved = null;           // what the server has: the push uses this, never the unsaved fields
 
@@ -2470,6 +2471,14 @@
 
   function paintKernel(data) {
     const box = $("settings-kernel");
+    // A repaint (a reload of Settings) must not throw away what the owner typed and has not saved yet.
+    const typed = box.querySelector("[data-id='kernel-repo'] input") ? {
+      repo: box.querySelector("[data-id='kernel-repo'] input").value,
+      branch: box.querySelector("[data-id='kernel-branch'] input").value,
+      paths: box.querySelector("[data-id='kernel-paths'] textarea").value,
+    } : null;
+    const hadUnsaved = !!(typed && kernelSaved && (typed.repo.trim() !== kernelSaved.repo || typed.branch.trim() !== kernelSaved.branch
+      || typed.paths.split("\n").map((x) => x.trim()).filter(Boolean).join("\n") !== kernelSaved.paths.join("\n")));
     box.replaceChildren();
     if (!data || data.ok === false) return;
     kernelSaved = { repo: data.repo, branch: data.branch, paths: (data.paths || []).slice() };
@@ -2481,6 +2490,7 @@
     branch.value = data.branch || "";
     const paths = document.createElement("textarea");
     paths.value = (data.paths || []).join("\n");
+    if (hadUnsaved) { repo.value = typed.repo; branch.value = typed.branch; paths.value = typed.paths; }
     const missing = (data.missing_paths || []).join(", ");
     box.append(fieldRow("kernel-repo", "studio.kernelRepo", repo),
                fieldRow("kernel-branch", "studio.kernelBranch", branch),
@@ -2488,14 +2498,17 @@
     const read = () => ({ repo: repo.value.trim(), branch: branch.value.trim(),
       paths: paths.value.split("\n").map((x) => x.trim()).filter(Boolean) });
     const same = (a, b) => a.repo === b.repo && a.branch === b.branch && a.paths.join("\n") === b.paths.join("\n");
-    box.appendChild(actionRow({
-      id: "kernel-actions", title: dx.t("studio.settingsKernel"), sub: "",
+    const target = () => (kernelSaved ? kernelSaved.repo + " → " + kernelSaved.branch : "");
+    const actions = actionRow({
+      id: "kernel-actions", title: target(), sub: "",
       buttons: [
         { label: dx.t("studio.kernelSave"), run: async () => {
           try {
             const fresh = await postJson("/api/v1/harness/kernel/config", read());
             kernelSaved = { repo: fresh.repo, branch: fresh.branch, paths: (fresh.paths || []).slice() };
             repo.value = fresh.repo; branch.value = fresh.branch; paths.value = (fresh.paths || []).join("\n");
+            const heading = actions.querySelector(".cfg-name b");
+            if (heading) heading.textContent = target();                 // what Push will do, kept current
             const gone = (fresh.missing_paths || []).join(", ");
             return { text: dx.t("studio.kernelSaved") + (gone ? " " + dx.t("studio.kernelMissing", { paths: gone }) : ""), bad: false };
           } catch (err) { return { text: kernelErr(err), bad: true }; }
@@ -2505,7 +2518,8 @@
           return pushKernel(kernelSaved);
         } },
       ],
-    }));
+    });
+    box.appendChild(actions);
   }
 
   async function pushKernel(saved) {
@@ -2524,10 +2538,19 @@
     return { text: dx.t(res.forced ? "studio.kernelPushedForced" : "studio.kernelPushed", { files: res.files, repo: res.repo, branch: res.branch }), bad: false };
   }
 
+  let poolTimer = null;
   function paintPool(d) {
     const box = $("settings-pool");
     box.replaceChildren();
+    clearTimeout(poolTimer);
     if (!d || d.ok === false) return;
+    if (d.running) {                       // a scan is running: look again until it ends, so the button and result are true
+      poolTimer = setTimeout(() => {
+        const panel = $("panel-settings");
+        if (!panel || panel.hidden) return;              // not on screen: the next time Settings opens it reads the state again
+        dx.api("/api/v1/harness/upgrade-pool").then(paintPool).catch(() => {});
+      }, 2500);
+    }
     const unknown = d.candidates < 0;
     const last = d.last ? (d.last.ok ? dx.t("studio.poolLastOk") : dx.t("studio.poolLastFail", { why: d.last.error || "?" })) : "";
     box.appendChild(actionRow({

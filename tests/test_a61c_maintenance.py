@@ -44,6 +44,16 @@ def test_defaults_point_at_this_repository_on_a_branch_of_its_own(client):
     ("o/r", "kernel-export", ["."], "bad_paths"),
     ("o/r", "kernel-export", ["daedalus/.env"], "secret_path"),
     ("o/r", "kernel-export", ["data/secrets.env"], "secret_path"),
+    ("o/r", "refs/heads/main", ["daedalus"], "bad_branch"),
+    ("o/r", "heads/main", ["daedalus"], "bad_branch"),
+    ("o/r", "origin/main", ["daedalus"], "bad_branch"),
+    ("o/r", "tags/v1", ["daedalus"], "bad_branch"),
+    ("o/r", "kernel-export", ["data"], "protected_path"),
+    ("o/r", "kernel-export", ["data/kv"], "protected_path"),
+    ("o/r", "kernel-export", [".git"], "protected_path"),
+    ("o/r", "kernel-export", ["playground/projects"], "protected_path"),
+    ("o/" + "r" * 300, "kernel-export", ["daedalus"], "bad_repo"),
+    ("o/r", "b" * 200, ["daedalus"], "bad_branch"),
     ("o/r", "kernel-export", ["certs/server.pem"], "secret_path"),
 ])
 def test_unsafe_kernel_config_is_refused_and_nothing_is_saved(client, repo, branch, paths, code):
@@ -133,7 +143,7 @@ def test_a_failed_push_answers_a_bare_code_with_an_error_status(client, monkeypa
     assert "secret-looking" not in res.text
 
 
-def test_a_protected_branch_saved_through_the_old_page_is_still_refused(client, monkeypatch):
+def test_a_protected_branch_saved_before_the_rules_existed_is_still_refused(client, monkeypatch):
     calls = []
 
     async def fake(**kw):
@@ -142,7 +152,9 @@ def test_a_protected_branch_saved_through_the_old_page_is_still_refused(client, 
 
     monkeypatch.setattr("daedalus.playground_github.push_kernel", fake)
     _token(monkeypatch)
-    client.post("/admin/daedalus/kernel/config", json={"repo": "o/r", "branch": "main", "paths": ["daedalus"]})
+    from daedalus import kv
+
+    kv.set("adn:daedalus_kernel_config", {"repo": "o/r", "branch": "main", "paths": ["daedalus"]})   # saved before the rules existed
     res = client.post("/api/v1/harness/kernel/push", json={"confirm": True, "force": True})
     assert res.status_code == 409 and res.json()["error"] == "protected_branch" and calls == []
 
@@ -176,7 +188,9 @@ def test_the_export_never_contains_secret_files_git_data_or_dependency_trees(a0_
         return 0, ""
 
     monkeypatch.setattr(gh, "_run", fake_run)
-    res = asyncio.run(gh.push_kernel(repo_full_name="o/r", paths=["daedalus", "README.md", ".env"], branch="kernel-export"))
+    with pytest.raises(ValueError, match="secret_path"):                            # named outright: refused up front
+        asyncio.run(gh.push_kernel(repo_full_name="o/r", paths=["daedalus", ".env"], branch="kernel-export"))
+    res = asyncio.run(gh.push_kernel(repo_full_name="o/r", paths=["daedalus", "README.md"], branch="kernel-export"))
     assert res["ok"] is True
     files = seen["files"]
     assert "daedalus/ok.py" in files and "README.md" in files and "daedalus/.env.example" in files
@@ -551,4 +565,200 @@ def test_kernel_and_pool_sections_fit_and_their_controls_are_really_clickable(st
             # scroll_into_view_if_needed leaves a partly visible element where it is; its centre can then be off screen
             page.locator(selector).first.evaluate("el => el.scrollIntoView({block: 'center'})")
             _hit(page, selector)
+        browser.close()
+
+
+# ------------------------------------------------------------------------------------------------ review fixes
+def test_too_long_fields_answer_a_code_not_a_422_the_browser_cannot_read(client):
+    res = client.post("/api/v1/harness/kernel/config", json={"repo": "o/" + "r" * 400, "branch": "kernel-export", "paths": ["daedalus"]})
+    assert res.status_code == 400 and res.json()["error"] == "bad_repo"
+    res = client.post("/api/v1/harness/kernel/config", json={"repo": "o/r", "branch": "kernel-export", "paths": ["a%d" % i for i in range(60)]})
+    assert res.status_code == 400 and res.json()["error"] == "bad_paths"
+
+
+def test_the_state_directories_of_this_install_are_never_exportable(client, a0_tmp, monkeypatch):  # noqa: F811
+    from daedalus.paths import data_root, playground_projects_dir
+
+    inside = a0_tmp / "product"
+    (inside / "state").mkdir(parents=True)
+    monkeypatch.setattr("daedalus.paths.repo_root", lambda: inside)
+    monkeypatch.setattr("daedalus.paths.data_root", lambda: inside / "state")
+    monkeypatch.setattr("daedalus.paths.playground_projects_dir", lambda: inside / "state" / "projects")
+    res = client.post("/api/v1/harness/kernel/config", json={"repo": "o/r", "branch": "kernel-export", "paths": ["state"]})
+    assert res.status_code == 400 and res.json()["error"] == "protected_path"
+
+
+def test_the_old_page_cannot_save_or_push_what_the_new_one_refuses(client, monkeypatch):
+    calls = []
+
+    async def fake_run(args, *, cwd=None, timeout=0):
+        calls.append(args)
+        return 0, ""
+
+    monkeypatch.setattr("daedalus.playground_github._run", fake_run)
+    _token(monkeypatch)
+    for bad in ({"repo": "o/r", "branch": "main", "paths": ["daedalus"]},
+                {"repo": "o/r", "branch": "refs/heads/main", "paths": ["daedalus"]},
+                {"repo": "attacker/x", "branch": "kernel-export", "paths": ["../../etc", "data"]},
+                {"repo": "o/r", "branch": "kernel-export", "paths": ["daedalus/.env"]}):
+        res = client.post("/admin/daedalus/kernel/config", json=bad)
+        assert res.status_code == 400 and res.json()["ok"] is False, bad
+        res = client.post("/admin/daedalus/kernel/push", json={**bad, "force": True})
+        assert res.status_code == 400 and res.json()["ok"] is False, bad
+    assert calls == []                                                           # git was never even started
+    assert client.get("/admin/daedalus/kernel/config").json()["repo"] == "Blaue-Ente/Deadalus-Gaming-Agent"
+
+
+@pytest.mark.skipif(not hasattr(__import__("os"), "symlink"), reason="no symlinks")
+def test_a_link_inside_an_exported_folder_is_not_followed(a0_tmp, monkeypatch):  # noqa: F811
+    import os
+
+    from daedalus import playground_github as gh
+
+    root = a0_tmp / "product"
+    (root / "daedalus").mkdir(parents=True)
+    (root / "daedalus" / "ok.py").write_text("x")
+    secret = a0_tmp / "elsewhere" / "id_rsa_notes"
+    secret.parent.mkdir()
+    secret.write_text("PRIVATE")
+    try:
+        os.symlink(secret, root / "daedalus" / "innocent.txt")
+        os.symlink(a0_tmp / "elsewhere", root / "daedalus" / "folder")
+    except OSError:
+        pytest.skip("cannot create links here")
+    monkeypatch.setattr(gh, "_WORKSPACE_ROOT", root)
+    monkeypatch.setattr(gh, "is_configured", lambda: True)
+    seen = {}
+
+    async def fake_run(args, *, cwd=None, timeout=0):
+        if "add" in args:
+            seen["files"] = sorted(str(p.relative_to(cwd)).replace("\\", "/") for p in Path(cwd).rglob("*") if p.is_file() and ".git" not in p.parts)
+        return 0, ""
+
+    monkeypatch.setattr(gh, "_run", fake_run)
+    asyncio.run(gh.push_kernel(repo_full_name="o/r", paths=["daedalus"], branch="kernel-export"))
+    assert "daedalus/ok.py" in seen["files"]
+    assert not [f for f in seen["files"] if "innocent" in f or "folder" in f or "id_rsa" in f], seen["files"]
+    assert "PRIVATE" not in "".join(p.read_text(errors="ignore") for p in [])        # nothing read through a link
+
+
+def test_a_scan_that_reports_failure_in_its_result_is_recorded_as_failed(a0_tmp, monkeypatch):  # noqa: F811
+    from daedalus import upgrade_pool_scanner as ups
+    from daedalus.harness import maintenance
+
+    monkeypatch.setattr(ups, "get_adn_candidates", lambda pool=None: [{"id": "a"}])
+    monkeypatch.setattr("daedalus.agent.get_daedalus", lambda: object())
+    maintenance._scan.update(task=None, last=None, session_id="")
+
+    async def quietly_failed(agent, session_id=""):
+        return {"ok": False, "error": "model call failed"}                  # what the scanner really does: no raise
+
+    monkeypatch.setattr(ups, "run_upgrade_pool_scan", quietly_failed)
+
+    async def scenario():
+        await maintenance.start_scan()
+        await maintenance._scan["task"]
+        return maintenance.scan_status()
+
+    status = asyncio.run(scenario())
+    assert status["last"]["ok"] is False and status["last"]["error"] == "scan_failed"
+
+
+def test_the_scan_button_comes_back_and_the_result_shows_when_the_scan_ends(studio_server):
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        polls = {"n": 0, "started": False}
+
+        def status(route):
+            if polls["started"]:
+                polls["n"] += 1
+            running = polls["started"] and polls["n"] < 3                       # two looks later it is over
+            last = {"ok": True, "finished_at": 1} if polls["started"] and not running else None
+            _fulfill(route, 200, {"ok": True, "candidates": 3, "running": running, "session_id": "", "last": last})
+
+        def scan(route):
+            polls["started"] = True
+            _fulfill(route, 200, {"ok": True, "started": True, "candidates": 3, "session_id": "bg-x"})
+
+        page.route("**/api/v1/harness/upgrade-pool", status)
+        page.route("**/api/v1/harness/upgrade-pool/scan", scan)
+        _open_maint(page, studio_server)
+        _dialogs(page, [True])
+        row = ".cfg-row[data-id='pool-scan']"
+        page.locator(row + " button").click()
+        _note(page, "pool-scan", "Scan started")
+        page.wait_for_function("() => document.querySelector(\".cfg-row[data-id='pool-scan'] button\").disabled")
+        assert "scanning" in page.inner_text(row)
+        page.wait_for_function("() => !document.querySelector(\".cfg-row[data-id='pool-scan'] button\").disabled", timeout=15000)
+        text = page.inner_text(row)
+        assert "idle" in text and "Last scan finished without error" in text and "scanning" not in text
+        assert "Scan started for 3" in page.inner_text(row + " .cfg-note")      # the owner's own result is still there
+        browser.close()
+
+
+def test_unsaved_kernel_edits_survive_leaving_and_reopening_settings(studio_server):
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        _pool_stub(page)
+        _open_maint(page, studio_server)
+        page.locator(".cfg-row[data-id='kernel-branch'] input").fill("work-in-progress")
+        page.locator(".cfg-row[data-id='kernel-paths'] textarea").fill("daedalus\napp\nscripts")
+        page.locator("#workspace-nav button[data-panel=chat]").click()
+        page.locator("#workspace-nav button[data-panel=settings]").click()
+        page.wait_for_selector(".cfg-row[data-id='kernel-actions']")
+        page.wait_for_timeout(500)
+        assert page.locator(".cfg-row[data-id='kernel-branch'] input").input_value() == "work-in-progress"
+        assert page.locator(".cfg-row[data-id='kernel-paths'] textarea").input_value() == "daedalus\napp\nscripts"
+        posts: list[str] = []
+        page.route("**/api/v1/harness/kernel/push", lambda r: (posts.append("x"), _fulfill(r, 200, {"ok": True})))
+        _dialogs(page, [True])
+        page.locator(".cfg-row[data-id='kernel-actions'] button", has_text="Push export").click()
+        assert "Save them before pushing" in _note(page, "kernel-actions", "Save them")      # still not what the server has
+        assert posts == []
+        browser.close()
+
+
+def test_the_actions_row_names_what_push_will_do_and_follows_a_save(studio_server):
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        _pool_stub(page)
+        _open_maint(page, studio_server)
+        title = ".cfg-row[data-id='kernel-actions'] .cfg-name b"
+        before = page.inner_text(title)
+        assert "→" in before and "Kernel export" not in before                      # not a copy of the section heading
+        page.locator(".cfg-row[data-id='kernel-branch'] input").fill("export-two")
+        page.locator(".cfg-row[data-id='kernel-actions'] button", has_text="Save").click()
+        _note(page, "kernel-actions", "Saved")
+        assert page.inner_text(title).endswith("→ export-two")
+        page.locator(".cfg-row[data-id='kernel-branch'] input").fill("kernel-export")           # put the default back
+        page.locator(".cfg-row[data-id='kernel-actions'] button", has_text="Save").click()
+        page.wait_for_function("() => document.querySelector(\".cfg-row[data-id='kernel-actions'] b\").textContent.endsWith('→ kernel-export')")
+        browser.close()
+
+
+def test_a_state_directory_is_refused_with_a_reason(studio_server):
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        _pool_stub(page)
+        _open_maint(page, studio_server)
+        page.locator(".cfg-row[data-id='kernel-paths'] textarea").fill("daedalus\ndata")
+        page.locator(".cfg-row[data-id='kernel-actions'] button", has_text="Save").click()
+        assert "own state" in _note(page, "kernel-actions", "own state")
+        page.locator(".cfg-row[data-id='kernel-branch'] input").fill("refs/heads/main")
+        page.locator(".cfg-row[data-id='kernel-paths'] textarea").fill("daedalus")
+        page.locator(".cfg-row[data-id='kernel-actions'] button", has_text="Save").click()
+        assert "not a usable branch name" in _note(page, "kernel-actions", "usable branch")
+        page.locator(".cfg-row[data-id='kernel-branch'] input").fill("kernel-export")
         browser.close()

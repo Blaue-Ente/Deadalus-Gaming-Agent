@@ -269,6 +269,17 @@ def _pump(page):
     page.evaluate("() => 1")
 
 
+def _seen(page, predicate, timeout=5.0):
+    """Wait for something the PAGE did and the test records from its request hook. The hook runs on the Python side,
+    so a page state (a button shown) can be visible a moment before the request that caused it is recorded."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if predicate():
+            return True
+        page.wait_for_timeout(25)
+    return predicate()
+
+
 def _no_resume_request(page, predicate, action):
     """The resume fetch is the positive event on the parent. Its absence is the fix.
 
@@ -393,7 +404,7 @@ def test_stop_does_not_resurrect_the_pending_guided_job(studio_server):
             _open(page, studio_server, game)
             owned.release_actives({"active": True, "job_id": "job-live"})
             page.wait_for_function("() => !document.getElementById('build-stop').hidden")
-            assert any("job-live" in url for url in owned.streams)
+            assert _seen(page, lambda: any("job-live" in url for url in owned.streams))
             page.locator("#build-guided").click()
             page.wait_for_function("() => document.getElementById('build-guided').disabled")
             page.locator("#build-stop").click()

@@ -737,7 +737,8 @@ def _kernel_ignore(root: Path):
     skip = {".git", "node_modules", "__pycache__", ".venv", "venv", ".pytest_cache"}
 
     def ignore(directory: str, names: list[str]) -> set[str]:
-        return {n for n in names if n in skip or is_secret_path(n)}
+        # a link is skipped whatever it is called: copying follows it, and its target may be a secret or live elsewhere
+        return {n for n in names if n in skip or is_secret_path(n) or os.path.islink(os.path.join(directory, n))}
 
     return ignore
 
@@ -761,8 +762,16 @@ async def push_kernel(
     import tempfile
     import datetime as _dt
 
-    if (branch or "").strip().lower() in PROTECTED_KERNEL_BRANCHES:
-        raise ValueError(f"protected_branch: the kernel export never goes to {branch!r} (use its own branch)")
+    # Every caller (the Studio, the old page, a script) passes the same rules: repo format, a branch of its own, and
+    # paths that stay inside the product and outside its secrets and state.
+    from .harness.maintenance import KernelConfigError, validate
+
+    selected_in = paths or DEFAULT_KERNEL_PATHS
+    try:
+        checked = validate(repo_full_name, branch, list(selected_in))
+    except KernelConfigError as exc:
+        raise ValueError(f"{exc.code}: the kernel export refuses this {exc.code.replace('_', ' ')}") from exc
+    repo_full_name, branch, paths = checked["repo"], checked["branch"], checked["paths"]
     if not is_configured():
         raise RuntimeError(github_error_hint("GITHUB_TOKEN not configured — cannot push kernel"))
 
@@ -779,6 +788,9 @@ async def push_kernel(
                 log.debug("kernel push: skipping missing path %s", rel_path)
                 continue
             dst = tmp / rel_path
+            if src.is_symlink():
+                log.warning("kernel push: skipping link %s", rel_path)
+                continue
             if src.is_dir():
                 shutil.copytree(src, dst, dirs_exist_ok=True, ignore=_kernel_ignore(src))
                 copied.append(f"{rel_path}/")
