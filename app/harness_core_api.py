@@ -335,3 +335,61 @@ async def harness_vision_probe() -> Any:
     from daedalus.harness import connections
 
     return await connections.vision_test()
+
+
+# ---- A6.1c: kernel export and the upgrade-pool scan ---------------------------------------------------------
+class KernelConfigBody(BaseModel):
+    # no length limits here: a 422 would reach the browser as raw JSON, and validate() answers with a code
+    repo: str = ""
+    branch: str = ""
+    paths: list[str] = Field(default_factory=list)
+
+
+class KernelPushBody(BaseModel):
+    confirm: bool = False
+    force: bool = False
+
+
+@router.get("/api/v1/harness/kernel")
+def harness_kernel() -> dict[str, Any]:
+    from daedalus.harness import maintenance
+
+    return maintenance.kernel_view()
+
+
+@router.post("/api/v1/harness/kernel/config")
+def harness_kernel_config(body: KernelConfigBody) -> Any:
+    from daedalus.harness import maintenance
+
+    try:
+        maintenance.save_kernel_config(body.repo, body.branch, body.paths)
+    except maintenance.KernelConfigError as exc:
+        return JSONResponse({"ok": False, "error": exc.code, **exc.extra}, status_code=409 if exc.code == "protected_branch" else 400)
+    return maintenance.kernel_view()
+
+
+@router.post("/api/v1/harness/kernel/push")
+async def harness_kernel_push(body: KernelPushBody) -> Any:
+    from daedalus.harness import maintenance
+
+    res = await maintenance.kernel_push(confirm=body.confirm, force=body.force)
+    if res.get("ok"):
+        return res
+    status = {"confirm_required": 400, "not_configured": 424, "non_fast_forward": 409, "protected_branch": 409,
+              "no_files": 400, "push_failed": 502}.get(res.get("error", ""), 400)
+    return JSONResponse(res, status_code=status)
+
+
+@router.get("/api/v1/harness/upgrade-pool")
+def harness_upgrade_pool() -> dict[str, Any]:
+    from daedalus.harness import maintenance
+
+    return maintenance.scan_status()
+
+
+@router.post("/api/v1/harness/upgrade-pool/scan")
+async def harness_upgrade_pool_scan() -> Any:
+    from daedalus.harness import maintenance
+
+    res = await maintenance.start_scan()
+    return JSONResponse(res, status_code=409 if res.get("error") == "already_running" else 200)

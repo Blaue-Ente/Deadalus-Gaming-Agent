@@ -390,6 +390,7 @@ main {
 .cfg-row .cfg-name small { color: var(--muted); font-family: var(--mono); font-size: 0.66rem; overflow-wrap: anywhere; }
 .cfg-row .cfg-control { display: flex; gap: 0.4rem; align-items: center; min-width: 0; }
 .cfg-row .cfg-control input, .cfg-row .cfg-control select { flex: 1; min-width: 0; }
+.cfg-row .cfg-control textarea { flex: 1; min-width: 0; min-height: 5.5rem; resize: vertical; font-family: var(--mono); font-size: 0.74rem; }
 .cfg-row .cfg-actions { display: flex; gap: 0.35rem; align-items: center; justify-content: flex-end; }
 .cfg-row .cfg-note { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 0.74rem; line-height: 1.35; }
 .cfg-row[data-locked="1"] .cfg-note { color: var(--warn); }

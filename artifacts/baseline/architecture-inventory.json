@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-07T23:10:19.581265+00:00",
+  "generated_at": "2026-11-08T01:53:29.134434+00:00",
   "package_version": "0.3.8",
-  "git_commit": "dd85e5d1a119e56ebe72df43f1f4a8e11042b21b",
+  "git_commit": "391696a4d1493939a49fa5e5cc80463e2499162d",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -14,7 +14,7 @@
     },
     {
       "path": "app/admin_compat.py",
-      "lines": 3166,
+      "lines": 3157,
       "broad_excepts": 78
     },
     {
@@ -130,8 +130,8 @@
     ]
   },
   "tests": {
-    "modules": 101,
-    "functions": 1042
+    "modules": 102,
+    "functions": 1076
   },
   "modules": {
     "daedalus": [
@@ -214,6 +214,7 @@
       "daedalus/harness/context.py",
       "daedalus/harness/gateway.py",
       "daedalus/harness/label_image.py",
+      "daedalus/harness/maintenance.py",
       "daedalus/harness/manifest.py",
       "daedalus/harness/parity.py",
       "daedalus/harness/perception.py",

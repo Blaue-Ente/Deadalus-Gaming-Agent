@@ -32,13 +32,14 @@ _TIMEOUT = 180  # seconds for clone/push
 # workspace root — four levels up from this file
 _WORKSPACE_ROOT = repo_root()
 
-DEFAULT_KERNEL_REPO  = "healthyaicreations-hue/Daedalus-Agent"
+DEFAULT_KERNEL_REPO = "Blaue-Ente/Deadalus-Gaming-Agent"
+DEFAULT_KERNEL_BRANCH = "kernel-export"
+# The export is a fresh-history snapshot. Pushed to a long-lived branch (and forced) it would overwrite that branch's
+# history, so these are never accepted: the export always lives on its own branch.
+PROTECTED_KERNEL_BRANCHES = frozenset({"main", "master", "trunk", "develop", "dev", "release", "production", "prod"})
 DEFAULT_KERNEL_PATHS = [
-    "Daedalus/daedalus",
-    "argos_data_nexus/modules/daedalus",
-    "argos_data_nexus/templates/daedalus.html",
-    "argos_data_nexus/templates/daedalus_playground.html",
-    "argos_data_nexus/templates/bundles.html",
+    "daedalus", "app", "ui", "scripts", "assets", "README.md", "ARCHITECTURE.md", "DEPLOY.md", "CONTRIBUTING.md",
+    "pyproject.toml", "Dockerfile",
 ]
 
 
@@ -729,12 +730,25 @@ async def push_upstream_branch(
 # Push Дедал kernel (sparse export of Дедал-relevant files → dedicated repo)
 # ---------------------------------------------------------------------------
 
+def _kernel_ignore(root: Path):
+    """What never leaves the machine in an export: secret files, git metadata, caches, dependency trees."""
+    from .secret_paths import is_secret_path
+
+    skip = {".git", "node_modules", "__pycache__", ".venv", "venv", ".pytest_cache"}
+
+    def ignore(directory: str, names: list[str]) -> set[str]:
+        # a link is skipped whatever it is called: copying follows it, and its target may be a secret or live elsewhere
+        return {n for n in names if n in skip or is_secret_path(n) or os.path.islink(os.path.join(directory, n))}
+
+    return ignore
+
+
 async def push_kernel(
     *,
     commit_msg: str = "",
     repo_full_name: str = DEFAULT_KERNEL_REPO,
     paths: list[str] | None = None,
-    branch: str = "main",
+    branch: str = DEFAULT_KERNEL_BRANCH,
     force: bool = False,
 ) -> dict[str, Any]:
     """Export only Дедал-relevant paths and push to the kernel repo.
@@ -748,6 +762,16 @@ async def push_kernel(
     import tempfile
     import datetime as _dt
 
+    # Every caller (the Studio, the old page, a script) passes the same rules: repo format, a branch of its own, and
+    # paths that stay inside the product and outside its secrets and state.
+    from .harness.maintenance import KernelConfigError, validate
+
+    selected_in = paths or DEFAULT_KERNEL_PATHS
+    try:
+        checked = validate(repo_full_name, branch, list(selected_in))
+    except KernelConfigError as exc:
+        raise ValueError(f"{exc.code}: the kernel export refuses this {exc.code.replace('_', ' ')}") from exc
+    repo_full_name, branch, paths = checked["repo"], checked["branch"], checked["paths"]
     if not is_configured():
         raise RuntimeError(github_error_hint("GITHUB_TOKEN not configured — cannot push kernel"))
 
@@ -764,10 +788,18 @@ async def push_kernel(
                 log.debug("kernel push: skipping missing path %s", rel_path)
                 continue
             dst = tmp / rel_path
+            if src.is_symlink():
+                log.warning("kernel push: skipping link %s", rel_path)
+                continue
             if src.is_dir():
-                shutil.copytree(src, dst, dirs_exist_ok=True)
+                shutil.copytree(src, dst, dirs_exist_ok=True, ignore=_kernel_ignore(src))
                 copied.append(f"{rel_path}/")
             else:
+                from .secret_paths import is_secret_path
+
+                if is_secret_path(rel_path):
+                    log.warning("kernel push: refusing secret path %s", rel_path)
+                    continue
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(src, dst)
                 copied.append(rel_path)

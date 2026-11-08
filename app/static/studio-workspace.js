@@ -2433,11 +2433,152 @@
     return r.recorded ? { text: dx.t("studio.visionPerceived"), bad: false } : { text: dx.t("studio.visionNotSaved"), bad: true };
   }
 
+
+  // ---- A6.1c: kernel export and the upgrade-pool scan -----------------------------------------------------------
+  const KERNEL_ERR = { bad_repo: "studio.kerrBadRepo", bad_branch: "studio.kerrBadBranch", protected_branch: "studio.kerrProtected",
+    bad_paths: "studio.kerrBadPaths", secret_path: "studio.kerrSecret", protected_path: "studio.kerrProtectedPath",
+    not_configured: "studio.kerrNoToken",
+    no_files: "studio.kerrNoFiles", push_failed: "studio.kerrPushFailed", confirm_required: "studio.kerrConfirm" };
+  let kernelSaved = null;           // what the server has: the push uses this, never the unsaved fields
+
+  function kernelErr(err) {
+    const code = String((err && err.message) || "");
+    return KERNEL_ERR[code] ? dx.t(KERNEL_ERR[code]) : failText(err);
+  }
+
+  function fieldRow(id, labelKey, control, note) {
+    const item = document.createElement("div");
+    item.className = "cfg-row";
+    item.dataset.id = id;
+    const name = document.createElement("div");
+    name.className = "cfg-name";
+    const b = document.createElement("b");
+    b.textContent = dx.t(labelKey);
+    name.appendChild(b);
+    const wrap = document.createElement("div");
+    wrap.className = "cfg-control";
+    control.setAttribute("aria-label", dx.t(labelKey));
+    wrap.appendChild(control);
+    item.append(name, wrap, document.createElement("div"));
+    if (note) {
+      const p = document.createElement("p");
+      p.className = "cfg-note";
+      p.textContent = note;
+      item.appendChild(p);
+    }
+    return item;
+  }
+
+  function paintKernel(data) {
+    const box = $("settings-kernel");
+    // A repaint (a reload of Settings) must not throw away what the owner typed and has not saved yet.
+    const typed = box.querySelector("[data-id='kernel-repo'] input") ? {
+      repo: box.querySelector("[data-id='kernel-repo'] input").value,
+      branch: box.querySelector("[data-id='kernel-branch'] input").value,
+      paths: box.querySelector("[data-id='kernel-paths'] textarea").value,
+    } : null;
+    const hadUnsaved = !!(typed && kernelSaved && (typed.repo.trim() !== kernelSaved.repo || typed.branch.trim() !== kernelSaved.branch
+      || typed.paths.split("\n").map((x) => x.trim()).filter(Boolean).join("\n") !== kernelSaved.paths.join("\n")));
+    box.replaceChildren();
+    if (!data || data.ok === false) return;
+    kernelSaved = { repo: data.repo, branch: data.branch, paths: (data.paths || []).slice() };
+    const repo = document.createElement("input");
+    repo.autocomplete = "off";
+    repo.value = data.repo || "";
+    const branch = document.createElement("input");
+    branch.autocomplete = "off";
+    branch.value = data.branch || "";
+    const paths = document.createElement("textarea");
+    paths.value = (data.paths || []).join("\n");
+    if (hadUnsaved) { repo.value = typed.repo; branch.value = typed.branch; paths.value = typed.paths; }
+    const missing = (data.missing_paths || []).join(", ");
+    box.append(fieldRow("kernel-repo", "studio.kernelRepo", repo),
+               fieldRow("kernel-branch", "studio.kernelBranch", branch),
+               fieldRow("kernel-paths", "studio.kernelPaths", paths, missing ? dx.t("studio.kernelMissing", { paths: missing }) : ""));
+    const read = () => ({ repo: repo.value.trim(), branch: branch.value.trim(),
+      paths: paths.value.split("\n").map((x) => x.trim()).filter(Boolean) });
+    const same = (a, b) => a.repo === b.repo && a.branch === b.branch && a.paths.join("\n") === b.paths.join("\n");
+    const target = () => (kernelSaved ? kernelSaved.repo + " → " + kernelSaved.branch : "");
+    const actions = actionRow({
+      id: "kernel-actions", title: target(), sub: "",
+      buttons: [
+        { label: dx.t("studio.kernelSave"), run: async () => {
+          try {
+            const fresh = await postJson("/api/v1/harness/kernel/config", read());
+            kernelSaved = { repo: fresh.repo, branch: fresh.branch, paths: (fresh.paths || []).slice() };
+            repo.value = fresh.repo; branch.value = fresh.branch; paths.value = (fresh.paths || []).join("\n");
+            const heading = actions.querySelector(".cfg-name b");
+            if (heading) heading.textContent = target();                 // what Push will do, kept current
+            const gone = (fresh.missing_paths || []).join(", ");
+            return { text: dx.t("studio.kernelSaved") + (gone ? " " + dx.t("studio.kernelMissing", { paths: gone }) : ""), bad: false };
+          } catch (err) { return { text: kernelErr(err), bad: true }; }
+        } },
+        { label: dx.t("studio.kernelPush"), run: () => {
+          if (!kernelSaved || !same(read(), kernelSaved)) return Promise.resolve({ text: dx.t("studio.kernelDirty"), bad: true });
+          return pushKernel(kernelSaved);
+        } },
+      ],
+    });
+    box.appendChild(actions);
+  }
+
+  async function pushKernel(saved) {
+    if (!window.confirm(dx.t("studio.kernelConfirm", { repo: saved.repo, branch: saved.branch }))) return null;
+    let res;
+    try {
+      res = await postJson("/api/v1/harness/kernel/push", { confirm: true });
+    } catch (err) {
+      if (String((err && err.message) || "") !== "non_fast_forward") return { text: kernelErr(err), bad: true };
+      if (!window.confirm(dx.t("studio.kernelForce", { branch: saved.branch }))) return { text: dx.t("studio.kernelNotPushed"), bad: true };
+      try {
+        res = await postJson("/api/v1/harness/kernel/push", { confirm: true, force: true });
+      } catch (err2) { return { text: kernelErr(err2), bad: true }; }
+    }
+    if (!res || res.ok === false) return { text: kernelErr({ message: res && res.error }), bad: true };     // never a success by default
+    return { text: dx.t(res.forced ? "studio.kernelPushedForced" : "studio.kernelPushed", { files: res.files, repo: res.repo, branch: res.branch }), bad: false };
+  }
+
+  let poolTimer = null;
+  function paintPool(d) {
+    const box = $("settings-pool");
+    box.replaceChildren();
+    clearTimeout(poolTimer);
+    if (!d || d.ok === false) return;
+    if (d.running) {                       // a scan is running: look again until it ends, so the button and result are true
+      poolTimer = setTimeout(() => {
+        const panel = $("panel-settings");
+        if (!panel || panel.hidden) return;              // not on screen: the next time Settings opens it reads the state again
+        dx.api("/api/v1/harness/upgrade-pool").then(paintPool).catch(() => {});
+      }, 2500);
+    }
+    const unknown = d.candidates < 0;
+    const last = d.last ? (d.last.ok ? dx.t("studio.poolLastOk") : dx.t("studio.poolLastFail", { why: d.last.error || "?" })) : "";
+    box.appendChild(actionRow({
+      id: "pool-scan", title: dx.t("studio.settingsPool"), sub: last,
+      info: unknown ? dx.t("studio.poolUnknown")
+        : dx.t("studio.poolState", { n: d.candidates, state: d.running ? dx.t("studio.poolRunning") : dx.t("studio.poolIdle") }),
+      buttons: [{ label: dx.t("studio.poolScan"), disabled: d.running || unknown, run: scanPool }],
+    }));
+  }
+
+  async function scanPool() {
+    if (!window.confirm(dx.t("studio.poolConfirm"))) return null;
+    let res;
+    try {
+      res = await postJson("/api/v1/harness/upgrade-pool/scan", {});
+    } catch (err) {
+      return { text: String((err && err.message) || "") === "already_running" ? dx.t("studio.poolBusy") : failText(err), bad: true };
+    }
+    dx.api("/api/v1/harness/upgrade-pool").then(paintPool).catch(() => {});
+    return res.started ? { text: dx.t("studio.poolStarted", { n: res.candidates }), bad: false } : { text: dx.t("studio.poolNone"), bad: false };
+  }
+
   async function loadHarnessSettings() {
     const mine = ++harnessSeq;
     paintLinks();
     const calls = ["/api/v1/harness/config", "/api/v1/harness/intents", "/api/v1/harness/engines",
-      "/api/v1/harness/workers", "/api/v1/harness/connections"].map((p) => dx.api(p));
+      "/api/v1/harness/workers", "/api/v1/harness/connections", "/api/v1/harness/kernel",
+      "/api/v1/harness/upgrade-pool"].map((p) => dx.api(p));
     const results = await Promise.allSettled(calls);
     if (mine !== harnessSeq) return;                  // a newer load owns the screen
     const problems = [];
@@ -2450,6 +2591,8 @@
     paint(results[2], (v) => { paintEngines(v); paintProof(v); });
     paint(results[3], paintWorkers);
     paint(results[4], paintConnections);
+    paint(results[5], paintKernel);
+    paint(results[6], paintPool);
     const unique = problems.filter((p, i) => problems.indexOf(p) === i);
     showStatus("harness-status", unique.length ? dx.t("studio.requestFailed") + ": " + unique.join(" · ") : "", unique.length > 0);
   }
