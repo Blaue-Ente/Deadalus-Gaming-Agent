@@ -3024,7 +3024,7 @@ async def daedalus_set_plan_status(plan_id: str, request: Request):
 @router.post("/daedalus/proposals/approve-all-pending")
 async def daedalus_approve_all_pending():
     from daedalus.harness import review_actions
-    return JSONResponse(review_actions.approve_all_pending(True))
+    return JSONResponse(review_actions.approve_proposals(review_actions.pending_proposal_ids()))
 
 
 @router.post("/daedalus/blockers/{blocker_id}/remediate")

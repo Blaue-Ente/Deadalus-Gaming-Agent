@@ -4,7 +4,8 @@ These move authority or change the owner's work, so every one of them:
 * needs an explicit ``confirm`` (the browser asks the owner first; a script cannot do it by accident),
 * decides on the SERVER what it acts on (the browser names a blocker, never a permission or a path),
 * answers codes and numbers, so the Studio says it in the owner's language,
-* clamps the grant length to a sane range and records the owner as the grantor."""
+* clamps the grant length to a sane range. Bulk grants are recorded as granted by the owner; grants made through a
+  blocker keep the source label the blocker code has always used (so an audit can tell them apart)."""
 from __future__ import annotations
 
 from typing import Any
@@ -77,46 +78,48 @@ def grant_recommended(hours: Any, confirm: Any) -> dict[str, Any]:
     return {"ok": True, "granted": res.get("granted", []), "count": res.get("count", 0), "hours": h}
 
 
-def auto_fix(blocker_id: str, hours: Any, confirm: Any) -> dict[str, Any]:
-    """Fix one blocker, or every open one when ``blocker_id`` is empty, by granting the permissions it names."""
+def auto_fix(blocker_id: str, hours: Any, confirm: Any, *, all_open: bool = False) -> dict[str, Any]:
+    """Fix ONE named blocker, or every open one only when ``all_open`` is set explicitly. A missing id never widens
+    the request: it is refused."""
     from .. import blockers
 
     if (refused := _need(confirm)):
         return refused
     h = clamp_hours(hours, 8.0)
-    if not blocker_id:
+    if all_open:
         res = blockers.auto_fix_all_open(hours=h)
-        return {"ok": bool(res.get("ok")), "fixed": res.get("fixed_count", 0), "skipped": res.get("skipped_count", 0),
-                "hours": h, **({"error": res["error"]} if res.get("error") else {})}
+        out = {"ok": bool(res.get("ok")), "fixed": res.get("fixed_count", 0), "skipped": res.get("skipped_count", 0), "hours": h}
+        if res.get("error"):
+            out["error"] = res["error"]
+        return out
+    if not blocker_id:
+        return {"ok": False, "error": "id_required"}
     res = blockers.auto_fix_blocker(blocker_id, hours=h)
-    out: dict[str, Any] = {"ok": bool(res.get("ok")), "id": blocker_id, "granted": list(res.get("granted") or []), "hours": h}
+    out = {"ok": bool(res.get("ok")), "id": blocker_id, "granted": list(res.get("granted") or []), "hours": h}
     if not res.get("ok"):
         err = str(res.get("error") or "")
         out["error"] = "not_found" if "not found" in err else "already_resolved" if "resolved" in err else "no_fix_available"
     return out
 
 
-async def remediation_preview(blocker_id: str) -> dict[str, Any]:
-    """What 'remediate' would do to the project, WITHOUT doing it: it switches a project to the static kind."""
-    from .. import blockers
-    from .. import playground as pg
+_REMEDIATE_ERR = {"blocker not found": "not_found", "blocker already resolved": "already_resolved",
+                  "no_playground_slug": "no_project"}
 
-    b = blockers._rdb_get(f"{blockers._BLOCKER_PREFIX}{blocker_id}")
-    if b is None:
-        return {"ok": False, "error": "not_found"}
-    if b.get("status") != "open":
-        return {"ok": False, "error": "already_resolved"}
-    slug = blockers.extract_playground_slug(b)
-    if not slug:
-        return {"ok": False, "error": "no_project"}
-    blob = blockers._blocker_blob(b).lower()
-    if blockers.classify_blocker(b) != "infra" and "npm" not in blob and "firewall" not in blob:
-        return {"ok": False, "error": "not_infra"}
-    proj = await pg.get_project(slug)
-    if not proj:
-        return {"ok": False, "error": "project_not_found", "slug": slug}
-    old = str(proj.get("kind") or "static")
-    return {"ok": True, "slug": slug, "old_kind": old, "new_kind": "static", "changes_kind": old != "static"}
+
+def _remediation_error(res: dict[str, Any]) -> dict[str, Any]:
+    err = str(res.get("error") or "")
+    return {"ok": False, "error": _REMEDIATE_ERR.get(err, err if err in {"not_infra", "project_not_found"} else "remediate_failed"),
+            **({"slug": res["slug"]} if res.get("slug") else {})}
+
+
+async def remediation_preview(blocker_id: str) -> dict[str, Any]:
+    """What 'remediate' would do to the project, WITHOUT doing it (it is the real function in dry-run mode)."""
+    from .. import blockers
+
+    res = await blockers.remediate_infra_blocker(blocker_id, dry_run=True)
+    if not res.get("ok"):
+        return _remediation_error(res)
+    return {"ok": True, "slug": res["slug"], "old_kind": res["old_kind"], "new_kind": "static", "changes_kind": bool(res["changes_kind"])}
 
 
 async def remediate(blocker_id: str, confirm_kind_change: Any) -> dict[str, Any]:
@@ -130,7 +133,7 @@ async def remediate(blocker_id: str, confirm_kind_change: Any) -> dict[str, Any]
         return {"ok": False, "error": "confirm_required", **{k: preview[k] for k in ("slug", "old_kind", "new_kind")}}
     res = await blockers.remediate_infra_blocker(blocker_id)
     if not res.get("ok"):
-        return {"ok": False, "error": "remediate_failed", "slug": preview["slug"]}
+        return _remediation_error(res)
     return {"ok": True, "slug": res.get("slug"), "old_kind": res.get("old_kind", preview["old_kind"]),
             "new_kind": "static", "already_static": bool(res.get("already_static"))}
 
@@ -158,7 +161,10 @@ async def bundle_detail(bundle_id: str) -> dict[str, Any]:
 
     from ..bundle import get_bundle
 
-    row = await get_bundle(bundle_id)
+    try:
+        row = await get_bundle(bundle_id)
+    except Exception:
+        return {"ok": False, "error": "unavailable"}                  # the bundle store could not be read
     if not row:
         return {"ok": False, "error": "not_found"}
     files = []
@@ -173,24 +179,41 @@ async def bundle_detail(bundle_id: str) -> dict[str, Any]:
             "files": files}
 
 
-# ---- approve all -------------------------------------------------------------------------------------------
-def approve_all_pending(confirm: Any = True) -> dict[str, Any]:
-    from ..self_improve import approve_proposal, list_proposals
+# ---- approve ------------------------------------------------------------------------------------------------
+def pending_proposal_ids() -> list[str]:
+    from ..self_improve import list_proposals
 
-    if (refused := _need(confirm)):
-        return refused
+    return [str(p.get("proposal_id") or p.get("id")) for p in list_proposals(status="pending") if p.get("proposal_id") or p.get("id")]
+
+
+def approve_proposals(ids: list[str]) -> dict[str, Any]:
+    """Approve exactly these proposals. One that is no longer pending (changed since it was listed) is skipped, never
+    approved on a hunch."""
+    from ..self_improve import approve_proposal
+
+    still = set(pending_proposal_ids())
     applied: list[str] = []
     failed: list[dict[str, Any]] = []
-    for p in list_proposals(status="pending"):
-        pid = p.get("proposal_id") or p.get("id")
-        if not pid:
+    skipped = 0
+    for pid in ids:
+        if pid not in still:
+            skipped += 1
             continue
         try:
-            res = approve_proposal(str(pid), approved_by="owner")
+            res = approve_proposal(pid, approved_by="owner")
             if res.get("ok"):
-                applied.append(str(pid))
+                applied.append(pid)
             else:
-                failed.append({"id": str(pid), "error": str(res.get("error") or "")[:120]})
+                failed.append({"id": pid, "error": str(res.get("error") or "")[:120]})
         except Exception as exc:
-            failed.append({"id": str(pid), "error": type(exc).__name__})
-    return {"ok": not failed, "partial": bool(applied and failed), "applied": len(applied), "failed": failed}
+            failed.append({"id": pid, "error": type(exc).__name__})
+    return {"ok": not failed, "partial": bool(applied and failed), "applied": len(applied), "failed": failed, "skipped": skipped}
+
+
+def approve_all_pending(ids: Any, confirm: Any) -> dict[str, Any]:
+    """The Studio's approve-all: the browser sends the ids it showed in the question, and only those are approved."""
+    if (refused := _need(confirm)):
+        return refused
+    if not isinstance(ids, list) or not ids or not all(isinstance(i, str) and i for i in ids):
+        return {"ok": False, "error": "ids_required"}
+    return approve_proposals(list(dict.fromkeys(ids)))

@@ -382,8 +382,10 @@ def blockers_summary(blockers: list[dict[str, Any]] | None = None) -> dict[str, 
     }
 
 
-async def remediate_infra_blocker(blocker_id: str) -> dict[str, Any]:
-    """For npm-firewall blockers: switch playground project to static kind."""
+async def remediate_infra_blocker(blocker_id: str, *, dry_run: bool = False) -> dict[str, Any]:
+    """For npm-firewall blockers: switch playground project to static kind.
+
+    ``dry_run`` answers what WOULD change ({ok, slug, old_kind, kind, changes_kind}) and changes nothing."""
     key = f"{_BLOCKER_PREFIX}{blocker_id}"
     b = _rdb_get(key)
     if b is None:
@@ -410,6 +412,9 @@ async def remediate_infra_blocker(blocker_id: str) -> dict[str, Any]:
         if not proj:
             return {"ok": False, "error": "project_not_found", "slug": slug}
         old_kind = proj.get("kind", "static")
+        if dry_run:
+            return {"ok": True, "dry_run": True, "slug": slug, "old_kind": old_kind, "kind": "static",
+                    "changes_kind": old_kind != "static"}
         if old_kind == "static":
             note = f"infra-remediate: {slug} вече е static"
             resolve_blocker(blocker_id, note=note)

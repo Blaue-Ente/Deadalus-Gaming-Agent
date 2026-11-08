@@ -403,6 +403,7 @@ class GrantBody(BaseModel):
 
 class AutoFixBody(BaseModel):
     id: str = ""
+    all: bool = False                    # every open blocker: only ever on an explicit request, never by leaving the id out
     hours: float = 0.0
     confirm: bool = False
 
@@ -411,11 +412,12 @@ class RemediateBody(BaseModel):
     confirm_kind_change: bool = False
 
 
-class ConfirmBody(BaseModel):
+class ApproveBody(BaseModel):
+    ids: list[str] = Field(default_factory=list)      # what the owner was shown; only these are approved
     confirm: bool = False
 
 
-_REVIEW_STATUS = {"confirm_required": 400, "not_found": 404, "project_not_found": 404, "already_resolved": 409,
+_REVIEW_STATUS = {"confirm_required": 400, "id_required": 400, "ids_required": 400, "unavailable": 503, "not_found": 404, "project_not_found": 404, "already_resolved": 409,
                   "no_project": 409, "not_infra": 409, "no_fix_available": 409, "remediate_failed": 502}
 
 
@@ -464,7 +466,10 @@ def harness_review_grant_recommended(body: GrantBody) -> Any:
 def harness_review_auto_fix(body: AutoFixBody) -> Any:
     from daedalus.harness import review_actions
 
-    return _review_reply(review_actions.auto_fix(body.id.strip(), body.hours or None, body.confirm))
+    res = review_actions.auto_fix(body.id.strip(), body.hours or None, body.confirm, all_open=body.all)
+    if body.all and res.get("error") == "no_fix_available":
+        return res                       # a result, not a failure: "fixed 0, skipped N" is what the owner needs to see
+    return _review_reply(res)
 
 
 @router.get("/api/v1/harness/review/blockers/{blocker_id}/remediation")
@@ -496,8 +501,7 @@ async def harness_review_bundle(bundle_id: str) -> Any:
 
 
 @router.post("/api/v1/harness/review/proposals/approve-all")
-def harness_review_approve_all(body: ConfirmBody) -> Any:
+def harness_review_approve_all(body: ApproveBody) -> Any:
     from daedalus.harness import review_actions
 
-    res = review_actions.approve_all_pending(body.confirm)
-    return JSONResponse(res, status_code=400) if res.get("error") == "confirm_required" else res
+    return _review_reply(review_actions.approve_all_pending(body.ids, body.confirm))

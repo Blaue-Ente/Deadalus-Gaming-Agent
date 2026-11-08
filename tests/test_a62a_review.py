@@ -84,14 +84,28 @@ def test_auto_fix_one_blocker_grants_only_what_its_text_names(client):
     assert other
 
 
-def test_auto_fix_all_reports_what_it_did_and_says_when_nothing_could_be_fixed(client):
+def test_a_missing_id_never_widens_auto_fix_to_every_blocker(client):
+    from daedalus import blockers
+
+    blockers.push_blocker("Cannot write file: needs modify_files", "", "")
+    for body in ({"confirm": True}, {"id": "", "confirm": True}, {"id": "   ", "hours": 4, "confirm": True}):
+        res = client.post("/api/v1/harness/review/blockers/auto-fix", json=body)
+        assert res.status_code == 400 and res.json()["error"] == "id_required", body
+    assert not _active("modify_files")                                          # nothing was granted, nothing resolved
+    assert len(blockers.list_blockers(status="open")) == 1
+
+
+def test_auto_fix_all_needs_the_explicit_flag_and_reports_counts_as_a_result(client):
     from daedalus import blockers
 
     blockers.push_blocker("Something vague that nobody understands", "", "")
-    out = client.post("/api/v1/harness/review/blockers/auto-fix", json={"confirm": True})
-    assert out.status_code == 409 and out.json()["error"] == "no_fix_available" and out.json()["fixed"] == 0
+    out = client.post("/api/v1/harness/review/blockers/auto-fix", json={"all": True, "confirm": True})
+    assert out.status_code == 200                                               # a result to read, not a failure to hide
+    assert out.json()["ok"] is False and out.json()["error"] == "no_fix_available"
+    assert out.json()["fixed"] == 0 and out.json()["skipped"] == 1
+    assert client.post("/api/v1/harness/review/blockers/auto-fix", json={"all": True}).status_code == 400   # still needs confirm
     blockers.push_blocker("Cannot write file: needs modify_files", "", "")
-    out = client.post("/api/v1/harness/review/blockers/auto-fix", json={"confirm": True, "hours": 4}).json()
+    out = client.post("/api/v1/harness/review/blockers/auto-fix", json={"all": True, "confirm": True, "hours": 4}).json()
     assert out["ok"] is True and out["fixed"] == 1 and out["skipped"] == 1 and out["hours"] == 4.0
 
 
@@ -124,6 +138,43 @@ def test_remediation_is_previewed_and_changing_the_kind_needs_its_own_confirmati
     out = client.post(f"/api/v1/harness/review/blockers/{bid}/remediate", json={"confirm_kind_change": True}).json()
     assert out["ok"] is True and out["old_kind"] == "vite" and out["new_kind"] == "static"
     assert calls == [("my-game", {"kind": "static"})]
+
+
+def test_a_project_with_no_kind_is_previewed_as_a_change_exactly_like_the_real_thing(client, monkeypatch):
+    calls = []
+
+    async def get_project(slug):
+        return {"slug": slug, "kind": None}
+
+    async def update_project(slug, **fields):
+        calls.append((slug, fields))
+
+    monkeypatch.setattr("daedalus.playground.get_project", get_project)
+    monkeypatch.setattr("daedalus.playground.update_project", update_project)
+    bid = _npm_blocker()
+    assert client.get(f"/api/v1/harness/review/blockers/{bid}/remediation").json()["changes_kind"] is True
+    assert client.post(f"/api/v1/harness/review/blockers/{bid}/remediate", json={}).status_code == 400 and calls == []
+    assert client.post(f"/api/v1/harness/review/blockers/{bid}/remediate", json={"confirm_kind_change": True}).json()["ok"] is True
+    assert calls == [("my-game", {"kind": "static"})]
+
+
+def test_remediate_infra_blocker_dry_run_changes_nothing(a0_tmp, monkeypatch):  # noqa: F811
+    from daedalus import blockers
+
+    calls = []
+
+    async def get_project(slug):
+        return {"slug": slug, "kind": "vite"}
+
+    async def update_project(slug, **fields):
+        calls.append(slug)
+
+    monkeypatch.setattr("daedalus.playground.get_project", get_project)
+    monkeypatch.setattr("daedalus.playground.update_project", update_project)
+    bid = blockers.push_blocker("npm install blocked by the firewall for slug: my-game", "", "")
+    res = asyncio.run(blockers.remediate_infra_blocker(bid, dry_run=True))
+    assert res == {"ok": True, "dry_run": True, "slug": "my-game", "old_kind": "vite", "kind": "static", "changes_kind": True}
+    assert calls == [] and blockers.list_blockers(status="open")[0]["id"] == bid            # still open, project untouched
 
 
 def test_remediation_refuses_what_is_not_an_infra_blocker_or_has_no_project(client, monkeypatch):
@@ -188,12 +239,21 @@ def test_bundle_detail_shows_each_file_with_its_diff(client, a0_tmp, monkeypatch
     assert client.get("/api/v1/harness/review/bundles/nope").status_code == 404
 
 
+def test_an_unreadable_bundle_store_is_a_code_not_a_500(client, monkeypatch):
+    async def boom(bundle_id):
+        raise RuntimeError("no pool")
+
+    monkeypatch.setattr("daedalus.bundle.get_bundle", boom)
+    res = client.get("/api/v1/harness/review/bundles/b1")
+    assert res.status_code == 503 and res.json() == {"ok": False, "error": "unavailable"}
+
+
 # ------------------------------------------------------------------------------------------------ approve all
-def test_approve_all_needs_a_confirm_and_reports_partial_honestly(client, monkeypatch):
+def test_approve_all_approves_exactly_the_confirmed_ids_and_reports_partial_honestly(client, monkeypatch):
     seen = []
 
     def lp(status=None):
-        return [{"id": "p1"}, {"id": "p2"}, {"id": "p3"}]
+        return [{"id": "p1"}, {"id": "p2"}, {"id": "p3"}, {"id": "p_new"}]            # p_new arrived after the owner looked
 
     def ap(pid, approved_by=""):
         seen.append(pid)
@@ -205,10 +265,24 @@ def test_approve_all_needs_a_confirm_and_reports_partial_honestly(client, monkey
 
     monkeypatch.setattr("daedalus.self_improve.list_proposals", lp)
     monkeypatch.setattr("daedalus.self_improve.approve_proposal", ap)
-    assert client.post("/api/v1/harness/review/proposals/approve-all", json={}).status_code == 400 and seen == []
-    out = client.post("/api/v1/harness/review/proposals/approve-all", json={"confirm": True}).json()
-    assert out["ok"] is False and out["partial"] is True and out["applied"] == 1
+    url = "/api/v1/harness/review/proposals/approve-all"
+    assert client.post(url, json={"ids": ["p1"]}).status_code == 400 and seen == []                 # no confirm
+    for body in ({"confirm": True}, {"confirm": True, "ids": []}):
+        res = client.post(url, json=body)
+        assert res.status_code == 400 and res.json()["error"] == "ids_required", body            # no ids: never "everything"
+    assert seen == []
+    out = client.post(url, json={"ids": ["p1", "p2", "p3", "p_gone"], "confirm": True}).json()
+    assert out["ok"] is False and out["partial"] is True and out["applied"] == 1 and out["skipped"] == 1   # p_gone is no longer pending
     assert out["failed"] == [{"id": "p2", "error": "path blocked"}, {"id": "p3", "error": "RuntimeError"}]
+    assert "p_new" not in seen                                                                       # not on the owner's list: untouched
+
+
+def test_the_old_page_route_keeps_approving_whatever_is_pending(client, monkeypatch):
+    seen = []
+    monkeypatch.setattr("daedalus.self_improve.list_proposals", lambda status=None: [{"id": "a"}, {"id": "b"}])
+    monkeypatch.setattr("daedalus.self_improve.approve_proposal", lambda pid, approved_by="": (seen.append(pid), {"ok": True})[1])
+    out = client.post("/admin/daedalus/proposals/approve-all-pending").json()
+    assert out["ok"] is True and out["applied"] == 2 and seen == ["a", "b"]
 
 
 # ------------------------------------------------------------------------------------------------ UI (real clicks)
@@ -416,7 +490,7 @@ def test_auto_fix_all_and_grant_recommended_show_what_they_will_grant(studio_ser
         asked = _dialogs(page, [True, True])
         page.locator("#blocker-autofix-all").click()
         page.wait_for_function("() => document.getElementById('blocker-status').textContent.includes('Fixed 2 blockers, skipped 1')")
-        assert fix_all == [{"hours": 8.0, "confirm": True}] and "3 open" in asked[0]
+        assert fix_all == [{"all": True, "hours": 8.0, "confirm": True}] and "3 open" in asked[0]
         page.locator("#blocker-grant-rec").click()
         page.wait_for_function("() => document.getElementById('blocker-status').textContent.includes('Granted 2 permissions for 8 hours')")
         assert rec == [{"hours": 8.0, "confirm": True}] and "modify_files, web_search" in asked[1] and "2 recommended" in asked[1]
@@ -503,7 +577,7 @@ def test_approve_all_pending_asks_with_the_count_and_reports_a_partial_result_ho
         assert posts == [] and "2 pending proposals" in asked[0]
         page.locator(box + " button").click()
         assert "Applied 1, 1 failed" in _bulk_note(page, "bulk-approve-all", "Applied 1")
-        assert page.locator(box).get_attribute("data-state") == "error" and posts == [{"confirm": True}]
+        assert page.locator(box).get_attribute("data-state") == "error" and posts == [{"ids": ["p1", "p2"], "confirm": True}]   # what the question showed
         browser.close()
 
 
@@ -559,4 +633,50 @@ def test_review_actions_fit_and_are_really_clickable(studio_server, size):
                          "#blocker-list button[data-role='autofix']", "#blocker-list button[data-role='remediate']"):
             page.locator(selector).first.evaluate("el => el.scrollIntoView({block: 'center'})")
             _hit(page, selector)
+        browser.close()
+
+
+def test_fix_all_that_fixes_nothing_shows_the_counts_not_a_vague_error(studio_server):
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        _blockers_page(page)
+        page.route("**/api/v1/harness/review/blockers", lambda r: _fulfill(r, 200, {"ok": True, "open": 2, "recommended": []}))
+        _record(page, "**/api/v1/harness/review/blockers/auto-fix", [(200, {"ok": False, "error": "no_fix_available", "fixed": 0, "skipped": 2, "hours": 8.0})])
+        _open_review(page, studio_server, "proposals", wait="#blocker-list .item")
+        _dialogs(page, [True])
+        page.locator("#blocker-autofix-all").click()
+        page.wait_for_function("() => document.getElementById('blocker-status').textContent.includes('Fixed 0 blockers, skipped 2')")
+        assert page.locator("#blocker-status").get_attribute("data-state") == "error"
+        browser.close()
+
+
+def test_a_running_blocker_action_locks_the_other_buttons_and_a_late_result_is_dropped_after_leaving(studio_server):
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        _blockers_page(page)
+        held = {}
+        page.route("**/api/v1/harness/review/blockers/auto-fix", lambda r: held.update(route=r))
+        _open_review(page, studio_server, "proposals", wait="#blocker-list .item")
+        page.wait_for_selector("#blocker-list button[data-role='autofix']")
+        _dialogs(page, [True])
+        page.locator("#blocker-list button[data-role='autofix']").click()
+        assert _until(page, lambda: "route" in held)
+        # while it runs: Resolve, the other actions and the panel buttons cannot be clicked (one request at a time)
+        for selector in ("#blocker-list button[data-gen]", "#blocker-list button[data-role='remediate']", "#blocker-autofix-all",
+                         "#blocker-grant-rec", "#blocker-refresh"):
+            assert page.locator(selector).is_disabled(), selector
+        page.locator("#workspace-nav button[data-panel=chat]").click()               # the owner leaves Review...
+        _fulfill(held["route"], 200, {"ok": True, "id": "blk_a", "granted": ["modify_files"], "hours": 8.0})
+        page.wait_for_timeout(500)
+        assert "Granted" not in page.locator("#blocker-status").text_content()        # ...so the late answer writes nothing
+        page.locator("#workspace-nav button[data-panel=review]").click()
+        page.wait_for_selector("#blocker-list .item")
+        # the reload that draws the list holds the lock for a moment; a lock that never lets go would fail this wait
+        page.wait_for_function("() => !document.getElementById('blocker-autofix-all').disabled && !document.getElementById('blocker-refresh').disabled", timeout=10000)
         browser.close()

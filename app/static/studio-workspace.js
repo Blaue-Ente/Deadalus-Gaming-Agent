@@ -807,8 +807,10 @@
 
   function syncBlockerButtons() {
     const locked = blockerFlight !== 0;
-    const refresh = $("blocker-refresh");
-    if (refresh) refresh.disabled = locked;
+    ["blocker-refresh", "blocker-autofix-all", "blocker-grant-rec", "blocker-hours"].forEach((id) => {
+      const el = $(id);
+      if (el) el.disabled = locked;
+    });
     document.querySelectorAll("#blocker-list button").forEach((btn) => { btn.disabled = locked; });
   }
 
@@ -936,7 +938,7 @@
         const data = await dx.api("/admin/daedalus/proposals/api");
         const rows = data.proposals || [];
         if (!rows.length) emptyNote(list);
-        else list.appendChild(approveAllToolbar(rows.filter((item) => item.status === "pending").length));
+        else list.appendChild(approveAllToolbar(rows.filter((item) => item.status === "pending" && item.id).map((item) => String(item.id))));
         rows.forEach((item) => {
           list.appendChild(row(item.reason || item.id || "", item.status || "", [
             actionButton("detail-proposal", item.id, dx.t("studio.detail")),
@@ -1916,7 +1918,8 @@
   // ---- A6.2a: bulk permissions, blocker fixes, details, approve-all ---------------------------------------------
   const REV_ERR = { confirm_required: "studio.revErrConfirm", not_found: "studio.revErrNotFound", already_resolved: "studio.revErrResolved",
     no_project: "studio.revErrNoProject", not_infra: "studio.revErrNotInfra", no_fix_available: "studio.revErrNoFix",
-    project_not_found: "studio.revErrProjectGone", remediate_failed: "studio.revErrFailed" };
+    project_not_found: "studio.revErrProjectGone", remediate_failed: "studio.revErrFailed", unavailable: "studio.revErrUnavailable",
+    id_required: "studio.revErrFailed", ids_required: "studio.revErrFailed" };
   const REVIEW_HOURS = [1, 4, 8, 24, 72];
 
   function revErr(err) {
@@ -1924,10 +1927,7 @@
     return REV_ERR[code] ? dx.t(REV_ERR[code]) : failText(err);
   }
 
-  function hoursSelect(def, id) {
-    const sel = document.createElement("select");
-    if (id) sel.id = id;
-    sel.setAttribute("aria-label", dx.t("studio.bulkHours"));
+  function fillHours(sel, def) {
     REVIEW_HOURS.forEach((h) => {
       const o = document.createElement("option");
       o.value = String(h);
@@ -1936,6 +1936,12 @@
     });
     sel.value = String(def);
     return sel;
+  }
+
+  function hoursSelect(def) {
+    const sel = document.createElement("select");
+    sel.setAttribute("aria-label", dx.t("studio.bulkHours"));
+    return fillHours(sel, def);
   }
 
   // A row of bulk actions for a Review tab: title, hint, an optional hours choice, buttons, and a note for the outcome.
@@ -2008,13 +2014,14 @@
     ]);
   }
 
-  function approveAllToolbar(pending) {
+  function approveAllToolbar(pendingIds) {
     return bulkBox("bulk-approve-all", "studio.approveAllTitle", null, null, [
       { label: dx.t("studio.approveAll"), run: async () => {
-        if (!pending) return { text: dx.t("studio.approveAllNone"), bad: false };
-        if (!window.confirm(dx.t("studio.approveAllConfirm", { n: pending }))) return null;
+        if (!pendingIds.length) return { text: dx.t("studio.approveAllNone"), bad: false };
+        if (!window.confirm(dx.t("studio.approveAllConfirm", { n: pendingIds.length }))) return null;
         try {
-          const r = await postJson("/api/v1/harness/review/proposals/approve-all", { confirm: true });
+          // exactly the proposals the question was about: one added meanwhile is not approved by this click
+          const r = await postJson("/api/v1/harness/review/proposals/approve-all", { ids: pendingIds, confirm: true });
           await loadReview("proposals");
           if (r.ok) return { text: dx.t("studio.approveAllDone", { n: r.applied }), bad: false };
           const f = (r.failed || []).length;
@@ -2079,53 +2086,77 @@
     return [fix, rem];
   }
 
-  async function blockerAutoFix(id, btn) {
+  // The blocker actions take the same lock as Resolve (one request at a time, buttons greyed out) and drop their
+  // result when the owner has left Review, so none of them can write to a screen that is no longer theirs.
+  async function blockerLocked(btn, work) {
+    if (blockerFlight) return;
+    const gen = blockerGen;
+    const flight = ++blockerSeq;
+    blockerFlight = flight;
+    syncBlockerButtons();
+    let refresh = false;
+    try {
+      await runAction(btn, "blocker-status", async () => {
+        try {
+          const done = await work(() => blockerStill(gen));
+          refresh = done === true;
+        } catch (err) {
+          if (blockerStill(gen)) showStatus("blocker-status", revErr(err), true);
+        }
+      });
+    } finally {
+      if (blockerFlight === flight) {
+        blockerFlight = 0;
+        syncBlockerButtons();
+      }
+      if (refresh && blockerStill(gen)) loadBlockers({ keepStatus: true });
+    }
+  }
+
+  function blockerAutoFix(id, btn) {
     const h = Number($("blocker-hours").value);
-    if (!window.confirm(dx.t("studio.blockerAutoFixConfirm", { h }))) return;
-    await runAction(btn, "blocker-status", async () => {
-      try {
-        const r = await postJson("/api/v1/harness/review/blockers/auto-fix", { id, hours: h, confirm: true });
-        showStatus("blocker-status", dx.t("studio.blockerFixed", { n: (r.granted || []).length, h: r.hours }), false);
-        loadBlockers({ keepStatus: true });
-      } catch (err) { showStatus("blocker-status", revErr(err), true); }
+    if (!window.confirm(dx.t("studio.blockerAutoFixConfirm", { h }))) return Promise.resolve();
+    return blockerLocked(btn, async (still) => {
+      const r = await postJson("/api/v1/harness/review/blockers/auto-fix", { id, hours: h, confirm: true });
+      if (still()) showStatus("blocker-status", dx.t("studio.blockerFixed", { n: (r.granted || []).length, h: r.hours }), false);
+      return true;
     });
   }
 
-  async function blockerRemediate(id, btn) {
-    await runAction(btn, "blocker-status", async () => {
-      try {
-        const prev = await dx.api("/api/v1/harness/review/blockers/" + encodeURIComponent(id) + "/remediation");
-        if (prev.changes_kind && !window.confirm(dx.t("studio.blockerRemediateConfirm", { slug: prev.slug, old: prev.old_kind }))) return;
-        const r = await postJson("/api/v1/harness/review/blockers/" + encodeURIComponent(id) + "/remediate", { confirm_kind_change: !!prev.changes_kind });
-        showStatus("blocker-status", dx.t(r.already_static ? "studio.blockerAlreadyStatic" : "studio.blockerRemediated", { slug: r.slug, old: r.old_kind || "" }), false);
-        loadBlockers({ keepStatus: true });
-      } catch (err) { showStatus("blocker-status", revErr(err), true); }
+  function blockerRemediate(id, btn) {
+    return blockerLocked(btn, async (still) => {
+      const prev = await dx.api("/api/v1/harness/review/blockers/" + encodeURIComponent(id) + "/remediation");
+      if (!still()) return false;
+      if (prev.changes_kind && !window.confirm(dx.t("studio.blockerRemediateConfirm", { slug: prev.slug, old: prev.old_kind }))) return false;
+      const r = await postJson("/api/v1/harness/review/blockers/" + encodeURIComponent(id) + "/remediate", { confirm_kind_change: !!prev.changes_kind });
+      if (still()) showStatus("blocker-status", dx.t(r.already_static ? "studio.blockerAlreadyStatic" : "studio.blockerRemediated", { slug: r.slug, old: r.old_kind || "" }), false);
+      return true;
     });
   }
 
-  async function blockersAutoFixAll(btn) {
+  function blockersAutoFixAll(btn) {
     const h = Number($("blocker-hours").value);
-    await runAction(btn, "blocker-status", async () => {
-      try {
-        const prev = await dx.api("/api/v1/harness/review/blockers");
-        if (!window.confirm(dx.t("studio.blockerAutoFixAllConfirm", { h, n: prev.open }))) return;
-        const r = await postJson("/api/v1/harness/review/blockers/auto-fix", { hours: h, confirm: true });
-        showStatus("blocker-status", dx.t("studio.blockerFixedAll", { fixed: r.fixed, skipped: r.skipped }), false);
-        loadBlockers({ keepStatus: true });
-      } catch (err) { showStatus("blocker-status", revErr(err), true); }
+    return blockerLocked(btn, async (still) => {
+      const prev = await dx.api("/api/v1/harness/review/blockers");
+      if (!still()) return false;
+      if (!window.confirm(dx.t("studio.blockerAutoFixAllConfirm", { h, n: prev.open }))) return false;
+      const r = await postJson("/api/v1/harness/review/blockers/auto-fix", { all: true, hours: h, confirm: true });
+      // "fixed 0, skipped N" is a result to read, not an error to hide
+      if (still()) showStatus("blocker-status", dx.t("studio.blockerFixedAll", { fixed: r.fixed, skipped: r.skipped }), r.ok === false);
+      return true;
     });
   }
 
-  async function blockersGrantRecommended(btn) {
+  function blockersGrantRecommended(btn) {
     const h = Number($("blocker-hours").value);
-    await runAction(btn, "blocker-status", async () => {
-      try {
-        const prev = await dx.api("/api/v1/harness/review/blockers");
-        const list = prev.recommended || [];
-        if (!window.confirm(dx.t("studio.blockerGrantRecConfirm", { n: list.length, h, list: list.join(", ") }))) return;
-        const r = await postJson("/api/v1/harness/review/blockers/grant-recommended", { hours: h, confirm: true });
-        showStatus("blocker-status", dx.t("studio.blockerFixed", { n: r.count, h: r.hours }), false);
-      } catch (err) { showStatus("blocker-status", revErr(err), true); }
+    return blockerLocked(btn, async (still) => {
+      const prev = await dx.api("/api/v1/harness/review/blockers");
+      if (!still()) return false;
+      const list = prev.recommended || [];
+      if (!window.confirm(dx.t("studio.blockerGrantRecConfirm", { n: list.length, h, list: list.join(", ") }))) return false;
+      const r = await postJson("/api/v1/harness/review/blockers/grant-recommended", { hours: h, confirm: true });
+      if (still()) showStatus("blocker-status", dx.t("studio.blockerFixed", { n: r.count, h: r.hours }), false);
+      return false;
     });
   }
 
@@ -3851,13 +3882,7 @@
   const blockerGrantRec = $("blocker-grant-rec");
   if (blockerGrantRec) blockerGrantRec.addEventListener("click", () => blockersGrantRecommended(blockerGrantRec));
   const blockerHours = $("blocker-hours");
-  if (blockerHours) REVIEW_HOURS.forEach((h) => {
-    const o = document.createElement("option");
-    o.value = String(h);
-    o.textContent = h + " h";
-    blockerHours.appendChild(o);
-    if (h === 8) blockerHours.value = String(h);
-  });
+  if (blockerHours) fillHours(blockerHours, 8);
   const planGenerate = $("plan-generate");
   if (planGenerate) planGenerate.addEventListener("click", generatePlan);
   const planRefresh = $("plan-refresh");
