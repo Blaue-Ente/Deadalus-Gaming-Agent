@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-08T01:53:29.134434+00:00",
+  "generated_at": "2026-11-08T09:27:37.717133+00:00",
   "package_version": "0.3.8",
-  "git_commit": "391696a4d1493939a49fa5e5cc80463e2499162d",
+  "git_commit": "8c9c319e819a96cabe933acb6d4e57e430244dfc",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -14,8 +14,8 @@
     },
     {
       "path": "app/admin_compat.py",
-      "lines": 3157,
-      "broad_excepts": 78
+      "lines": 3137,
+      "broad_excepts": 77
     },
     {
       "path": "daedalus/native_tools.py",
@@ -130,8 +130,8 @@
     ]
   },
   "tests": {
-    "modules": 102,
-    "functions": 1076
+    "modules": 104,
+    "functions": 1117
   },
   "modules": {
     "daedalus": [
@@ -233,6 +233,7 @@
       "daedalus/harness/play_worker/win32.py",
       "daedalus/harness/proof.py",
       "daedalus/harness/registry.py",
+      "daedalus/harness/review_actions.py",
       "daedalus/harness/runs.py",
       "daedalus/hello_test.py",
       "daedalus/host.py",

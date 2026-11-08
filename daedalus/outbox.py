@@ -539,17 +539,23 @@ def grant_all_known_permissions(
     return grant_permissions_bulk(KNOWN_PERMISSION_IDS, hours=hours, granted_by=granted_by)
 
 
-def renew_expired_permissions(hours: float = 24.0, granted_by: str = "owner") -> dict[str, Any]:
-    """Re-grant all known classes that are missing or expired."""
+def renewable_permission_ids() -> list[str]:
+    """Known classes that are missing or expired (a standing default that already covers one is not renewable)."""
     now = int(time.time())
     perms: dict = _rdb_get(_PERMS_KEY) or {}
-    to_renew: list[str] = []
+    out: list[str] = []
     for pid in KNOWN_PERMISSION_IDS:
         p = perms.get(pid)
         if default_grant_active(pid) and not p:
             continue  # the standing default already covers it; do not turn it into a 24h grant
         if not p or now >= int(p.get("expires_at", 0)):
-            to_renew.append(pid)
+            out.append(pid)
+    return out
+
+
+def renew_expired_permissions(hours: float = 24.0, granted_by: str = "owner") -> dict[str, Any]:
+    """Re-grant all known classes that are missing or expired."""
+    to_renew = renewable_permission_ids()
     if not to_renew:
         return {"ok": True, "granted": [], "hours": hours, "count": 0, "message": "nothing to renew"}
     return grant_permissions_bulk(to_renew, hours=hours, granted_by=granted_by)

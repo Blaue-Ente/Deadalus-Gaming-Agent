@@ -13,19 +13,27 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      # The Godot zip is cached once it has been downloaded AND verified, so a later run never needs the release host at
+      # all (it answered 504 for over ten minutes on the runners while the file itself was fine).
+      - name: Cache the verified Godot download
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/godot-dl
+          key: godot-4.3-stable-linux-x86_64-fd52bb4b
       - name: Native play worker prerequisites (Godot 4.3, Xvfb, xdotool)
         env:
           GODOT_ZIP: Godot_v4.3-stable_linux.x86_64.zip
           # Published value from godot-builds 4.3-stable SHA512-SUMS.txt
           GODOT_SHA512: fd52bb4ba8acc30ca5accd1c566d470ad7282f891ccc0995dfafabcf92bcf76280ce182bf9d80ebd885f3ed2165d01e1fc3f2928436b15498dfbd98656c2a45a
+          GH_TOKEN: ${{ github.token }}
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq xvfb xdotool imagemagick libgl1 libgl1-mesa-dri libxcursor1 libxinerama1 \
             libxi6 libxrandr2 libxkbcommon0 libfontconfig1 libasound2t64
-          mkdir -p "$RUNNER_TEMP/godot" && cd "$RUNNER_TEMP/godot"
-          curl -fsSL -o "$GODOT_ZIP" "https://github.com/godotengine/godot-builds/releases/download/4.3-stable/$GODOT_ZIP"
-          echo "$GODOT_SHA512  $GODOT_ZIP" | sha512sum -c -
-          unzip -q "$GODOT_ZIP"
+          mkdir -p "$RUNNER_TEMP/godot-dl" "$RUNNER_TEMP/godot"
+          bash scripts/ci/fetch_godot.sh "$RUNNER_TEMP/godot-dl" "$GODOT_ZIP" "$GODOT_SHA512"
+          cd "$RUNNER_TEMP/godot"
+          unzip -q -o "$RUNNER_TEMP/godot-dl/$GODOT_ZIP"
           chmod +x Godot_v4.3-stable_linux.x86_64
           ./Godot_v4.3-stable_linux.x86_64 --version
           echo "GODOT_BIN=$RUNNER_TEMP/godot/Godot_v4.3-stable_linux.x86_64" >> "$GITHUB_ENV"

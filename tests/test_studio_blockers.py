@@ -377,7 +377,7 @@ def test_review_lists_blockers_and_resolve_posts_the_note(studio_server):
         assert "web_search" not in text
         assert "auto_approve" not in text
         assert "does not grant a permission" in text
-        _hit(page, "#blocker-list button")
+        _hit(page, "#blocker-list button[data-gen]")
         assert posts == []
         assert "blk_demo" in dialogs[-1]
         assert "only marks it resolved" in dialogs[-1]
@@ -386,24 +386,24 @@ def test_review_lists_blockers_and_resolve_posts_the_note(studio_server):
         assert "Cancel sends nothing" in dialogs[-1]
         accept["on"] = True
         page.locator("#blocker-note").fill("   ")
-        _hit(page, "#blocker-list button")
+        _hit(page, "#blocker-list button[data-gen]")
         _status_has(page, "Blocker blk_demo is resolved.")
         assert posts == [{}]
         _settled(page)
         page.locator("#blocker-note").fill("  checked by hand  ")
-        _hit(page, "#blocker-list button")
+        _hit(page, "#blocker-list button[data-gen]")
         _status_has(page, "Blocker blk_demo is resolved.")
         assert posts[-1] == {"note": "checked by hand"}
         _settled(page)
         page.locator("#blocker-note").fill("")
         state["post"] = None
-        _hit(page, "#blocker-list button")
+        _hit(page, "#blocker-list button[data-gen]")
         _status_has(page, "The response did not succeed.")
         assert "is resolved" not in page.locator("#blocker-status").inner_text()
         assert posts[-1] == {}
         _settled(page)
         state["post"] = {"ok": False, "error": "blocker not found"}
-        _hit(page, "#blocker-list button")
+        _hit(page, "#blocker-list button[data-gen]")
         _status_has(page, "blocker not found")
         assert "is resolved" not in page.locator("#blocker-status").inner_text()
         assert "The response did not succeed." in page.locator("#blocker-status").inner_text()
@@ -411,10 +411,10 @@ def test_review_lists_blockers_and_resolve_posts_the_note(studio_server):
         state["post"] = {"ok": True, "blocker_id": "blk_demo"}
         state["hold_post"] = True
         before = len(posts)
-        _hit(page, "#blocker-list button")
+        _hit(page, "#blocker-list button[data-gen]")
         assert len(posts) == before + 1
         with pytest.raises(PlaywrightTimeout):
-            page.locator("#blocker-list button").click(timeout=1000)
+            page.locator("#blocker-list button[data-gen]").click(timeout=1000)
         assert len(posts) == before + 1
         state["hold_post"] = False
         _fulfill(held["post"].pop(), 200, state["post"])
@@ -462,7 +462,7 @@ def test_review_lists_blockers_and_resolve_posts_the_note(studio_server):
         assert page.locator("#blocker-controls img").count() == 0
         accept["on"] = False
         posted = len(posts)
-        _hit(page, "#blocker-list button")
+        _hit(page, "#blocker-list button[data-gen]")
         assert len(posts) == posted
         assert "blk_demo" in dialogs[-1]
         assert "Не дава разрешение" in dialogs[-1]
@@ -511,7 +511,7 @@ def test_leaving_review_drops_late_replies_and_a_stale_button(studio_server):
         )
         assert _open_ready
         state["hold_post"] = True
-        _hit(page, "#blocker-list button")
+        _hit(page, "#blocker-list button[data-gen]")
         _wait_len(page, posts, 1)
         assert posts[0] == {}
         _hit(page, "#workspace-nav button[data-panel=build]")
@@ -533,7 +533,7 @@ def test_leaving_review_drops_late_replies_and_a_stale_button(studio_server):
         page.evaluate("() => { document.getElementById('panel-review').hidden = false; }")
         posted = len(posts)
         dialogs.clear()
-        _hit(page, "#blocker-list button")
+        _hit(page, "#blocker-list button[data-gen]")
         assert dialogs == []
         assert len(posts) == posted
         _hit(page, "#workspace-nav button[data-panel=review]")

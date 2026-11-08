@@ -3023,28 +3023,8 @@ async def daedalus_set_plan_status(plan_id: str, request: Request):
 
 @router.post("/daedalus/proposals/approve-all-pending")
 async def daedalus_approve_all_pending():
-    from daedalus.self_improve import approve_proposal, list_proposals
-    applied: list[str] = []
-    failed: list[dict[str, Any]] = []
-    for p in list_proposals(status="pending"):
-        pid = p.get("proposal_id") or p.get("id")
-        if not pid:
-            continue
-        try:
-            res = approve_proposal(str(pid), approved_by="owner")
-            if res.get("ok"):
-                applied.append(str(pid))
-            else:
-                failed.append({"id": pid, "error": res.get("error")})
-        except Exception as extra:
-            failed.append({"id": pid, "error": str(extra)})
-    # ok only when nothing failed; "partial" tells the UI some proposals did apply.
-    return JSONResponse({
-        "ok": not failed,
-        "partial": bool(applied and failed),
-        "applied": len(applied),
-        "failed": failed,
-    })
+    from daedalus.harness import review_actions
+    return JSONResponse(review_actions.approve_proposals(review_actions.pending_proposal_ids()))
 
 
 @router.post("/daedalus/blockers/{blocker_id}/remediate")
