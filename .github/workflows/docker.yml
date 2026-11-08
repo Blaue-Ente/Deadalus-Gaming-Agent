@@ -23,7 +23,10 @@ jobs:
           sudo apt-get install -y -qq xvfb xdotool imagemagick libgl1 libgl1-mesa-dri libxcursor1 libxinerama1 \
             libxi6 libxrandr2 libxkbcommon0 libfontconfig1 libasound2t64
           mkdir -p "$RUNNER_TEMP/godot" && cd "$RUNNER_TEMP/godot"
-          curl -fsSL -o "$GODOT_ZIP" "https://github.com/godotengine/godot-builds/releases/download/4.3-stable/$GODOT_ZIP"
+          # The release host answers 504 now and then; one failed download used to end the whole job before any test ran.
+          # Retry (it is still checked against the pinned SHA-512 below, so a retry can never accept a different file).
+          curl -fsSL --retry 8 --retry-all-errors --retry-delay 15 --retry-max-time 300 -o "$GODOT_ZIP" \
+            "https://github.com/godotengine/godot-builds/releases/download/4.3-stable/$GODOT_ZIP"
           echo "$GODOT_SHA512  $GODOT_ZIP" | sha512sum -c -
           unzip -q "$GODOT_ZIP"
           chmod +x Godot_v4.3-stable_linux.x86_64
