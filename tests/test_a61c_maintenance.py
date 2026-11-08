@@ -263,9 +263,11 @@ def _open_maint(page, server, lang="en"):
     _open(page, server, lang)
     page.wait_for_selector(".cfg-row[data-id='kernel-actions']")
     page.wait_for_selector(".cfg-row[data-id='pool-scan']")
-    # Settings loads in two waves; the second one hides the "loading" line at the top and so moves everything up.
+    # Settings loads in two waves; the second one replaces the "loading" line at the top (hidden, or an error on a
+    # machine with no model configured) and so moves everything. The "loading" state is a shown line that is not an error.
     # Wait for the settled page, or a position measured before that is measured on a layout that is about to change.
-    page.wait_for_function("() => document.getElementById('settings-status').hidden && document.getElementById('settings-fields').children.length > 0")
+    page.wait_for_function(
+        "() => { const s = document.getElementById('settings-status'); return s.hidden || s.dataset.state === 'error'; }")
 
 
 def _note(page, row, text=None):
@@ -546,6 +548,7 @@ def test_kernel_and_pool_sections_fit_and_their_controls_are_really_clickable(st
         for selector in (".cfg-row[data-id='kernel-repo'] input", ".cfg-row[data-id='kernel-branch'] input",
                          ".cfg-row[data-id='kernel-paths'] textarea", ".cfg-row[data-id='kernel-actions'] button",
                          ".cfg-row[data-id='pool-scan'] button"):
-            page.locator(selector).first.scroll_into_view_if_needed()
+            # scroll_into_view_if_needed leaves a partly visible element where it is; its centre can then be off screen
+            page.locator(selector).first.evaluate("el => el.scrollIntoView({block: 'center'})")
             _hit(page, selector)
         browser.close()
