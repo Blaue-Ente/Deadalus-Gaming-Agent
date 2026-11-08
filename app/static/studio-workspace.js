@@ -1075,7 +1075,7 @@
     if (generate) generate.disabled = listLocked || planGenerateOp !== null;
     if (refresh) refresh.disabled = listLocked;
     document.querySelectorAll("#plan-list button").forEach((btn) => {
-      btn.disabled = listLocked || (btn.dataset.act === "approve" && planApproveOp.has(btn.dataset.id || ""));
+      btn.disabled = listLocked || btn.dataset.keep === "1" || (btn.dataset.act === "approve" && planApproveOp.has(btn.dataset.id || ""));
     });
   }
 
@@ -1329,7 +1329,7 @@
     if (refresh) refresh.disabled = locked;
     if (filter) filter.disabled = locked;
     document.querySelectorAll("#discovery-list button").forEach((btn) => {
-      btn.disabled = locked || discoveryApproveOp.has(btn.dataset.id || "");
+      btn.disabled = locked || btn.dataset.keep === "1" || discoveryApproveOp.has(btn.dataset.id || "");
     });
   }
 
@@ -2201,7 +2201,7 @@
   // these actions are cheap local writes (a step, a status) or an explicit, confirmed model turn (run a step, regenerate).
   const PLN_ERR = { title_required: "studio.plnErrTitle", too_long: "studio.plnErrLong", too_many_steps: "studio.plnErrSteps",
     bad_dependency: "studio.plnErrDep", bad_state: "studio.plnErrState", use_approve: "studio.plnErrApprove",
-    already_running: "studio.plnErrRunning", status_not_allowed: "studio.plnErrStatus" };
+    already_running: "studio.plnErrRunning", plan_not_active: "studio.plnErrNotActive", dependency_open: "studio.plnErrDepOpen", status_not_allowed: "studio.plnErrStatus" };
   const STEP_STATES = ["pending", "passed", "failed", "blocked"];
   const openManagers = new Set();                  // plan ids whose steps are open: a reload of the list keeps them open
   const managerTimers = {};
@@ -2216,7 +2216,7 @@
   }
 
   function lockExtras(on) {
-    document.querySelectorAll("[data-extra]").forEach((b) => { b.disabled = on; });
+    document.querySelectorAll("[data-extra]").forEach((b) => { b.disabled = on || b.dataset.keep === "1"; });
     if (!on) { syncPlanButtons(); syncDiscoveryButtons(); }
   }
 
@@ -2324,6 +2324,12 @@
     const keepNote = box.querySelector(":scope > .note.result");
     const noteText = keepNote && !keepNote.hidden ? keepNote.textContent : "";
     const noteState = keepNote ? keepNote.dataset.state : "";
+    const oldForm = box.querySelector(":scope > .add-step");
+    const kept = oldForm ? {
+      inputs: Array.from(oldForm.querySelectorAll("input")).map((i) => i.value),
+      deps: Array.from(oldForm.querySelectorAll("select option:checked")).map((o) => o.value),
+      focus: oldForm.contains(document.activeElement) ? Array.from(oldForm.children).indexOf(document.activeElement) : -1,
+    } : null;
     box.replaceChildren();
     const steps = data.steps || [];
     const active = data.plan_status === "active";
@@ -2385,14 +2391,22 @@
       });
       over.dataset.role = "override";
       over.disabled = st.status === "passed";
+      if (over.disabled) over.dataset.keep = "1";            // stays off after an unlock: nothing to override
       const run = xbtn(dx.t("studio.stepRun"), (btn) => runStep(btn, id, st.id, el));
       run.dataset.role = "run";
       run.disabled = !!st.bg_running;
+      if (run.disabled) run.dataset.keep = "1";              // stays off while this step runs
       actions.append(sel, set, over, run);
       row.append(b, small, actions);
       box.appendChild(row);
     });
-    box.appendChild(addStepForm(id, el, steps, active));
+    const form = addStepForm(id, el, steps, active);
+    if (kept) {                                              // a refresh (the running-step poll) must not wipe what the owner is typing
+      form.querySelectorAll("input").forEach((i, n) => { if (kept.inputs[n] !== undefined) i.value = kept.inputs[n]; });
+      form.querySelectorAll("select option").forEach((o) => { if (kept.deps.indexOf(o.value) >= 0) o.selected = true; });
+      if (kept.focus >= 0 && form.children[kept.focus]) form.children[kept.focus].focus();
+    }
+    box.appendChild(form);
     if (noteText) say(noteText, noteState === "error");
     clearTimeout(managerTimers[id]);
     if (steps.some((st) => st.bg_running)) {                // a step is running: look again, so the row shows how it ended
@@ -2471,6 +2485,7 @@
   }
 
   function discoveryExtras(id, actions) {
+    if (regenWatch.size) watchRegenerations();         // back on Review after leaving it: look at the server's state again
     if (!id) return;
     const regen = xbtn(dx.t("studio.discRegen"), (b) => {
       if (!window.confirm(dx.t("studio.discRegenConfirm"))) return;

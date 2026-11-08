@@ -28,9 +28,8 @@ def loop_running() -> bool:
     try:
         from ..planner import run_planner_loop
 
-        return any(getattr(getattr(t.get_coro(), "cr_code", None), "co_code", None) == run_planner_loop.__code__.co_code
-                   and getattr(getattr(t.get_coro(), "cr_code", None), "co_name", "") == "run_planner_loop"
-                   for t in asyncio.all_tasks() if not t.done())
+        code = run_planner_loop.__code__
+        return any(getattr(t.get_coro(), "cr_code", None) is code for t in asyncio.all_tasks() if not t.done())
     except RuntimeError:                                            # no running loop
         return False
 
@@ -254,8 +253,14 @@ async def run_background(plan_id: str, step_id: str, confirm: Any, grant_recomme
         return {"ok": False, "error": "not_found"}
     for done in [sid for sid, t in _bg.items() if t.done()]:                 # finished tasks are not kept around
         del _bg[done]
-    if step_id in running_steps() or step.get("status") == "running":
+    if step_id in running_steps():                                          # only a task alive here counts: a DB "running" left by a crash must not block
         return {"ok": False, "error": "already_running"}
+    if plan.get("status") != "active":
+        return {"ok": False, "error": "plan_not_active", "status": plan.get("status")}
+    states = {s.get("id"): s.get("status") for s in plan.get("steps") or []}
+    for dep in [d.strip() for d in str(step.get("depends_on") or "").split(",") if d.strip()]:
+        if states.get(dep) not in ("passed", "done"):
+            return {"ok": False, "error": "dependency_open", "step": dep}
     from ..agent import get_daedalus
 
     agent = get_daedalus()
@@ -267,8 +272,29 @@ async def run_background(plan_id: str, step_id: str, confirm: Any, grant_recomme
     task_msg = (f"Plan: {plan.get('title')}\nStep #{step.get('step_order')}: {step.get('title')}\n"
                 f"{step.get('description') or ''}\nStep ID: {step_id}").strip()
     session_id = f"bg-{uuid.uuid4().hex[:8]}"
-    _bg[step_id] = asyncio.get_running_loop().create_task(execute_task(agent, task_msg, session_id))
+    _bg[step_id] = asyncio.get_running_loop().create_task(_run_step(agent, task_msg, session_id, step_id))
     return {"ok": True, "session_id": session_id, "granted": granted}
+
+
+async def _note(step_id: str, text: str) -> None:
+    from ..planner import update_step_progress
+
+    try:
+        await update_step_progress(step_id, text)
+    except Exception:
+        pass                                                         # a note is information, never a reason to fail the run
+
+
+async def _run_step(agent: Any, task_msg: str, session_id: str, step_id: str) -> None:
+    """The background turn plus honest notes on the step. The step's status is NOT changed: the agent turn is not a verification, so
+    passing the step stays the owner's decision (Mark / Override)."""
+    await _note(step_id, f"background run started ({session_id})")
+    try:
+        await execute_task(agent, task_msg, session_id)
+        await _note(step_id, f"background run ended ({session_id}); result is in the Outbox, step status unchanged")
+    except asyncio.CancelledError:
+        await _note(step_id, f"background run cancelled ({session_id})")
+        raise
 
 
 # ---- discoveries -----------------------------------------------------------------------------------------
@@ -290,6 +316,11 @@ def delete_discovery(discovery_id: str, confirm: Any) -> dict[str, Any]:
 
     if (refused := _need(confirm)):
         return refused
+    if _discovery(discovery_id) is None:
+        return {"ok": False, "error": "not_found"}
+    task = _regen.pop(discovery_id, None)
+    if task and not task.done():
+        task.cancel()                                               # a plan for a deleted discovery is not wanted
     if not get_daedalus().memory.delete_discovery(discovery_id):
         return {"ok": False, "error": "not_found"}
     _regen_last.pop(discovery_id, None)
@@ -324,10 +355,15 @@ async def regenerate_start(discovery_id: str, confirm: Any) -> dict[str, Any]:
     async def run() -> None:
         started = time.time()
         try:
-            plan = await generate_plan(discovery, registry, agent)
+            plan = await generate_plan(discovery, registry, agent, save_on_error=False)   # a failed model call saves no junk plan
+            if discovery_id not in _regen:                           # deleted meanwhile: record nothing
+                return
             _regen_last[discovery_id] = {"ok": True, "plan_id": plan["id"], "finished_at": time.time(), "seconds": round(time.time() - started, 1)}
+        except asyncio.CancelledError:
+            raise
         except Exception as exc:
-            _regen_last[discovery_id] = {"ok": False, "error": type(exc).__name__, "finished_at": time.time()}
+            if discovery_id in _regen:
+                _regen_last[discovery_id] = {"ok": False, "error": type(exc).__name__, "finished_at": time.time()}
 
     _regen[discovery_id] = asyncio.get_running_loop().create_task(run())
     _regen_last.pop(discovery_id, None)

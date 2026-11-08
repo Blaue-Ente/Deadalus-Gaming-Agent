@@ -167,7 +167,7 @@ def _active(perm):
 def test_run_in_background_needs_a_confirm_and_runs_the_step_text_not_a_request_text(client, monkeypatch):
     agent = FakeAgent()
     monkeypatch.setattr("daedalus.agent.get_daedalus", lambda: agent)
-    plan_id, (step,) = _plan(client, status="paused")
+    plan_id, (step,) = _plan(client, status="active")
     url = f"{P}/{plan_id}/steps/{step}/run"
     assert client.post(url, json={"grant_recommended": True}).status_code == 400
     assert agent.calls == [] and not _active("web_search")                                              # nothing ran, nothing granted
@@ -187,7 +187,7 @@ def test_only_the_servers_recommended_set_can_be_granted_and_only_when_asked(a0_
     async def scenario():
         from daedalus import planner
 
-        created = await planner.create_plan("p", "d", status="paused")
+        created = await planner.create_plan("p", "d", status="active")
         step = (await planner.add_step(created["plan_id"], "the step", "its text"))["step_id"]
         res = await planner_actions.run_background(created["plan_id"], step, True, True)
         await asyncio.gather(*list(planner_actions._bg.values()))
@@ -211,7 +211,7 @@ def test_a_step_runs_once_at_a_time_and_its_result_reaches_the_outbox(a0_tmp, mo
 
         gate = asyncio.Event()
         monkeypatch.setattr("daedalus.agent.get_daedalus", lambda: FakeAgent(gate))
-        created = await planner.create_plan("p", "d", status="paused")
+        created = await planner.create_plan("p", "d", status="active")
         step = (await planner.add_step(created["plan_id"], "slow step", ""))["step_id"]
         first = await planner_actions.run_background(created["plan_id"], step, True, False)
         second = await planner_actions.run_background(created["plan_id"], step, True, False)
@@ -291,7 +291,7 @@ def test_regenerating_a_plan_is_confirmed_single_flight_and_reports_how_it_ended
     async def scenario():
         gate = asyncio.Event()
 
-        async def generate_plan(discovery, registry, agent):
+        async def generate_plan(discovery, registry, agent, save_on_error=True):
             assert discovery == {"id": "d1", "content": "a finding", "metadata": {"kind": "x"}}
             await gate.wait()
             return {"id": "plan_new"}
@@ -319,7 +319,7 @@ def test_a_failed_regeneration_is_recorded_as_failed(a0_tmp, monkeypatch, agent_
     planner_actions._regen.clear()
     planner_actions._regen_last.clear()
 
-    async def boom(discovery, registry, agent):
+    async def boom(discovery, registry, agent, save_on_error=True):
         raise RuntimeError("no model")
 
     monkeypatch.setattr("daedalus.plans.generate_plan", boom)
@@ -827,3 +827,90 @@ def test_planner_and_discovery_controls_fit_and_are_really_clickable(studio_serv
             page.locator(selector).first.evaluate("el => el.scrollIntoView({block: 'center'})")
             _uncovered(page, selector)                                                       # looks, never clicks
         browser.close()
+
+
+# ------------------------------------------------------------------------------------------------ review fixes
+def test_a_failed_model_call_saves_no_junk_plan_and_is_recorded_as_failed(a0_tmp, monkeypatch, agent_with_memory):  # noqa: F811
+    from daedalus import plans
+    from daedalus.harness import planner_actions
+
+    planner_actions._regen.clear()
+    planner_actions._regen_last.clear()
+    saved = []
+    monkeypatch.setattr(plans, "save_plan", lambda plan: saved.append(plan))
+
+    async def llm_down(**kw):
+        raise RuntimeError("llm down")
+
+    monkeypatch.setattr("daedalus.agent._call_claude", llm_down)
+
+    async def scenario():
+        await planner_actions.regenerate_start("d1", True)
+        await asyncio.gather(*list(planner_actions._regen.values()))
+        return planner_actions.regenerate_status()["last"]["d1"]
+
+    last = asyncio.run(scenario())
+    assert last["ok"] is False and last["error"] == "RuntimeError" and saved == []
+
+
+def test_a_running_row_in_the_database_does_not_block_a_run_and_dependencies_and_plan_state_are_checked(client, monkeypatch):
+    monkeypatch.setattr("daedalus.agent.get_daedalus", lambda: FakeAgent())
+    from daedalus import planner
+    from daedalus.harness import planner_actions
+
+    planner_actions._bg.clear()
+    plan_id, (a, b) = _plan(client, status="active", steps=2)
+    asyncio.run(planner.mark_step(a, "running"))                                   # a crash left this behind
+    ok = client.post(f"{P}/{plan_id}/steps/{a}/run", json={"confirm": True}).json()
+    assert ok["ok"] is True
+    dep_plan, (x,) = _plan(client, status="active")
+    y = client.post(f"{P}/{dep_plan}/steps", json={"title": "second", "depends_on": [x], "confirm": True}).json()["step_id"]
+    blocked = client.post(f"{P}/{dep_plan}/steps/{y}/run", json={"confirm": True})
+    assert blocked.status_code == 409 and blocked.json()["error"] == "dependency_open"
+    draft, (d1,) = _plan(client, status="draft")
+    refused = client.post(f"{P}/{draft}/steps/{d1}/run", json={"confirm": True})
+    assert refused.status_code == 409 and refused.json()["error"] == "plan_not_active"
+
+
+def test_a_background_run_leaves_honest_notes_on_the_step_and_does_not_pass_it(a0_tmp, monkeypatch):  # noqa: F811
+    from daedalus.harness import planner_actions
+
+    planner_actions._bg.clear()
+
+    async def scenario():
+        from daedalus import planner
+
+        monkeypatch.setattr("daedalus.agent.get_daedalus", lambda: FakeAgent())
+        created = await planner.create_plan("p", "d", status="active")
+        step = (await planner.add_step(created["plan_id"], "s", ""))["step_id"]
+        await planner_actions.run_background(created["plan_id"], step, True, False)
+        await asyncio.gather(*list(planner_actions._bg.values()))
+        return (await planner_actions.progress(created["plan_id"]))["steps"][0]
+
+    st = asyncio.run(scenario())
+    assert st["status"] == "pending" and "background run ended" in (st["progress_note"] or "")
+
+
+def test_deleting_a_missing_discovery_is_not_found_and_cancels_a_running_regeneration(a0_tmp, monkeypatch, agent_with_memory):  # noqa: F811
+    from daedalus.harness import planner_actions
+
+    planner_actions._regen.clear()
+    planner_actions._regen_last.clear()
+
+    async def scenario():
+        gate = asyncio.Event()
+
+        async def slow(discovery, registry, agent, save_on_error=True):
+            await gate.wait()
+            return {"id": "plan_late"}
+
+        monkeypatch.setattr("daedalus.plans.generate_plan", slow)
+        missing = planner_actions.delete_discovery("d_nope", True)
+        await planner_actions.regenerate_start("d1", True)
+        gone = planner_actions.delete_discovery("d1", True)
+        await asyncio.sleep(0)
+        return missing, gone, planner_actions.regenerate_status()
+
+    missing, gone, status = asyncio.run(scenario())
+    assert missing == {"ok": False, "error": "not_found"} and gone["ok"] is True
+    assert status["running"] == [] and "d1" not in status["last"]

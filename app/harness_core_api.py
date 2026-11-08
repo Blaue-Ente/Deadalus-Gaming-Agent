@@ -536,7 +536,8 @@ class RunStepBody(BaseModel):
 
 
 _PLANNER_STATUS = {"confirm_required": 400, "title_required": 400, "too_long": 400, "too_many_steps": 400, "status_not_allowed": 400,
-                   "bad_dependency": 400, "not_found": 404, "bad_state": 409, "use_approve": 409, "already_running": 409}
+                   "bad_dependency": 400, "not_found": 404, "bad_state": 409, "use_approve": 409, "already_running": 409,
+                   "plan_not_active": 409, "dependency_open": 409}
 
 
 def _planner_reply(res: dict[str, Any]) -> Any:

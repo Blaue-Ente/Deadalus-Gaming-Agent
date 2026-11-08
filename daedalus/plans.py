@@ -197,8 +197,12 @@ async def generate_plan(
     discovery: dict[str, Any],
     registry: dict[str, Any],
     daedalus,  # DaedalusAgent — typed loosely to avoid circular import
+    *,
+    save_on_error: bool = True,
 ) -> dict[str, Any]:
     """Generate an implementation plan for an approved discovery.
+
+    ``save_on_error=False`` re-raises an LLM failure instead of saving the error text as a draft plan.
 
     Returns the saved plan dict (also written to disk).
     """
@@ -214,6 +218,8 @@ async def generate_plan(
         )
     except Exception as exc:
         log.exception("Plan generation LLM call failed")
+        if not save_on_error:
+            raise
         markdown = (
             f"## Грешка при генериране\n\n"
             f"LLM грешка: `{exc}`\n\n"
