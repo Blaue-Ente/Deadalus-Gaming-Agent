@@ -771,3 +771,12 @@ label.grow { flex: 1; min-width: 7rem; }
     border-left: 0;
   }
 }
+
+/* A6.2a: bulk action rows and inline details in the Review panel */
+.item .cfg-note { margin: 0.3rem 0 0; color: var(--muted); font-size: 0.74rem; line-height: 1.35; }
+.item[data-state="error"] .cfg-note { color: var(--err); }
+.item.bulk .row.tight > select, #blocker-controls .row > select { flex: 0 0 auto; width: auto; min-width: 4.5rem; }
+.item .detail {
+  margin: 0.4rem 0 0.2rem; padding: 0.55rem 0.65rem; max-height: 22rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+  font-family: var(--mono); font-size: 0.7rem; line-height: 1.45; color: var(--ink); background: var(--bg-deep); border: 1px solid var(--line); border-radius: var(--radius);
+}

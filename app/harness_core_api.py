@@ -393,3 +393,111 @@ async def harness_upgrade_pool_scan() -> Any:
 
     res = await maintenance.start_scan()
     return JSONResponse(res, status_code=409 if res.get("error") == "already_running" else 200)
+
+
+# ---- A6.2a: Review actions (bulk permissions, blockers, details, approve-all) -------------------------------
+class GrantBody(BaseModel):
+    hours: float = 0.0
+    confirm: bool = False
+
+
+class AutoFixBody(BaseModel):
+    id: str = ""
+    hours: float = 0.0
+    confirm: bool = False
+
+
+class RemediateBody(BaseModel):
+    confirm_kind_change: bool = False
+
+
+class ConfirmBody(BaseModel):
+    confirm: bool = False
+
+
+_REVIEW_STATUS = {"confirm_required": 400, "not_found": 404, "project_not_found": 404, "already_resolved": 409,
+                  "no_project": 409, "not_infra": 409, "no_fix_available": 409, "remediate_failed": 502}
+
+
+def _review_reply(res: dict[str, Any]) -> Any:
+    if res.get("ok") or "error" not in res:
+        return res
+    return JSONResponse(res, status_code=_REVIEW_STATUS.get(str(res.get("error")), 400))
+
+
+@router.get("/api/v1/harness/review/permissions")
+def harness_review_permissions() -> dict[str, Any]:
+    from daedalus.harness import review_actions
+
+    return review_actions.permissions_preview()
+
+
+@router.post("/api/v1/harness/review/permissions/grant-all")
+def harness_review_grant_all(body: GrantBody) -> Any:
+    from daedalus.harness import review_actions
+
+    return _review_reply(review_actions.grant_all(body.hours or None, body.confirm))
+
+
+@router.post("/api/v1/harness/review/permissions/renew-expired")
+def harness_review_renew(body: GrantBody) -> Any:
+    from daedalus.harness import review_actions
+
+    return _review_reply(review_actions.renew_expired(body.hours or None, body.confirm))
+
+
+@router.get("/api/v1/harness/review/blockers")
+def harness_review_blockers() -> dict[str, Any]:
+    from daedalus.harness import review_actions
+
+    return review_actions.blockers_preview()
+
+
+@router.post("/api/v1/harness/review/blockers/grant-recommended")
+def harness_review_grant_recommended(body: GrantBody) -> Any:
+    from daedalus.harness import review_actions
+
+    return _review_reply(review_actions.grant_recommended(body.hours or None, body.confirm))
+
+
+@router.post("/api/v1/harness/review/blockers/auto-fix")
+def harness_review_auto_fix(body: AutoFixBody) -> Any:
+    from daedalus.harness import review_actions
+
+    return _review_reply(review_actions.auto_fix(body.id.strip(), body.hours or None, body.confirm))
+
+
+@router.get("/api/v1/harness/review/blockers/{blocker_id}/remediation")
+async def harness_review_remediation(blocker_id: str) -> Any:
+    from daedalus.harness import review_actions
+
+    return _review_reply(await review_actions.remediation_preview(blocker_id))
+
+
+@router.post("/api/v1/harness/review/blockers/{blocker_id}/remediate")
+async def harness_review_remediate(blocker_id: str, body: RemediateBody) -> Any:
+    from daedalus.harness import review_actions
+
+    return _review_reply(await review_actions.remediate(blocker_id, body.confirm_kind_change))
+
+
+@router.get("/api/v1/harness/review/proposals/{proposal_id}")
+def harness_review_proposal(proposal_id: str) -> Any:
+    from daedalus.harness import review_actions
+
+    return _review_reply(review_actions.proposal_detail(proposal_id))
+
+
+@router.get("/api/v1/harness/review/bundles/{bundle_id}")
+async def harness_review_bundle(bundle_id: str) -> Any:
+    from daedalus.harness import review_actions
+
+    return _review_reply(await review_actions.bundle_detail(bundle_id))
+
+
+@router.post("/api/v1/harness/review/proposals/approve-all")
+def harness_review_approve_all(body: ConfirmBody) -> Any:
+    from daedalus.harness import review_actions
+
+    res = review_actions.approve_all_pending(body.confirm)
+    return JSONResponse(res, status_code=400) if res.get("error") == "confirm_required" else res

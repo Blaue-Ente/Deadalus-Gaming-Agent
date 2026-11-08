@@ -851,6 +851,7 @@
         btn.textContent = dx.t("studio.blockerResolve");
         btn.addEventListener("click", () => resolveBlocker(id, gen, btn));
         actions.appendChild(btn);
+        blockerFixButtons(id).forEach((extra) => actions.appendChild(extra));      // defined with the other Review actions
       }
       el.append(title, sub, actions);
       list.appendChild(el);
@@ -935,8 +936,10 @@
         const data = await dx.api("/admin/daedalus/proposals/api");
         const rows = data.proposals || [];
         if (!rows.length) emptyNote(list);
+        else list.appendChild(approveAllToolbar(rows.filter((item) => item.status === "pending").length));
         rows.forEach((item) => {
           list.appendChild(row(item.reason || item.id || "", item.status || "", [
+            actionButton("detail-proposal", item.id, dx.t("studio.detail")),
             actionButton("approve", item.id, dx.t("studio.approve")),
             actionButton("reject", item.id, dx.t("studio.reject")),
             actionButton("rollback", item.id, dx.t("studio.rollback")),
@@ -957,6 +960,7 @@
         if (!rows.length) emptyNote(list);
         rows.forEach((item) => {
           list.appendChild(row(item.title || item.name || item.id || "", item.status || "", [
+            actionButton("detail-bundle", item.id, dx.t("studio.detail")),
             actionButton("apply", item.id, dx.t("studio.apply")),
             actionButton("bundle-reject", item.id, dx.t("studio.reject")),
           ]));
@@ -969,6 +973,7 @@
         });
         const catalog = data.catalog || [];
         if (!catalog.length) emptyNote(list);
+        else list.appendChild(permissionsToolbar());
         catalog.forEach((item) => {
           const on = !!active[item.id];
           list.appendChild(row(item.label || item.id, on ? dx.t("studio.settingsSet") : dx.t("studio.settingsUnset"), [
@@ -1907,7 +1912,231 @@
     });
   }
 
+
+  // ---- A6.2a: bulk permissions, blocker fixes, details, approve-all ---------------------------------------------
+  const REV_ERR = { confirm_required: "studio.revErrConfirm", not_found: "studio.revErrNotFound", already_resolved: "studio.revErrResolved",
+    no_project: "studio.revErrNoProject", not_infra: "studio.revErrNotInfra", no_fix_available: "studio.revErrNoFix",
+    project_not_found: "studio.revErrProjectGone", remediate_failed: "studio.revErrFailed" };
+  const REVIEW_HOURS = [1, 4, 8, 24, 72];
+
+  function revErr(err) {
+    const code = String((err && err.message) || "");
+    return REV_ERR[code] ? dx.t(REV_ERR[code]) : failText(err);
+  }
+
+  function hoursSelect(def, id) {
+    const sel = document.createElement("select");
+    if (id) sel.id = id;
+    sel.setAttribute("aria-label", dx.t("studio.bulkHours"));
+    REVIEW_HOURS.forEach((h) => {
+      const o = document.createElement("option");
+      o.value = String(h);
+      o.textContent = h + " h";
+      sel.appendChild(o);
+    });
+    sel.value = String(def);
+    return sel;
+  }
+
+  // A row of bulk actions for a Review tab: title, hint, an optional hours choice, buttons, and a note for the outcome.
+  // A button's ``run`` returns {text, bad}, or null when the owner declined and there is nothing to say.
+  function bulkBox(id, titleKey, hintKey, hours, buttons) {
+    const el = document.createElement("div");
+    el.className = "item bulk";
+    el.dataset.id = id;
+    const b = document.createElement("b");
+    b.textContent = dx.t(titleKey);
+    el.appendChild(b);
+    if (hintKey) {
+      const small = document.createElement("small");
+      small.textContent = dx.t(hintKey);
+      el.appendChild(small);
+    }
+    const actions = document.createElement("div");
+    actions.className = "row tight";
+    if (hours) actions.appendChild(hours);
+    const note = document.createElement("p");
+    note.className = "cfg-note";
+    note.hidden = true;
+    buttons.forEach((def) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = def.label;
+      btn.addEventListener("click", async () => {
+        el.dataset.state = "";
+        note.hidden = true;
+        await runAction(btn, "review-status", async () => {
+          const res = await def.run();
+          if (!res) return;
+          lastNotes[id] = res;
+          const live = el.isConnected ? el : document.querySelector(".item.bulk[data-id='" + id + "']");
+          if (live) showNote(live, res);
+        });
+      });
+      actions.appendChild(btn);
+    });
+    el.append(actions, note);
+    if (lastNotes[id]) showNote(el, lastNotes[id]);
+    return el;
+  }
+
+  function permissionsToolbar() {
+    const hours = hoursSelect(24);
+    return bulkBox("bulk-permissions", "studio.bulkPermTitle", "studio.bulkPermHint", hours, [
+      { label: dx.t("studio.permGrantAll"), run: async () => {
+        const h = Number(hours.value);
+        try {
+          const prev = await dx.api("/api/v1/harness/review/permissions");
+          if (!window.confirm(dx.t("studio.permGrantAllConfirm", { n: (prev.known || []).length, h }))) return null;
+          const r = await postJson("/api/v1/harness/review/permissions/grant-all", { hours: h, confirm: true });
+          await loadReview("permissions");
+          return { text: dx.t("studio.permGranted", { n: r.count, h: r.hours }), bad: false };
+        } catch (err) { return { text: revErr(err), bad: true }; }
+      } },
+      { label: dx.t("studio.permRenew"), run: async () => {
+        const h = Number(hours.value);
+        try {
+          const prev = await dx.api("/api/v1/harness/review/permissions");
+          const n = (prev.renewable || []).length;
+          if (!n) return { text: dx.t("studio.permNothingToRenew"), bad: false };
+          if (!window.confirm(dx.t("studio.permRenewConfirm", { n, h }))) return null;
+          const r = await postJson("/api/v1/harness/review/permissions/renew-expired", { hours: h, confirm: true });
+          await loadReview("permissions");
+          return { text: dx.t("studio.permGranted", { n: r.count, h: r.hours }), bad: false };
+        } catch (err) { return { text: revErr(err), bad: true }; }
+      } },
+    ]);
+  }
+
+  function approveAllToolbar(pending) {
+    return bulkBox("bulk-approve-all", "studio.approveAllTitle", null, null, [
+      { label: dx.t("studio.approveAll"), run: async () => {
+        if (!pending) return { text: dx.t("studio.approveAllNone"), bad: false };
+        if (!window.confirm(dx.t("studio.approveAllConfirm", { n: pending }))) return null;
+        try {
+          const r = await postJson("/api/v1/harness/review/proposals/approve-all", { confirm: true });
+          await loadReview("proposals");
+          if (r.ok) return { text: dx.t("studio.approveAllDone", { n: r.applied }), bad: false };
+          const f = (r.failed || []).length;
+          return { text: dx.t(r.applied ? "studio.approveAllPartial" : "studio.approveAllFailed", { n: r.applied, f }), bad: true };
+        } catch (err) { return { text: revErr(err), bad: true }; }
+      } },
+    ]);
+  }
+
+  // Details: a trimmed diff shown under the row. textContent only, so nothing in a diff is ever treated as markup.
+  function detailBlock(lines, diffText, truncated) {
+    const pre = document.createElement("pre");
+    pre.className = "detail";
+    const head = lines.filter(Boolean).join("\n");
+    pre.textContent = (head ? head + "\n\n" : "") + (diffText || dx.t("studio.detailNoDiff")) + (truncated ? "\n\n… " + dx.t("studio.detailTruncated") : "");
+    return pre;
+  }
+
+  async function toggleDetail(act, id, button) {
+    const item = button.closest(".item");
+    if (!item) return;
+    const open = item.querySelector(".detail");
+    if (open) {
+      open.remove();
+      return;
+    }
+    let block;
+    try {
+      if (act === "detail-proposal") {
+        const d = await dx.api("/api/v1/harness/review/proposals/" + encodeURIComponent(id));
+        block = detailBlock([d.file_path, [d.status, d.risk_level != null ? dx.t("studio.detailRisk", { risk: d.risk_level }) : ""].filter(Boolean).join(" · "),
+          d.reason, d.risk_rationale], d.diff, d.truncated);
+      } else {
+        const d = await dx.api("/api/v1/harness/review/bundles/" + encodeURIComponent(id));
+        const files = d.files || [];
+        const diff = files.map((f) => "# " + f.action + " " + f.file_path + (f.reason ? "  (" + f.reason + ")" : "") + "\n" + (f.diff || "")).join("\n\n");
+        block = detailBlock([d.title, d.status], diff, files.some((f) => f.truncated));
+      }
+    } catch (err) {
+      showStatus("review-status", revErr(err), true);
+      return;
+    }
+    item.appendChild(block);
+  }
+
+
+  // The extra actions of an open blocker. They live here, apart from the load/resolve code above, on purpose: that code
+  // stays a pure read (Resolve only marks a blocker resolved), and these buttons each ask the owner before anything is granted.
+  function blockerFixButtons(id) {
+    const fix = document.createElement("button");
+    fix.type = "button";
+    fix.dataset.id = id;
+    fix.dataset.role = "autofix";
+    fix.textContent = dx.t("studio.blockerAutoFix");
+    fix.addEventListener("click", () => blockerAutoFix(id, fix));
+    const rem = document.createElement("button");
+    rem.type = "button";
+    rem.dataset.id = id;
+    rem.dataset.role = "remediate";
+    rem.textContent = dx.t("studio.blockerRemediate");
+    rem.addEventListener("click", () => blockerRemediate(id, rem));
+    return [fix, rem];
+  }
+
+  async function blockerAutoFix(id, btn) {
+    const h = Number($("blocker-hours").value);
+    if (!window.confirm(dx.t("studio.blockerAutoFixConfirm", { h }))) return;
+    await runAction(btn, "blocker-status", async () => {
+      try {
+        const r = await postJson("/api/v1/harness/review/blockers/auto-fix", { id, hours: h, confirm: true });
+        showStatus("blocker-status", dx.t("studio.blockerFixed", { n: (r.granted || []).length, h: r.hours }), false);
+        loadBlockers({ keepStatus: true });
+      } catch (err) { showStatus("blocker-status", revErr(err), true); }
+    });
+  }
+
+  async function blockerRemediate(id, btn) {
+    await runAction(btn, "blocker-status", async () => {
+      try {
+        const prev = await dx.api("/api/v1/harness/review/blockers/" + encodeURIComponent(id) + "/remediation");
+        if (prev.changes_kind && !window.confirm(dx.t("studio.blockerRemediateConfirm", { slug: prev.slug, old: prev.old_kind }))) return;
+        const r = await postJson("/api/v1/harness/review/blockers/" + encodeURIComponent(id) + "/remediate", { confirm_kind_change: !!prev.changes_kind });
+        showStatus("blocker-status", dx.t(r.already_static ? "studio.blockerAlreadyStatic" : "studio.blockerRemediated", { slug: r.slug, old: r.old_kind || "" }), false);
+        loadBlockers({ keepStatus: true });
+      } catch (err) { showStatus("blocker-status", revErr(err), true); }
+    });
+  }
+
+  async function blockersAutoFixAll(btn) {
+    const h = Number($("blocker-hours").value);
+    await runAction(btn, "blocker-status", async () => {
+      try {
+        const prev = await dx.api("/api/v1/harness/review/blockers");
+        if (!window.confirm(dx.t("studio.blockerAutoFixAllConfirm", { h, n: prev.open }))) return;
+        const r = await postJson("/api/v1/harness/review/blockers/auto-fix", { hours: h, confirm: true });
+        showStatus("blocker-status", dx.t("studio.blockerFixedAll", { fixed: r.fixed, skipped: r.skipped }), false);
+        loadBlockers({ keepStatus: true });
+      } catch (err) { showStatus("blocker-status", revErr(err), true); }
+    });
+  }
+
+  async function blockersGrantRecommended(btn) {
+    const h = Number($("blocker-hours").value);
+    await runAction(btn, "blocker-status", async () => {
+      try {
+        const prev = await dx.api("/api/v1/harness/review/blockers");
+        const list = prev.recommended || [];
+        if (!window.confirm(dx.t("studio.blockerGrantRecConfirm", { n: list.length, h, list: list.join(", ") }))) return;
+        const r = await postJson("/api/v1/harness/review/blockers/grant-recommended", { hours: h, confirm: true });
+        showStatus("blocker-status", dx.t("studio.blockerFixed", { n: r.count, h: r.hours }), false);
+      } catch (err) { showStatus("blocker-status", revErr(err), true); }
+    });
+  }
+
   async function reviewAct(act, id, button) {
+    if (act === "detail-proposal" || act === "detail-bundle") {
+      await runAction(button, "review-status", () => toggleDetail(act, id, button));
+      // runAction puts the button's original label back when it finishes, so the label is set here, after it
+      const item = button.closest(".item");
+      button.textContent = item && item.querySelector(".detail") ? dx.t("studio.detailHide") : dx.t("studio.detail");
+      return;
+    }
     await runAction(button, "review-status", async () => {
       let path = "";
       let body = {};
@@ -3617,6 +3846,18 @@
   syncShipVisibility();
   const blockerRefresh = $("blocker-refresh");
   if (blockerRefresh) blockerRefresh.addEventListener("click", () => loadBlockers());
+  const blockerFixAll = $("blocker-autofix-all");
+  if (blockerFixAll) blockerFixAll.addEventListener("click", () => blockersAutoFixAll(blockerFixAll));
+  const blockerGrantRec = $("blocker-grant-rec");
+  if (blockerGrantRec) blockerGrantRec.addEventListener("click", () => blockersGrantRecommended(blockerGrantRec));
+  const blockerHours = $("blocker-hours");
+  if (blockerHours) REVIEW_HOURS.forEach((h) => {
+    const o = document.createElement("option");
+    o.value = String(h);
+    o.textContent = h + " h";
+    blockerHours.appendChild(o);
+    if (h === 8) blockerHours.value = String(h);
+  });
   const planGenerate = $("plan-generate");
   if (planGenerate) planGenerate.addEventListener("click", generatePlan);
   const planRefresh = $("plan-refresh");
