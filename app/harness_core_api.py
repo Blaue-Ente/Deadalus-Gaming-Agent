@@ -621,3 +621,125 @@ async def harness_discovery_regenerate(discovery_id: str, body: ConfirmBody) -> 
     from daedalus.harness import planner_actions
 
     return _planner_reply(await planner_actions.regenerate_start(discovery_id, body.confirm))
+
+
+# ---- A6.2c: Review → Memory -------------------------------------------------------------------------------
+class ModeBody(BaseModel):
+    mode: str = ""
+
+
+class TaskBody(BaseModel):
+    title: str = ""
+    summary: str = ""
+
+
+class SearchBody(BaseModel):
+    query: str = ""
+    limit: int = 5
+
+
+_MEMORY_STATUS = {"confirm_required": 400, "title_required": 400, "too_long": 400, "query_required": 400, "bad_mode": 400,
+                  "bad_status": 400, "not_found": 404, "unavailable": 503, "already_running": 409, "search_failed": 502,
+                  "delete_failed": 500}
+
+
+def _memory_reply(res: dict[str, Any]) -> Any:
+    if res.get("ok") or "error" not in res:
+        return res
+    return JSONResponse(res, status_code=_MEMORY_STATUS.get(str(res.get("error")), 400))
+
+
+_M = "/api/v1/harness/memory"
+
+
+@router.get(_M)
+async def harness_memory_overview() -> dict[str, Any]:
+    from daedalus.harness import memory_actions
+
+    return await memory_actions.overview()
+
+
+@router.get(_M + "/episodic")
+def harness_memory_episodic(limit: int = 50) -> dict[str, Any]:
+    from daedalus.harness import memory_actions
+
+    return memory_actions.episodic(limit)
+
+
+@router.post(_M + "/episodic/{fact_id}/delete")
+def harness_memory_delete_fact(fact_id: str, body: ConfirmBody) -> Any:
+    from daedalus.harness import memory_actions
+
+    return _memory_reply(memory_actions.delete_fact(fact_id, body.confirm))
+
+
+@router.post(_M + "/navigator/reset")
+def harness_memory_navigator_reset(body: ConfirmBody) -> Any:
+    from daedalus.harness import memory_actions
+
+    return _memory_reply(memory_actions.reset_navigator(body.confirm))
+
+
+@router.post(_M + "/mode")
+def harness_memory_mode(body: ModeBody) -> Any:
+    from daedalus.harness import memory_actions
+
+    return _memory_reply(memory_actions.set_mode(body.mode))
+
+
+@router.post(_M + "/progress/clear")
+def harness_memory_progress_clear() -> dict[str, Any]:
+    from daedalus.harness import memory_actions
+
+    return memory_actions.clear_progress()
+
+
+@router.get(_M + "/tasks")
+def harness_memory_tasks(status: str = "", limit: int = 50) -> Any:
+    from daedalus.harness import memory_actions
+
+    return _memory_reply(memory_actions.tasks(status, limit))
+
+
+@router.post(_M + "/tasks")
+def harness_memory_task_create(body: TaskBody) -> Any:
+    from daedalus.harness import memory_actions
+
+    return _memory_reply(memory_actions.create_task(body.title, body.summary))
+
+
+@router.get(_M + "/sessions")
+def harness_memory_sessions(limit: int = 30) -> dict[str, Any]:
+    from daedalus.harness import memory_actions
+
+    return memory_actions.sessions(limit)
+
+
+@router.get(_M + "/sessions/{session_id}")
+def harness_memory_session(session_id: str, limit: int = 100) -> Any:
+    from daedalus.harness import memory_actions
+
+    return _memory_reply(memory_actions.session_turns(session_id, limit))
+
+
+@router.post(_M + "/search/{kind}")
+async def harness_memory_search(kind: str, body: SearchBody) -> Any:
+    from daedalus.harness import memory_actions
+
+    if kind not in ("web", "github"):
+        return JSONResponse({"ok": False, "error": "not_found"}, status_code=404)
+    return _memory_reply(await memory_actions.search(kind, body.query, body.limit))
+
+
+@router.post(_M + "/jobs/{name}")
+async def harness_memory_job(name: str, body: ConfirmBody) -> Any:
+    from daedalus.harness import memory_actions
+
+    return _memory_reply(await memory_actions.start_job(name, body.confirm))
+
+
+@router.get(_M + "/jobs")
+def harness_memory_jobs() -> dict[str, Any]:
+    from daedalus.harness import memory_actions
+
+    return {"ok": True, **memory_actions.jobs_status()}
