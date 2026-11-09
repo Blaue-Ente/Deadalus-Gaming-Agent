@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-09T10:11:11.874051+00:00",
+  "generated_at": "2026-11-09T10:34:21.007336+00:00",
   "package_version": "0.3.8",
-  "git_commit": "949b20ce5b93a7e28bc1d53749f1b270d4ad6bd9",
+  "git_commit": "2cb8756021ebb16caf4eb36c4f0666f8f4fb8581",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -130,8 +130,8 @@
     ]
   },
   "tests": {
-    "modules": 109,
-    "functions": 1257
+    "modules": 110,
+    "functions": 1268
   },
   "modules": {
     "daedalus": [
@@ -239,6 +239,7 @@
       "daedalus/harness/registry.py",
       "daedalus/harness/review_actions.py",
       "daedalus/harness/runs.py",
+      "daedalus/harness/turn_changes.py",
       "daedalus/hello_test.py",
       "daedalus/host.py",
       "daedalus/identity.py",

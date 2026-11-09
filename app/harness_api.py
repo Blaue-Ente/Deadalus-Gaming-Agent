@@ -716,6 +716,7 @@ class ChatJobBody(BaseModel):
     skill_ids: list[str] = Field(default_factory=list)
     mcp_ids: list[str] = Field(default_factory=list)
     attachment_ids: list[str] = Field(default_factory=list)
+    project: str = Field(default="", max_length=80)        # set: project chat (classic project chat; changes are reviewable)
 
     @field_validator("skill_ids", "mcp_ids", "attachment_ids")
     @classmethod
@@ -739,14 +740,41 @@ async def chat_job_start(body: ChatJobBody) -> dict[str, Any]:
     from daedalus.chat_jobs import start_chat
     if not (body.message or "").strip() and not body.attachment_ids:
         raise HTTPException(status_code=400, detail="message or attachment required")
-    return await start_chat(
-        message=body.message or "(see attached context)",
-        session_id=body.session_id,
-        effort=body.effort,
-        skill_ids=body.skill_ids,
-        mcp_ids=body.mcp_ids,
-        attachment_ids=body.attachment_ids,
-    )
+    try:
+        return await start_chat(
+            message=body.message or "(see attached context)",
+            session_id=body.session_id,
+            effort=body.effort,
+            skill_ids=body.skill_ids,
+            mcp_ids=body.mcp_ids,
+            attachment_ids=body.attachment_ids,
+            project=(body.project or "").strip() or None,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail="project_not_found") from exc
+
+
+class RevertBody(BaseModel):
+    path: str = Field(..., min_length=1, max_length=400)
+    confirm: bool = False
+
+
+_REVERT_STATUS = {"not_found": 404, "still_running": 409, "changed_since": 409, "not_revertible": 409, "already_reverted": 409,
+                  "unreadable": 500}
+
+
+@router.post("/api/v1/daedalus/chat/jobs/{job_id}/revert")
+async def chat_job_revert(job_id: str, body: RevertBody) -> Any:
+    """Take back one file change a project-chat turn made (asks first; refused if the file changed since)."""
+    from fastapi.responses import JSONResponse
+
+    from daedalus.chat_jobs import revert_change
+    if body.confirm is not True:
+        return JSONResponse({"ok": False, "error": "confirm_required"}, status_code=400)
+    res = revert_change(job_id, body.path)
+    if not res.get("ok"):
+        return JSONResponse(res, status_code=_REVERT_STATUS.get(res.get("error"), 400))
+    return res
 
 
 @router.get("/api/v1/daedalus/chat/jobs/{job_id}")

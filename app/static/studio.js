@@ -1365,6 +1365,7 @@
           skill_ids: skillIds,
           mcp_ids: mcpIds,
           attachment_ids: attachmentIds,
+          project: projectChatSlug(),
         }),
         timeoutMs: 20000,
       });
@@ -1383,6 +1384,7 @@
         else if (payload && payload.status === "cancelled") text(last, t("studio.stopped"));
         else if (payload && payload.status === "error") text(last, t("studio.errorPrefix") + ": " + (payload.error || t("studio.chatStopped")));
         else applyChatResult(last, payload);
+        if (payload && payload.project) renderTurnChanges(payload);
         chatBusy(false);
         refreshPrefs();
         refreshLessons();
@@ -1426,6 +1428,84 @@
       text(last, t("studio.errorPrefix") + ": " + errText(e));
       chatBusy(false);
     }
+  }
+
+  // Project chat (the classic project chat): the turn sees the project's files and keeps the project's own history.
+  // What the turn changed is listed under the reply, with each diff and a Revert that asks first.
+  function projectChatSlug() {
+    return state.slug && $("projchat") && $("projchat").checked ? state.slug : "";
+  }
+
+  function syncProjectChat() {
+    const wrap = $("projchatwrap");
+    if (!wrap) return;
+    wrap.hidden = !state.slug;
+    if (!state.slug && $("projchat")) $("projchat").checked = false;
+  }
+  slugWatchers.push(syncProjectChat);
+
+  const REVERT_ERR = { changed_since: "studio.revertChangedSince", already_reverted: "studio.revertAlready",
+    not_revertible: "studio.revertNotPossible", still_running: "studio.revertRunning", not_found: "studio.revertGone" };
+
+  function renderTurnChanges(job) {
+    const list = job.changes;
+    const box = document.createElement("div");
+    box.className = "msg bot turn-changes";
+    box.dataset.job = job.id || "";
+    const head = document.createElement("b");
+    if (!Array.isArray(list)) text(head, t("studio.changesUnknown"));
+    else if (!list.length) text(head, t("studio.changesNone", { slug: job.project }));
+    else text(head, t("studio.changesHead", { n: list.length, slug: job.project }));
+    box.appendChild(head);
+    (Array.isArray(list) ? list : []).forEach((c) => {
+      const row = document.createElement("div");
+      row.className = "change";
+      row.dataset.path = c.path;
+      const label = document.createElement("span");
+      text(label, c.path + " · " + t("studio.change_" + c.status) + (c.secret ? " · " + t("studio.changeSecret") : ""));
+      row.appendChild(label);
+      const note = document.createElement("small");
+      if (c.diff) {
+        const pre = document.createElement("pre");
+        pre.hidden = true;
+        text(pre, c.diff);
+        const show = document.createElement("button");
+        show.type = "button";
+        show.dataset.role = "diff";
+        text(show, t("studio.changeDiff"));
+        show.onclick = () => { pre.hidden = !pre.hidden; };
+        row.append(show, pre);
+      }
+      if (c.revertible && !c.reverted) {
+        const undo = document.createElement("button");
+        undo.type = "button";
+        undo.dataset.role = "revert";
+        text(undo, t("studio.changeRevert"));
+        undo.onclick = async () => {
+          if (!window.confirm(t(c.status === "created" ? "studio.revertCreatedConfirm" : "studio.revertConfirm", { path: c.path }))) return;
+          busy(undo, true, "…");
+          try {
+            const res = await api("/api/v1/daedalus/chat/jobs/" + encodeURIComponent(job.id) + "/revert", {
+              method: "POST", body: JSON.stringify({ path: c.path, confirm: true }), timeoutMs: 20000 });
+            undo.remove();
+            text(note, t(res.reverted === "removed" ? "studio.revertRemoved" : "studio.revertRestored"));
+          } catch (e) {
+            busy(undo, false);
+            const key = REVERT_ERR[String((e && e.message) || "")];
+            text(note, key ? t(key) : t("studio.errorPrefix") + ": " + errText(e));
+          }
+        };
+        row.appendChild(undo);
+      } else if (c.reverted) {
+        text(note, t(c.reverted === "removed" ? "studio.revertRemoved" : "studio.revertRestored"));
+      } else if (!c.secret) {
+        text(note, t("studio.revertNotPossible"));
+      }
+      row.appendChild(note);
+      box.appendChild(row);
+    });
+    msgs.appendChild(box);
+    msgs.scrollTop = msgs.scrollHeight;
   }
 
   async function stopChat() {

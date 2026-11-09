@@ -827,3 +827,10 @@ label.grow { flex: 1; min-width: 7rem; }
 .app-data-form { display: grid; gap: 0.35rem; margin-top: 0.5rem; }
 .app-data-form textarea { font-family: var(--mono); font-size: 0.78rem; }
 #app-data-list .item b { font-family: var(--mono); overflow-wrap: anywhere; }
+/* A6.4: project chat and the changes a turn made */
+.meta-row .project-chat { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.78rem; color: var(--muted); }
+.meta-row .project-chat input { width: auto; }
+.msg.turn-changes .change { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin: 0.3rem 0; }
+.msg.turn-changes .change > span { flex: 1 1 12rem; font-family: var(--mono); font-size: 0.76rem; overflow-wrap: anywhere; }
+.msg.turn-changes .change > small { flex: 1 1 100%; color: var(--muted); }
+.msg.turn-changes .change > pre { flex: 1 1 100%; max-height: 18rem; overflow: auto; font-size: 0.72rem; }
