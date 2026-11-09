@@ -767,3 +767,23 @@ def test_a_second_identical_read_does_not_replace_the_buttons(studio_server):
         page.wait_for_timeout(300)
         assert page.locator(_ctl("plan-create")).evaluate("el => el.__first === true")
         browser.close()
+
+
+def test_a_workspace_repaint_keeps_the_manual_steps_off_while_full_auto_owns_the_project(studio_server):
+    """Seen in CI: the controls paint switched the manual steps off, a later workspace paint switched them on again,
+    and the next (identical) controls answer was not repainted, so nothing switched them off."""
+    from playwright.sync_api import sync_playwright
+
+    live = {"ok": True, "run": {"id": "r1", "state": "running", "milestone": "M0", "reason": "", "events": []}}
+    with sync_playwright() as pw:
+        browser, page = _browser(pw)
+        calls, _ = _build_page(page, ctl=[{**CTL, "busy": "full_auto"}], fa=[live])
+        _open_build(page, studio_server)
+        ids = "['build-guided', 'build-autopilot', 'build-verify', 'build-advance']"
+        page.wait_for_function(f"() => {ids}.every((id) => document.getElementById(id).disabled)")
+        before = calls["n"]
+        page.evaluate("() => window.dxStudio.selectSlug(window.dxStudio.getSlug())")   # workspace repaint + the same controls answer
+        assert _until(page, lambda: calls["n"] > before)
+        page.wait_for_timeout(400)
+        assert page.evaluate(f"() => {ids}.every((id) => document.getElementById(id).disabled)")
+        browser.close()

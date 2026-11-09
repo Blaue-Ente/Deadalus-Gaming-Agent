@@ -374,15 +374,17 @@
       li.textContent = summary.stages_done + "/" + summary.stages_total;
       list.appendChild(li);
     }
-    $("build-guided").disabled = !data.can_guided;
-    $("build-autopilot").disabled = !data.can_autopilot;
+    // Full Auto drives this project (as last seen by the run controls): the manual steps would race it, so every
+    // repaint keeps them off, not only the controls' own paint (which skips an unchanged answer).
+    const faOwns = faOwnerSlug !== "" && faOwnerSlug === dx.getSlug();
+    $("build-guided").disabled = faOwns || !data.can_guided;
+    $("build-autopilot").disabled = faOwns || !data.can_autopilot;
     $("build-gates").disabled = false;
-    $("build-verify").disabled = false;
-    $("build-advance").disabled = !data.can_advance;
+    $("build-verify").disabled = faOwns;
+    $("build-advance").disabled = faOwns || !data.can_advance;
     // A waiver is offered only where the Game Studio itself allows one, and only when a plain Advance is not possible.
-    const owned = faOwnerSlug === dx.getSlug();            // Full Auto drives it: the waivers wait, as the server would refuse them
-    $("build-waive-unity").disabled = owned;
-    $("build-waive-proof").disabled = owned;
+    $("build-waive-unity").disabled = faOwns;               // the waivers wait too, as the server would refuse them
+    $("build-waive-proof").disabled = faOwns;
     $("build-waive-unity").hidden = !!data.can_advance || !data.can_unity_waiver;
     $("build-waive-proof").hidden = !!data.can_advance || !data.can_proof_waiver || !!data.can_unity_waiver;
   }
@@ -2943,7 +2945,7 @@
       // The same answer again (the panel often reads it twice on open) is not repainted: a repaint replaces every button,
       // so a click or a scroll that is under way would land on a node that has just been thrown away.
       const key = slug + "\n" + JSON.stringify([st, fa.run]);
-      if (key === ctlPainted && !$("build-controls").hidden) return;
+      if (key === ctlPainted && !$("build-controls").hidden) { applyFullAutoLock(slug, st.busy || ""); return; }
       ctlPainted = key;
       paintControls(slug, st, fa.run);
     } catch (err) {
@@ -3041,6 +3043,11 @@
     if (busy) body.appendChild(crow(dx.t("studio.ctlBusy", { owner: OWNER[busy] ? dx.t(OWNER[busy]) : busy }), []));
     if (st.game_studio) paintFullAuto(slug, body, run, busy);
     // Full Auto drives this project: the manual build steps would race it (the server refuses them too).
+    applyFullAutoLock(slug, busy);
+  }
+
+  // Remember who owns the project and switch the manual steps off now; the workspace paint reads the same flag later.
+  function applyFullAutoLock(slug, busy) {
     faOwnerSlug = busy === "full_auto" ? slug : (faOwnerSlug === slug ? "" : faOwnerSlug);
     if (busy === "full_auto") {
       ["build-guided", "build-autopilot", "build-verify", "build-advance", "build-waive-unity", "build-waive-proof"].forEach((id) => { $(id).disabled = true; });
