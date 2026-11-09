@@ -269,7 +269,7 @@ def test_bulgarian_project_chat_without_raw_keys(studio_server):
         browser, page = _browser(pw, (910, 640))
         _chat(page, _job(CHANGES))
         _open_chat(page, studio_server, lang="bg")
-        assert page.inner_text("#projchatwrap").strip() == "Чат за проекта"
+        assert " ".join(page.inner_text("#projchatwrap").split()) == f"Чат за проекта · {G}"   # it names the project
         page.locator("#projchat").check()
         _send(page, "направи го червено")
         page.wait_for_selector(".msg.turn-changes .change[data-path='index.html']")
@@ -293,4 +293,70 @@ def test_the_project_chat_switch_fits_and_is_really_clickable(studio_server, siz
             _uncovered(page, selector)
         over = page.evaluate("() => ({docw: document.documentElement.scrollWidth, vw: window.innerWidth})")
         assert over["docw"] <= over["vw"] + 1, over
+        browser.close()
+
+
+# ------------------------------------------------------------------------------------------------ review fixes
+def test_a_modified_secret_is_reported_but_never_shown_or_revertible(project, monkeypatch):
+    from daedalus import playground as pg
+
+    pg.write_file(project, ".env", "TOKEN=old-secret\n")
+    _, job = _run(project, Agent(edits=lambda: pg.write_file(project, ".env", "TOKEN=new-secret\n")), monkeypatch)
+    assert job["changes"] == [{"path": ".env", "status": "modified", "secret": True, "diff": "", "revertible": False}]
+    assert "secret" not in str(job).replace('"secret": True', "").replace("'secret': True", "")       # no secret value anywhere
+
+
+@pytest.mark.parametrize("how", ["error", "cancel"])
+def test_a_failed_or_stopped_turn_still_lists_what_it_wrote(project, monkeypatch, how):
+    from daedalus import chat_jobs
+    from daedalus import playground as pg
+
+    class Broken(Agent):
+        async def chat(self, message, session_id="", **kw):
+            pg.write_file(project, "half.js", "partial\n")
+            if how == "error":
+                raise RuntimeError("model down")
+            await asyncio.sleep(10)
+
+    monkeypatch.setattr("daedalus.agent.get_daedalus", lambda: Broken())
+
+    async def go():
+        started = await chat_jobs.start_chat(message="m", session_id="s", project=project)
+        task = chat_jobs._jobs[started["job_id"]]["task"]
+        if how == "cancel":
+            await asyncio.sleep(0.05)
+            chat_jobs.cancel(started["job_id"])
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+        return chat_jobs.get_job(started["job_id"])
+
+    job = asyncio.run(go())
+    assert job["status"] == ("error" if how == "error" else "cancelled")
+    assert [c["path"] for c in job["changes"]] == ["half.js"] and job["changes"][0]["status"] == "created"
+
+
+def test_the_classic_project_chat_sends_the_same_prompt(project, monkeypatch):
+    agent = Agent()
+    monkeypatch.setattr("daedalus.agent.get_daedalus", lambda: agent)
+    res = _client().post(f"/admin/daedalus/playground/api/projects/{project}/chat", json={"message": "make it red"})
+    assert res.json()["ok"] is True
+    message, session = agent.calls[0]
+    assert session == f"pg-{project}" and message.startswith(f"[PLAYGROUND {project} · static · standalone]") and message.endswith("make it red")
+
+
+def test_switching_project_turns_project_chat_off(studio_server):
+    from playwright.sync_api import sync_playwright
+
+    from test_studio_phase2_workspace import _api
+
+    other = _api(studio_server, "POST", "/api/v1/playground/projects", {"name": "Other Chat", "kind": "static"})["project"]["slug"]
+    with sync_playwright() as pw:
+        browser, page = _browser(pw)
+        _open_chat(page, studio_server)
+        page.locator("#projchat").check()
+        page.evaluate(f"() => window.dxStudio.selectSlug('{other}')")
+        page.wait_for_function(f"() => document.getElementById('projchatslug').textContent.includes('{other}')")
+        assert page.locator("#projchat").is_checked() is False
         browser.close()

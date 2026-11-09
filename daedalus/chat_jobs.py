@@ -123,14 +123,14 @@ async def start_chat(
             row["status"] = "done"
             _runs.sync_job(row, "chat")
         except asyncio.CancelledError:
-            _record_changes()                                  # a stopped turn may still have written files
+            await asyncio.to_thread(_record_changes)           # a stopped turn may still have written files
             row["status"] = "cancelled"
             row["error"] = "спряно"
             _runs.sync_job(row, "chat")
             raise
         except Exception as exc:
             log.exception("chat job %s failed", job_id)
-            _record_changes()
+            await asyncio.to_thread(_record_changes)
             row["error"] = str(exc)[:400]
             row["status"] = "error"
             _runs.sync_job(row, "chat")

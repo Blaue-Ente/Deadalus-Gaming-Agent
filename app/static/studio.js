@@ -1436,11 +1436,16 @@
     return state.slug && $("projchat") && $("projchat").checked ? state.slug : "";
   }
 
+  let projectChatFor = null;
   function syncProjectChat() {
     const wrap = $("projchatwrap");
     if (!wrap) return;
     wrap.hidden = !state.slug;
-    if (!state.slug && $("projchat")) $("projchat").checked = false;
+    // Another project: the switch goes off, so a turn never becomes a project turn on a project nobody chose for it.
+    if (projectChatFor !== null && projectChatFor !== state.slug && $("projchat")) $("projchat").checked = false;
+    projectChatFor = state.slug || "";
+    const name = $("projchatslug");
+    if (name) text(name, state.slug ? "· " + state.slug : "");
   }
   slugWatchers.push(syncProjectChat);
 

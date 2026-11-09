@@ -3,7 +3,8 @@
 In standalone Daedalus the agent writes files itself (its playground tools), so there is never a "proposal" to preview
 before it is applied. The honest review is after the fact: the project is snapshotted when the turn starts, compared
 when it ends, and every changed file is listed with its diff. A change can be reverted, but only while the file is
-still exactly what the turn left (a later edit is never overwritten), and secret files are never read or restored.
+still exactly what the turn left (a later edit is never overwritten). A secret file is only hashed, to see that it
+changed: its content is never kept, shown or restored.
 """
 from __future__ import annotations
 
@@ -31,12 +32,12 @@ def snapshot(slug: str) -> dict[str, dict[str, Any]]:
     total = 0
     for ent in pg.read_tree(slug, max_files=MAX_FILES):
         rel = ent["path"]
-        if is_secret_path(rel):
-            out[rel] = {"sha": None, "text": None, "secret": True}
-            continue
         try:
             raw = (root / rel).read_bytes()
         except OSError:
+            continue
+        if is_secret_path(rel):
+            out[rel] = {"sha": _sha(raw), "text": None, "secret": True}     # hashed to see a change; content never kept
             continue
         text = None
         if len(raw) <= MAX_FILE_BYTES and total + len(raw) <= MAX_TOTAL_BYTES:
@@ -55,9 +56,10 @@ def compare(before: dict[str, dict[str, Any]], after: dict[str, dict[str, Any]])
     for path in sorted(set(before) | set(after)):
         b, a = before.get(path), after.get(path)
         if (b or {}).get("secret") or (a or {}).get("secret"):
-            if (b is None) != (a is None):
-                changes.append({"path": path, "status": "created" if b is None else "deleted", "secret": True,
-                                "diff": "", "revertible": False})
+            if b and a and b["sha"] == a["sha"]:
+                continue
+            status = "created" if b is None else "deleted" if a is None else "modified"
+            changes.append({"path": path, "status": status, "secret": True, "diff": "", "revertible": False})
             continue
         if b and a and b["sha"] == a["sha"]:
             continue
