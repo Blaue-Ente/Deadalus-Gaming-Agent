@@ -433,12 +433,6 @@ async def daedalus_outbox_list(status: str | None = None):
     return JSONResponse({"ok": True, "items": items, "pending": pending_count()})
 
 
-@router.post("/daedalus/outbox/{item_id}/apply")
-async def daedalus_outbox_apply(item_id: str):
-    from daedalus.outbox import apply_data_batch
-    return JSONResponse(await apply_data_batch(item_id))
-
-
 @router.post("/daedalus/outbox/{item_id}/dismiss")
 async def daedalus_outbox_dismiss(item_id: str):
     from daedalus.outbox import update_outbox_item, get_outbox_item

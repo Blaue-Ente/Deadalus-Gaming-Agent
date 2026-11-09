@@ -2785,55 +2785,26 @@ class Daedalus:
                     dp_category = data_prop_m.group(1).strip()
                     dp_title    = data_prop_m.group(2).strip()
                     dp_raw_json = data_prop_m.group(3).strip()
-                    from .outbox import push_outbox, has_insert_permission, _do_apply
+                    from .outbox import push_outbox
                     import json as _json
                     try:
                         dp_payload = _json.loads(dp_raw_json)
                     except Exception:
                         dp_payload = dp_raw_json
-                    # If Николай has pre-granted insert permission → apply immediately
-                    perm_cls = f"insert_{dp_category}"
-                    if has_insert_permission(dp_category):
-                        try:
-                            apply_result = await _do_apply(dp_category, dp_payload)
-                            inserted = apply_result.get("inserted", 0)
-                            skipped  = apply_result.get("skipped", 0)
-                            result_text = (
-                                f"━━━ TOOL RESULTS — DATA PROPOSAL AUTO-APPLIED ━━━\n"
-                                f"Category : {dp_category}\n"
-                                f"Title    : {dp_title}\n"
-                                f"Inserted : {inserted}  Skipped: {skipped}\n"
-                                f"Permission '{perm_cls}' is pre-granted — applied immediately.\n"
-                                f"Tell Nikolai: '{inserted} new records written to {dp_category}.'"
-                            )
-                            tool_calls_used.append({"tool": "data_proposal_auto", "category": dp_category, "inserted": inserted})
-                        except Exception as exc:
-                            result_text = (
-                                f"━━━ TOOL RESULTS — DATA PROPOSAL AUTO-APPLY FAILED ━━━\n"
-                                f"Category : {dp_category}\n"
-                                f"Error    : {exc}\n"
-                                f"Propose was queued in outbox as fallback."
-                            )
-                            push_outbox(type="data_batch", title=dp_title,
-                                        category=dp_category, payload=dp_payload,
-                                        session_id=session_id)
-                            tool_calls_used.append({"tool": "data_proposal_queued", "category": dp_category, "ok": False})
-                    else:
-                        item = push_outbox(type="data_batch", title=dp_title,
-                                           category=dp_category, payload=dp_payload,
-                                           session_id=session_id)
-                        result_text = (
-                            f"━━━ TOOL RESULTS — DATA PROPOSAL QUEUED ━━━\n"
-                            f"Outbox ID: {item['id']}\n"
-                            f"Category : {dp_category}\n"
-                            f"Title    : {dp_title}\n"
-                            f"Records  : {len(dp_payload) if isinstance(dp_payload, list) else 1}\n\n"
-                            f"Предложението е в outbox и чака едно кликване от Николай.\n"
-                            f"Tell Nikolai: '{dp_title}' is in the outbox at /admin/daedalus — "
-                            f"click Apply to insert {len(dp_payload) if isinstance(dp_payload, list) else 1} record(s) into {dp_category}.\n"
-                            f"If he wants to skip confirming next time, he can grant permission '{perm_cls}'."
-                        )
-                        tool_calls_used.append({"tool": "data_proposal_queued", "category": dp_category, "id": item["id"]})
+                    # R2 (retired): a data batch is never applied from here; it is queued so it stays visible in the Outbox.
+                    item = push_outbox(type="data_batch", title=dp_title,
+                                       category=dp_category, payload=dp_payload,
+                                       session_id=session_id)
+                    result_text = (
+                        f"━━━ TOOL RESULTS — DATA PROPOSAL QUEUED ━━━\n"
+                        f"Outbox ID: {item['id']}\n"
+                        f"Category : {dp_category}\n"
+                        f"Title    : {dp_title}\n"
+                        f"Records  : {len(dp_payload) if isinstance(dp_payload, list) else 1}\n\n"
+                        f"It is listed in the Outbox. Standalone Daedalus does not apply data batches (that wrote into the old "
+                        f"ADN host's tables); tell Nikolai it is there to read or dismiss, not that it was inserted."
+                    )
+                    tool_calls_used.append({"tool": "data_proposal_queued", "category": dp_category, "id": item["id"]})
                 except Exception as exc:
                     tool_results_text_parts.append(f"━━━ TOOL RESULTS — DATA PROPOSAL FAILED ━━━\n{exc}")
                     tool_calls_used.append({"tool": "data_proposal", "ok": False})

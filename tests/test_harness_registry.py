@@ -71,7 +71,7 @@ def test_catch_all_is_marked_stub_and_new_routes_present(app_and_caps):
     stub = by_id["route:GET /admin/daedalus/{rest:path}"]
     assert stub.status == "stub" and "404" in stub.title
     assert "route:GET /api/v1/harness/capabilities" in by_id
-    assert by_id["route:POST /admin/daedalus/outbox/{item_id}/apply"].status == "partial"
+    assert "route:POST /admin/daedalus/outbox/{item_id}/apply" not in by_id          # R2 retired (owner sign-off)
     # ui_home comes from the parity table: in_studio rows get their home, legacy-only routes get none.
     assert by_id["route:POST /api/v1/daedalus/mentor"].ui_home == "setting:mentor"
     assert by_id["route:GET /admin/daedalus/memory/stats"].ui_home is None  # legacy-only until A6.2
@@ -160,7 +160,7 @@ def test_every_legacy_only_function_has_a_planned_or_held_home(app_and_caps):
         elif row.disposition.startswith(("port:", "held:")):
             assert status[row.home] in ("planned", "implemented", "partial"), row.id
         else:
-            assert row.disposition.startswith("retire:") and row.home is None
+            assert row.disposition.startswith(("retire:", "retired:")) and row.home is None
 
 
 def test_registry_is_deterministic_and_json_safe(app_and_caps):
@@ -191,7 +191,7 @@ def test_endpoints_serve_and_filter(a0_tmp):
     parity = client.get("/api/v1/harness/parity").json()
     assert parity["ok"] is True and parity["problems"] == []
     assert parity["by_disposition"]["in_studio"] >= 20
-    assert sum(v for k, v in parity["by_disposition"].items() if k.startswith("retire:")) == 4
+    assert sum(v for k, v in parity["by_disposition"].items() if k.startswith(("retire:", "retired:"))) == 4
     assert parity["by_disposition"]["port:A6.2"] >= 1 and parity["by_disposition"]["held:MR126"] == 1
 
 
@@ -201,3 +201,19 @@ def test_endpoints_require_the_owner_token(a0_tmp, raw_http):
     client = TestClient(app)
     for path in ("/api/v1/harness/capabilities", "/api/v1/harness/parity"):
         assert client.get(path).status_code == 401
+
+
+def test_a_carried_out_retirement_fails_the_parity_check_while_its_route_is_still_served():
+    from types import SimpleNamespace
+
+    from daedalus.harness import parity
+
+    row = parity.ParityRow("x", "x", ("classic",), None, ("POST /admin/daedalus/outbox/{item_id}/apply",), "retired:R2")
+    caps = [SimpleNamespace(id="route:x", kind="route", http=["POST /admin/daedalus/outbox/{item_id}/apply"])]
+    original = parity.PARITY_ROWS
+    try:
+        parity.PARITY_ROWS = (row,)
+        assert parity.check_parity(caps) == ["x: retired but still served: POST /admin/daedalus/outbox/{item_id}/apply"]
+        assert parity.check_parity([]) == []
+    finally:
+        parity.PARITY_ROWS = original

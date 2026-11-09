@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-09T10:42:25.570112+00:00",
+  "generated_at": "2026-11-09T11:25:51.653328+00:00",
   "package_version": "0.3.8",
-  "git_commit": "f27f9a8462fae2d8c3eb173e734523df85f5fcc2",
+  "git_commit": "1ee13cdeaec536ecd03955c332f41bd943871248",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -9,12 +9,12 @@
   "hotspots": [
     {
       "path": "daedalus/agent.py",
-      "lines": 5118,
-      "broad_excepts": 166
+      "lines": 5089,
+      "broad_excepts": 165
     },
     {
       "path": "app/admin_compat.py",
-      "lines": 3022,
+      "lines": 3016,
       "broad_excepts": 71
     },
     {
@@ -131,7 +131,7 @@
   },
   "tests": {
     "modules": 110,
-    "functions": 1272
+    "functions": 1273
   },
   "modules": {
     "daedalus": [
@@ -155,7 +155,6 @@
       "daedalus/build_jobs.py",
       "daedalus/build_loop.py",
       "daedalus/build_prompts.py",
-      "daedalus/builder_router.py",
       "daedalus/builder_runtime.py",
       "daedalus/bundle.py",
       "daedalus/capability.py",
@@ -255,7 +254,6 @@
       "daedalus/kernel/orchestrator.py",
       "daedalus/kernel/standalone_runtime.py",
       "daedalus/knowledge.py",
-      "daedalus/knowledge_books.py",
       "daedalus/kv.py",
       "daedalus/learned_skills.py",
       "daedalus/learning.py",
