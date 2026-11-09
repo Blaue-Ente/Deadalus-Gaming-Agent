@@ -498,6 +498,41 @@ def test_slug_change_does_not_resurrect_the_pending_guided_job(studio_server):
             browser.close()
 
 
+def test_a_later_reload_of_the_same_project_keeps_the_guided_error(studio_server):
+    """Root cause of the intermittent guided-error failure on slow CI: a workspace reload of the SAME project that starts
+    after a click reported its error (the slug watcher's late "ready" snapshot, or any panel return) took its status
+    stamp after that error and cleared it. Driven here deterministically: error first, then a fresh reload."""
+    from playwright.sync_api import sync_playwright
+
+    game = studio_server["game"]
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        owned = _Owned(page)
+        try:
+            owned.post_mode = "error"
+            owned.install()
+            _open(page, studio_server, game)
+            page.locator("#build-guided").click()
+            page.wait_for_function(
+                """() => document.getElementById('build-status').dataset.state === 'error'
+                  && document.getElementById('build-status').textContent.includes('no saved plan')"""
+            )
+            shown = page.locator("#build-status").text_content()
+            reload = "/admin/daedalus/game-studio/api/projects/" + game
+            page.locator('#workspace-nav button[data-panel="chat"]').click()
+            with page.expect_response(lambda r: r.url.split("?", 1)[0].endswith(reload)):
+                page.locator('#workspace-nav button[data-panel="build"]').click()
+            _pump(page)
+            page.wait_for_function("() => !document.getElementById('build-guided').disabled")
+            status = page.locator("#build-status")
+            assert status.get_attribute("data-state") == "error"
+            assert status.is_visible() and status.text_content() == shown
+        finally:
+            owned.settle()
+            browser.close()
+
+
 def test_guided_error_and_timeout_do_not_resurrect_a_stale_job(studio_server):
     from playwright.sync_api import sync_playwright
 
