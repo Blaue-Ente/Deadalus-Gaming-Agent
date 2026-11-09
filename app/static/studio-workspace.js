@@ -728,6 +728,7 @@
       if (!streamingSlug && untouched()) showStatus("build-status", failText(err), true);
     }
     if (!opts || !opts.quiet) resumeBuild(slug);
+    if (mine === workspaceSeq) loadControls(slug);
   }
 
   async function postJson(path, body) {
@@ -2850,6 +2851,234 @@
     }, 2500);
   }
 
+  // ---- A6.3a: Build run controls and Full Auto M0→M8 ------------------------------------------------------------
+  // Pause/resume the autopilot, continue a half-built plan, and look after the saved plan. Full Auto runs on the
+  // server: the tab can close and it keeps going; it stops on its own when a milestone does not verify.
+  const CTL_ERR = { confirm_required: "studio.ctlErrConfirm", build_running: "studio.ctlErrBusy", not_running: "studio.ctlErrNotRunning",
+    not_paused: "studio.ctlErrNotPaused", no_plan: "studio.ctlErrNoPlan", plan_failed: "studio.ctlErrPlanFailed",
+    description_required: "studio.needIdea", already_running: "studio.ctlErrRunning", not_game_studio: "studio.ctlErrNotStudio" };
+  const FA_REASON = { no_plan: "studio.faNoPlan", gates_not_passed: "studio.faGates", verify_failed: "studio.faVerify",
+    step_limit: "studio.faLimit", cancelled: "studio.faCancelled" };
+  let ctlGen = 0;
+  let ctlFlight = false;
+  let faTimer = null;
+  let ctlUltra = false;                            // the Ultra box survives the repaint while Full Auto is watched
+  let faWasLive = "";                              // slug whose Full Auto was live at the last look
+
+  function ctlPath(slug, rest) {
+    return "/api/v1/harness/build/" + slugPath(slug) + rest;
+  }
+
+  function ctlErr(err) {
+    const key = CTL_ERR[String((err && err.message) || "")];
+    return key ? dx.t(key) : failText(err);
+  }
+
+  function ctlOn(slug) {
+    return currentPanel === "build" && dx.getSlug() === slug;
+  }
+
+  function cbtn(label, role, handler) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.dataset.ctl = role;
+    b.textContent = label;
+    b.addEventListener("click", () => handler(b));
+    return b;
+  }
+
+  function crow(text, buttons) {
+    const row = document.createElement("div");
+    row.className = "row tight";
+    const p = document.createElement("p");
+    p.className = "note";
+    p.textContent = text;
+    row.appendChild(p);
+    buttons.forEach((b) => row.appendChild(b));
+    return row;
+  }
+
+  // One control at a time; the outcome goes to the controls' status line while the owner is on this project's Build panel.
+  async function ctlRun(btn, slug, work) {
+    if (ctlFlight) return;
+    ctlFlight = true;
+    document.querySelectorAll("[data-ctl]").forEach((b) => { b.disabled = true; });
+    dx.busy(btn, true, "…");
+    const say = (text, bad) => { if (ctlOn(slug)) showStatus("build-ctl-status", text, bad); };
+    try {
+      await work(say);
+    } catch (err) {
+      say(ctlErr(err), true);
+    } finally {
+      dx.busy(btn, false);
+      ctlFlight = false;
+      document.querySelectorAll("[data-ctl]").forEach((b) => { b.disabled = b.dataset.keep === "1"; });
+    }
+  }
+
+  async function loadControls(slug) {
+    const box = $("build-controls");
+    if (!box) return;
+    const gen = ++ctlGen;
+    if (!slug) { box.hidden = true; return; }
+    try {
+      const [st, fa] = await Promise.all([dx.api(ctlPath(slug, "/controls")), dx.api(ctlPath(slug, "/full-auto"))]);
+      if (gen !== ctlGen || dx.getSlug() !== slug) return;
+      paintControls(slug, st, fa.run);
+    } catch (err) {
+      if (gen !== ctlGen) return;
+      box.hidden = false;
+      $("build-ctl-body").replaceChildren();
+      showStatus("build-ctl-status", ctlErr(err), true);
+    }
+  }
+
+  function paintControls(slug, st, run) {
+    const box = $("build-controls");
+    const body = $("build-ctl-body");
+    box.hidden = false;
+    body.replaceChildren();
+    const busy = st.busy || "";
+    const ap = st.autopilot || {};
+    if (ap.running) {
+      const btn = ap.paused
+        ? cbtn(dx.t("studio.ctlResume"), "resume", (b) => ctlRun(b, slug, async (say) => {
+            await postJson(ctlPath(slug, "/autopilot/resume"), {});
+            say(dx.t("studio.ctlResumed"), false);
+            loadControls(slug);
+          }))
+        : cbtn(dx.t("studio.ctlPause"), "pause", (b) => ctlRun(b, slug, async (say) => {
+            await postJson(ctlPath(slug, "/autopilot/pause"), {});
+            say(dx.t("studio.ctlPaused"), false);
+            loadControls(slug);
+          }));
+      body.appendChild(crow(dx.t(ap.paused ? "studio.ctlApPaused" : "studio.ctlApRunning"), [btn]));
+    } else if (st.resume) {
+      const r = st.resume;
+      const go = cbtn(dx.t("studio.ctlContinue"), "continue", (b) => startAutopilot(true, b));
+      if (busy) { go.disabled = true; go.dataset.keep = "1"; }
+      body.appendChild(crow(dx.t("studio.ctlResumeInfo", { title: r.plan_title || "—", done: r.done_stages, total: r.total_stages, next: r.next_stage || "—" }), [go]));
+    }
+    // the saved plan
+    const plan = st.plan;
+    const planText = plan ? dx.t("studio.ctlPlan", { title: plan.title || "—", done: plan.done, total: plan.stages }) + (plan.ultra ? " · Ultra" : "")
+      : dx.t("studio.ctlNoPlan");
+    const ultra = document.createElement("label");
+    ultra.className = "check";
+    const ultraBox = document.createElement("input");
+    ultraBox.type = "checkbox";
+    ultraBox.dataset.role = "ultra";
+    ultraBox.checked = ctlUltra;
+    ultraBox.addEventListener("change", () => { ctlUltra = ultraBox.checked; });
+    const ultraText = document.createElement("span");
+    ultraText.textContent = dx.t("studio.ctlUltra");
+    ultra.append(ultraBox, ultraText);
+    const create = cbtn(dx.t("studio.ctlCreatePlan"), "plan-create", (b) => {
+      const description = ($("build-idea").value || "").trim();
+      if (!description) { showStatus("build-ctl-status", dx.t("studio.needIdea"), true); return; }
+      const replace = !!plan;
+      if (!window.confirm(dx.t(replace ? "studio.ctlCreateReplaceConfirm" : "studio.ctlCreateConfirm"))) return;
+      ctlRun(b, slug, async (say) => {
+        const res = await postJson(ctlPath(slug, "/plan/create"), { description, ultra: ultraBox.checked, studio: !!st.game_studio, confirm: replace });
+        say(dx.t("studio.ctlPlanMade", { n: res.plan.stages }), false);
+        loadControls(slug);
+        loadWorkspace(slug);
+      });
+    });
+    const buttons = [create];
+    if (plan) {
+      buttons.push(cbtn(dx.t("studio.ctlExpand"), "plan-expand", (b) => {
+        if (!window.confirm(dx.t("studio.ctlExpandConfirm"))) return;
+        ctlRun(b, slug, async (say) => {
+          const res = await postJson(ctlPath(slug, "/plan/expand"), { confirm: true });
+          say(dx.t("studio.ctlExpanded", { before: res.before.stages, after: res.plan.stages }), false);
+          loadControls(slug);
+        });
+      }));
+      buttons.push(cbtn(dx.t("studio.ctlClear"), "plan-clear", (b) => {
+        if (!window.confirm(dx.t("studio.ctlClearConfirm"))) return;
+        ctlRun(b, slug, async (say) => {
+          await postJson(ctlPath(slug, "/plan/clear"), { confirm: true });
+          say(dx.t("studio.ctlCleared"), false);
+          loadControls(slug);
+        });
+      }));
+    }
+    if (busy) buttons.forEach((b) => { b.disabled = true; b.dataset.keep = "1"; });
+    const planRow = crow(planText, [ultra].concat(buttons));
+    body.appendChild(planRow);
+    const OWNER = { guided: "studio.guided", autopilot: "studio.autopilot", full_auto: "studio.faName" };
+    if (busy) body.appendChild(crow(dx.t("studio.ctlBusy", { owner: OWNER[busy] ? dx.t(OWNER[busy]) : busy }), []));
+    if (st.game_studio) paintFullAuto(slug, body, run, busy);
+  }
+
+  function faLine(ev) {
+    if (ev.type === "milestone_build") return dx.t("studio.faBuild", { m: ev.milestone });
+    if (ev.type === "verify") return dx.t("studio.faVerifying", { m: ev.milestone });
+    if (ev.type === "verified") return dx.t(ev.ok ? "studio.faVerified" : "studio.faNotVerified", { m: ev.milestone });
+    if (ev.type === "advanced") return dx.t("studio.faAdvanced", { from: ev.previous || "?", to: ev.current || "—" });
+    if (ev.type === "stop_requested") return dx.t("studio.faStopping");
+    if (ev.type === "ended") return faEnd(ev.state, ev.reason);
+    return "";
+  }
+
+  function faEnd(state, reason) {
+    if (state === "succeeded") return dx.t("studio.faDone");
+    if (state === "stopped") return dx.t("studio.faStopped");
+    const why = FA_REASON[reason] ? dx.t(FA_REASON[reason]) : (reason || "?");
+    return dx.t(state === "blocked" ? "studio.faBlocked" : "studio.faFailed", { why });
+  }
+
+  function paintFullAuto(slug, body, run, busy) {
+    const live = !!(run && (run.state === "running" || run.state === "stopping"));
+    const box = document.createElement("div");
+    box.className = "full-auto";
+    box.dataset.state = run ? run.state : "none";
+    const btn = live
+      ? cbtn(dx.t("studio.faStop"), "fa-stop", (b) => ctlRun(b, slug, async (say) => {
+          await postJson(ctlPath(slug, "/full-auto/stop"), {});
+          say(dx.t("studio.faStopping"), false);
+          loadControls(slug);
+        }))
+      : cbtn(dx.t("studio.faStart"), "fa-start", (b) => {
+          if (!window.confirm(dx.t("studio.faConfirm"))) return;
+          ctlRun(b, slug, async (say) => {
+            await postJson(ctlPath(slug, "/full-auto"), { confirm: true });
+            say(dx.t("studio.faStarted"), false);
+            loadControls(slug);
+          });
+        });
+    if (!live && busy) { btn.disabled = true; btn.dataset.keep = "1"; }
+    if (live && run.state === "stopping") { btn.disabled = true; btn.dataset.keep = "1"; }
+    box.appendChild(crow(live ? dx.t("studio.faRunning", { m: run.milestone || "…" }) : dx.t("studio.faIdle"), [btn]));
+    if (run) {
+      const log = document.createElement("ol");
+      log.className = "fa-log";
+      run.events.slice(-12).forEach((ev) => {
+        const text = faLine(ev);
+        if (!text) return;
+        const li = document.createElement("li");
+        li.dataset.type = ev.type;
+        if (ev.type === "ended") li.dataset.state = ev.state;
+        li.textContent = text;
+        log.appendChild(li);
+      });
+      box.appendChild(log);
+    }
+    body.appendChild(box);
+    clearTimeout(faTimer);
+    if (faWasLive === slug && !live) loadWorkspace(slug, { quiet: true });   // it ended: the milestones moved
+    faWasLive = live ? slug : "";
+    if (live) {                                          // the run is on the server: look again while it lives
+      const look = () => {
+        if (!ctlOn(slug)) return;                        // left: the next visit reads it again
+        if (ctlFlight) { faTimer = setTimeout(look, 2000); return; }
+        loadControls(slug);
+      };
+      faTimer = setTimeout(look, 2000);
+    }
+  }
+
   function paintBrain(data) {
     const box = $("settings-brain");
     box.replaceChildren();
@@ -4263,18 +4492,21 @@
       }
     });
   });
-  $("build-autopilot").addEventListener("click", () => {
+  $("build-autopilot").addEventListener("click", () => startAutopilot(false, $("build-autopilot")));
+  // resume=true continues the saved plan from its first stage that is not done (the classic page's "resume" start).
+  function startAutopilot(resume, btn) {
     const slug = dx.getSlug();
     if (!slug) return;
     const description = ($("build-idea").value || "").trim() || slug;
     flight = "autopilot";
     const ticket = claimExplicitBuild(slug);
-    runAction($("build-autopilot"), "build-status", async () => {
+    runAction(btn, "build-status", async () => {
       try {
         const data = await postJson("/api/v1/playground/projects/" + slugPath(slug) + "/autopilot", {
           description,
           mode: "full",
           effort: "auto",
+          resume: !!resume,
         });
         if (!explicitCurrent(ticket, slug)) return;
         if (data.harness_check) {
@@ -4284,11 +4516,12 @@
         showStatus("build-status", dx.t("studio.started"), false);
         const jobId = data.job && data.job.id;
         if (jobId) followBuild("autopilot", slug, jobId);
+        loadControls(slug);
       } finally {
         finishExplicitBuild(ticket);
       }
     });
-  });
+  }
   $("build-stop").addEventListener("click", () => {
     const slug = dx.getSlug();
     if (!slug) return;

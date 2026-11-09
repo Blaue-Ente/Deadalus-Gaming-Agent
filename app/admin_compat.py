@@ -789,72 +789,18 @@ async def playground_autopilot_clear_plan(slug: str):
 
 @router.post("/daedalus/playground/api/projects/{slug}/plan/create")
 async def playground_plan_create(slug: str, request: Request):
-    """Thinner standalone planner — same JSON shape the copied UI expects."""
-    from daedalus import playground as pg
-    from daedalus.game_platform_guide import is_likely_game
-    from daedalus.playground_plan_guide import (
-        PLAN_GRANULARITY_RULES,
-        build_planner_system_prompt,
-        enrich_plan,
-        resolve_plan_kind,
-    )
+    """Thinner standalone planner — same JSON shape the copied UI expects (the Studio uses the harness route)."""
+    from daedalus.harness.build_controls import make_plan
 
     body = await _body(request)
     description = (body.get("description") or "").strip()
     if not description:
         return JSONResponse({"ok": False, "error": "description required"}, status_code=400)
-    proj = await pg.get_project(slug)
-    if not proj:
+    res = await make_plan(slug, description, ultra=bool(body.get("ultra")), studio=bool(body.get("studio")),
+                          studio_preset=(body.get("studio_preset") or "").strip(), fallback=True)
+    if not res.get("ok"):
         return JSONResponse({"ok": False, "error": "project not found"}, status_code=404)
-    kind_key, kind_label = resolve_plan_kind(proj.get("kind", "static"))
-    studio = bool(body.get("studio"))
-    ultra = bool(body.get("ultra"))
-    studio_preset = (body.get("studio_preset") or "").strip() or "custom"
-    sys = build_planner_system_prompt(
-        kind_key,
-        PLAN_GRANULARITY_RULES + f"\nPlatform: {kind_label}",
-        is_game=is_likely_game(f"{proj.get('name', '')} {description}"),
-        ultra=ultra,
-        studio=studio,
-        studio_preset=studio_preset,
-        description=f"{proj.get('name', '')} {description}",
-        slug=slug,
-    )
-    plan: dict[str, Any] | None = None
-    try:
-        from daedalus.llm_client import complete
-        result = await complete(system=sys, user=description, intent="json", max_tokens=4000)
-        text = (result.get("reply") or "") if isinstance(result, dict) else str(result)
-        plan = _extract_json_obj(text)
-    except Exception as exc:
-        log.warning("plan/create llm failed: %s", exc)
-    if not plan or not isinstance(plan.get("stages"), list):
-        plan = {
-            "title": proj.get("name") or slug,
-            "stages": [
-                {
-                    "id": 1,
-                    "title": "Scaffold",
-                    "goal": "Create project files",
-                    "instructions": description[:1500],
-                    "uses_visuals": False,
-                    "files": ["index.html"],
-                    "status": "pending",
-                }
-            ],
-        }
-    if studio:
-        from daedalus.playground_studio_mode import finalize_studio_plan
-        plan = finalize_studio_plan(
-            plan,
-            kind=kind_key,
-            preset=studio_preset,
-            description=description,
-            project_name=proj.get("name") or slug,
-        )
-    plan = enrich_plan(plan, kind_key, description)
-    await pg.save_autopilot_plan(slug, plan)
-    return JSONResponse({"ok": True, "plan": plan, "slug": slug})
+    return JSONResponse(res)
 
 
 # ── Preview ─────────────────────────────────────────────────────────────────

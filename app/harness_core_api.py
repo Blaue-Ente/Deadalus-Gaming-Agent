@@ -744,3 +744,85 @@ def harness_memory_jobs() -> dict[str, Any]:
     from daedalus.harness import memory_actions
 
     return {"ok": True, **memory_actions.jobs_status()}
+
+
+# ---- A6.3a: Build run controls and Full Auto M0→M8 ----------------------------------------------------------
+class PlanCreateBody(BaseModel):
+    description: str = ""
+    ultra: bool = False
+    studio: bool = False
+    studio_preset: str = ""
+    confirm: bool = False
+
+
+_BUILD_STATUS = {"confirm_required": 400, "description_required": 400, "too_long": 400, "not_found": 404, "build_running": 409,
+                 "already_running": 409, "not_running": 409, "not_paused": 409, "no_plan": 409, "plan_failed": 502,
+                 "not_game_studio": 409}
+_B = "/api/v1/harness/build/{slug}"
+
+
+def _build_reply(res: dict[str, Any]) -> Any:
+    return _coded(res, _BUILD_STATUS)
+
+
+@router.get(_B + "/controls")
+async def harness_build_controls(slug: str) -> Any:
+    from daedalus.harness import build_controls
+
+    return _build_reply(await build_controls.state(slug))
+
+
+@router.post(_B + "/autopilot/pause")
+async def harness_build_pause(slug: str) -> Any:
+    from daedalus.harness import build_controls
+
+    return _build_reply(await build_controls.pause(slug))
+
+
+@router.post(_B + "/autopilot/resume")
+async def harness_build_resume(slug: str) -> Any:
+    from daedalus.harness import build_controls
+
+    return _build_reply(await build_controls.resume(slug))
+
+
+@router.post(_B + "/plan/clear")
+async def harness_build_plan_clear(slug: str, body: ConfirmBody) -> Any:
+    from daedalus.harness import build_controls
+
+    return _build_reply(await build_controls.clear_plan(slug, body.confirm))
+
+
+@router.post(_B + "/plan/create")
+async def harness_build_plan_create(slug: str, body: PlanCreateBody) -> Any:
+    from daedalus.harness import build_controls
+
+    return _build_reply(await build_controls.create_plan(slug, body.description, body.ultra, body.studio, body.studio_preset, body.confirm))
+
+
+@router.post(_B + "/plan/expand")
+async def harness_build_plan_expand(slug: str, body: ConfirmBody) -> Any:
+    from daedalus.harness import build_controls
+
+    return _build_reply(await build_controls.expand_plan(slug, body.confirm))
+
+
+@router.get(_B + "/full-auto")
+def harness_full_auto_status(slug: str, after: int = 0) -> dict[str, Any]:
+    from daedalus.harness import full_auto
+
+    return full_auto.status(slug, after)
+
+
+@router.post(_B + "/full-auto")
+async def harness_full_auto_start(slug: str, body: ConfirmBody) -> Any:
+    from daedalus.harness import full_auto
+
+    return _build_reply(await full_auto.start(slug, body.confirm))
+
+
+@router.post(_B + "/full-auto/stop")
+async def harness_full_auto_stop(slug: str) -> Any:
+    from daedalus.harness import full_auto
+
+    return _build_reply(await full_auto.stop(slug))

@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-09T05:18:28.231279+00:00",
+  "generated_at": "2026-11-09T05:58:24.165643+00:00",
   "package_version": "0.3.8",
-  "git_commit": "23f2e1e6dd3d81d3806ae8eca8ea75c78dbd0c0f",
+  "git_commit": "b95c362739eed7c85da325cbbd6a178f15760863",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -14,8 +14,8 @@
     },
     {
       "path": "app/admin_compat.py",
-      "lines": 3059,
-      "broad_excepts": 73
+      "lines": 3005,
+      "broad_excepts": 72
     },
     {
       "path": "daedalus/native_tools.py",
@@ -130,8 +130,8 @@
     ]
   },
   "tests": {
-    "modules": 106,
-    "functions": 1193
+    "modules": 107,
+    "functions": 1218
   },
   "modules": {
     "daedalus": [
@@ -209,9 +209,11 @@
       "daedalus/godot_tools.py",
       "daedalus/guided_jobs.py",
       "daedalus/harness/__init__.py",
+      "daedalus/harness/build_controls.py",
       "daedalus/harness/config_view.py",
       "daedalus/harness/connections.py",
       "daedalus/harness/context.py",
+      "daedalus/harness/full_auto.py",
       "daedalus/harness/gateway.py",
       "daedalus/harness/label_image.py",
       "daedalus/harness/maintenance.py",
