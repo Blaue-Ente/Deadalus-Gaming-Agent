@@ -42,6 +42,9 @@ class Episodic:
         self._col.delete(ids)
         return len(ids)
 
+    def exists(self, fact_id):
+        return bool(self._col.get(ids=[fact_id])["ids"])
+
 
 class Mem0:
     def __init__(self):
@@ -167,11 +170,13 @@ def test_progress_is_read_and_cleared(client):
 
 def test_task_ledger_lists_and_creates_with_limits(client):
     assert client.post(M + "/tasks", json={"title": " "}).status_code == 400
-    assert client.post(M + "/tasks", json={"title": "x" * 201}).status_code == 400
+    assert client.post(M + "/tasks", json={"title": "x" * 81}).status_code == 400            # the ledger keeps 80: refuse, never cut
+    assert client.post(M + "/tasks", json={"title": "ok", "summary": "s" * 401}).status_code == 400
     made = client.post(M + "/tasks", json={"title": "Fix the jump", "summary": "too floaty"}).json()
     assert made["ok"] is True and made["task_id"].startswith("task_")
     rows = client.get(M + "/tasks").json()["tasks"]
-    assert any(r["id"] == made["task_id"] and r["title"] == "Fix the jump" for r in rows)
+    mine = next(r for r in rows if r["id"] == made["task_id"])
+    assert mine["title"] == "Fix the jump" and mine["summary"] == "too floaty" and mine["created_ts"] and mine["updated_ts"]
     assert client.get(M + "/tasks?status=nope").status_code == 400
 
 
@@ -465,7 +470,7 @@ def test_a_style_lesson_with_nothing_to_learn_and_a_failed_job_are_said_so(studi
         _open_memory(page, studio_server)
         text = page.inner_text(_sec("overview"))
         assert "No style lesson: there were no new clarifications to learn from." in text
-        assert "It did not work: cycle_errors." in text
+        assert "It did not work: cycle_errors" in text
         assert page.locator(_sec("overview") + " .mem-job[data-job='consolidate']").get_attribute("data-state") == "error"
         browser.close()
 
@@ -599,4 +604,102 @@ def test_memory_controls_fit_and_are_really_clickable(studio_server, size):
             selector = f"#review-list button[data-mem='{role}']"
             page.locator(selector).first.evaluate("el => el.scrollIntoView({block: 'center'})")
             _uncovered(page, selector)
+        browser.close()
+
+
+# ------------------------------------------------------------------------------------------------ review fixes
+def test_the_newest_facts_are_listed_even_when_there_are_more_than_the_limit(client, agent):
+    now = time.time()
+    agent.mem0.episodic._col.items = {f"f{i}": (f"fact {i}", {"ts": now - (100 - i) * 60}) for i in range(100)}   # oldest first
+    agent.mem0.episodic.all_facts = lambda limit=200: sorted(                                               # like the real one
+        [{"id": i, "content": d, "metadata": m} for i, (d, m) in list(agent.mem0.episodic._col.items.items())[:limit]],
+        key=lambda f: f["metadata"]["ts"], reverse=True)
+    data = client.get(M + "/episodic?limit=5").json()
+    assert [f["id"] for f in data["facts"]] == ["f99", "f98", "f97", "f96", "f95"] and data["total"] == 100 and data["shown"] == 5
+
+
+def test_a_sessions_store_that_cannot_be_read_is_unavailable_not_empty_or_gone(client, agent):
+    def broken():
+        raise RuntimeError("locked")
+
+    agent.memory.sessions_col.count = broken
+    assert client.get(M + "/sessions").json() == {"ok": True, "available": False, "sessions": []}
+    assert client.get(M + "/sessions/s1").status_code == 503
+
+
+def test_a_delete_whose_index_rebuild_fails_still_says_the_fact_is_gone(client, agent):
+    def broken():
+        raise RuntimeError("bm25")
+
+    agent.mem0.rebuild_bm25_indices = broken
+    assert client.post(M + "/episodic/f1/delete", json={"confirm": True}).json() == {"ok": True, "fact_id": "f1", "index_stale": True}
+    assert agent.mem0.episodic.count() == 0
+
+
+def test_a_store_error_on_delete_is_unavailable_not_a_crash(client, agent):
+    def broken(fact_id):
+        raise RuntimeError("chroma")
+
+    agent.mem0.episodic.exists = broken
+    assert client.post(M + "/episodic/f1/delete", json={"confirm": True}).status_code == 503
+
+
+def test_a_style_lesson_is_not_called_nothing_to_learn_when_the_clarifications_cannot_be_read(a0_tmp, agent, monkeypatch):  # noqa: F811
+    from daedalus.harness import memory_actions
+
+    async def no_table():
+        return {}
+
+    called = []
+
+    async def lesson(agent):
+        called.append(1)
+        return {"ok": True, "lesson": None}
+
+    monkeypatch.setattr("daedalus.clarification_tracker.get_clarification_stats", no_table)
+    monkeypatch.setattr("daedalus.clarification_tracker.generate_daily_lesson", lesson)
+
+    async def once():
+        await memory_actions.start_job("lesson", True)
+        await asyncio.gather(*memory_actions._jobs.values())
+        return memory_actions.jobs_status()["last"]["lesson"]
+
+    last = asyncio.run(once())
+    assert last["ok"] is False and last["error"] == "unavailable" and called == []
+
+
+def test_web_search_falls_back_like_the_classic_route(client, agent, monkeypatch):
+    async def down(**kw):
+        raise RuntimeError("agent search down")
+
+    async def standalone(query, limit=5, fetch_content=False):
+        return {"ok": True, "results": [{"title": "fallback", "url": "https://example.org", "snippet": ""}]}
+
+    agent.web_search = down
+    monkeypatch.setattr("daedalus.web_search_standalone.web_search", standalone)
+    res = client.post(M + "/search/web", json={"query": "x"}).json()
+    assert res["ok"] is True and res["results"][0]["title"] == "fallback" and res["discoveries_recorded"] == 0
+
+
+def test_one_part_that_fails_does_not_blank_the_others(studio_server):
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        browser, page = _browser(pw)
+        _mem_page(page)
+        page.route(re.compile(r".*/api/v1/harness/memory/sessions(\?.*)?$"), lambda r: _fulfill(r, 503, {"ok": False, "error": "unavailable"}))
+        _open_memory(page, studio_server)
+        assert "This part could not be read: That memory is not available." in page.inner_text(_sec("sessions"))
+        assert "Fix the jump" in page.inner_text(_sec("tasks")) and "Owner likes pixel art" in page.inner_text(_sec("facts"))
+        browser.close()
+
+
+def test_a_truncated_fact_list_says_how_much_it_shows(studio_server):
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        browser, page = _browser(pw)
+        _mem_page(page, facts={**FACTS, "total": 120, "shown": 1})
+        _open_memory(page, studio_server)
+        assert "The newest 1 of 120 facts." in page.inner_text(_sec("facts"))
         browser.close()

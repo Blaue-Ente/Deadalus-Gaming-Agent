@@ -17,13 +17,20 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
-QUERY_MAX, TITLE_MAX, SUMMARY_MAX = 300, 200, 2000
+QUERY_MAX, TITLE_MAX, SUMMARY_MAX = 300, 80, 400          # the ledger keeps 80/400 characters: refuse more, never cut silently
 SEARCH_LIMIT_MAX, LIST_MAX = 10, 200
 TASK_STATES = ("open", "done", "rework")
 
 
 def _need(confirm: Any) -> dict[str, Any] | None:
     return None if confirm is True else {"ok": False, "error": "confirm_required"}
+
+
+def _clamp(value: Any, hi: int, default: int) -> int:
+    try:
+        return max(1, min(hi, int(value)))
+    except (TypeError, ValueError):
+        return default
 
 
 def _agent() -> Any:
@@ -85,22 +92,28 @@ def consolidations(limit: int = 5) -> list[dict[str, Any]]:
     return out
 
 
+def _overview_sync() -> dict[str, Any]:
+    return {"memory": memory_stats(), "navigator": navigator_stats(), "mode": mode(), "progress": progress(),
+            "consolidations": consolidations()}
+
+
 async def overview() -> dict[str, Any]:
-    return {"ok": True, "memory": memory_stats(), "navigator": navigator_stats(), "mode": mode(), "progress": progress(),
-            "clarifications": await clarification_stats(), "consolidations": consolidations(),
-            "jobs": jobs_status()}
+    local = await asyncio.to_thread(_overview_sync)                    # Chroma counts, kv and a log file: not on the event loop
+    return {"ok": True, **local, "clarifications": await clarification_stats(), "jobs": jobs_status()}
+
+
+SCAN_MAX = 5000                                                       # the store returns facts in insertion order, not by age
 
 
 def episodic(limit: Any = 50) -> dict[str, Any]:
-    try:
-        n = max(1, min(LIST_MAX, int(limit)))
-    except (TypeError, ValueError):
-        n = 50
+    n = _clamp(limit, LIST_MAX, 50)
     try:
         mem0 = getattr(_agent(), "mem0", None)
         if mem0 is None:
             return {"ok": True, "available": False, "facts": []}
-        facts = mem0.episodic.all_facts(limit=n)
+        total = mem0.episodic.count()
+        everything = mem0.episodic.all_facts(limit=SCAN_MAX)           # sorted newest first after the read
+        facts = everything[:n]
     except Exception as exc:
         log.warning("episodic memory unavailable: %s", exc)
         return {"ok": True, "available": False, "facts": []}
@@ -112,20 +125,28 @@ def episodic(limit: Any = 50) -> dict[str, Any]:
         out.append({"id": f.get("id"), "content": f.get("content") or "", "kind": meta.get("kind", "general"),
                     "importance": float(meta.get("importance", 1.0) or 0), "access_count": int(meta.get("access_count", 0) or 0),
                     "promoted": bool(meta.get("promoted_to_lesson", False)), "age_hours": round((now - ts) / 3600.0, 1)})
-    return {"ok": True, "available": True, "facts": out}
+    return {"ok": True, "available": True, "facts": out, "total": total, "shown": len(out)}
 
 
 def delete_fact(fact_id: str, confirm: Any) -> dict[str, Any]:
     if (refused := _need(confirm)):
         return refused
-    mem0 = getattr(_agent(), "mem0", None)
-    if mem0 is None:
+    try:
+        mem0 = getattr(_agent(), "mem0", None)
+        if mem0 is None:
+            return {"ok": False, "error": "unavailable"}
+        if not mem0.episodic.exists(fact_id):                       # Chroma deletes a missing id without complaint
+            return {"ok": False, "error": "not_found"}
+        if not mem0.episodic.delete([fact_id]):
+            return {"ok": False, "error": "delete_failed"}
+    except Exception as exc:
+        log.warning("episodic delete unavailable: %s", exc)
         return {"ok": False, "error": "unavailable"}
-    if not mem0.episodic._col.get(ids=[fact_id]).get("ids"):     # Chroma deletes a missing id without complaint
-        return {"ok": False, "error": "not_found"}
-    if not mem0.episodic.delete([fact_id]):
-        return {"ok": False, "error": "delete_failed"}
-    mem0.rebuild_bm25_indices()
+    try:
+        mem0.rebuild_bm25_indices()
+    except Exception as exc:                                         # the fact IS gone; only the search index is behind
+        log.warning("bm25 rebuild after delete failed: %s", exc)
+        return {"ok": True, "fact_id": fact_id, "index_stale": True}
     return {"ok": True, "fact_id": fact_id}
 
 
@@ -161,12 +182,8 @@ def tasks(status: Any = None, limit: Any = 50) -> dict[str, Any]:
     st = str(status or "") or None
     if st and st not in TASK_STATES:
         return {"ok": False, "error": "bad_status"}
-    try:
-        n = max(1, min(LIST_MAX, int(limit)))
-    except (TypeError, ValueError):
-        n = 50
-    rows = continuity.list_tasks(status=st, limit=n)
-    return {"ok": True, "tasks": [{k: t.get(k) for k in ("id", "title", "status", "summary", "created_at", "updated_at")} for t in rows]}
+    rows = continuity.list_tasks(status=st, limit=_clamp(limit, LIST_MAX, 50))
+    return {"ok": True, "tasks": [{k: t.get(k) for k in ("id", "title", "status", "summary", "created_ts", "updated_ts")} for t in rows]}
 
 
 def create_task(title: Any, summary: Any) -> dict[str, Any]:
@@ -181,13 +198,17 @@ def create_task(title: Any, summary: Any) -> dict[str, Any]:
     return {"ok": True, "task_id": task.get("id")}
 
 
+def _session_store() -> Any:
+    """The agent's memory, after checking its sessions store can be read (the list helpers below answer [] on any error)."""
+    memory = _agent().memory
+    memory.sessions_col.count()
+    return memory
+
+
 def sessions(limit: Any = 30) -> dict[str, Any]:
+    n = _clamp(limit, LIST_MAX, 30)
     try:
-        n = max(1, min(LIST_MAX, int(limit)))
-    except (TypeError, ValueError):
-        n = 30
-    try:
-        rows = _agent().memory.list_sessions(limit=n)
+        rows = _session_store().list_sessions(limit=n)
     except Exception as exc:
         log.warning("sessions unavailable: %s", exc)
         return {"ok": True, "available": False, "sessions": []}
@@ -195,12 +216,9 @@ def sessions(limit: Any = 30) -> dict[str, Any]:
 
 
 def session_turns(session_id: str, limit: Any = 100) -> dict[str, Any]:
+    n = _clamp(limit, 500, 100)
     try:
-        n = max(1, min(500, int(limit)))
-    except (TypeError, ValueError):
-        n = 100
-    try:
-        turns = _agent().memory.session_history(session_id, limit=n)
+        turns = _session_store().session_history(session_id, limit=n)
     except Exception as exc:
         log.warning("session history unavailable: %s", exc)
         return {"ok": False, "error": "unavailable"}
@@ -217,16 +235,21 @@ async def search(kind: str, query: Any, limit: Any = 5) -> dict[str, Any]:
         return {"ok": False, "error": "query_required"}
     if len(q) > QUERY_MAX:
         return {"ok": False, "error": "too_long"}
-    try:
-        n = max(1, min(SEARCH_LIMIT_MAX, int(limit)))
-    except (TypeError, ValueError):
-        n = 5
+    n = _clamp(limit, SEARCH_LIMIT_MAX, 5)
     try:
         agent = _agent()
         res = await (agent.web_search(query=q, limit=n) if kind == "web" else agent.github_search(query=q, limit=n))
     except Exception as exc:
         log.warning("%s search failed: %s", kind, exc)
-        return {"ok": False, "error": "search_failed"}
+        if kind != "web":
+            return {"ok": False, "error": "search_failed"}
+        try:                                                         # the classic route falls back the same way (nothing saved)
+            from ..web_search_standalone import web_search
+
+            res = await web_search(q, limit=n)
+        except Exception as extra:
+            log.warning("standalone web search failed: %s", extra)
+            return {"ok": False, "error": "search_failed"}
     if not isinstance(res, dict) or res.get("ok") is False:
         return {"ok": False, "error": "search_failed"}
     rows = res.get("results") or res.get("repos") or res.get("items") or []
@@ -263,6 +286,8 @@ async def _consolidate() -> dict[str, Any]:
 async def _lesson() -> dict[str, Any]:
     from ..clarification_tracker import generate_daily_lesson
 
+    if not (await clarification_stats())["available"]:               # its read answers [] on errors: "nothing to learn" would be a lie
+        return {"ok": False, "error": "unavailable"}
     res = await generate_daily_lesson(_agent())
     if res.get("ok") and not res.get("lesson"):
         return {"ok": True, "nothing_to_learn": True}

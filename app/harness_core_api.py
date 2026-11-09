@@ -421,10 +421,15 @@ _REVIEW_STATUS = {"confirm_required": 400, "id_required": 400, "ids_required": 4
                   "no_project": 409, "not_infra": 409, "no_fix_available": 409, "remediate_failed": 502}
 
 
-def _review_reply(res: dict[str, Any]) -> Any:
+def _coded(res: dict[str, Any], table: dict[str, int]) -> Any:
+    """A success as it is; a refusal as its code with the HTTP status the table gives it (400 when unlisted)."""
     if res.get("ok") or "error" not in res:
         return res
-    return JSONResponse(res, status_code=_REVIEW_STATUS.get(str(res.get("error")), 400))
+    return JSONResponse(res, status_code=table.get(str(res.get("error")), 400))
+
+
+def _review_reply(res: dict[str, Any]) -> Any:
+    return _coded(res, _REVIEW_STATUS)
 
 
 @router.get("/api/v1/harness/review/permissions")
@@ -541,9 +546,7 @@ _PLANNER_STATUS = {"confirm_required": 400, "title_required": 400, "too_long": 4
 
 
 def _planner_reply(res: dict[str, Any]) -> Any:
-    if res.get("ok") or "error" not in res:
-        return res
-    return JSONResponse(res, status_code=_PLANNER_STATUS.get(str(res.get("error")), 400))
+    return _coded(res, _PLANNER_STATUS)
 
 
 @router.post("/api/v1/harness/review/planner/plans")
@@ -644,9 +647,7 @@ _MEMORY_STATUS = {"confirm_required": 400, "title_required": 400, "too_long": 40
 
 
 def _memory_reply(res: dict[str, Any]) -> Any:
-    if res.get("ok") or "error" not in res:
-        return res
-    return JSONResponse(res, status_code=_MEMORY_STATUS.get(str(res.get("error")), 400))
+    return _coded(res, _MEMORY_STATUS)
 
 
 _M = "/api/v1/harness/memory"

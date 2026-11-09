@@ -2605,17 +2605,22 @@
 
   async function loadMemory(list) {
     const gen = ++memGen;
-    const [over, facts, tasks, sessions] = await Promise.all([
+    // Each part is read on its own: one that fails says so in its own place, and the others still show.
+    const settled = await Promise.allSettled([
       dx.api(MEM), dx.api(MEM + "/episodic?limit=50"), dx.api(MEM + "/tasks?limit=50"), dx.api(MEM + "/sessions?limit=30"),
     ]);
     if (gen !== memGen || !memOn()) return;
+    if (settled.every((r) => r.status === "rejected")) throw settled[0].reason;
+    const part = (i) => (settled[i].status === "fulfilled" ? settled[i].value : null);
     list.replaceChildren();
-    paintMemOverview(list, over);
-    paintMemFacts(list, facts);
-    paintMemTasks(list, tasks);
-    paintMemSessions(list, sessions);
+    [["studio.memOverview", "overview", paintMemOverview], ["studio.memFacts", "facts", paintMemFacts],
+      ["studio.memTasks", "tasks", paintMemTasks], ["studio.memSessions", "sessions", paintMemSessions]].forEach(([key, role, paint], i) => {
+      const data = part(i);
+      if (data) paint(list, data);
+      else msection(list, key, role).appendChild(mnote(dx.t("studio.memPartFailed", { why: memErr(settled[i].reason) }), "note mem-failed"));
+    });
     paintMemSearch(list);
-    watchMemJobs(over.jobs);
+    watchMemJobs(part(0) && part(0).jobs);
   }
 
   // A refresh after an action: repaint in place and keep the action's message on the status line.
@@ -2626,7 +2631,7 @@
 
   function jobLine(name, last) {
     if (!last) return "";
-    if (!last.ok) return dx.t("studio.memJobFailed", { why: last.error || "?" });
+    if (!last.ok) return dx.t("studio.memJobFailed", { why: MEM_ERR[last.error] ? dx.t(MEM_ERR[last.error]) : (last.error || "?") });
     if (name === "lesson") return last.nothing_to_learn ? dx.t("studio.memLessonNothing") : dx.t("studio.memLessonDone", { n: last.processed || 0 });
     return dx.t("studio.memConsolidateDone", { scanned: last.scanned || 0, merged: last.merged || 0, promoted: last.promoted || 0 });
   }
@@ -2726,6 +2731,7 @@
     const box = msection(list, "studio.memFacts", "facts");
     if (!data.available) { box.appendChild(mnote(dx.t("studio.memFactsUnavailable"))); return; }
     if (!(data.facts || []).length) { emptyNote(box); return; }
+    if (data.total > data.shown) box.appendChild(mnote(dx.t("studio.memFactsShown", { shown: data.shown, total: data.total })));
     data.facts.forEach((f) => {
       const del = mbtn(dx.t("studio.memDelete"), "fact-delete", (b) => {
         if (!window.confirm(dx.t("studio.memDeleteConfirm"))) return;
