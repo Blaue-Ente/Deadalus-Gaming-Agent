@@ -477,6 +477,10 @@ class EpisodicMemory:
         out.sort(key=lambda x: x["metadata"].get("ts", 0), reverse=True)
         return out
 
+    def exists(self, fact_id: str) -> bool:
+        """True if a fact with this id is stored (raises if the store cannot be read)."""
+        return bool(self._col.get(ids=[fact_id]).get("ids"))
+
     def delete(self, fact_ids: list[str]) -> int:
         if not fact_ids:
             return 0

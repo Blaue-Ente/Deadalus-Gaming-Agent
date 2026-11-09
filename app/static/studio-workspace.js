@@ -3,7 +3,7 @@
   if (!dx) return;
 
   const PANELS = ["chat", "build", "preview", "review", "settings", "world", "tools"];
-  const TABS = ["proposals", "skills", "bundles", "permissions", "outbox"];
+  const TABS = ["proposals", "skills", "bundles", "permissions", "outbox", "memory"];
   let currentPanel = "chat";
   let currentTab = "proposals";
   let queryReady = false;
@@ -982,6 +982,8 @@
             actionButton(on ? "revoke" : "grant", item.id, dx.t(on ? "studio.revoke" : "studio.grant")),
           ]));
         });
+      } else if (currentTab === "memory") {
+        await loadMemory(list);
       } else if (currentTab === "outbox") {
         const data = await dx.api("/admin/daedalus/outbox/api");
         const rows = data.items || [];
@@ -2531,6 +2533,320 @@
         });
       } catch (err) { /* try again below */ }
       watchRegenerations();
+    }, 2500);
+  }
+
+  // ---- A6.2c: Review → Memory --------------------------------------------------------------------------------
+  // What Daedalus remembers and keeps track of. Reads say "unavailable" when they cannot be read (never zeros); a delete or
+  // reset asks first; consolidate and the style lesson are confirmed model turns that run on the server and report how they ended.
+  const MEM_ERR = { confirm_required: "studio.memErrConfirm", not_found: "studio.memErrGone", unavailable: "studio.memErrUnavailable",
+    already_running: "studio.memErrRunning", search_failed: "studio.memErrSearch", query_required: "studio.memErrQuery",
+    title_required: "studio.plnErrTitle", too_long: "studio.plnErrLong", bad_mode: "studio.memErrMode" };
+  const MEM = "/api/v1/harness/memory";
+  let memGen = 0;
+  let memFlight = false;
+  let memTimer = null;
+
+  function memErr(err) {
+    const key = MEM_ERR[String((err && err.message) || "")];
+    return key ? dx.t(key) : failText(err);
+  }
+
+  function memOn() {
+    return currentPanel === "review" && currentTab === "memory";
+  }
+
+  function mbtn(label, role, handler) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.dataset.mem = role;
+    b.textContent = label;
+    b.addEventListener("click", () => handler(b));
+    return b;
+  }
+
+  function mnote(text, cls) {
+    const p = document.createElement("p");
+    p.className = cls || "note";
+    p.textContent = text;
+    return p;
+  }
+
+  function msection(list, key, role) {
+    const box = document.createElement("div");
+    box.className = "mem-section";
+    box.dataset.section = role;
+    const k = document.createElement("p");
+    k.className = "kicker";
+    k.textContent = dx.t(key);
+    box.appendChild(k);
+    list.appendChild(box);
+    return box;
+  }
+
+  // One memory action at a time. Its outcome goes to the Review status line, and only if the owner is still on Memory.
+  async function memRun(btn, work) {
+    if (memFlight) return;
+    const gen = memGen;
+    memFlight = true;
+    document.querySelectorAll("[data-mem]").forEach((b) => { b.disabled = true; });
+    dx.busy(btn, true, "…");
+    const say = (text, bad) => { if (memOn() && gen === memGen) showStatus("review-status", text, bad); };
+    try {
+      await work(say);
+    } catch (err) {
+      say(memErr(err), true);
+    } finally {
+      dx.busy(btn, false);
+      memFlight = false;
+      document.querySelectorAll("[data-mem]").forEach((b) => { b.disabled = b.dataset.keep === "1"; });
+    }
+  }
+
+  async function loadMemory(list) {
+    const gen = ++memGen;
+    // Each part is read on its own: one that fails says so in its own place, and the others still show.
+    const settled = await Promise.allSettled([
+      dx.api(MEM), dx.api(MEM + "/episodic?limit=50"), dx.api(MEM + "/tasks?limit=50"), dx.api(MEM + "/sessions?limit=30"),
+    ]);
+    if (gen !== memGen || !memOn()) return;
+    if (settled.every((r) => r.status === "rejected")) throw settled[0].reason;
+    const part = (i) => (settled[i].status === "fulfilled" ? settled[i].value : null);
+    list.replaceChildren();
+    [["studio.memOverview", "overview", paintMemOverview], ["studio.memFacts", "facts", paintMemFacts],
+      ["studio.memTasks", "tasks", paintMemTasks], ["studio.memSessions", "sessions", paintMemSessions]].forEach(([key, role, paint], i) => {
+      const data = part(i);
+      if (data) paint(list, data);
+      else msection(list, key, role).appendChild(mnote(dx.t("studio.memPartFailed", { why: memErr(settled[i].reason) }), "note mem-failed"));
+    });
+    paintMemSearch(list);
+    watchMemJobs(part(0) && part(0).jobs);
+  }
+
+  // A refresh after an action: repaint in place and keep the action's message on the status line.
+  function reloadMemory() {
+    if (!memOn()) return;
+    loadMemory($("review-list")).catch((err) => { if (memOn()) showStatus("review-status", memErr(err), true); });
+  }
+
+  function jobLine(name, last) {
+    if (!last) return "";
+    if (!last.ok) return dx.t("studio.memJobFailed", { why: MEM_ERR[last.error] ? dx.t(MEM_ERR[last.error]) : (last.error || "?") });
+    if (name === "lesson") return last.nothing_to_learn ? dx.t("studio.memLessonNothing") : dx.t("studio.memLessonDone", { n: last.processed || 0 });
+    return dx.t("studio.memConsolidateDone", { scanned: last.scanned || 0, merged: last.merged || 0, promoted: last.promoted || 0 });
+  }
+
+  function paintMemOverview(list, d) {
+    const box = msection(list, "studio.memOverview", "overview");
+    const m = d.memory || {};
+    if (!m.available) box.appendChild(mnote(dx.t("studio.memUnavailable")));
+    else {
+      const c = m.counts || {};
+      box.appendChild(mnote(dx.t("studio.memCounts", { lessons: c.lessons, episodes: c.episodes, sessions: c.sessions, discoveries: c.discoveries,
+        facts: c.episodic_facts === null ? "—" : c.episodic_facts })));
+    }
+    // mode
+    const modeRow = document.createElement("div");
+    modeRow.className = "row tight";
+    const sel = document.createElement("select");
+    sel.setAttribute("aria-label", dx.t("studio.memMode"));
+    ((d.mode && d.mode.valid) || []).forEach((v) => {
+      const o = document.createElement("option");
+      o.value = v;
+      o.textContent = dx.t("studio.memMode_" + v);
+      sel.appendChild(o);
+    });
+    if (d.mode) sel.value = d.mode.mode;
+    const label = document.createElement("span");
+    label.textContent = dx.t("studio.memMode");
+    modeRow.append(label, sel, mbtn(dx.t("studio.memModeSave"), "mode", (b) => memRun(b, async (say) => {
+      const res = await postJson(MEM + "/mode", { mode: sel.value });
+      say(dx.t("studio.memModeSaved", { mode: dx.t("studio.memMode_" + res.mode) }), false);
+    })));
+    box.appendChild(modeRow);
+    // progress
+    const p = d.progress || {};
+    const pRow = document.createElement("div");
+    pRow.className = "row tight";
+    pRow.appendChild(mnote(p.active ? dx.t("studio.memProgressOn", { task: p.task, pct: Math.round((p.pct || 0) * 100), msg: p.message }) : dx.t("studio.memProgressOff")));
+    pRow.appendChild(mbtn(dx.t("studio.memProgressClear"), "progress-clear", (b) => memRun(b, async (say) => {
+      await postJson(MEM + "/progress/clear", {});
+      say(dx.t("studio.memProgressCleared"), false);
+      reloadMemory();
+    })));
+    box.appendChild(pRow);
+    // navigator
+    const n = d.navigator || {};
+    const nRow = document.createElement("div");
+    nRow.className = "row tight";
+    nRow.appendChild(mnote(dx.t("studio.memNavigator", { calls: n.total_calls || 0, fast: n.fast_path_pct || 0, ms: n.avg_latency_ms || 0,
+      state: dx.t(n.enabled ? "studio.memOn" : "studio.memOff") })));
+    nRow.appendChild(mbtn(dx.t("studio.memNavigatorReset"), "navigator-reset", (b) => {
+      if (!window.confirm(dx.t("studio.memNavigatorResetConfirm"))) return;
+      memRun(b, async (say) => {
+        await postJson(MEM + "/navigator/reset", { confirm: true });
+        say(dx.t("studio.memNavigatorResetDone"), false);
+        reloadMemory();
+      });
+    }));
+    box.appendChild(nRow);
+    // clarifications + style lesson, consolidation
+    const cl = d.clarifications || {};
+    box.appendChild(mnote(cl.available ? dx.t("studio.memClarifications", { total: cl.total, pending: cl.pending_lessons, week: cl.last_7d })
+      : dx.t("studio.memClarificationsUnavailable")));
+    const jobs = d.jobs || { running: [], last: {} };
+    const jRow = document.createElement("div");
+    jRow.className = "row tight";
+    [["consolidate", "studio.memConsolidate", "studio.memConsolidateConfirm"], ["lesson", "studio.memLesson", "studio.memLessonConfirm"]].forEach(([name, key, ask]) => {
+      const running = (jobs.running || []).indexOf(name) >= 0;
+      const b = mbtn(dx.t(running ? "studio.memJobRunning" : key), "job-" + name, (btn) => {
+        if (!window.confirm(dx.t(ask))) return;
+        memRun(btn, async (say) => {
+          await postJson(MEM + "/jobs/" + name, { confirm: true });
+          say(dx.t("studio.memJobStarted"), false);
+          reloadMemory();
+        });
+      });
+      if (running) { b.disabled = true; b.dataset.keep = "1"; }            // stays off until the job has ended
+      jRow.appendChild(b);
+    });
+    box.appendChild(jRow);
+    ["consolidate", "lesson"].forEach((name) => {
+      const line = jobLine(name, (jobs.last || {})[name]);
+      if (line) {
+        const el = mnote(line, "note mem-job");
+        el.dataset.job = name;
+        el.dataset.state = (jobs.last[name] || {}).ok ? "ok" : "error";
+        box.appendChild(el);
+      }
+    });
+    const runs = d.consolidations || [];
+    if (runs.length) {
+      const r = runs[0];
+      box.appendChild(mnote(dx.t("studio.memLastRun", { when: r.finished_at || "?", merged: r.merged || 0, promoted: r.promoted || 0, errors: r.errors || 0 })));
+    }
+  }
+
+  function paintMemFacts(list, data) {
+    const box = msection(list, "studio.memFacts", "facts");
+    if (!data.available) { box.appendChild(mnote(dx.t("studio.memFactsUnavailable"))); return; }
+    if (!(data.facts || []).length) { emptyNote(box); return; }
+    if (data.total > data.shown) box.appendChild(mnote(dx.t("studio.memFactsShown", { shown: data.shown, total: data.total })));
+    data.facts.forEach((f) => {
+      const del = mbtn(dx.t("studio.memDelete"), "fact-delete", (b) => {
+        if (!window.confirm(dx.t("studio.memDeleteConfirm"))) return;
+        memRun(b, async (say) => {
+          await postJson(MEM + "/episodic/" + encodeURIComponent(f.id) + "/delete", { confirm: true });
+          say(dx.t("studio.memDeleted"), false);
+          reloadMemory();
+        });
+      });
+      const item = row(f.content, [f.kind, dx.t("studio.memFactAge", { h: f.age_hours }), dx.t("studio.memFactUsed", { n: f.access_count })]
+        .concat(f.promoted ? [dx.t("studio.memFactPromoted")] : []).join(" · "), [del]);
+      item.dataset.fact = f.id;
+      box.appendChild(item);
+    });
+  }
+
+  function paintMemTasks(list, data) {
+    const box = msection(list, "studio.memTasks", "tasks");
+    (data.tasks || []).forEach((t) => box.appendChild(row(t.title, [t.status, t.summary].filter(Boolean).join(" · "), [])));
+    if (!(data.tasks || []).length) emptyNote(box);
+    const form = document.createElement("div");
+    form.className = "add-step";
+    const title = document.createElement("input");
+    title.type = "text";
+    title.autocomplete = "off";
+    title.placeholder = dx.t("studio.memTaskTitle");
+    title.setAttribute("aria-label", dx.t("studio.memTaskTitle"));
+    const summary = document.createElement("input");
+    summary.type = "text";
+    summary.autocomplete = "off";
+    summary.placeholder = dx.t("studio.memTaskSummary");
+    summary.setAttribute("aria-label", dx.t("studio.memTaskSummary"));
+    form.append(title, summary, mbtn(dx.t("studio.memTaskAdd"), "task-add", (b) => memRun(b, async (say) => {
+      await postJson(MEM + "/tasks", { title: title.value, summary: summary.value });
+      say(dx.t("studio.memTaskAdded"), false);
+      reloadMemory();
+    })));
+    box.appendChild(form);
+  }
+
+  function paintMemSessions(list, data) {
+    const box = msection(list, "studio.memSessions", "sessions");
+    if (!data.available) { box.appendChild(mnote(dx.t("studio.memSessionsUnavailable"))); return; }
+    if (!(data.sessions || []).length) { emptyNote(box); return; }
+    data.sessions.forEach((s) => {
+      const open = mbtn(dx.t("studio.memSessionOpen"), "session-open", (b) => {
+        const shown = item.querySelector(".mem-turns");
+        if (shown) { shown.remove(); b.textContent = dx.t("studio.memSessionOpen"); return; }
+        memRun(b, async () => {
+          const res = await dx.api(MEM + "/sessions/" + encodeURIComponent(s.session_id) + "?limit=100");
+          if (!item.isConnected) return;
+          const turns = document.createElement("div");
+          turns.className = "mem-turns";
+          res.turns.forEach((t) => {
+            const p = document.createElement("p");
+            const who = document.createElement("b");
+            who.textContent = t.role + ": ";
+            p.append(who, document.createTextNode(t.content));
+            turns.appendChild(p);
+          });
+          item.appendChild(turns);
+        }).then(() => { if (item.querySelector(".mem-turns")) b.textContent = dx.t("studio.memSessionHide"); });   // after busy() put the old label back
+      });
+      const item = row(s.preview || s.session_id, dx.t("studio.memSessionTurns", { n: s.turn_count, id: s.session_id }), [open]);
+      item.dataset.session = s.session_id;
+      box.appendChild(item);
+    });
+  }
+
+  function paintMemSearch(list) {
+    const box = msection(list, "studio.memSearch", "search");
+    box.appendChild(mnote(dx.t("studio.memSearchHint"), "hint"));
+    const form = document.createElement("div");
+    form.className = "add-step";
+    const q = document.createElement("input");
+    q.type = "text";
+    q.autocomplete = "off";
+    q.placeholder = dx.t("studio.memSearchQuery");
+    q.setAttribute("aria-label", dx.t("studio.memSearchQuery"));
+    const results = document.createElement("div");
+    results.className = "mem-results";
+    const go = (kind) => (b) => memRun(b, async (say) => {
+      const res = await postJson(MEM + "/search/" + kind, { query: q.value, limit: 5 });
+      results.replaceChildren();
+      (res.results || []).forEach((r) => {
+        const item = document.createElement("div");
+        item.className = "item";
+        const a = document.createElement("a");
+        a.textContent = r.title || r.url;
+        if (/^https?:\/\//i.test(r.url)) { a.href = r.url; a.target = "_blank"; a.rel = "noopener noreferrer"; }
+        const s = document.createElement("small");
+        s.textContent = r.snippet || "";
+        item.append(a, s);
+        results.appendChild(item);
+      });
+      say(dx.t("studio.memSearchDone", { n: (res.results || []).length, saved: res.discoveries_recorded || 0 }), false);
+    });
+    form.append(q, mbtn(dx.t("studio.memSearchWeb"), "search-web", go("web")), mbtn(dx.t("studio.memSearchGithub"), "search-github", go("github")));
+    box.append(form, results);
+  }
+
+  // Consolidate and the style lesson run on the server: look every few seconds while one runs, then show how it ended.
+  function watchMemJobs(jobs) {
+    clearTimeout(memTimer);
+    if (!jobs || !(jobs.running || []).length) return;
+    const gen = memGen;
+    memTimer = setTimeout(async () => {
+      if (!memOn() || gen !== memGen) return;          // left Memory: the next visit reads the state again
+      try {
+        const st = await dx.api(MEM + "/jobs");
+        if (!memOn() || gen !== memGen) return;
+        if ((st.running || []).length) { watchMemJobs(st); return; }
+        if (!memFlight) reloadMemory();
+        else watchMemJobs(jobs);
+      } catch (err) { watchMemJobs(jobs); }
     }, 2500);
   }
 
