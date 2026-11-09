@@ -2875,6 +2875,7 @@
   const PLAN_CREATE_TIMEOUT_MS = 240000;          // a 4000-token planning turn can take minutes
   const FA_TAIL = 12;                              // Full Auto events shown (the poll asks only for these)
   let ctlGen = 0;
+  let ctlPainted = "";                             // slug + the last answer painted (see loadControls)
   let ctlFlight = false;
   let faTimer = null;
   let ctlUltra = false;                            // the Ultra box survives the repaint while Full Auto is watched
@@ -2935,14 +2936,20 @@
     const box = $("build-controls");
     if (!box) return;
     const gen = ++ctlGen;
-    if (!slug) { box.hidden = true; return; }
+    if (!slug) { box.hidden = true; ctlPainted = ""; return; }
     try {
       const [st, fa] = await Promise.all([dx.api(ctlPath(slug, "/controls")), dx.api(ctlPath(slug, "/full-auto?tail=" + FA_TAIL))]);
       if (gen !== ctlGen || dx.getSlug() !== slug) return;
+      // The same answer again (the panel often reads it twice on open) is not repainted: a repaint replaces every button,
+      // so a click or a scroll that is under way would land on a node that has just been thrown away.
+      const key = slug + "\n" + JSON.stringify([st, fa.run]);
+      if (key === ctlPainted && !$("build-controls").hidden) return;
+      ctlPainted = key;
       paintControls(slug, st, fa.run);
     } catch (err) {
       if (gen !== ctlGen) return;
       box.hidden = false;
+      ctlPainted = "";
       $("build-ctl-body").replaceChildren();
       showStatus("build-ctl-status", ctlErr(err), true);
     }

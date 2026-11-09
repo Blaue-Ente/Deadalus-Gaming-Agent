@@ -750,3 +750,20 @@ def test_a_full_auto_project_disables_the_manual_build_buttons_and_explains_a_re
         page.locator("#build-verify").click()
         _status_has(page, "build-status", "Full Auto is driving this project. Stop Full Auto first.")
         browser.close()
+
+
+def test_a_second_identical_read_does_not_replace_the_buttons(studio_server):
+    """The Build panel reads its controls twice when it opens. Repainting the same answer replaced every button, so a
+    scroll or click under way landed on a node that had just been thrown away (seen in CI at 910x640)."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        browser, page = _browser(pw, (910, 640))
+        calls, _ = _build_page(page)
+        _open_build(page, studio_server)
+        page.locator(_ctl("plan-create")).evaluate("el => { el.__first = true; }")
+        page.evaluate("() => window.dxStudio.selectSlug(window.dxStudio.getSlug())")   # one more read of the same answer
+        assert _until(page, lambda: calls["n"] >= 2)
+        page.wait_for_timeout(300)
+        assert page.locator(_ctl("plan-create")).evaluate("el => el.__first === true")
+        browser.close()
