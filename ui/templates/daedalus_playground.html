@@ -4422,12 +4422,13 @@ function skillCreatorDownloadZip() {
 
 async function skillCreatorGist() {
   if (!_scSession?.session_id) return;
+  if (!confirm(t('pg.gistConfirm'))) return;          // the gist is PUBLIC
   const btn = $('sc-gist-btn');
   if (btn) { btn.disabled = true; btn.textContent = '⏳…'; }
   try {
     const r = await api('/admin/daedalus/playground/api/skill-creator/github-gist', {
       method: 'POST',
-      body: JSON.stringify({ session_id: _scSession.session_id }),
+      body: JSON.stringify({ session_id: _scSession.session_id, confirm_public: true }),
     });
     if (!r.ok) { alert('Gist: ' + (r.error || 'unknown')); return; }
     if (r.gist_url) window.open(r.gist_url, '_blank');
