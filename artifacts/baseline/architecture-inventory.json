@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-09T05:58:24.165643+00:00",
+  "generated_at": "2026-11-09T06:17:46.261371+00:00",
   "package_version": "0.3.8",
-  "git_commit": "b95c362739eed7c85da325cbbd6a178f15760863",
+  "git_commit": "10d6d71b6a99b9dd3296ce0f4cb3912bd49c9208",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -14,7 +14,7 @@
     },
     {
       "path": "app/admin_compat.py",
-      "lines": 3005,
+      "lines": 3026,
       "broad_excepts": 72
     },
     {
@@ -131,7 +131,7 @@
   },
   "tests": {
     "modules": 107,
-    "functions": 1218
+    "functions": 1226
   },
   "modules": {
     "daedalus": [

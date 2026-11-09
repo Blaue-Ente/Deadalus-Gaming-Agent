@@ -107,6 +107,15 @@ def _guided_sse_response(job, from_offset: int = 0):
     )
 
 
+def _full_auto_refusal(slug: str) -> JSONResponse | None:
+    """While Full Auto drives a project, a manual build step would race it on the same files: refuse it (Stop Full Auto first)."""
+    from daedalus.harness import full_auto
+
+    if full_auto.owns(slug):
+        return JSONResponse({"ok": False, "error": "full_auto_running"}, status_code=409)
+    return None
+
+
 def _extract_json_obj(text: str) -> dict[str, Any] | None:
     text = (text or "").strip()
     if not text:
@@ -701,6 +710,8 @@ async def playground_suggest(slug: str):
 
 @router.post("/daedalus/playground/api/projects/{slug}/autopilot")
 async def playground_autopilot(slug: str, request: Request):
+    if (refused := _full_auto_refusal(slug)) is not None:
+        return refused
     from daedalus import playground as pg
     from daedalus.builder_runtime import start_builder_run_async
     body = await _body(request)
@@ -1245,6 +1256,8 @@ async def game_studio_run_gates(slug: str, request: Request):
 
 @router.post("/daedalus/game-studio/api/projects/{slug}/verify")
 async def game_studio_verify(slug: str, request: Request):
+    if (refused := _full_auto_refusal(slug)) is not None:
+        return refused
     from daedalus.game_studio_verify import run_milestone_verify
     body = await _body(request)
     logs: list[dict[str, str]] = []
@@ -1261,6 +1274,8 @@ async def game_studio_verify(slug: str, request: Request):
 
 @router.post("/daedalus/game-studio/api/projects/{slug}/milestones/advance")
 async def game_studio_advance(slug: str, request: Request):
+    if (refused := _full_auto_refusal(slug)) is not None:
+        return refused
     from daedalus.game_studio import advance_project_milestone
     body = await _body(request)
     try:
@@ -1277,6 +1292,8 @@ async def game_studio_advance(slug: str, request: Request):
 
 @router.post("/daedalus/game-studio/api/projects/{slug}/build/guided")
 async def game_studio_build_guided(slug: str, request: Request):
+    if (refused := _full_auto_refusal(slug)) is not None:
+        return refused
     from daedalus.game_studio import start_milestone_guided
     body = await _body(request)
     try:
@@ -1508,6 +1525,8 @@ async def guided_stop(slug: str):
 
 @router.post("/daedalus/playground/api/projects/{slug}/guided/start")
 async def guided_start(slug: str, request: Request):
+    if (refused := _full_auto_refusal(slug)) is not None:
+        return refused
     from daedalus import guided_jobs as gj
     from daedalus import playground as pg
     from daedalus.playground_plan_guide import enrich_plan
@@ -1566,6 +1585,8 @@ async def guided_start(slug: str, request: Request):
 
 @router.post("/daedalus/playground/api/projects/{slug}/guided/continue")
 async def guided_continue(slug: str, request: Request):
+    if (refused := _full_auto_refusal(slug)) is not None:
+        return refused
     from daedalus import guided_jobs as gj
     body = await _body(request)
     job_id = (body.get("job_id") or "").strip()

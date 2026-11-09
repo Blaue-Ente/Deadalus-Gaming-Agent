@@ -808,10 +808,10 @@ async def harness_build_plan_expand(slug: str, body: ConfirmBody) -> Any:
 
 
 @router.get(_B + "/full-auto")
-def harness_full_auto_status(slug: str, after: int = 0) -> dict[str, Any]:
+def harness_full_auto_status(slug: str, after: int = 0, tail: int = 0) -> dict[str, Any]:
     from daedalus.harness import full_auto
 
-    return full_auto.status(slug, after)
+    return full_auto.status(slug, after, tail)
 
 
 @router.post(_B + "/full-auto")

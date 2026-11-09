@@ -1,7 +1,9 @@
 """Build panel run controls: autopilot pause/resume, resume info, and the saved build plan (clear, create, expand).
 
 * Pause is cooperative: the autopilot stops before its next step (a model call already under way finishes first).
-* The saved plan is what a build reads, so it is not cleared, replaced or expanded while a build owns the project.
+* The saved plan is what Guided and Full Auto build from, so it is not cleared, replaced or expanded while a build owns
+  the project. The autopilot keeps its OWN plan in its run checkpoint: "continue" resumes that checkpoint, and the panel
+  describes the checkpoint, not the saved plan.
 * Clearing or replacing the plan asks first; creating one is a model turn. A failed model call saves NOTHING (the old route
   saved a one-stage stand-in plan and answered ok, which looked like a real plan).
 Answers are codes and numbers so the Studio can say them in the owner's language."""
@@ -21,6 +23,29 @@ def _plan_summary(plan: dict[str, Any] | None) -> dict[str, Any] | None:
     stages = [s for s in plan["stages"] if isinstance(s, dict)]
     return {"title": str(plan.get("title") or ""), "stages": len(stages), "done": sum(1 for s in stages if s.get("status") == "done"),
             "ultra": bool(plan.get("ultra")), "studio": bool(plan.get("studio"))}
+
+
+def _checkpoint_resume(slug: str) -> dict[str, Any] | None:
+    """What a resumed autopilot would continue: its last run checkpoint (the stage it reached and the plan it was using)."""
+    from ..run_engine import checkpoint_for_slug
+
+    try:
+        ckpt = checkpoint_for_slug(slug) or {}
+    except Exception as exc:
+        log.warning("checkpoint read failed: %s", exc)
+        return None
+    plan = ckpt.get("plan") if isinstance(ckpt.get("plan"), dict) else None
+    stages = [s for s in (plan or {}).get("stages") or [] if isinstance(s, dict)]
+    if not stages or "stage" not in ckpt:
+        return None
+    try:
+        reached = int(ckpt.get("stage") or 0)
+    except (TypeError, ValueError):
+        return None
+    if reached >= len(stages):
+        return None                                                     # it had finished: nothing to continue
+    return {"plan_title": str(plan.get("title") or ""), "done_stages": reached, "total_stages": len(stages),
+            "next_stage": str(stages[reached].get("title") or "")}
 
 
 def _busy(slug: str) -> str:
@@ -46,9 +71,7 @@ async def state(slug: str) -> dict[str, Any]:
         plan = None
     resume = None
     if not running:
-        info = await pg.get_resume_info(slug)
-        if info:
-            resume = {k: info.get(k) for k in ("plan_title", "done_stages", "total_stages", "next_stage")}
+        resume = _checkpoint_resume(slug)
     from .. import game_studio
 
     return {"ok": True, "game_studio": bool(game_studio.is_game_studio_slug(slug)), "autopilot": {"running": running, "paused": bool(running and getattr(job, "paused", False)),

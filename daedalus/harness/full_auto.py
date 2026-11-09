@@ -30,6 +30,7 @@ class _Run:
         self.slug = slug
         self.state = "running"
         self.reason = ""
+        self.detail = ""                                          # the raw message behind a reason (logs, ledger); never shown as copy
         self.milestone = ""
         self.guided_job = ""
         self.started = time.time()
@@ -47,10 +48,11 @@ class _Run:
 
         runs.safe_event(self.ledger, type, data) if self.ledger else None
 
-    def snapshot(self, after: int = 0) -> dict[str, Any]:
-        return {"id": self.id, "slug": self.slug, "state": self.state, "reason": self.reason, "milestone": self.milestone,
-                "guided_job": self.guided_job, "started": self.started, "ended": self.ended,
-                "events": [e for e in self.events if e["seq"] > after]}
+    def snapshot(self, after: int = 0, tail: int = 0) -> dict[str, Any]:
+        events = [e for e in self.events if e["seq"] > after]
+        return {"id": self.id, "slug": self.slug, "state": self.state, "reason": self.reason, "detail": self.detail,
+                "milestone": self.milestone, "guided_job": self.guided_job, "started": self.started, "ended": self.ended,
+                "events": events[-tail:] if tail else events, "last_seq": len(self.events)}
 
 
 _runs_by_slug: dict[str, _Run] = {}
@@ -60,9 +62,14 @@ def _live(run: _Run | None) -> bool:
     return bool(run and run.state in ("running", "stopping"))
 
 
-def status(slug: str, after: int = 0) -> dict[str, Any]:
+def status(slug: str, after: int = 0, tail: int = 0) -> dict[str, Any]:
     run = _runs_by_slug.get(slug)
-    return {"ok": True, "run": run.snapshot(after) if run else None}
+    return {"ok": True, "run": run.snapshot(after, max(0, min(int(tail), EVENTS_MAX))) if run else None}
+
+
+def owns(slug: str) -> bool:
+    """Full Auto is driving this project: the manual build routes refuse until it ends."""
+    return _live(_runs_by_slug.get(slug))
 
 
 def _other_owner(slug: str) -> str:
@@ -125,7 +132,8 @@ def _end(run: _Run, state: str, reason: str = "") -> None:
     run.say("ended", state=state, reason=reason)
     ledger_state = {"succeeded": "succeeded", "stopped": "stopped", "failed": "failed", "blocked": "stopped"}[state]
     if run.ledger:
-        runs.safe_state(run.ledger, ledger_state, reason=f"{state}: {reason}" if reason else state)
+        note = ": ".join(x for x in (state, reason, run.detail) if x)
+        runs.safe_state(run.ledger, ledger_state, reason=note)
 
 
 async def _wait_guided(run: _Run, job_id: str) -> str:
@@ -137,6 +145,13 @@ async def _wait_guided(run: _Run, job_id: str) -> str:
         job = gj.get_job(job_id)
         if job is None:
             return "lost"
+        if run.stop_requested and job.status in ("running", "checkpoint"):   # Stop came before the job id was known, or mid-checkpoint
+            if job.status == "checkpoint":
+                await job.mark_interrupted("stopped by the owner (Full Auto)")
+            else:
+                await gj.stop_active(run.slug)
+            await asyncio.sleep(POLL_SECONDS)
+            continue
         if job.status not in ("running", "checkpoint"):
             return job.status
         if job.status == "checkpoint":
@@ -167,9 +182,9 @@ async def _drive(run: _Run) -> None:
             cur = ctx.get("current_milestone")
             cur = cur.get("id") if isinstance(cur, dict) else str(cur or "")
             run.milestone = cur
-            pending = any(isinstance(s, dict) and (s.get("milestone_id") or "") == cur and s.get("status") != "done"
-                          for s in plan.get("stages") or [])
-            if pending:
+            from ..game_studio_build import first_pending_index
+
+            if first_pending_index(plan, cur) is not None:                # the Game Studio's own rule (skipped counts as resolved)
                 started = await game_studio.start_milestone_guided(run.slug, cur, auto_approve=True)
                 run.guided_job = started.get("job_id") or ""
                 run.say("milestone_build", milestone=cur, guided_job=run.guided_job)
@@ -192,6 +207,10 @@ async def _drive(run: _Run) -> None:
     except asyncio.CancelledError:
         _end(run, "stopped", "cancelled")
         raise
+    except ValueError as exc:                                         # the Game Studio refused a step: the owner can act on it
+        run.detail = str(exc)[:300]
+        _end(run, "blocked", "studio_refused")
     except Exception as exc:
         log.exception("full auto failed")
-        _end(run, "failed", f"{type(exc).__name__}: {str(exc)[:200]}")
+        run.detail = f"{type(exc).__name__}: {str(exc)[:200]}"
+        _end(run, "failed", "error")

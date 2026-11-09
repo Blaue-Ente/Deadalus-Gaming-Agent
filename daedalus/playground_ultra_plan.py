@@ -164,6 +164,8 @@ def ultra_expand_plan(
             m = dict(m)
             m["id"] = new_id
             m["ultra_parent_title"] = stage.get("title", "")
+            if stage.get("milestone_id") and not m.get("milestone_id"):
+                m["milestone_id"] = stage["milestone_id"]           # a micro-stage stays in its parent's milestone
             out_stages.append(m)
             new_id += 1
     title = plan.get("title", "План")

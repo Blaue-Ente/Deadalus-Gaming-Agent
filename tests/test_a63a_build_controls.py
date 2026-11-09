@@ -48,7 +48,15 @@ def test_state_reports_the_plan_and_what_a_resume_would_continue(client, slug):
     _save(slug, PLAN)
     data = client.get(f"{B}/{slug}/controls").json()
     assert data["plan"] == {"title": "Space", "stages": 3, "done": 1, "ultra": False, "studio": False}
-    assert data["resume"] == {"plan_title": "Space", "done_stages": 1, "total_stages": 3, "next_stage": "b"}
+    assert data["resume"] is None                                   # the saved plan is NOT what a resumed autopilot continues
+    from daedalus.run_engine import save_checkpoint
+
+    ckpt_plan = {"title": "Autopilot plan", "stages": [{"title": "s1"}, {"title": "s2"}, {"title": "s3"}, {"title": "s4"}]}
+    save_checkpoint("run_x", {"stage": 2, "slug": slug, "plan": ckpt_plan}, slug=slug)
+    data = client.get(f"{B}/{slug}/controls").json()
+    assert data["resume"] == {"plan_title": "Autopilot plan", "done_stages": 2, "total_stages": 4, "next_stage": "s3"}
+    save_checkpoint("run_y", {"stage": 4, "slug": slug, "plan": ckpt_plan}, slug=slug)
+    assert client.get(f"{B}/{slug}/controls").json()["resume"] is None           # it had finished every stage
     assert client.get(f"{B}/nope/controls").status_code == 404
 
 
@@ -135,6 +143,9 @@ def test_expanding_the_saved_plan_asks_and_needs_a_plan(client, slug):
 class Job:
     def __init__(self, id, finals):
         self.id, self.status, self._finals = id, "running", list(finals)
+
+    async def mark_interrupted(self, reason):
+        self.status = "interrupted"
 
 
 class World:
@@ -608,4 +619,134 @@ def test_run_controls_fit_and_are_really_clickable(studio_server, size):
         for role in ("continue", "plan-create", "plan-expand", "plan-clear", "fa-start"):
             page.locator(_ctl(role)).first.evaluate("el => el.scrollIntoView({block: 'center'})")
             _uncovered(page, _ctl(role))
+        browser.close()
+
+
+# ------------------------------------------------------------------------------------------------ review fixes
+def test_a_milestone_whose_stages_were_skipped_goes_to_verify_not_to_a_build(client, slug, monkeypatch):
+    world = World(milestones=1)
+    original = world.ctx
+
+    async def ctx(s):
+        data = await original(s)
+        for st in data["plan"]["stages"]:
+            st["status"] = "skipped"
+        return data
+
+    world.ctx = ctx
+    _, run = _drive(slug, world, monkeypatch)
+    assert run["state"] == "succeeded" and world.calls == [("verify", "M0"), ("advance", {})]
+
+
+def test_stop_pressed_while_the_build_is_being_started_still_stops_it(client, slug, monkeypatch):
+    from daedalus.harness import full_auto
+
+    world = World(milestones=2)
+    world.install(monkeypatch)
+    gate = {}
+    original = world.start
+
+    async def slow_start(s, mid, auto_approve=False):
+        await gate["go"].wait()                                  # the job id is not known while this waits
+        return await original(s, mid, auto_approve)
+
+    monkeypatch.setattr("daedalus.game_studio.start_milestone_guided", slow_start)
+
+    async def scenario():
+        gate["go"] = asyncio.Event()
+        world.hold = asyncio.Event()
+        await full_auto.start(slug, True)
+        await asyncio.sleep(0.05)
+        await full_auto.stop(slug)
+        gate["go"].set()
+        await asyncio.wait_for(asyncio.shield(full_auto._runs_by_slug[slug].task), 5)   # a Stop that is ignored fails, never hangs
+        return full_auto.status(slug)["run"]
+
+    run = asyncio.run(scenario())
+    assert run["state"] == "stopped" and ("stop_guided",) in world.calls and not any(c[0] == "verify" for c in world.calls)
+
+
+def test_stop_during_an_auto_approved_checkpoint_interrupts_the_job(client, slug, monkeypatch):
+    from daedalus.harness import full_auto
+
+    world = World(milestones=1)
+    world.install(monkeypatch)
+
+    async def start(s, mid, auto_approve=False):
+        job = Job("job_cp", [])
+        job.status = "checkpoint"
+        world.jobs[job.id] = job
+        return {"job_id": job.id}
+
+    monkeypatch.setattr("daedalus.game_studio.start_milestone_guided", start)
+
+    async def scenario():
+        await full_auto.start(slug, True)
+        await asyncio.sleep(0.05)
+        await full_auto.stop(slug)
+        await asyncio.wait_for(asyncio.shield(full_auto._runs_by_slug[slug].task), 5)
+        return full_auto.status(slug)["run"], world.jobs["job_cp"].status
+
+    run, job_status = asyncio.run(scenario())
+    assert run["state"] == "stopped" and job_status == "interrupted"
+
+
+def test_a_refused_step_blocks_with_a_code_and_keeps_the_message_apart(client, slug, monkeypatch):
+    world = World(milestones=1)
+
+    async def refuse(s, mid, auto_approve=False):
+        raise ValueError("milestone M0 has no stages — прегенерирай")
+
+    world.start = refuse
+    _, run = _drive(slug, world, monkeypatch)
+    assert run["state"] == "blocked" and run["reason"] == "studio_refused" and "no stages" in run["detail"]
+    from daedalus.harness import runs
+
+    assert "studio_refused" in runs.list_runs(slug=slug, kind="build")[0]["error"] + str(runs.events(runs.list_runs(slug=slug, kind="build")[0]["id"]))
+
+
+@pytest.mark.parametrize("method,path", [
+    ("post", "/admin/daedalus/playground/api/projects/{slug}/guided/start"),
+    ("post", "/admin/daedalus/playground/api/projects/{slug}/guided/continue"),
+    ("post", "/admin/daedalus/game-studio/api/projects/{slug}/verify"),
+    ("post", "/admin/daedalus/game-studio/api/projects/{slug}/milestones/advance"),
+    ("post", "/admin/daedalus/game-studio/api/projects/{slug}/build/guided"),
+    ("post", "/admin/daedalus/playground/api/projects/{slug}/autopilot"),
+    ("post", "/api/v1/playground/projects/{slug}/autopilot"),
+])
+def test_manual_build_steps_are_refused_while_full_auto_drives_the_project(client, slug, monkeypatch, method, path):
+    monkeypatch.setattr("daedalus.harness.full_auto.owns", lambda s: s == slug)
+    res = getattr(client, method)(path.format(slug=slug), json={"description": "x"})
+    assert res.status_code == 409 and "full_auto_running" in res.text
+
+
+def test_ultra_expand_keeps_each_micro_stage_in_its_parents_milestone():
+    from daedalus.playground_ultra_plan import ultra_expand_plan
+
+    plan = {"title": "t", "stages": [{"id": 1, "title": "Core", "milestone_id": "M2", "files": ["a.js", "b.js", "c.js"], "status": "pending"},
+                                     {"id": 2, "title": "Menu", "milestone_id": "M3", "files": ["m.js", "n.js"], "status": "pending"}]}
+    out = ultra_expand_plan(plan, kind="static", is_game=True)
+    assert len(out["stages"]) > 2 and all(s.get("milestone_id") in ("M2", "M3") for s in out["stages"])
+    assert {s["milestone_id"] for s in out["stages"] if s.get("ultra_parent_title") == "Core"} == {"M2"}
+
+
+def test_status_tail_returns_only_the_last_events(client, slug, monkeypatch):
+    _drive(slug, World(milestones=2), monkeypatch)
+    data = client.get(f"{B}/{slug}/full-auto?tail=2").json()["run"]
+    assert [e["type"] for e in data["events"]] == ["advanced", "ended"] and data["last_seq"] == 9
+
+
+def test_a_full_auto_project_disables_the_manual_build_buttons_and_explains_a_refusal(studio_server):
+    from playwright.sync_api import sync_playwright
+
+    live = {"ok": True, "run": {"id": "r1", "state": "running", "milestone": "M0", "reason": "", "events": []}}
+    with sync_playwright() as pw:
+        browser, page = _browser(pw)
+        _build_page(page, ctl=[{**CTL, "busy": "full_auto"}], fa=[live])
+        page.route(f"**/game-studio/api/projects/{G}/verify", lambda r: _fulfill(r, 409, {"ok": False, "error": "full_auto_running"}))
+        _open_build(page, studio_server)
+        page.wait_for_function("() => ['build-guided', 'build-autopilot', 'build-verify', 'build-advance'].every((id) => document.getElementById(id).disabled)")
+        page.locator("#build-verify").evaluate("el => el.disabled = false")       # a stale page that still offers it
+        page.locator("#build-verify").click()
+        _status_has(page, "build-status", "Full Auto is driving this project. Stop Full Auto first.")
         browser.close()

@@ -74,6 +74,7 @@
     if (err && (err.name === "AbortError" || /aborted|timeout/i.test(String(err.message || "")))) {
       return dx.t("studio.timeout");
     }
+    if (err && String(err.message || "") === "full_auto_running") return dx.t("studio.ctlErrFullAuto");
     return dx.errText(err);
   }
 
@@ -710,7 +711,7 @@
       setBuildControlsDisabled();
       workspacePainted = "";
     }
-    if (!slug) return;
+    if (!slug) { loadControls(""); return; }
     const stamp = statusStamp["build-status"] || 0;
     const untouched = () => (statusStamp["build-status"] || 0) === stamp;   // nothing reported here since this began
     try {
@@ -2856,9 +2857,14 @@
   // server: the tab can close and it keeps going; it stops on its own when a milestone does not verify.
   const CTL_ERR = { confirm_required: "studio.ctlErrConfirm", build_running: "studio.ctlErrBusy", not_running: "studio.ctlErrNotRunning",
     not_paused: "studio.ctlErrNotPaused", no_plan: "studio.ctlErrNoPlan", plan_failed: "studio.ctlErrPlanFailed",
-    description_required: "studio.needIdea", already_running: "studio.ctlErrRunning", not_game_studio: "studio.ctlErrNotStudio" };
+    description_required: "studio.needIdea", already_running: "studio.ctlErrRunning", not_game_studio: "studio.ctlErrNotStudio",
+    too_long: "studio.plnErrLong" };
   const FA_REASON = { no_plan: "studio.faNoPlan", gates_not_passed: "studio.faGates", verify_failed: "studio.faVerify",
-    step_limit: "studio.faLimit", cancelled: "studio.faCancelled" };
+    step_limit: "studio.faLimit", cancelled: "studio.faCancelled", studio_refused: "studio.faRefused", error: "studio.faError",
+    guided_error: "studio.faGuidedError", guided_interrupted: "studio.faGuidedStopped", guided_lost: "studio.faGuidedLost",
+    guided_stuck: "studio.faGuidedStuck" };
+  const PLAN_CREATE_TIMEOUT_MS = 240000;          // a 4000-token planning turn can take minutes
+  const FA_TAIL = 12;                              // Full Auto events shown (the poll asks only for these)
   let ctlGen = 0;
   let ctlFlight = false;
   let faTimer = null;
@@ -2922,7 +2928,7 @@
     const gen = ++ctlGen;
     if (!slug) { box.hidden = true; return; }
     try {
-      const [st, fa] = await Promise.all([dx.api(ctlPath(slug, "/controls")), dx.api(ctlPath(slug, "/full-auto"))]);
+      const [st, fa] = await Promise.all([dx.api(ctlPath(slug, "/controls")), dx.api(ctlPath(slug, "/full-auto?tail=" + FA_TAIL))]);
       if (gen !== ctlGen || dx.getSlug() !== slug) return;
       paintControls(slug, st, fa.run);
     } catch (err) {
@@ -2979,10 +2985,18 @@
       const replace = !!plan;
       if (!window.confirm(dx.t(replace ? "studio.ctlCreateReplaceConfirm" : "studio.ctlCreateConfirm"))) return;
       ctlRun(b, slug, async (say) => {
-        const res = await postJson(ctlPath(slug, "/plan/create"), { description, ultra: ultraBox.checked, studio: !!st.game_studio, confirm: replace });
+        let res;
+        try {
+          res = await dx.api(ctlPath(slug, "/plan/create"), { method: "POST", timeoutMs: PLAN_CREATE_TIMEOUT_MS,
+            body: JSON.stringify({ description, ultra: ultraBox.checked, studio: !!st.game_studio, confirm: replace }) });
+        } catch (err) {
+          if (!(err && (err.name === "AbortError" || /aborted|timeout/i.test(String(err.message || ""))))) throw err;
+          say(dx.t("studio.ctlPlanUnknown"), true);              // the server may still finish and save it: look again
+          loadWorkspace(slug, { quiet: true, force: true });
+          return;
+        }
         say(dx.t("studio.ctlPlanMade", { n: res.plan.stages }), false);
-        loadControls(slug);
-        loadWorkspace(slug);
+        loadWorkspace(slug, { quiet: true, force: true });    // repaints the milestones and these controls
       });
     });
     const buttons = [create];
@@ -3010,6 +3024,8 @@
     const OWNER = { guided: "studio.guided", autopilot: "studio.autopilot", full_auto: "studio.faName" };
     if (busy) body.appendChild(crow(dx.t("studio.ctlBusy", { owner: OWNER[busy] ? dx.t(OWNER[busy]) : busy }), []));
     if (st.game_studio) paintFullAuto(slug, body, run, busy);
+    // Full Auto drives this project: the manual build steps would race it (the server refuses them too).
+    if (busy === "full_auto") ["build-guided", "build-autopilot", "build-verify", "build-advance"].forEach((id) => { $(id).disabled = true; });
   }
 
   function faLine(ev) {
@@ -3070,10 +3086,18 @@
     if (faWasLive === slug && !live) loadWorkspace(slug, { quiet: true });   // it ended: the milestones moved
     faWasLive = live ? slug : "";
     if (live) {                                          // the run is on the server: look again while it lives
-      const look = () => {
+      const look = async () => {
         if (!ctlOn(slug)) return;                        // left: the next visit reads it again
         if (ctlFlight) { faTimer = setTimeout(look, 2000); return; }
-        loadControls(slug);
+        try {
+          const fa = await dx.api(ctlPath(slug, "/full-auto?tail=" + FA_TAIL));
+          if (!ctlOn(slug)) return;
+          const still = !!(fa.run && (fa.run.state === "running" || fa.run.state === "stopping"));
+          if (!still) { loadControls(slug); return; }   // it ended: everything may have changed
+          const old = $("build-ctl-body").querySelector(".full-auto");
+          if (old) old.remove();
+          paintFullAuto(slug, $("build-ctl-body"), fa.run, "full_auto");
+        } catch (err) { faTimer = setTimeout(look, 4000); }
       };
       faTimer = setTimeout(look, 2000);
     }
