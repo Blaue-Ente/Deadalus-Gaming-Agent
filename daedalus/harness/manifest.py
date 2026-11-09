@@ -74,7 +74,7 @@ PANELS: dict[str, tuple[str, str, str]] = {
     "panel:settings/auto-apply": ("Settings: auto-apply and upgrade scan", "partial", "upgrade scan in Settings (A6.1c); auto-apply still on the classic page (R6 kept)"),
     "panel:settings/intents": ("Settings: per-intent models", "implemented", "A2 routes, A6.1 UI"),
     "panel:settings/engines": ("Settings: engine binaries and proof levels", "planned", "A5, A6.1"),
-    "panel:chat/attachments": ("Chat: documents and project chat", "planned", "A6.4"),
+    "panel:chat/attachments": ("Chat: documents and project chat", "implemented", "documents: chat attachments; blocking chat: chat jobs; A6.4: project chat with a revertible record of the turn's file changes"),
     "panel:build/controls": ("Build: autopilot controls, Unity, presets, dissect", "implemented", "A6.3a: pause/resume, continue, plan create/expand/clear, Full Auto M0→M8; A6.3b: Unity init/attach/build scripts and presets (ship menu), Unity/proof waivers, dissection and labs (World rail)"),
     "panel:preview/apps": ("Preview: app data editor and tunnel", "implemented", "A6.3c app data editor; standalone has no Expo tunnel/QR route, so none is offered"),
     "panel:rail/git": ("Project git menu: browse and status", "implemented", "A6.3c: connections, GitHub repos/branches, GitLab projects, compat check"),

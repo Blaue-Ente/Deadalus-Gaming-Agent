@@ -1622,24 +1622,16 @@ async def plan_expand_ultra(slug: str, request: Request):
 @router.post("/daedalus/playground/api/projects/{slug}/chat")
 async def playground_chat(slug: str, request: Request):
     from daedalus.agent import get_daedalus
-    from daedalus import playground as pg
     body = await _body(request)
     message = (body.get("message") or "").strip()
     if not message:
         return JSONResponse({"ok": False, "error": "message required"}, status_code=400)
-    proj = await pg.get_project(slug)
-    if not proj:
-        return JSONResponse({"ok": False, "error": "project not found"}, status_code=404)
+    from daedalus.chat_jobs import project_message
     try:
-        from daedalus.playground_chat_context import build_chat_file_context
-        tree_summary, file_ctx = build_chat_file_context(slug)
-    except Exception:
-        tree_summary, file_ctx = "", ""
-    full = (
-        f"[PLAYGROUND {slug} · {proj.get('kind')} · standalone]\n"
-        f"{tree_summary}\n{file_ctx}\n\n{message}"
-    )
-    result = await get_daedalus().chat(message=full, session_id=f"pg-{slug}")
+        full, session_id = await project_message(slug, message)      # the same prompt the Studio's project chat sends
+    except ValueError:
+        return JSONResponse({"ok": False, "error": "project not found"}, status_code=404)
+    result = await get_daedalus().chat(message=full, session_id=session_id)
     reply = result.get("reply") if isinstance(result, dict) else str(result)
     return JSONResponse({
         "ok": True, "reply": reply, "files": [], "has_files": False,
