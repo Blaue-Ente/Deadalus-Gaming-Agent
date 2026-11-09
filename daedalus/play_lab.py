@@ -211,6 +211,9 @@ def list_labs() -> list[dict[str, Any]]:
                 vm["port"] = live.get("port") or vm.get("port")
                 vm["url"] = _local_http_url(int(live["port"]), str(meta.get("playable") or ""))
                 meta["vm"] = vm
+            elif (meta.get("vm") or {}).get("status") == "running" and (meta.get("vm") or {}).get("backend") in ("local-http", "filesystem"):
+                meta = dict(meta)                                   # stored "running" from before a restart: nothing serves it now
+                meta["vm"] = {**meta["vm"], "status": "stopped", "port": 0, "url": ""}
             try:
                 from .computer_smolvm import session_for
                 extra = session_for(child.name)
@@ -270,19 +273,25 @@ def allowed_install_src(src: Path) -> bool:
 
 
 def _holds_data_root(src: Path) -> bool:
-    """True when ``src`` is the data root or a folder that contains it."""
+    """True when ``src`` is the data root, a folder that contains it, or anything inside it other than the playground
+    projects and the labs themselves (the KV store, the owner token and the database live there under ordinary names)."""
     try:
         data = data_root().resolve()
         src = src.resolve()
     except Exception:
         return False
-    return src.is_dir() and (src == data or _is_under(data, src))
+    if src == data or (src.is_dir() and _is_under(data, src)):
+        return True
+    if _is_under(src, data):
+        return not (_is_under(src, playground_projects_dir()) or _is_under(src, labs_root()))
+    return False
 
 
 def _skip_names(_dir: str, names: list[str]) -> list[str]:
+    """Names a lab copy leaves out: build junk, secret files and folders, and links (a link could point anywhere)."""
     from .secret_paths import is_secret_name
 
-    return [n for n in names if n in _SKIP_COPY or is_secret_name(n)]
+    return [n for n in names if n in _SKIP_COPY or is_secret_name(n) or (_dir and os.path.islink(os.path.join(_dir, n)))]
 
 
 def _tree_size(path: Path) -> int:
@@ -344,7 +353,7 @@ def install_into_lab(lab_id: str, src: str | Path) -> dict[str, Any]:
         raise ValueError("install path is a secret file (.env, key, certificate): it is never copied into a lab")
     if _holds_data_root(path):
         # the whole data folder (keys, the KV store, the database) would be copied into a lab that is served over HTTP
-        raise ValueError("install path contains the Daedalus data folder: pick the game's own folder or zip")
+        raise ValueError("install path is (or holds) Daedalus's own data: pick the game's own folder or zip")
     if _looks_native_installer(path):
         raise ValueError(
             "native installer refused — Play Lab hosts HTML5, git checkouts, "
@@ -365,7 +374,7 @@ def install_into_lab(lab_id: str, src: str | Path) -> dict[str, Any]:
             pass
     elif path.is_dir():
         for child in path.iterdir():
-            if child.name in _SKIP_COPY:
+            if _skip_names(str(path), [child.name]):
                 continue
             target = dest / child.name
             if child.is_dir():
@@ -377,7 +386,7 @@ def install_into_lab(lab_id: str, src: str | Path) -> dict[str, Any]:
                     dirs_exist_ok=True,
                     ignore=_skip_names,                     # never copies .env, keys or other secret files
                 )
-            elif not _skip_names("", [child.name]):
+            else:
                 shutil.copy2(child, target)
     else:
         shutil.copy2(path, dest / path.name)

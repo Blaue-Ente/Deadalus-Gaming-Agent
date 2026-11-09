@@ -62,6 +62,7 @@
   const SHIP_UNITY_TIMEOUT_MS = 240000;
   const BLOCKER_TIMEOUT_MS = 20000;
   const PLAN_TIMEOUT_MS = 20000;
+  let faOwnerSlug = "";                            // the project Full Auto owned at the last look (Build run controls)
   const DISCOVERY_TIMEOUT_MS = 20000;
   const SKILL_TIMEOUT_MS = 90000;
   const REF_TIMEOUT_MS = 45000;
@@ -379,8 +380,9 @@
     $("build-verify").disabled = false;
     $("build-advance").disabled = !data.can_advance;
     // A waiver is offered only where the Game Studio itself allows one, and only when a plain Advance is not possible.
-    $("build-waive-unity").disabled = false;
-    $("build-waive-proof").disabled = false;
+    const owned = faOwnerSlug === dx.getSlug();            // Full Auto drives it: the waivers wait, as the server would refuse them
+    $("build-waive-unity").disabled = owned;
+    $("build-waive-proof").disabled = owned;
     $("build-waive-unity").hidden = !!data.can_advance || !data.can_unity_waiver;
     $("build-waive-proof").hidden = !!data.can_advance || !data.can_proof_waiver || !!data.can_unity_waiver;
   }
@@ -3032,6 +3034,7 @@
     if (busy) body.appendChild(crow(dx.t("studio.ctlBusy", { owner: OWNER[busy] ? dx.t(OWNER[busy]) : busy }), []));
     if (st.game_studio) paintFullAuto(slug, body, run, busy);
     // Full Auto drives this project: the manual build steps would race it (the server refuses them too).
+    faOwnerSlug = busy === "full_auto" ? slug : (faOwnerSlug === slug ? "" : faOwnerSlug);
     if (busy === "full_auto") {
       ["build-guided", "build-autopilot", "build-verify", "build-advance", "build-waive-unity", "build-waive-proof"].forEach((id) => { $(id).disabled = true; });
     }
@@ -4131,8 +4134,10 @@
     return preset !== "racing" && preset !== "godot_2d" && preset !== "godot_3d";
   }
 
+  // A template can be cloned when the server catalog gives it a repository; the HTML marks those options (a test keeps them in step).
   function unityClones(template) {
-    return template === "unity_game_framework" || template === "daedalus_ugf";
+    const opt = $("ship-template") && $("ship-template").querySelector("option[value='" + template + "']");
+    return !!(opt && opt.dataset.clone === "1");
   }
 
   function syncShipVisibility() {

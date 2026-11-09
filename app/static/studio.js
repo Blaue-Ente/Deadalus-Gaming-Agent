@@ -466,6 +466,7 @@
       btn.classList.add("on");
       btn.setAttribute("aria-selected", "true");
       $("pane-" + btn.dataset.pane).classList.add("on");
+      if (btn.dataset.pane === "world" && typeof refreshLabs === "function") refreshLabs();   // the lab list probes the host: only when shown
     };
   });
   document.querySelectorAll(".effort button").forEach((btn) => {
@@ -1948,11 +1949,14 @@
       emptyRow(box, t("studio.dissectReadFail") + ": " + errText(e));
     }
   }
+  let labsGen = 0;
   async function refreshLabs() {
     const box = $("labsbox");
     if (!box) return;
+    const gen = ++labsGen;                                  // a slower, older answer never repaints over a newer one
     try {
       const data = await api("/api/v1/daedalus/labs", { timeoutMs: 8000 });
+      if (gen !== labsGen) return;
       box.replaceChildren();
       const rows = data.labs || [];
       if (!rows.length) { emptyRow(box, t("studio.labsNone")); return; }
@@ -1965,6 +1969,7 @@
         box.appendChild(card);
       });
     } catch (e) {
+      if (gen !== labsGen) return;
       box.replaceChildren();
       emptyRow(box, t("studio.labsReadFail") + ": " + errText(e));
     }
@@ -2081,5 +2086,4 @@
   refreshConnectors();
   refreshEvolution();
   refreshComputer();
-  refreshLabs();
 })();
