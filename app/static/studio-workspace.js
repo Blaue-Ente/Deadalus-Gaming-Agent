@@ -1005,7 +1005,6 @@
         if (!rows.length) emptyNote(list);
         rows.forEach((item) => {
           list.appendChild(row(item.title || item.id || "", item.status || "", [
-            actionButton("out-apply", item.id, dx.t("studio.apply")),
             actionButton("out-dismiss", item.id, dx.t("studio.dismiss")),
           ]));
         });
@@ -2205,7 +2204,6 @@
         path = "/admin/daedalus/permissions/grant";
         body = { perm_class: id, hours: 24 };
       } else if (act === "revoke") path = "/admin/daedalus/permissions/" + encodeURIComponent(id) + "/revoke";
-      else if (act === "out-apply") path = "/admin/daedalus/outbox/" + encodeURIComponent(id) + "/apply";
       else if (act === "out-dismiss") path = "/admin/daedalus/outbox/" + encodeURIComponent(id) + "/dismiss";
       const data = await postJson(path, body);
       if (!data || data.ok !== true) {

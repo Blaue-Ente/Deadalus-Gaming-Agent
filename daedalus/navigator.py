@@ -287,7 +287,7 @@ OUTPUT FORMAT — exactly these tags on one line each:
 
 Available NEED_* markers Sonnet can use:
   NEED_ENDPOINTS, NEED_MODULES, NEED_DB_SCHEMA, NEED_CODE_SEARCH (read-only)
-  NEED_PG (SQL), NEED_PROPOSE (write code), NEED_MESH (call services)
+  NEED_PG (SQL), NEED_PROPOSE (write code)
   NEED_WEB, NEED_GITHUB, NEED_READ_FILE, NEED_LOGS
 
 RULES:
@@ -457,10 +457,6 @@ _FEASIBILITY_RULES: list[tuple[str, str]] = [
     (r"(?i)\b(backtest|strategy_run|positions|trades)\b",
      "PREFLIGHT: преди да query-ваш тази таблица, провери с <NEED_DB_SCHEMA: *> "
      "че реално съществува — част от Strategy Lab плана не е още имплементиран."),
-    # Mesh call to specific service — match service+verb in either order
-    (r"(?i)(?:\b(stock-?argos|argos-?vault|rechtsportal|mrzing|kitchenos|dilindra|mail-?secretary|argos-?assistant)\b.*\b(вика|извикай|питай|повикай|fetch|ping|обади)\b|\b(вика|извикай|питай|повикай|fetch|ping|обади)\b.*\b(stock-?argos|argos-?vault|rechtsportal|mrzing|kitchenos|dilindra|mail-?secretary|argos-?assistant)\b)",
-     "PREFLIGHT: преди NEED_MESH провери LIVE STATE блока — ако сервисът е down, "
-     "питай Николай дали да чакаш или да минеш през fallback."),
     # Massive batch insert request
     (r"(?i)\b(всички|цялата|пълна|целия|10\+|20\+|50\+|всичко)\b.*\b(концепт|criteria|patterns|таблица|knowledge|theory|book|книга)\b",
      "PREFLIGHT: голяма batch задача — обмисли <NEED_PROJECT_PLAN: ...> вместо да я "

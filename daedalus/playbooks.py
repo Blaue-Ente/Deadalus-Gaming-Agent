@@ -125,20 +125,6 @@ _BUILTIN_PLAYBOOKS: list[dict[str, Any]] = [
         ],
     },
     {
-        "name": "mesh-integration",
-        "aliases": ["mesh", "iyveris mesh", "inter-app", "сервис интеграция"],
-        "description": "Интеграция с Iyveris Mesh (извикване на друга услуга)",
-        "steps": [
-            "NEED_MESH: health → провери LIVE STATE на target сервиса ПЪРВО",
-            "search_code → намери съществуващи mesh calls за образец",
-            "Провери IYVERIS_MESH_KEY e наличен (env var, не го print-вай)",
-            "Имплементирай с timeout + fallback (mesh може да е down)",
-            "Добави error handling за 503/timeout отговори",
-            "NEED_PROPOSE_START с CONFIDENCE: 0.85+",
-            "NEED_LOGS → потвърди успешен mesh call в логовете",
-        ],
-    },
-    {
         "name": "write-llm-prompt",
         "aliases": [
             "напиши промпт", "write prompt", "worker prompt", "system prompt",

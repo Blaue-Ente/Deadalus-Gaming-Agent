@@ -30,10 +30,7 @@ SURFACES: tuple[tuple[str, str], ...] = (
 )
 
 # Route -> status overrides ("METHOD path").
-ROUTE_STATUS: dict[str, str] = {
-    # Needs the legacy ADN host to apply; always fails standalone (outbox.py).
-    "POST /admin/daedalus/outbox/{item_id}/apply": "partial",
-}
+ROUTE_STATUS: dict[str, str] = {}
 
 # Tool cost class. Anything not listed is "none" (local, no model or network call).
 TOOL_COST: dict[str, str] = {

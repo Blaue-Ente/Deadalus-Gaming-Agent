@@ -229,11 +229,13 @@ def test_plan_discovery_contract_names_the_real_dispatch():
     assert "discoveryApproveOp" not in leave
     assert "planGenerateOp" not in leave
     confirm = I18N[I18N.find('"studio.discoveryApproveConfirm"'):I18N.find('"studio.discoveryForSelf"')]
-    assert "OpenRouter Claude Sonnet" in confirm
-    assert "Novita DeepSeek" in confirm
+    # R5 (owner sign-off 2026-11-09): approving no longer schedules a model call, so the confirm must say so.
+    assert "does not call a model" in confirm
+    assert "schedules" not in confirm
+    confirm_bg = I18N[I18N.rfind('"studio.discoveryApproveConfirm"'):I18N.rfind('"studio.discoveryForSelf"')]
+    assert "Не вика модел" in confirm_bg and "насрочва" not in confirm_bg
     assert "Grok" not in confirm
     assert "Composer" not in confirm
-    assert "free or local" in confirm
     generate = I18N[I18N.find('"studio.planGenerateConfirm"'):I18N.find('"studio.planDraft"')]
     assert "full agent turn" in generate or "пълен агентен ход" in generate
     assert "for_self" in generate
@@ -261,14 +263,12 @@ def test_temp_plan_and_discovery_do_not_call_the_provider(tmp_path, monkeypatch)
     DaedalusMemory._instance = None
     chat_calls = []
     claude_calls = []
-    schedule_calls = []
     mode = {
         "reply": json.dumps({
             "title": "Maze",
             "description": "walk",
             "steps": [{"title": "Lay tiles", "description": "place them"}],
         }),
-        "schedule": "pending",
     }
 
     async def fake_chat(self, message, session_id=None, for_self=False, **kwargs):
@@ -279,14 +279,11 @@ def test_temp_plan_and_discovery_do_not_call_the_provider(tmp_path, monkeypatch)
         claude_calls.append("called")
         return "stub"
 
-    def fake_schedule(self, discovery):
-        schedule_calls.append(discovery.get("id"))
-        if mode["schedule"] == "boom":
-            raise RuntimeError("mesh missing")
-        return "pending"
+    async def no_plan(*_args, **_kwargs):
+        raise AssertionError("R5: approving a discovery must not generate a plan")
 
     monkeypatch.setattr(Daedalus, "chat", fake_chat)
-    monkeypatch.setattr(Daedalus, "_schedule_plan_generation", fake_schedule)
+    monkeypatch.setattr("daedalus.plans.generate_plan", no_plan)
     monkeypatch.setattr("daedalus.agent._call_claude", fake_claude)
     try:
         from fastapi.testclient import TestClient
@@ -358,17 +355,16 @@ def test_temp_plan_and_discovery_do_not_call_the_provider(tmp_path, monkeypatch)
                 "Other find", "https://example.test/other", "manual", "also", kind="article",
             )
             assert kept and other
+            # R5 (owner sign-off 2026-11-09): approval no longer schedules a plan through the old mesh registry.
             partial = client.post(f"/admin/daedalus/discoveries/{other}/approve")
             assert partial.status_code == 200
             assert partial.json()["approved"] is True
-            assert partial.json()["plan_id"] == "pending"
-            assert schedule_calls == [other]
+            assert partial.json()["plan_id"] is None
             assert agent.memory.lessons_col.count() == lessons_before + 1
-            mode["schedule"] = "boom"
-            broken = client.post(f"/admin/daedalus/discoveries/{kept}/approve")
-            assert broken.status_code == 200
-            assert broken.json()["approved"] is True
-            assert broken.json()["plan_id"] is None
+            second = client.post(f"/admin/daedalus/discoveries/{kept}/approve")
+            assert second.status_code == 200
+            assert second.json()["approved"] is True
+            assert second.json()["plan_id"] is None
             assert agent.memory.lessons_col.count() == lessons_before + 2
             lesson_docs = agent.memory.lessons_col.get().get("documents") or []
             assert any("Find tiles" in (doc or "") for doc in lesson_docs)
@@ -377,12 +373,10 @@ def test_temp_plan_and_discovery_do_not_call_the_provider(tmp_path, monkeypatch)
                 "Skip me", "https://example.test/skip", "manual", "no", kind="tool",
             )
             lessons_now = agent.memory.lessons_col.count()
-            scheduled_now = len(schedule_calls)
             denied = client.post(f"/admin/daedalus/discoveries/{skipped}/reject")
             assert denied.status_code == 200
             assert denied.json()["rejected"] is True
             assert agent.memory.lessons_col.count() == lessons_now
-            assert len(schedule_calls) == scheduled_now
             row = agent.memory.list_discoveries()
             saved = next(item for item in row if item["id"] == skipped)
             assert saved["metadata"]["status"] == "rejected"
@@ -657,12 +651,11 @@ def test_review_confirms_plan_and_discovery_and_hides_approved_rows(studio_serve
         state["disc_approve"] = {"discovery_id": "disc_part", "approved": True, "plan_id": None}
         _hit(page, "#discovery-list [data-id=disc_part] button[data-act=approve]")
         assert "disc_part" in dialogs[-1]
-        assert "OpenRouter Claude Sonnet" in dialogs[-1]
-        assert "Novita DeepSeek" in dialogs[-1]
+        assert "does not call a model" in dialogs[-1]          # R5: approval makes no model call any more
         assert "Daedalus itself" in dialogs[-1]
         assert "Grok" not in dialogs[-1]
         assert "Composer" not in dialogs[-1]
-        _status_has(page, "discovery-status", "was not scheduled")
+        _status_has(page, "discovery-status", "No plan and no task were made")
         assert "The id is pending" not in page.locator("#discovery-status").inner_text()
         page.wait_for_function(
             """() => {
@@ -685,7 +678,7 @@ def test_review_confirms_plan_and_discovery_and_hides_approved_rows(studio_serve
         )
         state["disc_approve"] = {"discovery_id": "disc_file", "approved": True, "plan_id": "plan:abc"}
         _hit(page, "#discovery-list [data-id=disc_file] button[data-act=approve]")
-        _status_has(page, "discovery-status", "was not scheduled")
+        _status_has(page, "discovery-status", "No plan and no task were made")
         assert "The id is pending" not in page.locator("#discovery-status").inner_text()
         page.wait_for_function(
             """() => document.querySelectorAll('#discovery-list [data-id=disc_file] button[data-act=approve]').length === 0"""

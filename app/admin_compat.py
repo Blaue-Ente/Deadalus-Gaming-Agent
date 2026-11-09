@@ -433,12 +433,6 @@ async def daedalus_outbox_list(status: str | None = None):
     return JSONResponse({"ok": True, "items": items, "pending": pending_count()})
 
 
-@router.post("/daedalus/outbox/{item_id}/apply")
-async def daedalus_outbox_apply(item_id: str):
-    from daedalus.outbox import apply_data_batch
-    return JSONResponse(await apply_data_batch(item_id))
-
-
 @router.post("/daedalus/outbox/{item_id}/dismiss")
 async def daedalus_outbox_dismiss(item_id: str):
     from daedalus.outbox import update_outbox_item, get_outbox_item
@@ -2833,12 +2827,7 @@ async def daedalus_regenerate_plan(discovery_id: str):
         "content": (res.get("documents") or [""])[0],
         "metadata": (res.get("metadatas") or [{}])[0] or {},
     }
-    registry: dict = {}
-    try:
-        from argos_data_nexus import mesh as mesh_mod
-        registry = mesh_mod._load_registry()
-    except Exception:
-        pass
+    registry: dict = {}      # R5: the old ADN mesh service registry is retired; plans match no external services
     try:
         plan = await generate_plan(discovery, registry, daedalus)
         return JSONResponse({"ok": True, "plan_id": plan["id"]})

@@ -336,38 +336,6 @@ async def github_list_issues_tool(owner: str, repo: str, state: str = "open") ->
         return {"ok": False, "error": str(exc)}
 
 
-async def mesh_call_tool(
-    target: str,
-    action: str,
-    payload: dict[str, Any] | None = None,
-    timeout: float = 30.0,
-) -> dict[str, Any]:
-    """Call a mesh-registered Iyveris service directly from Daedalus.
-
-    Safe to use for read-only actions (ping, capabilities, ask, forecast, catalyst).
-    Destructive or write actions require explicit owner approval before calling.
-    """
-    try:
-        from argos_data_nexus import mesh  # type: ignore
-    except Exception as exc:
-        return {"ok": False, "error": f"mesh module unavailable: {exc}"}
-
-    try:
-        reg = mesh._load_registry()
-        svc = reg.get("services", {}).get(target)
-        if not svc:
-            available = sorted(reg.get("services", {}).keys())
-            return {"ok": False, "error": f"Service '{target}' not found. Available: {available}"}
-        if not svc.get("enabled", True):
-            return {"ok": False, "error": f"Service '{target}' is disabled"}
-        result = await mesh._call_service(
-            svc, action, payload or {}, from_service="daedalus", timeout=timeout
-        )
-        return {"ok": True, "target": target, "action": action, "result": result}
-    except Exception as exc:
-        log.warning("mesh_call_tool %s.%s failed: %s", target, action, exc)
-        return {"ok": False, "target": target, "action": action, "error": str(exc)}
-
 AUTO_APPROVE_THRESHOLD = 0.85
 DEFAULT_WEB_LIMIT = 5
 DEFAULT_GH_LIMIT = 5

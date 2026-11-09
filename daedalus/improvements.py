@@ -415,7 +415,7 @@ def proposal_enforcement_check(pg_query: str) -> dict | None:
             f"Direct INSERT INTO {table} is disallowed — this is a curated table. "
             f"Use NEED_DATA_PROPOSAL instead:\n"
             f"  <NEED_DATA_PROPOSAL: {table} | Batch Title | [{{...}}, {{...}}]>\n"
-            f"Owner approves via outbox UI before the data goes live."
+            f"The batch is only recorded in the Outbox for the owner to see; standalone Daedalus does not apply it."
         ),
         "table": table,
         "redirect_marker": "NEED_DATA_PROPOSAL",
@@ -673,9 +673,6 @@ def select_skills(user_message: str, intent: str, hint: str = "") -> list[str]:
         "insert_concept": ["trading_concept", "trading_criteria", "fvg",
                            "order block", "volume profile", "smc концепт",
                            "добави концепт", "ingest concept", "signal_criteria"],
-        "mesh_call": ["iyveris", "stockargos", "karthago", "argonaft",
-                      "deutschesrechtsportal", "renorma", "mesh snapshot", "mesh call",
-                      "извикай услуга", "извикай mesh"],
         "planning": ["имплементирай модул", "imeplement module", "phase 5",
                      "phase 4", "multi-step plan", "конкретен план",
                      "step-by-step", "роадмап", "roadmap"],

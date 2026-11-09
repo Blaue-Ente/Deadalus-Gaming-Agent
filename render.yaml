@@ -22,8 +22,6 @@ services:
         generateValue: true
       - key: ALLTOKEN_API_KEY
         sync: false
-      - key: IYVERIS_MESH_KEY
-        generateValue: true
     disk:
       name: daedalus-data
       mountPath: /var/lib/daedalus

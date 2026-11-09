@@ -3,7 +3,8 @@
 A row is *resolved* when its ``home`` exists in the registry and every route it names is
 actually served. Dispositions: ``in_studio`` (already reachable from Studio ``/``),
 ``port:A6.x`` (legacy-only today; must move before its old page is redirected),
-``held:MR126`` (blocked on the radar/journal hold), ``retire:Rn`` (owner-approved retirement).
+``held:MR126`` (blocked on the radar/journal hold), ``retire:Rn`` (owner-approved retirement, not yet carried out),
+``retired:Rn`` (carried out after the owner's line sign-off: none of its routes may be served any more).
 Removing or redirecting a legacy page is only allowed once every row naming it is ``in_studio``.
 """
 from __future__ import annotations
@@ -11,7 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-DISPOSITIONS_PREFIX = ("in_studio", "port:", "held:", "retire:")
+DISPOSITIONS_PREFIX = ("in_studio", "port:", "held:", "retire:", "retired:")
 
 
 @dataclass(frozen=True)
@@ -144,10 +145,19 @@ PARITY_ROWS: tuple[ParityRow, ...] = (
        f"POST {_A}/journal/{{session_id}}/clear", "held:MR126"),
     # ---- owner-approved retirements (nothing is deleted before the A6.5 sign-off) -------------
     _r("retire-outbox-apply", "Outbox apply and raw SQL (needs the legacy ADN host)", "classic", None,
-       f"POST {_A}/outbox/{{item_id}}/apply", "retire:R2"),
-    _r("retire-dead-buttons", "Playground buttons served only by the old catch-all", "playground", None, "", "retire:R3"),
-    _r("retire-unmounted-routers", "builder_router and knowledge_books (never mounted)", "none", None, "", "retire:R4"),
-    _r("retire-adn-only", "ADN-only paths (Sonar search, mesh_call, /api/iyveris, discovery-to-plan)", "classic", None, "", "retire:R5"),
+       f"POST {_A}/outbox/{{item_id}}/apply", "retired:R2"),
+    _r("retire-dead-buttons", "Playground buttons served only by the old catch-all", "playground", None,
+       f"POST {_PG}/projects/{{slug}}/ai-build; GET {_PG}/projects/{{slug}}/ai-build/stream; "
+       f"GET {_PG}/projects/{{slug}}/ai-build/active; POST {_PG}/projects/{{slug}}/ai-build/stop; "
+       f"POST {_PG}/projects/{{slug}}/revive-pipeline; POST {_PG}/projects/{{slug}}/revive-repair; "
+       f"GET {_PG}/projects/{{slug}}/upstream-diff; POST {_PG}/projects/{{slug}}/eas-build; "
+       f"POST {_PG}/projects/{{slug}}/delete-published; POST {_PG}/projects/{{slug}}/publish; "
+       f"POST {_PG}/projects/{{slug}}/rebuild; POST {_PG}/projects/{{slug}}/unpublish; "
+       f"GET {_PG}/projects/{{slug}}/assets/raw; POST {_PG}/projects/{{slug}}/netlify-deploy; "
+       f"POST {_PG}/projects/{{slug}}/studio/unity-export", "retired:R3"),
+    _r("retire-unmounted-routers", "builder_router and knowledge_books (never mounted)", "none", None, "", "retired:R4"),
+    _r("retire-adn-only", "ADN-only paths (Sonar search, mesh_call, /api/iyveris, discovery-to-plan)", "classic", None,
+       "POST /api/iyveris", "retired:R5"),
 )
 
 
@@ -167,13 +177,18 @@ def check_parity(capabilities: list[Any]) -> list[str]:
         seen.add(row.id)
         if not row.disposition.startswith(DISPOSITIONS_PREFIX):
             problems.append(f"{row.id}: unknown disposition {row.disposition!r}")
-        if row.disposition.startswith("retire:"):
+        if row.disposition.startswith(("retire:", "retired:")):
             if row.home is not None:
                 problems.append(f"{row.id}: a retired row must not name a home")
         elif row.home not in ids:
             problems.append(f"{row.id}: home {row.home!r} is not in the registry")
         if row.disposition == "in_studio" and not row.routes:
             problems.append(f"{row.id}: an in_studio row must name at least one route")
+        if row.disposition.startswith("retired:"):
+            for route in row.routes:
+                if route in routes:
+                    problems.append(f"{row.id}: retired but still served: {route}")
+            continue
         if row.disposition.startswith("retire:"):
             continue  # retired routes disappear when the retirement is carried out
         for route in row.routes:

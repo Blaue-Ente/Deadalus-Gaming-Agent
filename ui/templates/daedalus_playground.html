@@ -350,7 +350,6 @@
             <button onclick="createAndPlan()" class="px-4 py-3 rounded-lg bg-yellow-600 hover:bg-yellow-500 text-white text-sm font-medium text-left">🗺️ Plan<span class="block text-[10px] font-normal opacity-80 mt-0.5" data-i18n="pg.planBuild">Plan & build</span></button>
             <button onclick="createProject()" class="px-4 py-3 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-sm text-left">📁 Empty<span class="block text-[10px] font-normal opacity-80 mt-0.5" data-i18n="pg.scaffoldOnly">Scaffold only</span></button>
           </div>
-          <button onclick="createAndRaw()" class="w-full px-3 py-2 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-mono border border-gray-700">&lt; Build in Raw mode</button>
         </div>
       </div>
       <div class="flex gap-2 p-4 border-t border-gray-800 shrink-0">
@@ -445,7 +444,6 @@
         <button onclick="reviveWizardAction('preview')" class="px-4 py-3 rounded-lg bg-gray-700 hover:bg-gray-600 text-white text-sm text-left">👁 Preview<span class="block text-[10px] opacity-70" data-i18n="pg.seeIt">See it run</span></button>
         <button onclick="reviveWizardAction('chat')" class="px-4 py-3 rounded-lg bg-purple-700 hover:bg-purple-600 text-white text-sm text-left">💬 Chat<span class="block text-[10px] opacity-70" data-i18n="pg.changeAi">Change it with AI</span></button>
         <button onclick="reviveWizardAction('autopilot')" class="px-4 py-3 rounded-lg bg-emerald-700 hover:bg-emerald-600 text-white text-sm text-left">🚀 Autopilot<span class="block text-[10px] opacity-70" data-i18n="pg.autoImprove">Autonomous polish</span></button>
-        <button onclick="reviveWizardAction('pipeline')" class="px-4 py-3 rounded-lg bg-cyan-700 hover:bg-cyan-600 text-white text-sm text-left">📦 Verify & Publish<span class="block text-[10px] opacity-70" data-i18n="pg.oneClickPub">One-click publish</span></button>
       </div>
       <button onclick="closeReviveWizard()" class="mt-4 w-full text-xs text-gray-500 hover:text-gray-300" data-i18n="pg.skipList">Skip — go to the list</button>
     </div>
@@ -506,8 +504,6 @@
             class="text-[10px] px-2 py-1 rounded font-medium bg-gray-700 text-gray-400 hover:text-white transition" data-i18n="pg.chat">💬 Chat</button>
           <button onclick="setBuildMode('plan')" id="tab-plan"
             class="text-[10px] px-2 py-1 rounded font-medium bg-gray-700 text-gray-400 hover:text-white transition" data-i18n="pg.plan">🗺️ Plan</button>
-          <button onclick="setBuildMode('raw')" id="tab-raw"
-            class="text-[10px] px-2 py-1 rounded font-medium bg-gray-700 text-gray-400 hover:text-white transition">🔨 Raw</button>
           <button onclick="closeBuild()" id="bd-close" class="text-gray-400 hover:text-white text-lg leading-none ml-2">✕</button>
         </div>
       </div>
@@ -595,7 +591,6 @@
             <button onclick="expandPlanUltra()" id="plan-ultra-btn" class="hidden px-3 py-2 rounded bg-violet-800 hover:bg-violet-700 text-violet-100 text-xs transition" data-i18n="pg.ultraFragment">🔬 Ultra-fragment the plan</button>
             <button onclick="initUnityForPlan()" id="plan-unity-init-btn" class="hidden px-3 py-2 rounded bg-indigo-800 hover:bg-indigo-700 text-indigo-100 text-xs transition">🎮 Init Unity</button>
             <button onclick="generateUnityBuildScripts()" id="plan-unity-build-btn" class="hidden px-3 py-2 rounded bg-slate-700 hover:bg-slate-600 text-slate-100 text-xs transition">🛠 Unity Build Scripts</button>
-            <button onclick="exportUnityBridge()" id="plan-unity-export-btn" class="hidden px-3 py-2 rounded bg-amber-800 hover:bg-amber-700 text-amber-100 text-xs transition">📦 Export Unity Bridge</button>
             <button onclick="initHybridForPlan()" id="plan-hybrid-init-btn" class="hidden px-3 py-2 rounded bg-emerald-800 hover:bg-emerald-700 text-emerald-100 text-xs transition" data-i18n="pg.hybridInit">📱 Init Hybrid F7</button>
             <button onclick="exportHybridForPlan()" id="plan-hybrid-export-btn" class="hidden px-3 py-2 rounded bg-teal-800 hover:bg-teal-700 text-teal-100 text-xs transition" data-i18n="pg.hybridExport">📦 Export PakePlus</button>
             <button onclick="initCapacitorForPlan()" id="plan-capacitor-init-btn" class="hidden px-3 py-2 rounded bg-sky-800 hover:bg-sky-700 text-sky-100 text-xs transition" data-i18n="pg.capInit">⚡ Init Capacitor</button>
@@ -619,9 +614,6 @@
         </div>
       </div>
 
-      <!-- Raw build body (hidden by default) -->
-      <pre id="bd-body" class="overflow-auto flex-1 p-4 text-xs text-gray-300 font-mono whitespace-pre-wrap leading-relaxed hidden"></pre>
-
       <!-- Chat input (default visible) -->
       <div id="bd-chat-input" class="border-t border-gray-700 bg-gray-950 px-3 py-2 flex-shrink-0">
         <div class="flex gap-2">
@@ -632,38 +624,10 @@
           <div class="flex flex-col gap-1 justify-end">
             <button onclick="sendChat()" id="chat-send-btn"
               class="px-4 py-1.5 rounded text-xs font-medium bg-purple-700 hover:bg-purple-600 text-white transition whitespace-nowrap" data-i18n="pg.send">Send</button>
-            <button onclick="switchToRawBuild()" title="Force a raw build (rewrite the whole codebase)" data-i18n-title="pg.rawTitle"
-              class="px-2 py-1 rounded text-[9px] font-medium bg-gray-700 hover:bg-gray-600 text-gray-300 transition whitespace-nowrap">🔨 Build</button>
           </div>
         </div>
       </div>
 
-      <!-- Raw build command panel (hidden by default) -->
-      <div id="bd-cmd" class="border-t border-gray-700 bg-gray-950 px-3 py-2 space-y-2 flex-shrink-0 hidden">
-        <div class="flex gap-2">
-          <textarea id="bd-cmd-input" rows="2" data-i18n-placeholder="pg.rawPh" placeholder="Type a correction, a new idea, or new requirements…"
-            class="flex-1 px-2 py-1.5 rounded bg-gray-800 text-white text-xs border border-gray-700 resize-none focus:outline-none focus:border-purple-600 font-mono placeholder-gray-600"></textarea>
-          <button onclick="stopBuild()" id="bd-stop-btn"
-            class="self-end px-3 py-1.5 rounded text-xs font-medium bg-red-700 hover:bg-red-600 text-white whitespace-nowrap transition" data-i18n="pg.stopShort">■ Stop</button>
-        </div>
-        <div class="flex gap-2 flex-wrap">
-          <button onclick="resumeBuild()" id="bd-resume-btn"
-            class="px-3 py-1.5 rounded text-xs font-medium bg-gray-700 hover:bg-gray-600 text-gray-200 transition" data-i18n="pg.resumeShort">▶ Resume</button>
-          <button onclick="correctBuild()" id="bd-correct-btn"
-            class="px-3 py-1.5 rounded text-xs font-medium bg-yellow-700 hover:bg-yellow-600 text-white transition" data-i18n="pg.correct">🔧 Correct</button>
-          <button onclick="rewriteBuild()" id="bd-rewrite-btn"
-            class="px-3 py-1.5 rounded text-xs font-medium bg-indigo-700 hover:bg-indigo-600 text-white transition" data-i18n="pg.rewrite">🔁 Rewrite</button>
-          <button onclick="setBuildMode('chat')" class="px-3 py-1.5 rounded text-xs font-medium bg-purple-900 hover:bg-purple-800 text-purple-300 transition" data-i18n="pg.backChat">← Back to chat</button>
-        </div>
-      </div>
-
-      <!-- Footer (preview after build) -->
-      <div id="bd-foot" class="p-3 border-t border-gray-700 hidden flex-shrink-0 flex flex-wrap gap-2">
-        <button onclick="previewBuildDiff()" id="bd-diff-btn" class="hidden px-4 py-2 rounded bg-indigo-700 hover:bg-indigo-600 text-white text-sm" data-i18n="pg.changes">📋 Changes</button>
-        <button onclick="buildPreview()" id="bd-preview-btn" class="px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-sm" data-i18n="pg.seeResult">👁 See the result</button>
-        <button onclick="setBuildMode('chat')" class="px-4 py-2 rounded bg-purple-700 hover:bg-purple-600 text-white text-sm ml-2" data-i18n="pg.backChat">← Back to chat</button>
-        <button onclick="closeBuild()" class="px-4 py-2 rounded bg-gray-700 text-gray-300 text-sm ml-2" data-i18n="pg.close">Close</button>
-      </div>
     </div>
   </div>
 
@@ -874,7 +838,7 @@ async function loadProjects() {
         ${unityPushBtn}
         ${!isPublishable && !isUnity ? `<span class="text-[10px] font-mono text-yellow-500/80 px-2 py-1 rounded bg-yellow-900/20 border border-yellow-700/30">dev-only</span>` : ''}
         ${isUnity ? `<span class="text-[10px] font-mono text-sky-400/90 px-2 py-1 rounded bg-sky-950/30 border border-sky-700/30" title="Unity Hub">Unity Hub</span>` : ''}
-        ${projectOverflowMenu(p, isStatic, isPublishable, running)}
+        ${projectOverflowMenu(p, isStatic, running)}
       </div>
     </div>`;
   }).join('');
@@ -908,7 +872,6 @@ async function resumeFromPlan(slug, name) {
   _buildSlug = slug; _buildName = name;
   $('bd-proj-name').textContent = name || slug;
   $('build-modal').classList.remove('hidden');
-  $('bd-foot').classList.add('hidden');
   setBuildMode('auto');
   resetAutopilot();
 
@@ -976,7 +939,7 @@ function applySuggestion(idx) {
   const slug = _suggestSlug;
   const name = _suggestName;
   closeSuggest();
-  aiBuildStream(slug, name || slug, text, 'edit');
+  openChatModal(slug, name || slug, text);   // R3: the old raw-build route never existed here; the idea goes to project chat
 }
 
 // ── Coding mode (create form) ───────────────────────────────────
@@ -1112,11 +1075,7 @@ async function loadPublishedApps() {
           <div class="text-[10px] font-mono text-gray-500">${escHtml(a.slug)}</div>
         </div>
         <a href="/apps/${encodeURIComponent(a.slug)}/" target="_blank" class="btn-sm bg-gray-700 hover:bg-gray-600">${t('pg.open')}</a>
-        <button type="button" data-unpublish="${escHtml(a.slug)}" class="btn-sm bg-red-900/50 hover:bg-red-800 text-red-300 border border-red-800">${t('pg.delete')}</button>
       </div>`).join('') + '</div>';
-    el.querySelectorAll('[data-unpublish]').forEach((btn) => {
-      btn.addEventListener('click', () => deletePublishedProj(btn.getAttribute('data-unpublish')));
-    });
   } catch (e) {
     el.innerHTML = '<p class="text-red-400">' + t('pg.errPrefix') + ' ' + escHtml(e.message) + '</p>';
   }
@@ -1138,23 +1097,15 @@ function toggleDesc(slug, btn) {
   f.classList.toggle('hidden', !showFull);
   if (btn) btn.textContent = showFull ? t('pg.hide') : t('pg.seeMore');
 }
-function projectOverflowMenu(p, isStatic, isPublishable, running) {
+function projectOverflowMenu(p, isStatic, running) {
   const sn = p.name.replace(/'/g, "\\'");
   const items = [];
   items.push(`<button onclick="aiEdit('${p.slug}','${sn}')" class="pg-menu-item">🤖 AI edit</button>`);
   items.push(`<button onclick="showSuggestions('${p.slug}','${sn}')" class="pg-menu-item">${t('pg.ideas')}</button>`);
   items.push(`<button onclick="openAssets('${p.slug}','${sn}')" class="pg-menu-item">🎨 Asset Studio</button>`);
   if (!isStatic) items.push(`<button onclick="showLogs('${p.slug}')" class="pg-menu-item">${t('pg.logs')}</button>`);
-  if (p.kind === 'vite' || p.kind === 'vite-react' || p.kind === 'expo')
-    items.push(`<button onclick="rebuildProj('${p.slug}',this)" class="pg-menu-item">🔨 Rebuild</button>`);
   if (p.source === 'revived' || p.upstream_url) {
-    items.push(`<button onclick="revivePipeline('${p.slug}')" class="pg-menu-item">📦 Verify & Publish</button>`);
-    items.push(`<button onclick="showUpstreamDiff('${p.slug}')" class="pg-menu-item">↔ Upstream diff</button>`);
     items.push(`<button onclick="createUpstreamPr('${p.slug}')" class="pg-menu-item">${t('pg.prMr')}</button>`);
-  }
-  if (isPublishable) {
-    const pubLabel = p.kind === 'expo' ? '📦 Export' : (p.kind === 'vite' || p.kind === 'vite-react' ? '🔨 Build & Pub' : t('pg.publish'));
-    items.push(`<button onclick="publishProj('${p.slug}')" class="pg-menu-item">${pubLabel}</button>`);
   }
   if (p.kind === 'vite' || p.kind === 'vite-react' || p.kind === 'static') {
     items.push(`<button onclick="initCapacitorShip('${p.slug}').then(r=>alert(r.skipped?(r.reason||'skipped'):('Capacitor:\\n'+(r.written||[]).join('\\n')))).catch(e=>alert(e.message))" class="pg-menu-item">${t('pg.capInit')}</button>`);
@@ -1163,16 +1114,11 @@ function projectOverflowMenu(p, isStatic, isPublishable, running) {
   if (p.kind === 'expo') {
     items.push(`<button onclick="runExpoTunnel('${p.slug}')" class="pg-menu-item">📱 Tunnel+QR</button>`);
     items.push(`<button onclick="showQr('${p.slug}')" class="pg-menu-item">🔳 QR</button>`);
-    items.push(`<button onclick="easBuild('${p.slug}','android')" class="pg-menu-item">☁ EAS Android</button>`);
   }
   items.push(`<button onclick="backupWorkspace('${p.slug}')" class="pg-menu-item">💾 Backup workspace</button>`);
   items.push(`<button onclick="openDb('${p.slug}')" class="pg-menu-item">🗄 DB</button>`);
   items.push(`<button onclick="pushProj('${p.slug}','gitlab')" class="pg-menu-item">${t('pg.glSetup')}</button>`);
   items.push(`<button onclick="pushGithubOneClick('${p.slug}')" class="pg-menu-item">${t('pg.ghOneClick')}</button>`);
-  if (p.status === 'published') {
-    items.push(`<button onclick="unpublishProj('${p.slug}')" class="pg-menu-item">${t('pg.hideApps')}</button>`);
-    items.push(`<button onclick="deletePublishedProj('${p.slug}')" class="pg-menu-item text-red-400">${t('pg.removeApps')}</button>`);
-  }
   items.push(`<button onclick="delProj('${p.slug}')" class="pg-menu-item text-red-400">${t('pg.deleteProj')}</button>`);
   return `<details class="relative pg-card-menu"><summary class="btn-sm bg-gray-800 hover:bg-gray-700 cursor-pointer list-none">⋮</summary><div class="absolute right-0 top-full mt-1 z-20 min-w-[10rem] py-1 rounded-lg border border-gray-700 bg-gray-900 shadow-xl">${items.join('')}</div></details>`;
 }
@@ -1295,33 +1241,6 @@ async function createAndBuild() {
     const ref = ($('np-reference')?.value || '').trim();
     await openAutopilot(r.project.slug, r.project.name, autoPrompt, ref, r.project.kind);
   } finally { btn.textContent = t('pg.build'); btn.disabled = false; }
-}
-
-async function createAndRaw() {
-  const name   = $('np-name').value.trim();
-  const prompt = $('np-build').value.trim();
-  if (!name) { alert(t('pg.enterName')); return; }
-  if (!prompt) { alert(t('pg.needDesc')); $('np-build').focus(); return; }
-  const kind = $('np-kind').value;
-  const btn  = event.target;
-  btn.textContent = '⏳…'; btn.disabled = true;
-  try {
-    const r = await api('/admin/daedalus/playground/api/projects', {method:'POST',
-      body: JSON.stringify({name, kind, description: $('np-desc').value, coding_mode: _newProjMode})});
-    if (!r.ok) { alert(t('pg.errPrefix') + ' ' + r.error); return; }
-    hideCreate();
-    $('np-name').value=''; $('np-desc').value=''; $('np-build').value='';
-    await loadProjects();
-    // Open build modal in Raw mode with prompt prefilled
-    _buildSlug = r.project.slug;
-    _buildName = r.project.name;
-    $('bd-proj-name').textContent = r.project.name || r.project.slug;
-    $('build-modal').classList.remove('hidden');
-    $('bd-foot').classList.add('hidden');
-    setBuildMode('raw');
-    const inp = $('bd-cmd-input');
-    if (inp) { inp.value = prompt; setTimeout(() => inp.focus(), 80); }
-  } finally { btn.textContent = t('pg.rawBuild'); btn.disabled = false; }
 }
 
 function aiEdit(slug, name) {
@@ -1614,7 +1533,6 @@ function openPlanMode(slug, name, prefillDesc) {
   _buildSlug = slug; _buildName = name;
   $('bd-proj-name').textContent = name || slug;
   $('build-modal').classList.remove('hidden');
-  $('bd-foot').classList.add('hidden');
   setBuildMode('plan');
   resetPlan();
   _syncUltraUi();
@@ -1732,11 +1650,9 @@ function _updateStudioUi(plan) {
   const preset = (plan && plan.studio_preset) || studioPreset();
   const badge = $('plan-studio-badge');
   if (badge) badge.classList.toggle('hidden', !studio);
-  const unityBtn = $('plan-unity-export-btn');
   const unityInit = $('plan-unity-init-btn');
   const unityBuild = $('plan-unity-build-btn');
   const showUnity = studio || (_planSlug && $('np-kind')?.value === 'unity') || preset !== 'hybrid_mobile';
-  if (unityBtn) unityBtn.classList.toggle('hidden', !showUnity || preset === 'hybrid_mobile');
   if (unityInit) unityInit.classList.toggle('hidden', !showUnity || preset === 'hybrid_mobile');
   if (unityBuild) unityBuild.classList.toggle('hidden', !showUnity || preset === 'hybrid_mobile');
   const hybridInit = $('plan-hybrid-init-btn');
@@ -2125,24 +2041,11 @@ function guidedPreview() {
 /** @deprecated use executeGuidedPlan */
 async function executePlan() { return executeGuidedPlan(); }
 
-// ── Resilient AI build (detached background job) ───────────────────────────
-// The build runs SERVER-SIDE regardless of this browser; if the phone sleeps,
-// the network drops, or the tab goes inactive we simply re-attach on wake and
-// replay from offset 0.  localStorage remembers the active job across reloads.
-const PG_BUILD_KEY = 'pgActiveBuild';
-let _buildStreaming = false;
-
-function saveActiveBuild(o) { try { localStorage.setItem(PG_BUILD_KEY, JSON.stringify(o)); } catch (e) {} }
-function loadActiveBuild() { try { return JSON.parse(localStorage.getItem(PG_BUILD_KEY) || 'null'); } catch (e) { return null; } }
-function clearActiveBuild() { try { localStorage.removeItem(PG_BUILD_KEY); } catch (e) {} }
-
 // ── Chat mode ─────────────────────────────────────────────────
 let _chatSlug = null;
 let _chatName = null;
 const _chatHistory = {};   // slug → [{role, text, files, tool_calls, applyId}]
 const _pendingFiles = {};  // applyId → {slug, files}
-let _buildSnapshot = {};
-let _buildWrittenPaths = [];
 
 async function fetchPlaygroundDiff(slug, files) {
   const r = await fetch(`/admin/daedalus/playground/api/projects/${encodeURIComponent(slug)}/diff-preview`, {
@@ -2180,39 +2083,7 @@ async function previewChatFiles(applyId) {
 }
 window.previewChatFiles = previewChatFiles;
 
-async function previewBuildDiff() {
-  const slug = _buildSlug;
-  if (!slug || !_buildWrittenPaths.length || !window.DaedalusUI) return;
-  try {
-    const files = _buildWrittenPaths.map(path => ({
-      path,
-      old_content: _buildSnapshot[path] ?? '',
-    }));
-    const diffs = await fetchPlaygroundDiff(slug, files);
-    DaedalusUI.openDiffModal({
-      eyebrow: 'Build',
-      title: t('pg.writtenFiles', {n: _buildWrittenPaths.length}),
-      metaHtml: `<span class="text-gray-400">${t('pg.project')}</span> <span class="font-mono text-purple-300">${escHtml(slug)}</span>`,
-      diffs,
-    });
-  } catch (e) {
-    alert('Diff preview: ' + e.message);
-  }
-}
-window.previewBuildDiff = previewBuildDiff;
 
-async function snapshotBuildFiles(slug) {
-  _buildSnapshot = {};
-  _buildWrittenPaths = [];
-  const diffBtn = $('bd-diff-btn');
-  if (diffBtn) diffBtn.classList.add('hidden');
-  try {
-    const r = await api(`/admin/daedalus/playground/api/projects/${encodeURIComponent(slug)}/files-snapshot`);
-    _buildSnapshot = r.files || {};
-  } catch {
-    _buildSnapshot = {};
-  }
-}
 let _applyCounter = 0;
 
 function escHtml(s) {
@@ -2223,13 +2094,10 @@ function setBuildMode(mode) {
   const isAuto = (mode === 'auto');
   const isChat = (mode === 'chat');
   const isPlan = (mode === 'plan');
-  const isRaw  = (mode === 'raw');
   $('auto-body').classList.toggle('hidden', !isAuto);
   $('chat-body').classList.toggle('hidden', !isChat);
   $('bd-chat-input').classList.toggle('hidden', !isChat);
   $('plan-body').classList.toggle('hidden', !isPlan);
-  $('bd-body').classList.toggle('hidden', !isRaw);
-  $('bd-cmd').classList.toggle('hidden', !isRaw);
   const active   = 'text-[10px] px-2 py-1 rounded font-medium bg-purple-700 text-white transition';
   const activeY  = 'text-[10px] px-2 py-1 rounded font-medium bg-yellow-700 text-white transition';
   const activeE  = 'text-[10px] px-2 py-1 rounded font-medium bg-emerald-700 text-white transition';
@@ -2237,7 +2105,6 @@ function setBuildMode(mode) {
   $('tab-auto').className = isAuto ? activeE  : inactive;
   $('tab-chat').className = isChat ? active   : inactive;
   $('tab-plan').className = isPlan ? activeY  : inactive;
-  $('tab-raw').className  = isRaw  ? active   : inactive;
 }
 
 async function openAutopilot(slug, name, prefillDesc, prefillRef, kind) {
@@ -2246,7 +2113,6 @@ async function openAutopilot(slug, name, prefillDesc, prefillRef, kind) {
   if (kind) _buildKind = kind;
   $('bd-proj-name').textContent = name || slug;
   $('build-modal').classList.remove('hidden');
-  $('bd-foot').classList.add('hidden');
   setBuildMode('auto');
   resetAutopilot();
   if (prefillDesc) { const inp = $('auto-desc-input'); if (inp) inp.value = prefillDesc; }
@@ -2640,7 +2506,6 @@ function openChatModal(slug, name, prefill) {
   _buildName = name;
   $('bd-proj-name').textContent = name || slug;
   $('build-modal').classList.remove('hidden');
-  $('bd-foot').classList.add('hidden');
   setBuildMode('chat');
   _renderChatHistory(slug);
   const inp = $('chat-msg-input');
@@ -2799,209 +2664,8 @@ async function applyChatFiles(applyId) {
   }
 }
 
-function switchToRawBuild() {
-  const slug = _chatSlug; const name = _chatName;
-  if (!slug) return;
-  const inp = $('chat-msg-input');
-  const text = (inp?.value||'').trim();
-  if (!text) {
-    alert(t('pg.buildNeedPrompt'));
-    inp?.focus(); return;
-  }
-  if (inp) inp.value = '';
-  aiBuildStream(slug, name||slug, text, 'edit');
-}
-
-// ── Raw build modal ────────────────────────────────────────────
-function openBuildModal() {
-  $('build-modal').classList.remove('hidden');
-  $('bd-foot').classList.add('hidden');
-  $('bd-close').classList.remove('hidden');
-  $('bd-status').textContent = t('pg.connecting');
-  $('bd-body').textContent = '';
-  setBuildMode('raw');
-}
-
-// Fresh build: POST starts the background job, then we stream it.
-async function aiBuildStream(slug, name, prompt, mode) {
-  _buildSlug = slug; _buildName = name;
-  await snapshotBuildFiles(slug);
-  openBuildModal();
-  saveActiveBuild({slug, name});  // job_id is filled in on the 'job' event
-  await streamBuild(
-    `/admin/daedalus/playground/api/projects/${slug}/ai-build`,
-    {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({prompt, mode})}
-  );
-}
-
-// Re-attach to an already-running/finished job (replays full text from offset 0).
-async function reconnectBuild(slug, name, jobId) {
-  _buildSlug = slug; _buildName = name;
-  openBuildModal();
-  $('bd-status').textContent = t('pg.restoring');
-  saveActiveBuild({slug, name, job_id: jobId});
-  await streamBuild(
-    `/admin/daedalus/playground/api/projects/${slug}/ai-build/stream?job_id=${encodeURIComponent(jobId)}&from=0`,
-    {method: 'GET'}
-  );
-}
-
-async function streamBuild(url, opts) {
-  if (_buildStreaming) return;
-  _buildStreaming = true;
-  const body = $('bd-body');
-  let buf = '';
-  try {
-    const resp = await fetch(url, opts);
-    if (!resp.ok || !resp.body) {
-      $('bd-status').textContent = t('pg.errHttp', {status: resp.status});
-      $('bd-close').classList.remove('hidden');
-      return;
-    }
-    const reader = resp.body.getReader();
-    const dec = new TextDecoder();
-    let sse = '';
-    while (true) {
-      const {done, value} = await reader.read();
-      if (done) break;
-      sse += dec.decode(value, {stream: true});
-      const frames = sse.split('\n\n');
-      sse = frames.pop();
-      for (const f of frames) {
-        const ev = parseSSE(f);
-        if (!ev) continue;
-        if (ev.event === 'job') {
-          const cur = loadActiveBuild() || {};
-          saveActiveBuild({slug: ev.data.slug || cur.slug, name: cur.name || _buildName, job_id: ev.data.job_id});
-        } else if (ev.event === 'status') {
-          $('bd-status').textContent = ev.data.msg || '';
-        } else if (ev.event === 'token') {
-          buf += ev.data.text || '';
-          body.textContent = buf;
-          body.scrollTop = body.scrollHeight;
-        } else if (ev.event === 'file') {
-          const fpath = ev.data.path;
-          if (fpath && !_buildWrittenPaths.includes(fpath)) _buildWrittenPaths.push(fpath);
-          buf += '\n\n' + t('pg.writtenPath', {path: fpath, size: ev.data.size});
-          body.textContent = buf; body.scrollTop = body.scrollHeight;
-        } else if (ev.event === 'done') {
-          $('bd-status').textContent = t('pg.doneN', {n: ev.data.count});
-          $('bd-foot').classList.remove('hidden');
-          $('bd-close').classList.remove('hidden');
-          const diffBtn = $('bd-diff-btn');
-          if (diffBtn) diffBtn.classList.toggle('hidden', !_buildWrittenPaths.length);
-          clearActiveBuild();
-          loadProjects();
-        } else if (ev.event === 'error') {
-          const intr = ev.data.interrupted;
-          $('bd-status').textContent = intr ? t('pg.interrupted') : t('pg.errMark');
-          buf += `\n\n${intr ? '⚠' : '❌'} ${ev.data.error}`;
-          body.textContent = buf;
-          $('bd-close').classList.remove('hidden');
-          $('bd-foot').classList.remove('hidden');
-          clearActiveBuild();
-        }
-      }
-    }
-  } catch (e) {
-    // Connection dropped — the build keeps running server-side; we re-attach on wake.
-    $('bd-status').textContent = t('pg.connLostBg');
-    $('bd-close').classList.remove('hidden');
-  } finally {
-    _buildStreaming = false;
-  }
-}
-
-// On wake (page load / tab visible / back online / window focus) re-attach to
-// any build that is still running server-side.
-async function maybeReconnectBuild() {
-  if (_buildStreaming) return;
-  const saved = loadActiveBuild();
-  if (!saved || !saved.slug) return;
-  try {
-    const r = await api(`/admin/daedalus/playground/api/projects/${saved.slug}/ai-build/active`);
-    if (!r || !r.active) {
-      // Not running anymore.  If the server restarted mid-build it's "interrupted"
-      // → reattach once to show the partial output; otherwise it finished cleanly
-      // (files already on disk) and we just refresh the list.
-      if (r && r.status === 'interrupted' && r.job_id) {
-        reconnectBuild(saved.slug, saved.name || saved.slug, r.job_id);
-      } else {
-        clearActiveBuild();
-        loadProjects();
-      }
-      return;
-    }
-    reconnectBuild(saved.slug, saved.name || saved.slug, r.job_id);
-  } catch (e) { /* offline — try again on next wake */ }
-}
-
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') maybeReconnectBuild();
-});
-window.addEventListener('online', maybeReconnectBuild);
-window.addEventListener('focus', maybeReconnectBuild);
-
-function parseSSE(frame) {
-  let event = 'message', data = '';
-  for (const line of frame.split('\n')) {
-    if (line.startsWith('event:')) event = line.slice(6).trim();
-    else if (line.startsWith('data:')) data += line.slice(5).trim();
-  }
-  if (!data) return null;
-  try { return {event, data: JSON.parse(data)}; } catch(e) { return null; }
-}
 
 function closeBuild() { $('build-modal').classList.add('hidden'); }
-function buildPreview() { if (_buildSlug) { closeBuild(); preview(_buildSlug, _buildName || _buildSlug, _buildKind || ''); } }
-
-// ── Command panel ──────────────────────────────────────────────
-async function stopBuild() {
-  if (!_buildSlug) return;
-  const btn = $('bd-stop-btn');
-  btn.textContent = '⏳'; btn.disabled = true;
-  try {
-    await api(`/admin/daedalus/playground/api/projects/${_buildSlug}/ai-build/stop`, {method: 'POST'});
-    $('bd-status').textContent = t('pg.stoppedMark');
-    clearActiveBuild();
-  } finally {
-    btn.textContent = t('pg.stopShort'); btn.disabled = false;
-  }
-}
-
-async function resumeBuild() {
-  if (!_buildSlug) return;
-  if (_buildStreaming) { $('bd-status').textContent = t('pg.alreadyConnected'); return; }
-  try {
-    const r = await api(`/admin/daedalus/playground/api/projects/${_buildSlug}/ai-build/active`);
-    if (r && (r.active || r.status === 'interrupted') && r.job_id) {
-      reconnectBuild(_buildSlug, _buildName || _buildSlug, r.job_id);
-    } else {
-      $('bd-status').textContent = t('pg.noActiveBuild');
-    }
-  } catch(e) { $('bd-status').textContent = t('pg.resumeErr'); }
-}
-
-function correctBuild() {
-  const slug = _buildSlug; const name = _buildName;
-  if (!slug) return;
-  const text = ($('bd-cmd-input').value || '').trim();
-  if (!text) { $('bd-cmd-input').focus(); $('bd-cmd-input').style.borderColor = '#f59e0b'; return; }
-  $('bd-cmd-input').style.borderColor = '';
-  $('bd-cmd-input').value = '';
-  aiBuildStream(slug, name || slug, text, 'edit');
-}
-
-function rewriteBuild() {
-  const slug = _buildSlug; const name = _buildName;
-  if (!slug) return;
-  const text = ($('bd-cmd-input').value || '').trim();
-  if (!text) { $('bd-cmd-input').focus(); $('bd-cmd-input').style.borderColor = '#6366f1'; return; }
-  $('bd-cmd-input').style.borderColor = '';
-  $('bd-cmd-input').value = '';
-  aiBuildStream(slug, name || slug, text, 'create');
-}
-
 // ── Preview error capture (postMessage from iframe SDK) ─────
 let _pvErrorSlug = null;
 let _pvErrorStack = '';
@@ -3245,33 +2909,6 @@ function reviveWizardAction(action) {
   if (action === 'preview') preview(slug, name, kind);
   else if (action === 'chat') openChatModal(slug, name);
   else if (action === 'autopilot') openAutopilot(slug, name);
-  else if (action === 'pipeline') revivePipeline(slug);
-}
-
-async function revivePipeline(slug) {
-  if (!confirm(t('pg.verifyPublish'))) return;
-  const r = await api(`/admin/daedalus/playground/api/projects/${slug}/revive-pipeline`, {
-    method: 'POST', body: JSON.stringify({publish: true}),
-  });
-  if (r.ok) {
-    alert(t('pg.pipelineOk'));
-    loadProjects();
-  } else {
-    const err = r.error || (r.steps && r.steps.find(s => !s.ok)?.error) || 'failed';
-    if (confirm('Verify failed: ' + err + t('pg.tryRepair'))) {
-      const rep = await api(`/admin/daedalus/playground/api/projects/${slug}/revive-repair`, {method:'POST'});
-      alert(rep.ok ? t('pg.repairOk') : 'Repair failed: ' + (rep.error || ''));
-      loadProjects();
-    }
-  }
-}
-
-async function showUpstreamDiff(slug) {
-  const r = await api(`/admin/daedalus/playground/api/projects/${slug}/upstream-diff`);
-  if (!r.ok) { alert(t('pg.errPrefix') + ' ' + r.error); return; }
-  if (!r.has_upstream) { alert(r.message || t('pg.noUpstream')); return; }
-  const files = (r.changed_files || []).join('\n  ') || t('pg.noChanges');
-  alert(t('pg.upstreamDiff', {sha: r.upstream_sha?.slice(0,8) || '?', stat: r.diff_stat || '', files}));
 }
 
 async function createUpstreamPr(slug) {
@@ -3376,24 +3013,6 @@ async function showQr(slug) {
   } catch(e) { alert(t('pg.qrLoadErr') + e.message); }
 }
 
-// ── EAS Cloud Build ─────────────────────────────────────────────
-async function easBuild(slug, platform) {
-  const msg = platform === 'android'
-    ? t('pg.easAndroid')
-    : t('pg.easIos');
-  if (!confirm(msg)) return;
-  const btn = event.target;
-  btn.textContent = '⏳ EAS…'; btn.disabled = true;
-  try {
-    const r = await api(`/admin/daedalus/playground/api/projects/${slug}/eas-build`, {
-      method:'POST', body: JSON.stringify({platform})});
-    if (r.ok) {
-      alert(t('pg.easStarted', {platform, output: r.output}));
-    } else {
-      alert(t('pg.easErr') + r.error + (r.output ? '\n\n' + r.output : ''));
-    }
-  } finally { btn.textContent = platform === 'android' ? '☁ EAS Android' : '☁ EAS iOS'; btn.disabled = false; }
-}
 async function delProj(slug) {
   const proj = (await api('/admin/daedalus/playground/api/projects')).projects?.find(p => p.slug === slug);
   const isPublished = proj && proj.status === 'published';
@@ -3404,70 +3023,6 @@ async function delProj(slug) {
   await api(`/admin/daedalus/playground/api/projects/${slug}/delete`, {method:'POST'});
   loadProjects();
 }
-async function deletePublishedProj(slug) {
-  if (!confirm(`Unpublish "${slug}" from /apps/?\n\nThe Playground project (if any) stays — you can publish again.`)) return;
-  const r = await api(`/admin/daedalus/playground/api/projects/${slug}/delete-published`, {method:'POST'});
-  if (!r.ok) { alert(t('pg.errBang') + (r.error || t('pg.unknown'))); return; }
-  loadProjects();
-  if (!$('published-panel').classList.contains('hidden')) loadPublishedApps();
-}
-
-async function publishProj(slug) {
-  const icon = prompt(t('pg.menuIcon'), '🎮');
-  if (icon === null) return;
-  // Show build overlay for vite/expo projects (build can take time)
-  const proj = (await api('/admin/daedalus/playground/api/projects')).projects?.find(p => p.slug === slug);
-  const isVite = proj && (proj.kind === 'vite' || proj.kind === 'vite-react');
-  const isExpo = proj && proj.kind === 'expo';
-  let overlay = null;
-  if (isVite || isExpo) {
-    overlay = document.createElement('div');
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center';
-    const msg = isExpo
-      ? t('pg.expoExportNote')
-      : t('pg.viteBuildNote');
-    const icon = isExpo ? '📦' : '🔨';
-    overlay.innerHTML = `<div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:2rem 3rem;text-align:center;color:#e2e8f0"><div style="font-size:2rem;margin-bottom:.8rem">${icon}</div><div style="font-weight:600;margin-bottom:.4rem">Building…</div><div style="color:#94a3b8;font-size:.85rem">${msg}</div></div>`;
-    document.body.appendChild(overlay);
-  }
-  try {
-    const r = await api(`/admin/daedalus/playground/api/projects/${slug}/publish`, {method:'POST',
-      body: JSON.stringify({icon})});
-    if (r.ok) {
-      const repaired = (r.repaired_files && r.repaired_files.length)
-        ? t('pg.repairedFiles', {list: r.repaired_files.join(', ')}) : '';
-      const extra = r.built_from === 'dist' ? t('pg.viteOk') : '';
-      alert(t('pg.publishedTo', {url: r.url, extra, repaired, durable: r.durable ? t('pg.yes') : t('pg.no')}));
-      loadProjects();
-    } else {
-      alert(t('pg.errPrefix') + ' ' + r.error);
-    }
-  } finally {
-    if (overlay) overlay.remove();
-  }
-}
-async function rebuildProj(slug, btn) {
-  const prev = btn.textContent;
-  btn.textContent = t('pg.building'); btn.disabled = true;
-  const overlay = document.createElement('div');
-  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9999;display:flex;align-items:center;justify-content:center';
-  overlay.innerHTML = `<div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:2rem 3rem;text-align:center;color:#e2e8f0"><div style="font-size:2rem;margin-bottom:.8rem">🔨</div><div style="font-weight:600;margin-bottom:.4rem">Rebuild…</div><div style="color:#94a3b8;font-size:.85rem">${t('pg.rebuildHint')}</div></div>`;
-  document.body.appendChild(overlay);
-  try {
-    const r = await api(`/admin/daedalus/playground/api/projects/${slug}/rebuild`, {method:'POST'});
-    if (r.ok) {
-      alert(t('pg.rebuildOk'));
-    } else {
-      alert(t('pg.rebuildFail') + (r.error || r.output || t('pg.unknownErr')));
-    }
-  } catch(e) { alert(t('pg.errPrefix') + ' ' + e.message); }
-  finally { overlay.remove(); btn.textContent = prev; btn.disabled = false; }
-}
-async function unpublishProj(slug) {
-  await api(`/admin/daedalus/playground/api/projects/${slug}/unpublish`, {method:'POST'});
-  loadProjects();
-}
-
 async function backupWorkspace(slug) {
   const r = await api(`/admin/daedalus/playground/api/projects/${slug}/backup-workspace`, {method:'POST'});
   if (r.ok) alert(`✅ Backup OK (${Math.round((r.size_bytes||0)/1024)} KB) → object storage`);
@@ -3964,10 +3519,6 @@ async function scoutStudioReference() {
 let _assetsSlug = null;
 let _assetsName = null;
 
-function assetThumbUrl(slug, path) {
-  return `/admin/daedalus/playground/api/projects/${encodeURIComponent(slug)}/assets/raw?path=${encodeURIComponent(path)}`;
-}
-
 async function openAssets(slug, name) {
   _assetsSlug = slug;
   _assetsName = name;
@@ -4011,7 +3562,7 @@ async function loadAssets() {
       const kb = a.bytes ? `${Math.round(a.bytes / 1024)} KB` : '';
       const thumb = a.missing
         ? '<div class="h-24 flex items-center justify-center text-gray-600 text-xs">' + t('pg.missing') + '</div>'
-        : `<img src="${assetThumbUrl(slug, a.path)}" alt="" class="w-full h-24 object-contain bg-gray-950 rounded" loading="lazy">`;
+        : `<img src="/api/v1/playground/projects/${encodeURIComponent(slug)}/preview/${a.path.split('/').map(encodeURIComponent).join('/')}" alt="" class="w-full h-24 object-contain bg-gray-950 rounded" loading="lazy">`;   // R3: the served preview route (the old raw-asset route never existed)
       return `<div class="p-2 rounded-lg border border-gray-700 bg-gray-800/60 ${missing}">
         ${thumb}
         <div class="mt-1 text-[10px] font-mono text-pink-300 truncate" title="${escHtml(a.path)}">${escHtml(a.path.split('/').pop())}</div>
@@ -4071,46 +3622,12 @@ async function autoPackAssets() {
   finally { if (btn) { btn.disabled = false; btn.textContent = t('pg.autopack'); } }
 }
 
-// ── Netlify deploy (за static проекти вече публикувани в ADN) ──
-async function netlifyDeploy(slug) {
-  const token = prompt(
-    t('pg.netlifyTok')
-  );
-  if (!token) return;
-  const btn = event.target;
-  btn.textContent = t('pg.uploading'); btn.disabled = true;
-  try {
-    const r = await api(`/admin/daedalus/playground/api/projects/${slug}/netlify-deploy`, {
-      method: 'POST', body: JSON.stringify({ netlify_token: token })
-    });
-    if (r.ok) alert(t('pg.netlifyOk', {url: r.url, id: r.site_id}));
-    else alert(t('pg.netlifyErr') + (r.error || JSON.stringify(r)));
-  } catch(e) { alert(t('pg.errPrefix') + ' ' + e.message); }
-  finally { btn.textContent = '🌐 Netlify'; btn.disabled = false; }
-}
-
 _loadBuildUltra();
 _loadBuildStudio();
 _loadBuildProfile();
 
-async function exportUnityBridge() {
-  if (!_planSlug) return;
-  const btn = $('plan-unity-export-btn');
-  if (btn) { btn.disabled = true; btn.textContent = '⏳…'; }
-  try {
-    const r = await api(`/admin/daedalus/playground/api/projects/${_planSlug}/studio/unity-export`, {
-      method: 'POST',
-      body: JSON.stringify({plan: _planData, studio_preset: studioPreset()}),
-    });
-    if (!r.ok) { alert(r.error || 'export failed'); return; }
-    alert('Unity bridge: ' + (r.written || []).join(', ') + '\n' + (r.note || ''));
-  } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '🎮 Export Unity Bridge'; }
-  }
-}
 loadGh();
 loadProjects();
-maybeReconnectBuild();  // re-attach to any build still running server-side
 if (new URLSearchParams(location.search).get('revive') === '1') openReviveModal();
 document.addEventListener('daedalus:langchange', () => {
   if (window.DaedalusI18n && DaedalusI18n.apply) DaedalusI18n.apply();
