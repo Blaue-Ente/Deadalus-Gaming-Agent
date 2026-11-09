@@ -201,6 +201,10 @@ async def preview_file(slug: str, path: str) -> FileResponse:
 
 @router.post("/projects/{slug}/autopilot")
 async def start_autopilot(slug: str, body: AutopilotStart) -> dict:
+    from daedalus.harness import full_auto
+
+    if full_auto.owns(slug):                                    # it would race Full Auto on the same files
+        raise HTTPException(status_code=409, detail="full_auto_running")
     from daedalus import playground as pg
     from daedalus.builder_runtime import start_builder_run_async
 
