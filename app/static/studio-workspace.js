@@ -84,13 +84,11 @@
   // Every write to a status line bumps its stamp. A background refresh remembers the stamp when it starts and
   // writes only if nothing else has written since, so a slow answer can never replace a newer result.
   const statusStamp = {};
-  const statusSlug = {};          // the project a shown status line was written for ("" when the line is empty)
   function showStatus(id, message, bad) {
     const el = $(id);
     if (!el) return;
     statusStamp[id] = (statusStamp[id] || 0) + 1;
     const msg = message || "";
-    statusSlug[id] = msg ? dx.getSlug() : "";
     el.hidden = !msg;
     el.dataset.state = bad ? "error" : "ok";
     el.textContent = msg;
@@ -722,24 +720,20 @@
   async function loadWorkspaceNow(slug, opts) {
     const mine = ++workspaceSeq;
     $("build-slug").textContent = slug ? dx.t("studio.project") + ": " + slug : "";
-    const repaint = workspacePainted === slug;  // this project is already on screen: a reload, not a switch
-    if (!repaint) {                             // a different project: its controls are not known yet
+    if (workspacePainted !== slug) {            // a different project: its controls are not known yet
       setBuildControlsDisabled();
       workspacePainted = "";
     }
     if (!slug) { loadControls(""); return; }
     const stamp = statusStamp["build-status"] || 0;
     const untouched = () => (statusStamp["build-status"] || 0) === stamp;   // nothing reported here since this began
-    // A reload of the project already on screen (the slug watcher's late "ready" snapshot, a return to this panel) must
-    // not erase what a click reported for this same project before the reload began: only another project's line goes.
-    const ours = () => repaint && statusSlug["build-status"] === slug;
     try {
       const data = await dx.api("/admin/daedalus/game-studio/api/projects/" + slugPath(slug));
       if (mine !== workspaceSeq) return;        // a newer load owns the screen
       paintMilestones(data);
       workspacePainted = slug;
       // Clearing the status line is a write like any other: it must not erase what a click reported meanwhile.
-      if (!streamingSlug && !(checkpoint && checkpoint.slug === slug) && untouched() && !ours()) showStatus("build-status", "", false);
+      if (!streamingSlug && !(checkpoint && checkpoint.slug === slug) && untouched()) showStatus("build-status", "", false);
     } catch (err) {
       if (mine !== workspaceSeq) return;
       workspacePainted = "";
@@ -4707,7 +4701,8 @@
     syncAssetButtons();
     syncShipButtons();
     syncShipVisibility();
-    if (next !== buildSlug) {
+    const switched = next !== buildSlug;
+    if (switched) {
       buildSlug = next;
       invalidatePendingBuild();
     }
@@ -4715,7 +4710,11 @@
     if (streamingSlug && snap.slug !== streamingSlug) closeBuildStream();
     loadFiles(snap.slug);
     syncFilter();
-    if (currentPanel === "build") loadWorkspace(snap.slug);
+    // Every project-list render (a late game index, a filter click) notifies this watcher. Reload the build panel for
+    // another project, an explicit pick (even of the open one), or while this one is not painted yet (an in-flight first
+    // load is shared, not repeated). A passive re-render of the project already on screen must not reload it: that
+    // reload would clear the status line a click just wrote for it.
+    if (currentPanel === "build" && (switched || snap.selected || workspacePainted !== next)) loadWorkspace(snap.slug);
     if (currentPanel === "preview") loadPreviewStatus(snap.slug);
     if (!queryReady && snap.ready) {
       const q = readQuery();

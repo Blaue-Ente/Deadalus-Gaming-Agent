@@ -628,12 +628,17 @@
     return "games";
   }
 
+  // selected: this render follows an explicit pick of a project (a list click or selectSlug), even of the one already
+  // open; a passive re-render (the game index arriving, a filter click) is not one, and panels need not reload for it.
+  let pickPending = false;
   function notifySlug() {
     const snap = {
       slug: state.slug,
       projects: state.projects.slice(),
       ready: state.projectsReady,
+      selected: pickPending,
     };
+    pickPending = false;
     slugWatchers.slice().forEach((fn) => {
       try { fn(snap); } catch (err) { /* a panel watcher must not break the list */ }
     });
@@ -660,6 +665,7 @@
       el.onclick = () => {
         state.slug = p.slug;
         localStorage.setItem("dx.slug", state.slug);
+        pickPending = true;
         refreshProjects();
       };
       box.appendChild(el);
@@ -2129,6 +2135,7 @@
       state.slug = slug || null;
       if (state.slug) localStorage.setItem("dx.slug", state.slug);
       else localStorage.removeItem("dx.slug");
+      pickPending = true;
       refreshProjects();
     },
     watchSlug(fn) {

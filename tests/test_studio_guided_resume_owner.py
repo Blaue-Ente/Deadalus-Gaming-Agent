@@ -498,10 +498,11 @@ def test_slug_change_does_not_resurrect_the_pending_guided_job(studio_server):
             browser.close()
 
 
-def test_a_later_reload_of_the_same_project_keeps_the_guided_error(studio_server):
-    """Root cause of the intermittent guided-error failure on slow CI: a workspace reload of the SAME project that starts
-    after a click reported its error (the slug watcher's late "ready" snapshot, or any panel return) took its status
-    stamp after that error and cleared it. Driven here deterministically: error first, then a fresh reload."""
+def test_a_project_list_rerender_does_not_reload_the_build_panel_and_erase_the_guided_error(studio_server):
+    """Root cause of the intermittent guided-error failure on slow CI: every project-list render (the game index
+    arriving late, a filter click) notifies the slug watchers, and the build watcher reloaded the workspace of the SAME
+    project already on screen. That reload began after the click had reported its error, so its status guard saw the
+    line as untouched and cleared it. Driven here deterministically: error first, then a same-project re-render."""
     from playwright.sync_api import sync_playwright
 
     game = studio_server["game"]
@@ -519,12 +520,15 @@ def test_a_later_reload_of_the_same_project_keeps_the_guided_error(studio_server
                   && document.getElementById('build-status').textContent.includes('no saved plan')"""
             )
             shown = page.locator("#build-status").text_content()
-            reload = "/admin/daedalus/game-studio/api/projects/" + game
-            page.locator('#workspace-nav button[data-panel="chat"]').click()
-            with page.expect_response(lambda r: r.url.split("?", 1)[0].endswith(reload)):
-                page.locator('#workspace-nav button[data-panel="build"]').click()
+            project = "/admin/daedalus/game-studio/api/projects/" + game
+            reloads = []
+            page.on("request", lambda r: reloads.append(r.url) if r.method == "GET" and r.url.split("?", 1)[0].endswith(project) else None)
+            # The watcher calls loadFiles and (before the fix) loadWorkspace in the same tick: once the files request is
+            # answered, a workspace reload, if any, has already been sent.
+            with page.expect_response(lambda r: r.url.split("?", 1)[0].endswith("/" + game + "/files-snapshot")):
+                page.locator('#kind-filter button[data-filter="all"]').click()
             _pump(page)
-            page.wait_for_function("() => !document.getElementById('build-guided').disabled")
+            assert reloads == []
             status = page.locator("#build-status")
             assert status.get_attribute("data-state") == "error"
             assert status.is_visible() and status.text_content() == shown
