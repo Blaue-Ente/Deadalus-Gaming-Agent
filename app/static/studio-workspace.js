@@ -1075,7 +1075,7 @@
     if (generate) generate.disabled = listLocked || planGenerateOp !== null;
     if (refresh) refresh.disabled = listLocked;
     document.querySelectorAll("#plan-list button").forEach((btn) => {
-      btn.disabled = listLocked || (btn.dataset.act === "approve" && planApproveOp.has(btn.dataset.id || ""));
+      btn.disabled = listLocked || btn.dataset.keep === "1" || (btn.dataset.act === "approve" && planApproveOp.has(btn.dataset.id || ""));
     });
   }
 
@@ -1129,6 +1129,7 @@
         actions.appendChild(remove);
       }
       el.append(title, sub, actions);
+      planExtras(id, String(item.status || ""), actions, el);
       list.appendChild(el);
     });
   }
@@ -1328,7 +1329,7 @@
     if (refresh) refresh.disabled = locked;
     if (filter) filter.disabled = locked;
     document.querySelectorAll("#discovery-list button").forEach((btn) => {
-      btn.disabled = locked || discoveryApproveOp.has(btn.dataset.id || "");
+      btn.disabled = locked || btn.dataset.keep === "1" || discoveryApproveOp.has(btn.dataset.id || "");
     });
   }
 
@@ -1383,6 +1384,7 @@
         actions.append(approve, reject);
       }
       el.append(title, sub, actions);
+      discoveryExtras(id, actions);
       list.appendChild(el);
     });
   }
@@ -2191,6 +2193,345 @@
       showStatus("review-status", dx.t("studio.saved"), false);
       await loadReview(currentTab);
     });
+  }
+
+
+  // ---- A6.2b: planner extras and discovery actions -----------------------------------------------------------
+  // Kept apart from the plan/discovery load and approve code on purpose: that code has its own locks and contract, and
+  // these actions are cheap local writes (a step, a status) or an explicit, confirmed model turn (run a step, regenerate).
+  const PLN_ERR = { title_required: "studio.plnErrTitle", too_long: "studio.plnErrLong", too_many_steps: "studio.plnErrSteps",
+    bad_dependency: "studio.plnErrDep", bad_state: "studio.plnErrState", use_approve: "studio.plnErrApprove",
+    already_running: "studio.plnErrRunning", plan_not_active: "studio.plnErrNotActive", dependency_open: "studio.plnErrDepOpen", status_not_allowed: "studio.plnErrStatus" };
+  const STEP_STATES = ["pending", "passed", "failed", "blocked"];
+  const openManagers = new Set();                  // plan ids whose steps are open: a reload of the list keeps them open
+  const managerTimers = {};
+  const regenWatch = new Set();                    // discovery ids whose plan generation we are waiting for
+  let extraFlight = false;
+  let regenTimer = null;
+
+  function plnErr(err) {
+    const code = String((err && err.message) || "");
+    const key = PLN_ERR[code] || REV_ERR[code];
+    return key ? dx.t(key) : failText(err);
+  }
+
+  function lockExtras(on) {
+    document.querySelectorAll("[data-extra]").forEach((b) => { b.disabled = on || b.dataset.keep === "1"; });
+    if (!on) { syncPlanButtons(); syncDiscoveryButtons(); }
+  }
+
+  // One action at a time; its outcome goes to the panel's own status line, and only if the owner is still on Review.
+  async function extraRun(btn, statusId, work) {
+    if (extraFlight) return;
+    const pg = planGen;
+    const dg = discoveryGen;
+    extraFlight = true;
+    lockExtras(true);
+    dx.busy(btn, true, "…");
+    const report = (text, bad) => { if (currentPanel === "review" && pg === planGen && dg === discoveryGen) showStatus(statusId, text, bad); };
+    try {
+      await work(report);
+    } catch (err) {
+      report(plnErr(err), true);
+    } finally {
+      dx.busy(btn, false);
+      extraFlight = false;
+      lockExtras(false);
+    }
+  }
+
+  function xbtn(label, handler) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.dataset.extra = "1";
+    b.textContent = label;
+    b.addEventListener("click", () => handler(b));
+    return b;
+  }
+
+  function planExtras(id, status, actions, el) {
+    if (!id) return;
+    const manage = xbtn(dx.t(openManagers.has(id) ? "studio.planManageHide" : "studio.planManage"), () => toggleManager(id, el, manage));
+    manage.dataset.role = "steps";
+    actions.appendChild(manage);
+    if (status === "active") {
+      const pause = xbtn(dx.t("studio.planPause"), (b) => extraRun(b, "plan-status", async (say) => {
+        await postJson("/api/v1/harness/review/planner/plans/" + encodeURIComponent(id) + "/pause", {});
+        say(dx.t("studio.planPaused"), false);
+        loadPlans({ keepStatus: true });
+      }));
+      pause.dataset.role = "pause";
+      actions.appendChild(pause);
+    }
+    if (status === "paused") {
+      const resume = xbtn(dx.t("studio.planResume"), (b) => {
+        if (!window.confirm(dx.t("studio.planResumeConfirm"))) return;
+        extraRun(b, "plan-status", async (say) => {
+          await postJson("/api/v1/harness/review/planner/plans/" + encodeURIComponent(id) + "/resume", { confirm: true });
+          say(dx.t("studio.planResumed"), false);
+          loadPlans({ keepStatus: true });
+        });
+      });
+      resume.dataset.role = "resume";
+      actions.appendChild(resume);
+    }
+    if (openManagers.has(id)) renderManager(id, el);
+  }
+
+  async function toggleManager(id, el, btn) {
+    const existing = el.querySelector(":scope > .manage");
+    if (existing) {
+      existing.remove();
+      openManagers.delete(id);
+      clearTimeout(managerTimers[id]);
+      btn.textContent = dx.t("studio.planManage");
+      return;
+    }
+    openManagers.add(id);
+    btn.textContent = dx.t("studio.planManageHide");
+    await renderManager(id, el);
+  }
+
+  async function renderManager(id, el) {
+    let box = el.querySelector(":scope > .manage");
+    if (!box) {
+      box = document.createElement("div");
+      box.className = "manage";
+      box.dataset.plan = id;
+      el.appendChild(box);
+    }
+    try {
+      const data = await dx.api("/api/v1/harness/review/planner/plans/" + encodeURIComponent(id) + "/progress");
+      if (!box.isConnected) return;
+      paintManager(box, id, el, data);
+    } catch (err) {
+      if (box.isConnected) box.textContent = plnErr(err);
+    }
+  }
+
+  function managerNote(box) {
+    let n = box.querySelector(":scope > .note.result");
+    if (!n) {
+      n = document.createElement("p");
+      n.className = "note result";
+      n.hidden = true;
+      box.appendChild(n);
+    }
+    return n;
+  }
+
+  function paintManager(box, id, el, data) {
+    const keepNote = box.querySelector(":scope > .note.result");
+    const noteText = keepNote && !keepNote.hidden ? keepNote.textContent : "";
+    const noteState = keepNote ? keepNote.dataset.state : "";
+    const oldForm = box.querySelector(":scope > .add-step");
+    const kept = oldForm ? {
+      inputs: Array.from(oldForm.querySelectorAll("input")).map((i) => i.value),
+      deps: Array.from(oldForm.querySelectorAll("select option:checked")).map((o) => o.value),
+      focus: oldForm.contains(document.activeElement) ? Array.from(oldForm.children).indexOf(document.activeElement) : -1,
+    } : null;
+    box.replaceChildren();
+    const steps = data.steps || [];
+    const active = data.plan_status === "active";
+    if (active) {
+      const loop = document.createElement("p");
+      loop.className = "note";
+      loop.textContent = dx.t(data.loop_running ? "studio.stepLoopOn" : "studio.stepLoopOff");
+      box.appendChild(loop);
+    }
+    if (!steps.length) {
+      const none = document.createElement("p");
+      none.className = "note";
+      none.textContent = dx.t("studio.stepNone");
+      box.appendChild(none);
+    }
+    const result = managerNote(box);
+    const say = (text, bad) => { result.textContent = text; result.hidden = !text; result.dataset.state = bad ? "error" : "ok"; };
+    steps.forEach((st) => {
+      const row = document.createElement("div");
+      row.className = "step";
+      row.dataset.step = st.id;
+      const b = document.createElement("b");
+      b.textContent = st.step_order + ". " + st.title;
+      const small = document.createElement("small");
+      const bits = [st.status, dx.t("studio.stepCheckpoints", { n: st.checkpoints.passed_count, total: st.checkpoints.total })];
+      if (st.manual_override) bits.push(dx.t("studio.stepOverridden"));
+      if (st.bg_running) bits.push(dx.t("studio.stepRunning"));
+      [st.progress_note, st.error_msg].forEach((x) => { if (x) bits.push(String(x)); });
+      small.textContent = bits.join(" · ");
+      const actions = document.createElement("div");
+      actions.className = "row tight";
+      const sel = document.createElement("select");
+      sel.setAttribute("aria-label", dx.t("studio.stepStatus"));
+      STEP_STATES.forEach((s2) => {
+        const o = document.createElement("option");
+        o.value = s2;
+        o.textContent = s2;
+        sel.appendChild(o);
+      });
+      if (STEP_STATES.indexOf(st.status) >= 0) sel.value = st.status;
+      const set = xbtn(dx.t("studio.stepSet"), (btn) => {
+        const status = sel.value;
+        const needs = status === "passed" || (status === "pending" && active);
+        if (needs && !window.confirm(dx.t(status === "passed" ? "studio.stepSetPassedConfirm" : "studio.stepSetPendingConfirm"))) return;
+        extraRun(btn, "plan-status", async () => {
+          await postJson("/api/v1/harness/review/planner/plans/" + encodeURIComponent(id) + "/steps/" + encodeURIComponent(st.id) + "/mark", { status, confirm: needs });
+          await renderManager(id, el);
+          const fresh = el.querySelector(":scope > .manage");
+          if (fresh) { const n = managerNote(fresh); n.textContent = dx.t("studio.stepSetDone", { status }); n.hidden = false; n.dataset.state = "ok"; }
+        });
+      });
+      set.dataset.role = "set";
+      const over = xbtn(dx.t("studio.stepOverride"), (btn) => {
+        if (!window.confirm(dx.t("studio.stepOverrideConfirm"))) return;
+        extraRun(btn, "plan-status", async () => {
+          await postJson("/api/v1/harness/review/planner/plans/" + encodeURIComponent(id) + "/steps/" + encodeURIComponent(st.id) + "/override", { confirm: true });
+          await renderManager(id, el);
+        });
+      });
+      over.dataset.role = "override";
+      over.disabled = st.status === "passed";
+      if (over.disabled) over.dataset.keep = "1";            // stays off after an unlock: nothing to override
+      const run = xbtn(dx.t("studio.stepRun"), (btn) => runStep(btn, id, st.id, el));
+      run.dataset.role = "run";
+      run.disabled = !!st.bg_running;
+      if (run.disabled) run.dataset.keep = "1";              // stays off while this step runs
+      actions.append(sel, set, over, run);
+      row.append(b, small, actions);
+      box.appendChild(row);
+    });
+    const form = addStepForm(id, el, steps, active);
+    if (kept) {                                              // a refresh (the running-step poll) must not wipe what the owner is typing
+      form.querySelectorAll("input").forEach((i, n) => { if (kept.inputs[n] !== undefined) i.value = kept.inputs[n]; });
+      form.querySelectorAll("select option").forEach((o) => { if (kept.deps.indexOf(o.value) >= 0) o.selected = true; });
+      if (kept.focus >= 0 && form.children[kept.focus]) form.children[kept.focus].focus();
+    }
+    box.appendChild(form);
+    if (noteText) say(noteText, noteState === "error");
+    clearTimeout(managerTimers[id]);
+    if (steps.some((st) => st.bg_running)) {                // a step is running: look again, so the row shows how it ended
+      managerTimers[id] = setTimeout(() => {
+        if (currentPanel === "review" && box.isConnected) renderManager(id, el);
+      }, 3000);
+    }
+  }
+
+  function addStepForm(id, el, steps, active) {
+    const form = document.createElement("div");
+    form.className = "add-step";
+    const title = document.createElement("input");
+    title.type = "text";
+    title.autocomplete = "off";
+    title.placeholder = dx.t("studio.stepAddTitle");
+    title.setAttribute("aria-label", dx.t("studio.stepAddTitle"));
+    const desc = document.createElement("input");
+    desc.type = "text";
+    desc.autocomplete = "off";
+    desc.placeholder = dx.t("studio.stepAddDesc");
+    desc.setAttribute("aria-label", dx.t("studio.stepAddDesc"));
+    const deps = document.createElement("select");
+    deps.multiple = true;
+    deps.setAttribute("aria-label", dx.t("studio.stepAddDeps"));
+    steps.forEach((st) => {
+      const o = document.createElement("option");
+      o.value = st.id;
+      o.textContent = st.step_order + ". " + st.title;
+      deps.appendChild(o);
+    });
+    if (!steps.length) deps.hidden = true;
+    const add = xbtn(dx.t("studio.stepAdd"), (btn) => {
+      if (active && !window.confirm(dx.t("studio.stepAddConfirm"))) return;
+      extraRun(btn, "plan-status", async () => {
+        await postJson("/api/v1/harness/review/planner/plans/" + encodeURIComponent(id) + "/steps", {
+          title: title.value, description: desc.value, depends_on: Array.from(deps.selectedOptions).map((o) => o.value), confirm: active,
+        });
+        await renderManager(id, el);
+        const fresh = el.querySelector(":scope > .manage");
+        if (fresh) { const n = managerNote(fresh); n.textContent = dx.t("studio.stepAdded"); n.hidden = false; n.dataset.state = "ok"; }
+      });
+    });
+    add.dataset.role = "add-step";
+    form.append(title, desc, deps, add);
+    return form;
+  }
+
+  async function runStep(btn, planId, stepId, el) {
+    if (!window.confirm(dx.t("studio.stepRunConfirm"))) return;
+    let list = [];
+    try {
+      list = (await dx.api("/api/v1/harness/review/blockers")).recommended || [];
+    } catch (err) { list = []; }
+    // A second, separate question: running the step grants nothing unless the owner says yes to this.
+    const grant = list.length > 0 && window.confirm(dx.t("studio.stepRunGrant", { list: list.join(", ") }));
+    await extraRun(btn, "plan-status", async (say) => {
+      await postJson("/api/v1/harness/review/planner/plans/" + encodeURIComponent(planId) + "/steps/" + encodeURIComponent(stepId) + "/run", { confirm: true, grant_recommended: grant });
+      await renderManager(planId, el);
+      const fresh = el.querySelector(":scope > .manage");
+      if (fresh) { const n = managerNote(fresh); n.textContent = dx.t("studio.stepRunStarted"); n.hidden = false; n.dataset.state = "ok"; }
+      say("", false);
+    });
+  }
+
+  async function createManualPlan(btn) {
+    const title = $("plan-manual-title");
+    const desc = $("plan-manual-desc");
+    await extraRun(btn, "plan-status", async (say) => {
+      const r = await postJson("/api/v1/harness/review/planner/plans", { title: title.value, description: desc.value });
+      title.value = "";
+      desc.value = "";
+      say(dx.t("studio.planManualCreated", { id: r.plan_id }), false);
+      loadPlans({ keepStatus: true });
+    });
+  }
+
+  function discoveryExtras(id, actions) {
+    if (regenWatch.size) watchRegenerations();         // back on Review after leaving it: look at the server's state again
+    if (!id) return;
+    const regen = xbtn(dx.t("studio.discRegen"), (b) => {
+      if (!window.confirm(dx.t("studio.discRegenConfirm"))) return;
+      extraRun(b, "discovery-status", async (say) => {
+        await postJson("/api/v1/harness/review/discoveries/" + encodeURIComponent(id) + "/regenerate", { confirm: true });
+        regenWatch.add(id);
+        say(dx.t("studio.discRegenStarted"), false);
+        watchRegenerations();
+      });
+    });
+    regen.dataset.role = "regenerate";
+    const del = xbtn(dx.t("studio.discDelete"), (b) => {
+      if (!window.confirm(dx.t("studio.discDeleteConfirm"))) return;
+      extraRun(b, "discovery-status", async (say) => {
+        await postJson("/api/v1/harness/review/discoveries/" + encodeURIComponent(id) + "/delete", { confirm: true });
+        say(dx.t("studio.discDeleted"), false);
+        loadDiscoveries({ keepStatus: true });
+      });
+    });
+    del.dataset.role = "delete";
+    actions.append(regen, del);
+  }
+
+  // Plan generation runs on the server in the background: look every few seconds until it has ended, then say how.
+  function watchRegenerations() {
+    clearTimeout(regenTimer);
+    if (!regenWatch.size) return;
+    regenTimer = setTimeout(async () => {
+      if (currentPanel !== "review") return;           // not on screen: nothing is lost, the next visit reads the state again
+      try {
+        const st = await dx.api("/api/v1/harness/review/discoveries/regenerate-status");
+        const running = new Set(st.running || []);
+        regenWatch.forEach((did) => {
+          if (running.has(did)) return;
+          regenWatch.delete(did);
+          const last = (st.last || {})[did];
+          if (last && last.ok) {
+            showStatus("discovery-status", dx.t("studio.discRegenDone", { id: last.plan_id }), false);
+            loadPlans({ keepStatus: true });
+          } else {
+            showStatus("discovery-status", dx.t("studio.discRegenFailed", { why: (last && last.error) || "?" }), true);
+          }
+        });
+      } catch (err) { /* try again below */ }
+      watchRegenerations();
+    }, 2500);
   }
 
   function paintBrain(data) {
@@ -3887,6 +4228,11 @@
   if (planGenerate) planGenerate.addEventListener("click", generatePlan);
   const planRefresh = $("plan-refresh");
   if (planRefresh) planRefresh.addEventListener("click", () => loadPlans());
+  const planManualCreate = $("plan-manual-create");
+  if (planManualCreate) {
+    planManualCreate.dataset.extra = "1";
+    planManualCreate.addEventListener("click", () => createManualPlan(planManualCreate));
+  }
   const discoveryRefresh = $("discovery-refresh");
   if (discoveryRefresh) discoveryRefresh.addEventListener("click", () => loadDiscoveries());
   const discoveryFilter = $("discovery-filter");

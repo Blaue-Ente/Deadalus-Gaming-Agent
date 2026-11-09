@@ -505,3 +505,119 @@ def harness_review_approve_all(body: ApproveBody) -> Any:
     from daedalus.harness import review_actions
 
     return _review_reply(review_actions.approve_all_pending(body.ids, body.confirm))
+
+
+# ---- A6.2b: planner and discoveries ------------------------------------------------------------------------
+class ConfirmBody(BaseModel):
+    confirm: bool = False
+
+
+class PlanBody(BaseModel):
+    title: str = ""
+    description: str = ""
+
+
+class StepBody(BaseModel):
+    title: str = ""
+    description: str = ""
+    depends_on: list[str] = Field(default_factory=list)
+    max_retries: Any = 3
+    confirm: bool = False
+
+
+class MarkBody(BaseModel):
+    status: str = ""
+    confirm: bool = False
+
+
+class RunStepBody(BaseModel):
+    confirm: bool = False
+    grant_recommended: bool = False
+
+
+_PLANNER_STATUS = {"confirm_required": 400, "title_required": 400, "too_long": 400, "too_many_steps": 400, "status_not_allowed": 400,
+                   "bad_dependency": 400, "not_found": 404, "bad_state": 409, "use_approve": 409, "already_running": 409,
+                   "plan_not_active": 409, "dependency_open": 409}
+
+
+def _planner_reply(res: dict[str, Any]) -> Any:
+    if res.get("ok") or "error" not in res:
+        return res
+    return JSONResponse(res, status_code=_PLANNER_STATUS.get(str(res.get("error")), 400))
+
+
+@router.post("/api/v1/harness/review/planner/plans")
+async def harness_plan_create(body: PlanBody) -> Any:
+    from daedalus.harness import planner_actions
+
+    return _planner_reply(await planner_actions.create_manual(body.title, body.description))
+
+
+@router.post("/api/v1/harness/review/planner/plans/{plan_id}/steps")
+async def harness_plan_add_step(plan_id: str, body: StepBody) -> Any:
+    from daedalus.harness import planner_actions
+
+    return _planner_reply(await planner_actions.add_step(plan_id, body.title, body.description, body.depends_on, body.max_retries, body.confirm))
+
+
+@router.post("/api/v1/harness/review/planner/plans/{plan_id}/steps/{step_id}/mark")
+async def harness_plan_mark(plan_id: str, step_id: str, body: MarkBody) -> Any:
+    from daedalus.harness import planner_actions
+
+    return _planner_reply(await planner_actions.mark(plan_id, step_id, body.status, body.confirm))
+
+
+@router.post("/api/v1/harness/review/planner/plans/{plan_id}/steps/{step_id}/override")
+async def harness_plan_override(plan_id: str, step_id: str, body: ConfirmBody) -> Any:
+    from daedalus.harness import planner_actions
+
+    return _planner_reply(await planner_actions.override(plan_id, step_id, body.confirm))
+
+
+@router.post("/api/v1/harness/review/planner/plans/{plan_id}/steps/{step_id}/run")
+async def harness_plan_run_step(plan_id: str, step_id: str, body: RunStepBody) -> Any:
+    from daedalus.harness import planner_actions
+
+    return _planner_reply(await planner_actions.run_background(plan_id, step_id, body.confirm, body.grant_recommended))
+
+
+@router.post("/api/v1/harness/review/planner/plans/{plan_id}/pause")
+async def harness_plan_pause(plan_id: str) -> Any:
+    from daedalus.harness import planner_actions
+
+    return _planner_reply(await planner_actions.pause(plan_id))
+
+
+@router.post("/api/v1/harness/review/planner/plans/{plan_id}/resume")
+async def harness_plan_resume(plan_id: str, body: ConfirmBody) -> Any:
+    from daedalus.harness import planner_actions
+
+    return _planner_reply(await planner_actions.resume(plan_id, body.confirm))
+
+
+@router.get("/api/v1/harness/review/planner/plans/{plan_id}/progress")
+async def harness_plan_progress(plan_id: str) -> Any:
+    from daedalus.harness import planner_actions
+
+    return _planner_reply(await planner_actions.progress(plan_id))
+
+
+@router.get("/api/v1/harness/review/discoveries/regenerate-status")
+def harness_discovery_regenerate_status() -> dict[str, Any]:
+    from daedalus.harness import planner_actions
+
+    return planner_actions.regenerate_status()
+
+
+@router.post("/api/v1/harness/review/discoveries/{discovery_id}/delete")
+def harness_discovery_delete(discovery_id: str, body: ConfirmBody) -> Any:
+    from daedalus.harness import planner_actions
+
+    return _planner_reply(planner_actions.delete_discovery(discovery_id, body.confirm))
+
+
+@router.post("/api/v1/harness/review/discoveries/{discovery_id}/regenerate")
+async def harness_discovery_regenerate(discovery_id: str, body: ConfirmBody) -> Any:
+    from daedalus.harness import planner_actions
+
+    return _planner_reply(await planner_actions.regenerate_start(discovery_id, body.confirm))
