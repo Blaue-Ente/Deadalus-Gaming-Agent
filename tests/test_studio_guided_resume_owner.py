@@ -498,6 +498,66 @@ def test_slug_change_does_not_resurrect_the_pending_guided_job(studio_server):
             browser.close()
 
 
+def _passive_rerender(page, game):
+    """What the late game index does on slow CI: re-render the project list without picking a project. The slug
+    watcher calls loadFiles in the same tick as any panel reload, so once that answer is in, a reload was already sent."""
+    with page.expect_response(lambda r: r.url.split("?", 1)[0].endswith("/" + game + "/files-snapshot")):
+        page.evaluate("(slug) => window.dxStudio.setGameSlugs([slug])", game)
+    _pump(page)
+
+
+def test_a_late_project_list_render_does_not_erase_the_guided_or_preview_error(studio_server):
+    """Root cause of the intermittent guided-error failure on slow CI: every project-list render (the game index
+    arriving late, a filter click) notifies the slug watchers, and the build watcher reloaded the workspace of the SAME
+    project already on screen. That reload began after the click had reported its error, so its status guard saw the
+    line as untouched and cleared it. The preview line had the same race. Driven deterministically here."""
+    from playwright.sync_api import sync_playwright
+
+    game = studio_server["game"]
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        owned = _Owned(page)
+        try:
+            owned.post_mode = "error"
+            owned.install()
+            _open(page, studio_server, game)
+            page.locator("#build-guided").click()
+            page.wait_for_function(
+                """() => document.getElementById('build-status').dataset.state === 'error'
+                  && document.getElementById('build-status').textContent.includes('no saved plan')"""
+            )
+            shown = page.locator("#build-status").text_content()
+            project = "/admin/daedalus/game-studio/api/projects/" + game
+            logs = "/" + game + "/logs"
+            reloads = []
+            page.on("request", lambda r: reloads.append(r.url) if r.method == "GET" and (
+                r.url.split("?", 1)[0].endswith(project) or r.url.split("?", 1)[0].endswith(logs)) else None)
+            _passive_rerender(page, game)
+            assert reloads == []
+            status = page.locator("#build-status")
+            assert status.get_attribute("data-state") == "error"
+            assert status.is_visible() and status.text_content() == shown
+
+            page.route("**/" + game + "/run", lambda route: route.fulfill(
+                status=500, content_type="application/json", body='{"detail": "preview boom"}'))
+            page.locator('#workspace-nav button[data-panel="preview"]').click()
+            page.wait_for_function("() => !document.getElementById('preview-run').disabled")
+            page.locator("#preview-run").click()
+            page.wait_for_function(
+                """() => document.getElementById('preview-status').dataset.state === 'error'
+                  && document.getElementById('preview-status').textContent.includes('preview boom')"""
+            )
+            reloads.clear()
+            _passive_rerender(page, game)
+            assert reloads == []
+            preview = page.locator("#preview-status")
+            assert preview.get_attribute("data-state") == "error" and "preview boom" in preview.text_content()
+        finally:
+            owned.settle()
+            browser.close()
+
+
 def test_guided_error_and_timeout_do_not_resurrect_a_stale_job(studio_server):
     from playwright.sync_api import sync_playwright
 

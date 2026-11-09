@@ -628,18 +628,26 @@
     return "games";
   }
 
-  function notifySlug() {
-    const snap = {
+  // selected: this render follows an explicit pick of a project (a list click or selectSlug), even of the one already
+  // open; a passive re-render (the game index arriving, a filter click) is not one, and panels need not reload for it.
+  // The flag travels with the render the pick started (refreshProjects -> renderProjectList -> notifySlug), so another
+  // render running meanwhile can neither take it nor lend it.
+  function slugSnapshot(selected) {
+    return {
       slug: state.slug,
       projects: state.projects.slice(),
       ready: state.projectsReady,
+      selected: !!selected,
     };
+  }
+  function notifySlug(opts) {
+    const snap = slugSnapshot(opts && opts.selected);
     slugWatchers.slice().forEach((fn) => {
       try { fn(snap); } catch (err) { /* a panel watcher must not break the list */ }
     });
   }
 
-  function renderProjectList() {
+  function renderProjectList(opts) {
     const box = $("plist");
     box.replaceChildren();
     const indexed = state.gameIndex === "ready";
@@ -660,14 +668,14 @@
       el.onclick = () => {
         state.slug = p.slug;
         localStorage.setItem("dx.slug", state.slug);
-        refreshProjects();
+        refreshProjects({ selected: true });
       };
       box.appendChild(el);
     });
-    notifySlug();
+    notifySlug(opts);
   }
 
-  async function refreshProjects() {
+  async function refreshProjects(opts) {
     try {
       const data = await api("/api/v1/playground/projects");
       state.projects = data.projects || [];
@@ -676,7 +684,7 @@
       state.projects = state.projects || [];
     }
     state.projectsReady = true;
-    renderProjectList();
+    renderProjectList(opts);
     syncProjectChrome();
     refreshWorld();
     refreshSessionPins();
@@ -2129,15 +2137,11 @@
       state.slug = slug || null;
       if (state.slug) localStorage.setItem("dx.slug", state.slug);
       else localStorage.removeItem("dx.slug");
-      refreshProjects();
+      refreshProjects({ selected: true });
     },
     watchSlug(fn) {
       slugWatchers.push(fn);
-      fn({
-        slug: state.slug,
-        projects: state.projects.slice(),
-        ready: state.projectsReady,
-      });
+      fn(slugSnapshot(false));
     },
     setKindFilter(filter) {
       state.kindFilter = filter === "games" || filter === "apps" ? filter : "all";
