@@ -16,6 +16,7 @@
   let explicitTicket = 0;
   let explicitFlight = null;
   let buildSlug = null;
+  let previewSlug = null;      // the project the preview line was last loaded for (passive re-renders do not reload it)
   let checkpointGen = 0;
   let checkpoint = null;
   let continueInFlight = false;
@@ -4715,7 +4716,10 @@
     // load is shared, not repeated). A passive re-render of the project already on screen must not reload it: that
     // reload would clear the status line a click just wrote for it.
     if (currentPanel === "build" && (switched || snap.selected || workspacePainted !== next)) loadWorkspace(snap.slug);
-    if (currentPanel === "preview") loadPreviewStatus(snap.slug);
+    // Same rule for the preview line: a passive re-render must not replace what a preview action just reported.
+    const previewSwitched = next !== previewSlug;
+    previewSlug = next;
+    if (currentPanel === "preview" && (previewSwitched || snap.selected)) loadPreviewStatus(snap.slug);
     if (!queryReady && snap.ready) {
       const q = readQuery();
       if (q.slug && q.slug !== snap.slug) {
