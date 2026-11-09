@@ -46,6 +46,7 @@
   let skillGen = 0;
   let skillOp = null;
   let gistFlight = false;
+  let gistDone = null;                             // {id, url} of the gist published for a skill session
   let skillView = null;
   let skillFiles = null;
   let skillNote = "";
@@ -1660,7 +1661,10 @@
     if (download) download.hidden = !skillMdPath();
     if (bundle) bundle.hidden = skillFileNames().length === 0;
     const gist = $("skill-gist");                         // publishing (A6.3c): only a generated skill, one request at a time
-    if (gist) { gist.hidden = !(skillView && skillView.phase === "generated"); gist.disabled = locked || gistFlight; }
+    if (gist) {
+      gist.hidden = !(skillView && skillView.phase === "generated") || !!(gistDone && skillView && gistDone.id === skillView.session_id);
+      gist.disabled = locked || gistFlight;
+    }
   }
 
   function describeSkillStart(data) {
@@ -3140,10 +3144,6 @@
   let appDataGen = 0;
   let appDataFlight = false;
 
-  function gbRow(title, sub, buttons) {
-    return row(title, sub, buttons || []);
-  }
-
   function gbBtn(label, role, handler) {
     const b = document.createElement("button");
     b.type = "button";
@@ -3192,7 +3192,7 @@
       }
       const bits = [r.private ? dx.t("studio.gitPrivate") : dx.t("studio.gitPublic"), r.language, r.default_branch];
       if (r.compat && r.compat.level) bits.push(dx.t("studio.gitCompatLevel", { level: r.compat.level, score: r.compat.score }));
-      const item = gbRow(r.full_name || r.url, bits.filter(Boolean).join(" · "), buttons);
+      const item = row(r.full_name || r.url, bits.filter(Boolean).join(" · "), buttons);
       item.dataset.repo = r.full_name || "";
       return item;
     });
@@ -3204,7 +3204,7 @@
       const data = await dx.api(PG_API + "/github/repos/" + encodeURIComponent(owner) + "/" + encodeURIComponent(name) + "/branches");
       const rows = (data.branches || []).map((br) => {
         const nameText = typeof br === "string" ? br : String(br.name || "");
-        return gbRow(nameText, nameText === data.default_branch ? dx.t("studio.gitDefault") : "", []);
+        return row(nameText, nameText === data.default_branch ? dx.t("studio.gitDefault") : "", []);
       });
       const tags = (data.tags || []).map((t) => (typeof t === "string" ? t : String(t.name || ""))).filter(Boolean);
       return { rows, note: dx.t("studio.gitBranchesOf", { repo: repo.full_name, n: rows.length, tags: tags.join(", ") || "—" }) };
@@ -3215,8 +3215,10 @@
     const st = await dx.api(PG_API + "/git/status", { timeoutMs: 30000 });
     const line = (name, part) => {
       const p = part || {};
-      if (!p.configured) return gbRow(name, dx.t("studio.gitNotConfigured"), []);
-      return gbRow(name, p.ok ? dx.t("studio.gitConnected", { user: p.username || p.login || "?" }) : dx.t("studio.gitBroken", { why: p.error || "?" }), []);
+      if (!p.configured) return row(name, dx.t("studio.gitNotConfigured"), []);
+      if (p.ok) return row(name, dx.t("studio.gitConnected", { user: p.login || p.username || "?" }), []);
+      // the server's own error text is not UI copy (it is not in the owner's language): say its code instead
+      return row(name, dx.t("studio.gitBroken", { why: tOr(GIT_CODE_KEYS[p.code], dx.t("studio.errUnknown")) }), []);
     };
     return { rows: [line("GitHub", st.github), line("GitLab", st.gitlab)], note: "" };
   }));
@@ -3234,7 +3236,7 @@
     gitBrowse(ev.currentTarget, async () => {
       const data = await postJson(PG_API + "/github/compat-check", { url });
       const c = data.compat || {};
-      const rows = (c.warnings || []).map((w) => gbRow(String(w), "", []));
+      const rows = (c.warnings || []).map((w) => row(String(w), "", []));
       return { rows, note: dx.t("studio.gitCompatResult", { level: c.level || "?", score: c.score == null ? "?" : c.score, kind: c.kind || "?" }) };
     });
   });
@@ -3254,6 +3256,8 @@
     const msg = String((err && err.message) || "");
     if (msg === "not a published app") return dx.t("studio.appDataNotPublished");
     if (msg === "not found") return dx.t("studio.appDataGone");
+    if (/^value too large/.test(msg)) return dx.t("studio.appDataTooLarge");
+    if (/^key limit/.test(msg)) return dx.t("studio.appDataLimit");
     return failText(err);
   }
 
@@ -3277,6 +3281,21 @@
     }
   }
 
+  // Another project: what is on screen belongs to the old one, and every button would act on the new one. Clear it.
+  let appDataShown = "";
+  dx.watchSlug((snap) => {
+    const next = snap.slug || "";
+    if (next === appDataShown) return;
+    const before = appDataShown;
+    appDataShown = next;
+    if (!before) return;                                   // the first project of the page: nothing of another one is shown
+    appDataGen += 1;
+    $("app-data-list").replaceChildren();
+    $("app-data-key").value = "";
+    $("app-data-value").value = "";
+    showStatus("app-data-status", "", false);
+  });
+
   async function loadAppKeys(slug, gen) {
     const data = await dx.api(appDataPath(slug, null));
     if (gen !== appDataGen || dx.getSlug() !== slug) return 0;
@@ -3288,6 +3307,7 @@
       view.type = "button";
       view.textContent = dx.t("studio.appDataView");
       view.addEventListener("click", () => appDataRun(view, async (s, say) => {
+        if (s !== slug) return;                            // listed for another project (the list is cleared on a switch)
         const res = await dx.api(appDataPath(s, key));
         $("app-data-key").value = key;
         $("app-data-value").value = JSON.stringify(res.value, null, 2);
@@ -3299,6 +3319,7 @@
       del.addEventListener("click", () => {
         if (!window.confirm(dx.t("studio.appDataDeleteConfirm", { key }))) return;
         appDataRun(del, async (s, say, g) => {
+          if (s !== slug) return;
           await dx.api(appDataPath(s, key), { method: "DELETE" });
           await loadAppKeys(s, g);
           say(dx.t("studio.appDataDeleted", { key }), false);
@@ -3347,7 +3368,8 @@
     syncSkillButtons();
     try {
       const res = await postJson(PG_API + "/skill-creator/github-gist", { session_id: id, confirm_public: true });
-      skillNote = dx.t("studio.skillGistDone", { url: res.gist_url || res.gist_id || "?" });
+      gistDone = { id, url: res.gist_url || res.gist_id || "?" };       // published once: the button goes, the link stays
+      skillNote = dx.t("studio.skillGistDone", { url: gistDone.url });
       skillNoteBad = false;
     } catch (err) {
       const msg = String((err && err.message) || "");

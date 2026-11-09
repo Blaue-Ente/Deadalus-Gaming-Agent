@@ -73,14 +73,16 @@ def test_connections_say_what_is_configured_and_working(studio_server):
 
     with sync_playwright() as pw:
         browser, page = _browser(pw)
-        page.route(f"**{PG}/git/status", lambda r: _fulfill(r, 200, {"ok": True, "github": {"configured": True, "ok": True, "username": "nik"},
-                                                                  "gitlab": {"configured": False}}))
+        page.route(f"**{PG}/git/status", lambda r: _fulfill(r, 200, {"ok": True, "github": {"configured": True, "ok": True, "login": "nik"},
+                                                                  "gitlab": {"configured": True, "ok": False, "code": "invalid_token",
+                                                                             "error": "Токенът е невалиден"}}))
         _open(page, studio_server)
         _git(page)
         page.locator("#git-connections").click()
         page.wait_for_selector("#git-browse-list .item")
         text = page.inner_text("#git-browse-list")
-        assert "connected as nik" in text and "not configured (no token)" in text
+        assert "connected as nik" in text and "configured but not working" in text
+        assert "Токенът" not in text                                                  # server text is not UI copy: its code is shown
         browser.close()
 
 
@@ -209,6 +211,10 @@ def test_an_unpublished_app_says_so_instead_of_failing_quietly(studio_server):
         page.locator("#app-data-value").fill("1")
         page.locator("#app-data-save").click()
         _status_has(page, "app-data-status", "not a published app")
+        page.route(re.compile(rf".*/apps/{G}/db/big$"), lambda r: _fulfill(r, 413, {"ok": False, "error": "value too large (max 64KB)"}))
+        page.locator("#app-data-key").fill("big")
+        page.locator("#app-data-save").click()
+        _status_has(page, "app-data-status", "too large for the app store")
         assert page.locator("#app-data-status").get_attribute("data-state") == "error"
         browser.close()
 
@@ -242,6 +248,7 @@ def test_the_gist_appears_only_for_a_generated_skill_and_asks_before_publishing_
         page.locator("#skill-gist").click()
         _status_has(page, "skill-status", "Published as a public gist: https://gist.github.com/nik/abc")
         assert gists == [{"session_id": "sess9", "confirm_public": True}]
+        page.wait_for_selector("#skill-gist", state="hidden")                         # once per skill: no accidental second copy
         browser.close()
 
 
@@ -294,4 +301,36 @@ def test_the_new_controls_fit_and_are_really_clickable(studio_server, size):
         for selector in ("#git-connections", "#git-gh-repos", "#git-gl-projects", "#git-compat"):
             page.locator(selector).evaluate("el => el.scrollIntoView({block: 'center'})")
             _uncovered(page, selector)
+        browser.close()
+
+
+def test_the_classic_page_asks_and_sends_the_public_confirmation():
+    from pathlib import Path
+
+    page = (Path(__file__).resolve().parents[1] / "ui/templates/daedalus_playground.html").read_text(encoding="utf-8")
+    fn = page[page.index("async function skillCreatorGist()"):]
+    fn = fn[:fn.index("\n}\n")]
+    assert fn.index("confirm(t('pg.gistConfirm'))") < fn.index("/skill-creator/github-gist") and "confirm_public: true" in fn
+
+
+def test_switching_project_clears_the_app_data_shown_for_the_old_one(studio_server):
+    from playwright.sync_api import sync_playwright
+
+    from test_studio_phase2_workspace import _api
+
+    other = _api(studio_server, "POST", "/api/v1/playground/projects", {"name": "Other App", "kind": "static"})["project"]["slug"]
+    with sync_playwright() as pw:
+        browser, page = _browser(pw)
+        keys, values, writes = ["best"], {"best": 1}, []
+        _db(page, keys, values, writes)
+        _open(page, studio_server, panel="preview")
+        page.locator("#app-data-load").click()
+        page.wait_for_selector("#app-data-list .item[data-key='best']")
+        page.locator("#app-data-key").fill("best")
+        page.locator("#app-data-value").fill("1")
+        page.evaluate(f"() => window.dxStudio.selectSlug('{other}')")
+        page.wait_for_function(f"() => window.dxStudio.getSlug() === '{other}'")
+        page.wait_for_function("() => document.querySelectorAll('#app-data-list .item').length === 0")
+        assert page.locator("#app-data-key").input_value() == "" and page.locator("#app-data-value").input_value() == ""
+        assert writes == []
         browser.close()
