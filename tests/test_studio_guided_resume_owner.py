@@ -259,6 +259,31 @@ class _Owned:
                 pass
 
 
+def _trace(page):
+    """Record what the page asks for and logs from here on (read only)."""
+    seen = []
+    page.on("request", lambda r: seen.append("REQ " + r.method + " " + r.url.split("?", 1)[0]))
+    page.on("requestfailed", lambda r: seen.append("FAIL " + r.url.split("?", 1)[0] + " " + str(r.failure)))
+    page.on("console", lambda m: seen.append("CONSOLE " + m.type + " " + m.text))
+    page.on("pageerror", lambda e: seen.append("PAGEERROR " + str(e)))
+    return seen
+
+
+def _report(page, owned, seen):
+    try:
+        state = page.evaluate("""() => {
+          const s = document.getElementById('build-status'), b = document.getElementById('build-guided');
+          return {status: s.textContent, state: s.dataset.state, hidden: s.hidden, guidedDisabled: b.disabled,
+                  slug: window.dxStudio && window.dxStudio.getSlug(), url: location.href};
+        }""")
+    except Exception as exc:                                # the page itself may be the problem
+        state = {"evaluate_failed": str(exc)}
+    print("DIAG state", json.dumps(state, ensure_ascii=False))
+    print("DIAG posts", owned.posts, "streams", owned.streams, "actives held", len(owned.actives))
+    for line in seen[-80:]:
+        print("DIAG", line)
+
+
 def _open(page, server, game):
     page.goto(server["url"] + f"/?panel=build&slug={game}", wait_until="domcontentloaded")
     page.wait_for_function("() => !document.getElementById('build-guided').disabled")
@@ -501,13 +526,18 @@ def test_guided_error_and_timeout_do_not_resurrect_a_stale_job(studio_server):
             _pump(page)
             owned.streams.clear()
             owned.post_mode = "abort"
+            seen = _trace(page)
             page.locator("#build-guided").click()
-            page.wait_for_function(
-                """() => {
-                  const status = document.getElementById('build-status');
-                  return status.dataset.state === 'error' && status.textContent.length > 0;
-                }"""
-            )
+            try:
+                page.wait_for_function(
+                    """() => {
+                      const status = document.getElementById('build-status');
+                      return status.dataset.state === 'error' && status.textContent.length > 0;
+                    }"""
+                )
+            except Exception:
+                _report(page, owned, seen)                  # evidence for an intermittent CI-only failure; the wait itself is unchanged
+                raise
             _no_resume_request(
                 page,
                 lambda req: "/guided/stream" in req.url,

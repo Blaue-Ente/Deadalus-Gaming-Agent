@@ -62,6 +62,7 @@
   const SHIP_UNITY_TIMEOUT_MS = 240000;
   const BLOCKER_TIMEOUT_MS = 20000;
   const PLAN_TIMEOUT_MS = 20000;
+  let faOwnerSlug = "";                            // the project Full Auto owned at the last look (Build run controls)
   const DISCOVERY_TIMEOUT_MS = 20000;
   const SKILL_TIMEOUT_MS = 90000;
   const REF_TIMEOUT_MS = 45000;
@@ -373,11 +374,19 @@
       li.textContent = summary.stages_done + "/" + summary.stages_total;
       list.appendChild(li);
     }
-    $("build-guided").disabled = !data.can_guided;
-    $("build-autopilot").disabled = !data.can_autopilot;
+    // Full Auto drives this project (as last seen by the run controls): the manual steps would race it, so every
+    // repaint keeps them off, not only the controls' own paint (which skips an unchanged answer).
+    const faOwns = faOwnerSlug !== "" && faOwnerSlug === dx.getSlug();
+    $("build-guided").disabled = faOwns || !data.can_guided;
+    $("build-autopilot").disabled = faOwns || !data.can_autopilot;
     $("build-gates").disabled = false;
-    $("build-verify").disabled = false;
-    $("build-advance").disabled = !data.can_advance;
+    $("build-verify").disabled = faOwns;
+    $("build-advance").disabled = faOwns || !data.can_advance;
+    // A waiver is offered only where the Game Studio itself allows one, and only when a plain Advance is not possible.
+    $("build-waive-unity").disabled = faOwns;               // the waivers wait too, as the server would refuse them
+    $("build-waive-proof").disabled = faOwns;
+    $("build-waive-unity").hidden = !!data.can_advance || !data.can_unity_waiver;
+    $("build-waive-proof").hidden = !!data.can_advance || !data.can_proof_waiver || !!data.can_unity_waiver;
   }
 
   function appendBuild(line) {
@@ -702,6 +711,8 @@
     ["build-guided", "build-autopilot", "build-gates", "build-verify", "build-advance"].forEach((id) => {
       $(id).disabled = true;
     });
+    $("build-waive-unity").hidden = true;                 // another project: its waivers are not known yet
+    $("build-waive-proof").hidden = true;
   }
 
   async function loadWorkspaceNow(slug, opts) {
@@ -2866,6 +2877,7 @@
   const PLAN_CREATE_TIMEOUT_MS = 240000;          // a 4000-token planning turn can take minutes
   const FA_TAIL = 12;                              // Full Auto events shown (the poll asks only for these)
   let ctlGen = 0;
+  let ctlPainted = "";                             // slug + the last answer painted (see loadControls)
   let ctlFlight = false;
   let faTimer = null;
   let ctlUltra = false;                            // the Ultra box survives the repaint while Full Auto is watched
@@ -2926,14 +2938,20 @@
     const box = $("build-controls");
     if (!box) return;
     const gen = ++ctlGen;
-    if (!slug) { box.hidden = true; return; }
+    if (!slug) { box.hidden = true; ctlPainted = ""; return; }
     try {
       const [st, fa] = await Promise.all([dx.api(ctlPath(slug, "/controls")), dx.api(ctlPath(slug, "/full-auto?tail=" + FA_TAIL))]);
       if (gen !== ctlGen || dx.getSlug() !== slug) return;
+      // The same answer again (the panel often reads it twice on open) is not repainted: a repaint replaces every button,
+      // so a click or a scroll that is under way would land on a node that has just been thrown away.
+      const key = slug + "\n" + JSON.stringify([st, fa.run]);
+      if (key === ctlPainted && !$("build-controls").hidden) { applyFullAutoLock(slug, st.busy || ""); return; }
+      ctlPainted = key;
       paintControls(slug, st, fa.run);
     } catch (err) {
       if (gen !== ctlGen) return;
       box.hidden = false;
+      ctlPainted = "";
       $("build-ctl-body").replaceChildren();
       showStatus("build-ctl-status", ctlErr(err), true);
     }
@@ -3025,7 +3043,15 @@
     if (busy) body.appendChild(crow(dx.t("studio.ctlBusy", { owner: OWNER[busy] ? dx.t(OWNER[busy]) : busy }), []));
     if (st.game_studio) paintFullAuto(slug, body, run, busy);
     // Full Auto drives this project: the manual build steps would race it (the server refuses them too).
-    if (busy === "full_auto") ["build-guided", "build-autopilot", "build-verify", "build-advance"].forEach((id) => { $(id).disabled = true; });
+    applyFullAutoLock(slug, busy);
+  }
+
+  // Remember who owns the project and switch the manual steps off now; the workspace paint reads the same flag later.
+  function applyFullAutoLock(slug, busy) {
+    faOwnerSlug = busy === "full_auto" ? slug : (faOwnerSlug === slug ? "" : faOwnerSlug);
+    if (busy === "full_auto") {
+      ["build-guided", "build-autopilot", "build-verify", "build-advance", "build-waive-unity", "build-waive-proof"].forEach((id) => { $(id).disabled = true; });
+    }
   }
 
   function faLine(ev) {
@@ -4076,6 +4102,7 @@
     return [
       "ship-unity-init",
       "ship-unity-build",
+      "ship-unity-attach",
       "ship-firebase",
       "ship-hybrid-init",
       "ship-hybrid-export",
@@ -4121,8 +4148,10 @@
     return preset !== "racing" && preset !== "godot_2d" && preset !== "godot_3d";
   }
 
+  // A template can be cloned when the server catalog gives it a repository; the HTML marks those options (a test keeps them in step).
   function unityClones(template) {
-    return template === "unity_game_framework" || template === "daedalus_ugf";
+    const opt = $("ship-template") && $("ship-template").querySelector("option[value='" + template + "']");
+    return !!(opt && opt.dataset.clone === "1");
   }
 
   function syncShipVisibility() {
@@ -4134,6 +4163,7 @@
     [
       ["ship-unity-init", unity],
       ["ship-unity-build", unity],
+      ["ship-unity-attach", unity && unityClones(fields.template)],   // only templates with a repository can be attached
       ["ship-hybrid-init", hybrid],
       ["ship-hybrid-export", hybrid],
       ["ship-cap-init", cap],
@@ -4162,6 +4192,15 @@
     const paths = shipPaths(data);
     if (!paths.length) return dx.t("studio.shipNoNew");
     return dx.t("studio.shipWrote", { paths: paths.join("\n") });
+  }
+
+  function describeAttach(data) {
+    if (!data || data.ok !== true) {
+      const err = data && (data.error || data.detail);
+      return { text: dx.t("studio.shipNotOk") + (err ? ": " + err : ""), bad: true, refresh: false };
+    }
+    if (data.status === "already_present") return { text: dx.t("studio.shipAttachPresent", { path: data.cloned || "" }), bad: false, refresh: false };
+    return { text: dx.t("studio.shipCloned", { path: data.cloned || "" }), bad: false, refresh: true };
   }
 
   function describeUnity(data) {
@@ -4293,6 +4332,12 @@
           timeoutMs: SHIP_TIMEOUT_MS,
           describe: describeBuild,
         }],
+      };
+    }
+    if (action === "attach") {
+      return {
+        confirm: dx.t("studio.shipAttachConfirm", { slug: slug, template: fields.template }),
+        steps: [{ path: "/unity/attach-template", body: { template_id: fields.template }, timeoutMs: SHIP_UNITY_TIMEOUT_MS, describe: describeAttach }],
       };
     }
     if (action === "firebase") {
@@ -4562,6 +4607,18 @@
       showStatus("build-status", dx.t("studio.stopped"), false);
     });
   });
+  [["build-waive-unity", "unity_waiver", "studio.waiveUnityConfirm"], ["build-waive-proof", "proof_waiver", "studio.waiveProofConfirm"]].forEach(([id, flag, ask]) => {
+    $(id).addEventListener("click", () => {
+      const slug = dx.getSlug();
+      if (!slug || !window.confirm(dx.t(ask))) return;
+      runAction($(id), "build-status", async () => {
+        const data = await postJson("/admin/daedalus/game-studio/api/projects/" + slugPath(slug) + "/milestones/advance", { [flag]: true });
+        if (data.ok === false) throw new Error(data.error || dx.t("studio.requestFailed"));
+        await loadWorkspace(slug, { force: true });        // first: the reload clears an untouched status line
+        showStatus("build-status", dx.t("studio.waived", { from: data.previous || "?", to: data.current_milestone || "—" }), false);
+      });
+    });
+  });
   ["gates", "verify", "advance"].forEach((name) => {
     const suffix = name === "advance" ? "/milestones/advance" : "/" + name;
     $("build-" + name).addEventListener("click", () => {
@@ -4775,9 +4832,11 @@
   syncAssetFields();
   renderAssetJobs("");
   if ($("ship-preset")) $("ship-preset").addEventListener("change", syncShipVisibility);
+  if ($("ship-template")) $("ship-template").addEventListener("change", syncShipVisibility);
   [
     ["ship-unity-init", "unity"],
     ["ship-unity-build", "build"],
+    ["ship-unity-attach", "attach"],
     ["ship-firebase", "firebase"],
     ["ship-hybrid-init", "hybrid"],
     ["ship-hybrid-export", "hybrid-export"],

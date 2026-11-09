@@ -290,6 +290,8 @@
           <button id="build-gates" type="button" disabled data-i18n="studio.gates">Gates</button>
           <button id="build-verify" type="button" disabled data-i18n="studio.verify">Verify</button>
           <button id="build-advance" type="button" disabled data-i18n="studio.advance">Advance</button>
+          <button id="build-waive-unity" type="button" hidden data-i18n="studio.waiveUnity">Advance with Unity waiver</button>
+          <button id="build-waive-proof" type="button" hidden data-i18n="studio.waiveProof">Advance with proof waiver</button>
         </div>
         <ul id="build-milestones"></ul>
         <div class="run-controls" id="build-controls" hidden>
@@ -303,8 +305,8 @@
           <label><span data-i18n="studio.shipTemplate">Unity template</span>
             <select id="ship-template" data-i18n-aria="studio.shipTemplate" aria-label="Unity template">
               <option value="daedalus_minimal" selected>daedalus_minimal</option>
-              <option value="unity_game_framework">unity_game_framework</option>
-              <option value="daedalus_ugf">daedalus_ugf</option>
+              <option value="unity_game_framework" data-clone="1">unity_game_framework</option>
+              <option value="daedalus_ugf" data-clone="1">daedalus_ugf</option>
             </select>
           </label>
           <label><span data-i18n="studio.shipPreset">Studio preset</span>
@@ -334,6 +336,7 @@
           <div class="row">
             <button id="ship-unity-init" type="button" data-i18n="studio.shipUnityInit">Init Unity</button>
             <button id="ship-unity-build" type="button" data-i18n="studio.shipUnityBuild">Build scripts</button>
+            <button id="ship-unity-attach" type="button" hidden data-i18n="studio.shipUnityAttach">Attach template</button>
             <button id="ship-firebase" type="button" data-i18n="studio.shipFirebase">Firebase</button>
             <button id="ship-hybrid-init" type="button" hidden data-i18n="studio.shipHybridInit">Init hybrid</button>
             <button id="ship-hybrid-export" type="button" hidden data-i18n="studio.shipHybridExport">Export hybrid</button>
@@ -624,6 +627,10 @@
           <button id="labbtn" type="button" data-i18n="studio.lab">Lab</button>
         </div>
         <pre id="worldbox" data-i18n="studio.loading">Loading…</pre>
+        <p class="kicker stack-mt" data-i18n="studio.dissectSaved">Saved dissection</p>
+        <div id="dissectsaved" class="computer-box"></div>
+        <p class="kicker stack-mt" data-i18n="studio.labsTitle">Labs</p>
+        <div id="labsbox" class="computer-box"></div>
       </div>
     </section>
   </div>

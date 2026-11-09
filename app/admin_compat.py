@@ -1234,6 +1234,7 @@ async def game_studio_workspace(slug: str):
             "current_verify": ctx.get("current_verify"),
             "can_advance": ctx.get("can_advance", False),
             "can_unity_waiver": ctx.get("can_unity_waiver", False),
+            "can_proof_waiver": ctx.get("can_proof_waiver", False),
             "project_complete": ctx.get("project_complete", False),
         })
     except ValueError as exc:

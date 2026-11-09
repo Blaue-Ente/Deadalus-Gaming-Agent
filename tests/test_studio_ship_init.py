@@ -164,11 +164,13 @@ def test_ship_contract_is_present_and_leaves_dead_controls_out():
     assert "unity_game_framework" in HTML
     assert "daedalus_ugf" in HTML
     assert "hybrid_mobile" in HTML
-    assert "attach-template" not in HTML
+    # A6.3b ports the Unity attach-template action (parity row build-unity): present, behind its own confirmation.
+    assert 'id="ship-unity-attach"' in HTML and "/unity/attach-template" not in HTML
     assert "unity-export" not in HTML
     assert "with_ionic" not in WORK
     assert "unity-export" not in WORK
-    assert "attach-template" not in WORK
+    attach = WORK[WORK.find('if (action === "attach")'):WORK.find('if (action === "firebase")')]
+    assert '"/unity/attach-template"' in attach and "studio.shipAttachConfirm" in attach
     assert "preview-frame" not in WORK[WORK.find("function runShip"):WORK.find("function onSlug")]
     for path in PATHS:
         assert path in WORK
