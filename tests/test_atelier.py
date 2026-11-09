@@ -194,7 +194,7 @@ def test_atelier_http(harness_tmp):
     home = client.get("/")
     assert "Wardrobe" in home.text
     assert "Capsule" in home.text
-    assert "/admin/daedalus/connectors#brain" in home.text
+    assert 'href="/?panel=settings"' in home.text and "/admin/daedalus/connectors" not in home.text   # A6.5b: in-Studio Settings
     assert 'id="uselocal"' in home.text
     loc = client.post("/api/v1/llm/wardrobe/local", json={"backend": "ollama"})
     assert loc.json().get("ok") is True

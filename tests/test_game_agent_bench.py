@@ -112,11 +112,12 @@ def test_http_bench_and_studio_copy(tmp_path, monkeypatch):
     assert saved["ok"] is True
     assert saved.get("path")
 
-    gs = client.get("/admin/daedalus/game-studio")
-    assert gs.status_code == 200
-    assert "Honesty" in gs.text
-    assert 'data-i18n="gs.honesty"' in gs.text
-    assert "not a bake-off" in gs.text.lower()
+    # A6.5b: the game-studio page redirects to the Studio's Build panel; the Studio says the same honest thing.
+    gs = client.get("/admin/daedalus/game-studio", follow_redirects=False)
+    assert gs.status_code == 302 and gs.headers["location"] == "/?panel=build"
+    i18n = client.get("/static/i18n.js").text
+    assert '"studio.notBakeoff": "not a bake-off"' in i18n
+    assert 'itemEl(t("studio.honesty"), passed + "/" + total + " · " + t("studio.notBakeoff")' in client.get("/static/studio.js").text
 
     caps = client.get("/capabilities")
     assert "game-agent-bench" in caps.json()["capabilities"]

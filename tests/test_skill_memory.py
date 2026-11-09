@@ -208,9 +208,9 @@ def test_http_approve_reject_and_studio_copy(harness_tmp):
     caps = client.get("/capabilities")
     assert "skill-memory" in caps.json()["capabilities"]
 
-    cc = client.get("/admin/daedalus/skills")
-    assert cc.status_code == 200
-    assert "Lessons" in cc.text or "data-i18n=\"skills.lessons\"" in cc.text
+    # A6.5b: the skills page redirects to the Studio's Review → Skills tab.
+    cc = client.get("/admin/daedalus/skills", follow_redirects=False)
+    assert cc.status_code == 302 and cc.headers["location"] == "/?panel=review&tab=skills"
 
 
 def test_persona_still_compact_with_skill_tool(monkeypatch):

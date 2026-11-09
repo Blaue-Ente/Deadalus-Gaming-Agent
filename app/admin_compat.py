@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
 from fastapi.templating import Jinja2Templates
 
 log = logging.getLogger(__name__)
@@ -53,6 +53,17 @@ async def _body(request: Request) -> dict[str, Any]:
 
 def _page(request: Request, name: str, extra: dict[str, Any] | None = None) -> HTMLResponse:
     return templates.TemplateResponse(request, name, extra or {})
+
+
+def _old_page(request: Request, path: str, name: str, extra: dict[str, Any] | None = None) -> Response:
+    """An old HTML page: a 302 to its Studio panel once the parity gate allows it (every row naming the page is home in
+    the Studio or retired, and the owner has not kept it), otherwise still the real page. JSON APIs are never redirected."""
+    from daedalus.harness.parity_gate import redirect_target
+
+    target = redirect_target(path)
+    if target:
+        return RedirectResponse(target, status_code=302)
+    return _page(request, name, extra)
 
 
 def _sse(event: str, data: dict) -> str:
@@ -148,9 +159,14 @@ def _extract_json_list(text: str) -> list | None:
 
 # ── HTML ────────────────────────────────────────────────────────────────────
 
+@router.get("/", response_class=HTMLResponse)
+async def admin_root(request: Request):
+    return _old_page(request, "/admin/", "daedalus_hub.html")
+
+
 @router.get("/daedalus/hub", response_class=HTMLResponse)
 async def hub_page(request: Request):
-    return _page(request, "daedalus_hub.html")
+    return _old_page(request, "/admin/daedalus/hub", "daedalus_hub.html")
 
 
 @router.get("/daedalus", response_class=HTMLResponse)
@@ -160,36 +176,40 @@ async def chat_page(request: Request):
 
 @router.get("/daedalus/playground", response_class=HTMLResponse)
 async def playground_page(request: Request):
-    return _page(request, "daedalus_playground.html")
+    return _old_page(request, "/admin/daedalus/playground", "daedalus_playground.html")
 
 
 @router.get("/daedalus/game-studio", response_class=HTMLResponse)
 async def game_studio_page(request: Request):
-    return _page(request, "daedalus_game_studio.html")
+    return _old_page(request, "/admin/daedalus/game-studio", "daedalus_game_studio.html")
 
 
 @router.get("/daedalus/connectors", response_class=HTMLResponse)
 async def connectors_page(request: Request):
-    return _page(request, "daedalus_connectors.html")
+    return _old_page(request, "/admin/daedalus/connectors", "daedalus_connectors.html")
 
 
 @router.get("/daedalus/proposals", response_class=HTMLResponse)
 async def proposals_page(request: Request):
-    return _page(request, "proposals.html")
+    return _old_page(request, "/admin/daedalus/proposals", "proposals.html")
 
 
 @router.get("/daedalus/skills", response_class=HTMLResponse)
 async def skills_page(request: Request):
-    return _page(request, "skills.html")
+    return _old_page(request, "/admin/daedalus/skills", "skills.html")
 
 
 @router.get("/daedalus/bundles", response_class=HTMLResponse)
 async def bundles_page(request: Request):
-    return _page(request, "bundles.html")
+    return _old_page(request, "/admin/daedalus/bundles", "bundles.html")
 
 
 @router.get("/llm-router", response_class=HTMLResponse)
 async def llm_router_page(request: Request):
+    from daedalus.harness.parity_gate import redirect_target
+
+    if (target := redirect_target("/admin/llm-router")):
+        return RedirectResponse(target, status_code=302)
     ctx = {"provider": None, "model": None, "source": None, "has_key": False}
     try:
         from daedalus.llm_config import get_config

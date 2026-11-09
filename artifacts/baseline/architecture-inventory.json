@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-09T16:03:36.704654+00:00",
+  "generated_at": "2026-11-09T16:51:26.950519+00:00",
   "package_version": "0.3.8",
-  "git_commit": "083bff511e8488a587a1b3793c7e06c19b3b680d",
+  "git_commit": "c4bbf3d5024773d78cd03201d203d7f5fe5b77bb",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -14,7 +14,7 @@
     },
     {
       "path": "app/admin_compat.py",
-      "lines": 3011,
+      "lines": 3031,
       "broad_excepts": 70
     },
     {
@@ -130,8 +130,8 @@
     ]
   },
   "tests": {
-    "modules": 111,
-    "functions": 1286
+    "modules": 112,
+    "functions": 1296
   },
   "modules": {
     "daedalus": [
@@ -219,6 +219,7 @@
       "daedalus/harness/manifest.py",
       "daedalus/harness/memory_actions.py",
       "daedalus/harness/parity.py",
+      "daedalus/harness/parity_gate.py",
       "daedalus/harness/perception.py",
       "daedalus/harness/planner_actions.py",
       "daedalus/harness/play_worker/__init__.py",

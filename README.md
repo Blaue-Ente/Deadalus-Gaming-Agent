@@ -96,7 +96,7 @@ Data lives under `$DAEDALUS_DATA` (default `data/daedalus/` on the machine, `%LO
 | Native tools | `read_file`, `write_file`, `run_command`, `web_search`, `web_fetch`, `web_read`, `generate_image`, `remember`, `code_search`, `browser`, `mcp_call`, `spawn_subagent`, `playtest`, `play_lab`, `dissect_game`, `engine`, `world`, `assets`, `skill`, `production`, `git_forge`, `math3d`, `spatial`, `game_lint`, `profiler`, `game_canon` |
 | MCP | Studio → **Connectors** (`$DAEDALUS_DATA/mcp.json` + `secrets.env`) |
 | Honesty suite | `python -m daedalus.game_agent_bench` · `GET /api/v1/daedalus/bench` — this harness, not a vendor bake-off |
-| Local LLM | Connectors **Brain** (`/admin/daedalus/connectors#brain`) — Ollama wardrobe for the **whole process** (chat, workers, autopilot, CLI), not Studio-only. Or `DAEDALUS_PROVIDER=ollama` |
+| Local LLM | Studio **Settings** (`/?panel=settings`) — Ollama wardrobe for the **whole process** (chat, workers, autopilot, CLI), not Studio-only. Or `DAEDALUS_PROVIDER=ollama` |
 | Offline kit | `DAEDALUS_OFFLINE=1` / Studio toggle — no search/images; local model + capsules still work |
 | Sub-agents | worker slots **and** `spawn_subagent` (files + shell, jailed) |
 | Autopilot | kernel `full_autopilot` + Definition of Done + playtest |
@@ -223,20 +223,20 @@ Cloud (fly.io, Render, GitLab Registry): see [DEPLOY.md](DEPLOY.md).
 
 Open http://127.0.0.1:8787 — that is **Studio** (chat, shell, wardrobe, mark).
 
-Command Center (same process, same brain):
+Everything lives in Studio panels (same process, same brain):
 
-| Page | URL |
+| Studio | URL |
 |---|---|
-| Home | http://127.0.0.1:8787/admin/daedalus |
-| Playground | http://127.0.0.1:8787/admin/daedalus/playground |
-| Game Studio | http://127.0.0.1:8787/admin/daedalus/game-studio |
-| Proposals (Approve) | http://127.0.0.1:8787/admin/daedalus/proposals |
-| Skills | http://127.0.0.1:8787/admin/daedalus/skills |
-| Connectors (brain, keys, MCP) | http://127.0.0.1:8787/admin/daedalus/connectors |
+| Build (game studio, guided, autopilot) | http://127.0.0.1:8787/?panel=build |
+| Review (proposals, skills, bundles, permissions, memory) | http://127.0.0.1:8787/?panel=review |
+| Settings (brain, keys, MCP, workers) | http://127.0.0.1:8787/?panel=settings |
+| Classic page (radar/journal, auto-apply) | http://127.0.0.1:8787/admin/daedalus |
+| Playground (until its last tools move) | http://127.0.0.1:8787/admin/daedalus/playground |
 | OpenAPI | http://127.0.0.1:8787/docs |
 | Health | http://127.0.0.1:8787/health |
 
-LLM presets, workers, memory, tasks, and blockers share the same `/admin/daedalus/*` URLs. The brain is set once in Connectors — not a second form in Studio.
+The old Hub, Game Studio, Proposals, Skills, Bundles, Connectors and LLM-router pages redirect (302) to these panels.
+Their JSON APIs under `/admin/daedalus/*` are unchanged.
 
 ---
 

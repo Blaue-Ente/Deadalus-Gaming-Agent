@@ -1646,7 +1646,9 @@
       const prod = await api("/api/v1/playground/projects/" + state.slug + "/production");
       const layer = prod.layer || "prototype";
       const wall = prod.wall || "prototype";
-      box.appendChild(itemEl(t("studio.layer"), layer + " · " + wall, layer === "production" && wall === "clear"));
+      const done = layer === "production" && wall === "clear";
+      // The game-studio page said this too: until the production wall is clear, it is a prototype, not a store build.
+      box.appendChild(itemEl(t("studio.layer"), layer + " · " + wall + (done ? "" : " · " + t("studio.notStoreBuild")), done));
     } catch (e) {
       box.appendChild(itemEl(t("studio.layer"), errText(e), false));
     }
