@@ -269,6 +269,22 @@ def allowed_install_src(src: Path) -> bool:
     return any(_is_under(src, r) or src == r.resolve() for r in roots)
 
 
+def _holds_data_root(src: Path) -> bool:
+    """True when ``src`` is the data root or a folder that contains it."""
+    try:
+        data = data_root().resolve()
+        src = src.resolve()
+    except Exception:
+        return False
+    return src.is_dir() and (src == data or _is_under(data, src))
+
+
+def _skip_names(_dir: str, names: list[str]) -> list[str]:
+    from .secret_paths import is_secret_name
+
+    return [n for n in names if n in _SKIP_COPY or is_secret_name(n)]
+
+
 def _tree_size(path: Path) -> int:
     if path.is_file():
         return path.stat().st_size
@@ -324,6 +340,11 @@ def install_into_lab(lab_id: str, src: str | Path) -> dict[str, Any]:
             "install path must sit under DAEDALUS_DATA, playground, or /tmp "
             "(set DAEDALUS_LAB_INSTALL_ROOT to allow another root)"
         )
+    if path.is_file() and _skip_names("", [path.name]):
+        raise ValueError("install path is a secret file (.env, key, certificate): it is never copied into a lab")
+    if _holds_data_root(path):
+        # the whole data folder (keys, the KV store, the database) would be copied into a lab that is served over HTTP
+        raise ValueError("install path contains the Daedalus data folder: pick the game's own folder or zip")
     if _looks_native_installer(path):
         raise ValueError(
             "native installer refused — Play Lab hosts HTML5, git checkouts, "
@@ -354,9 +375,9 @@ def install_into_lab(lab_id: str, src: str | Path) -> dict[str, Any]:
                     child,
                     target,
                     dirs_exist_ok=True,
-                    ignore=lambda _d, names: [n for n in names if n in _SKIP_COPY],
+                    ignore=_skip_names,                     # never copies .env, keys or other secret files
                 )
-            else:
+            elif not _skip_names("", [child.name]):
                 shutil.copy2(child, target)
     else:
         shutil.copy2(path, dest / path.name)
@@ -396,6 +417,10 @@ def _extract_zip(zip_path: Path, dest: Path) -> None:
         for info in zf.infolist():
             name = info.filename.replace("\\", "/")
             if name.endswith("/") or not name:
+                continue
+            from .secret_paths import is_secret_path
+
+            if is_secret_path(name):                            # a key or .env inside the zip stays out of the served lab
                 continue
             if name.startswith("/") or ".." in Path(name).parts:
                 raise ValueError(f"zip slip blocked: {name}")

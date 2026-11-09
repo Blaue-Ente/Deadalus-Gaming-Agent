@@ -378,6 +378,11 @@
     $("build-gates").disabled = false;
     $("build-verify").disabled = false;
     $("build-advance").disabled = !data.can_advance;
+    // A waiver is offered only where the Game Studio itself allows one, and only when a plain Advance is not possible.
+    $("build-waive-unity").disabled = false;
+    $("build-waive-proof").disabled = false;
+    $("build-waive-unity").hidden = !!data.can_advance || !data.can_unity_waiver;
+    $("build-waive-proof").hidden = !!data.can_advance || !data.can_proof_waiver || !!data.can_unity_waiver;
   }
 
   function appendBuild(line) {
@@ -702,6 +707,8 @@
     ["build-guided", "build-autopilot", "build-gates", "build-verify", "build-advance"].forEach((id) => {
       $(id).disabled = true;
     });
+    $("build-waive-unity").hidden = true;                 // another project: its waivers are not known yet
+    $("build-waive-proof").hidden = true;
   }
 
   async function loadWorkspaceNow(slug, opts) {
@@ -3025,7 +3032,9 @@
     if (busy) body.appendChild(crow(dx.t("studio.ctlBusy", { owner: OWNER[busy] ? dx.t(OWNER[busy]) : busy }), []));
     if (st.game_studio) paintFullAuto(slug, body, run, busy);
     // Full Auto drives this project: the manual build steps would race it (the server refuses them too).
-    if (busy === "full_auto") ["build-guided", "build-autopilot", "build-verify", "build-advance"].forEach((id) => { $(id).disabled = true; });
+    if (busy === "full_auto") {
+      ["build-guided", "build-autopilot", "build-verify", "build-advance", "build-waive-unity", "build-waive-proof"].forEach((id) => { $(id).disabled = true; });
+    }
   }
 
   function faLine(ev) {
@@ -4076,6 +4085,7 @@
     return [
       "ship-unity-init",
       "ship-unity-build",
+      "ship-unity-attach",
       "ship-firebase",
       "ship-hybrid-init",
       "ship-hybrid-export",
@@ -4134,6 +4144,7 @@
     [
       ["ship-unity-init", unity],
       ["ship-unity-build", unity],
+      ["ship-unity-attach", unity && unityClones(fields.template)],   // only templates with a repository can be attached
       ["ship-hybrid-init", hybrid],
       ["ship-hybrid-export", hybrid],
       ["ship-cap-init", cap],
@@ -4162,6 +4173,15 @@
     const paths = shipPaths(data);
     if (!paths.length) return dx.t("studio.shipNoNew");
     return dx.t("studio.shipWrote", { paths: paths.join("\n") });
+  }
+
+  function describeAttach(data) {
+    if (!data || data.ok !== true) {
+      const err = data && (data.error || data.detail);
+      return { text: dx.t("studio.shipNotOk") + (err ? ": " + err : ""), bad: true, refresh: false };
+    }
+    if (data.status === "already_present") return { text: dx.t("studio.shipAttachPresent", { path: data.cloned || "" }), bad: false, refresh: false };
+    return { text: dx.t("studio.shipCloned", { path: data.cloned || "" }), bad: false, refresh: true };
   }
 
   function describeUnity(data) {
@@ -4293,6 +4313,12 @@
           timeoutMs: SHIP_TIMEOUT_MS,
           describe: describeBuild,
         }],
+      };
+    }
+    if (action === "attach") {
+      return {
+        confirm: dx.t("studio.shipAttachConfirm", { slug: slug, template: fields.template }),
+        steps: [{ path: "/unity/attach-template", body: { template_id: fields.template }, timeoutMs: SHIP_UNITY_TIMEOUT_MS, describe: describeAttach }],
       };
     }
     if (action === "firebase") {
@@ -4562,6 +4588,18 @@
       showStatus("build-status", dx.t("studio.stopped"), false);
     });
   });
+  [["build-waive-unity", "unity_waiver", "studio.waiveUnityConfirm"], ["build-waive-proof", "proof_waiver", "studio.waiveProofConfirm"]].forEach(([id, flag, ask]) => {
+    $(id).addEventListener("click", () => {
+      const slug = dx.getSlug();
+      if (!slug || !window.confirm(dx.t(ask))) return;
+      runAction($(id), "build-status", async () => {
+        const data = await postJson("/admin/daedalus/game-studio/api/projects/" + slugPath(slug) + "/milestones/advance", { [flag]: true });
+        if (data.ok === false) throw new Error(data.error || dx.t("studio.requestFailed"));
+        await loadWorkspace(slug, { force: true });        // first: the reload clears an untouched status line
+        showStatus("build-status", dx.t("studio.waived", { from: data.previous || "?", to: data.current_milestone || "—" }), false);
+      });
+    });
+  });
   ["gates", "verify", "advance"].forEach((name) => {
     const suffix = name === "advance" ? "/milestones/advance" : "/" + name;
     $("build-" + name).addEventListener("click", () => {
@@ -4775,9 +4813,11 @@
   syncAssetFields();
   renderAssetJobs("");
   if ($("ship-preset")) $("ship-preset").addEventListener("change", syncShipVisibility);
+  if ($("ship-template")) $("ship-template").addEventListener("change", syncShipVisibility);
   [
     ["ship-unity-init", "unity"],
     ["ship-unity-build", "build"],
+    ["ship-unity-attach", "attach"],
     ["ship-firebase", "firebase"],
     ["ship-hybrid-init", "hybrid"],
     ["ship-hybrid-export", "hybrid-export"],

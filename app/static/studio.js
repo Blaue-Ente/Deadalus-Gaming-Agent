@@ -1908,10 +1908,69 @@
       });
       text($("worldbox"), data.specimen_block || data.summary || JSON.stringify(data, null, 2));
       add("bot", data.ok ? (t("studio.specimen") + ": " + (data.title || source)) : (data.detail || data.error || t("studio.dissectFail")));
+      refreshSavedDissection(true);
+      refreshLabs();
     } catch (e) {
       text($("worldbox"), t("studio.dissect") + ": " + errText(e));
     }
   };
+  // The project's saved dissection (what the last dissection of this project found) and the labs on this machine: reads only.
+  let dissectSlug;
+  let dissectGen = 0;
+  function emptyRow(box, msg) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    text(empty, msg);
+    box.appendChild(empty);
+  }
+  async function refreshSavedDissection(force) {
+    const box = $("dissectsaved");
+    if (!box) return;
+    const slug = state.slug || "";
+    if (!force && slug === dissectSlug) return;
+    dissectSlug = slug;
+    const gen = ++dissectGen;
+    box.replaceChildren();
+    if (!slug) { emptyRow(box, t("studio.noProject")); return; }
+    try {
+      const data = await api("/api/v1/playground/projects/" + encodeURIComponent(slug) + "/dissection", { timeoutMs: 8000 });
+      if (gen !== dissectGen) return;
+      const d = data && data.dissection;
+      if (!d) { emptyRow(box, t("studio.dissectNone")); return; }
+      const card = itemEl(d.title || d.source || slug, [d.source_kind, d.stack && d.stack.engine].filter(Boolean).join(" · "), false);
+      const p = document.createElement("small");
+      text(p, d.summary || "");
+      card.appendChild(p);
+      card.dataset.dissection = slug;
+      box.appendChild(card);
+    } catch (e) {
+      if (gen !== dissectGen) return;
+      emptyRow(box, t("studio.dissectReadFail") + ": " + errText(e));
+    }
+  }
+  async function refreshLabs() {
+    const box = $("labsbox");
+    if (!box) return;
+    try {
+      const data = await api("/api/v1/daedalus/labs", { timeoutMs: 8000 });
+      box.replaceChildren();
+      const rows = data.labs || [];
+      if (!rows.length) { emptyRow(box, t("studio.labsNone")); return; }
+      rows.forEach((lab) => {
+        const sub = [lab.id, lab.source_kind, lab.playable ? t("studio.labPlayable", { file: lab.playable }) : t("studio.labNotPlayable"),
+          lab.vm && lab.vm.status === "running" ? t("studio.labServing") : ""]
+          .filter(Boolean).join(" · ");
+        const card = itemEl(lab.title || lab.id, sub, false);
+        card.dataset.lab = lab.id || "";
+        box.appendChild(card);
+      });
+    } catch (e) {
+      box.replaceChildren();
+      emptyRow(box, t("studio.labsReadFail") + ": " + errText(e));
+    }
+  }
+  slugWatchers.push(() => refreshSavedDissection(false));
+
   $("labbtn").onclick = async () => {
     document.querySelector('[data-pane="world"]').click();
     text($("worldbox"), t("studio.labbing"));
@@ -1924,6 +1983,7 @@
       text($("worldbox"), JSON.stringify({ lab: data, host }, null, 2));
       add("bot", data.ok ? t("studio.labOk", { id: data.id }) : (data.detail || t("studio.labFail")));
       refreshComputer();
+      refreshLabs();
     } catch (e) {
       text($("worldbox"), t("studio.lab") + ": " + errText(e));
     }
@@ -2021,4 +2081,5 @@
   refreshConnectors();
   refreshEvolution();
   refreshComputer();
+  refreshLabs();
 })();

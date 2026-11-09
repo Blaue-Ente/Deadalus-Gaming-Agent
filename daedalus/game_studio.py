@@ -713,6 +713,7 @@ async def get_workspace_context(slug: str) -> dict[str, Any]:
         "current_verify": cur_verify,
         "can_advance": can_advance_milestone(cfg, plan),
         "can_unity_waiver": can_advance_with_unity_waiver(cfg, plan),
+        "can_proof_waiver": can_advance_with_proof_waiver(cfg, plan),
         "project_complete": project_complete(cfg, plan),
         "studio_preset": preset,
         "build_mode": cfg.get("build_mode") or "guided",
