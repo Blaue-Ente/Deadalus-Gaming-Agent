@@ -84,15 +84,6 @@ GROUPS: list[dict[str, Any]] = [
         ),
     },
     {
-        "id": "mesh",
-        "title": "Assistants / mesh",
-        "blurb": (
-            "An external agent (another process, future Grok/Cursor MCP) calls "
-            "POST /api/iyveris with this key. Loopback Studio does not need it."
-        ),
-        "pick": "Change the default key before a public bind. It is not a substitute for DAEDALUS_TOKEN.",
-    },
-    {
         "id": "lab",
         "title": "Lab / engines",
         "blurb": "Play Lab is the virtual computer. Local HTTP always; optional SmolVM guest browser to watch.",
@@ -227,12 +218,6 @@ FIELDS: list[dict[str, Any]] = [
         "label": "Netlify",
         "why": "Lasting public URL for static / vite / expo-web.",
         "docs": "https://app.netlify.com/user/applications",
-    },
-    # Mesh
-    {
-        "key": "IYVERIS_MESH_KEY", "group": "mesh", "secret": True,
-        "label": "Mesh key",
-        "why": "X-Iyveris-Mesh-Key for POST /api/iyveris (chat/capabilities from another agent).",
     },
     # Lab / engines
     {

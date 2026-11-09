@@ -62,7 +62,7 @@ from .reflection import run_reflection_cycle
 from . import continuity as _continuity
 from . import mode as _mode
 from .tools import (
-    web_search_tool, github_search_tool, mesh_call_tool,
+    web_search_tool, github_search_tool,
     postgres_query_tool, query_mesh_stats_tool,
     backup_chromadb_tool, list_storage_objects_tool,
     github_search_repos_tool, github_list_my_repos_tool,
@@ -644,25 +644,6 @@ def _format_web_results(query: str, ws: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _extract_mesh_marker(raw: str) -> tuple[str, str, dict[str, Any]] | None:
-    """Pull a <NEED_MESH: service : action : {payload}> marker out of an LLM reply."""
-    if not raw or "NEED_MESH" not in raw:
-        return None
-    m = re.search(
-        r"<NEED_MESH:\s*([\w-]+)\s*:\s*([\w.]+)\s*:\s*(\{[^<>]*?\})\s*>",
-        raw, re.DOTALL
-    )
-    if not m:
-        return None
-    target = m.group(1).strip()
-    action = m.group(2).strip()
-    try:
-        payload: dict[str, Any] = json.loads(m.group(3).strip())
-    except Exception:
-        payload = {}
-    return target, action, payload
-
-
 def _perm_gate(perm_class: str, tool: str) -> str | None:
     """Return denial message if permission missing, else None."""
     try:
@@ -675,18 +656,6 @@ def _perm_gate(perm_class: str, tool: str) -> str | None:
         log.warning("permission check unavailable for %s (%s) - blocked", tool, exc)
         from .native_tools import PERMISSION_CHECK_UNAVAILABLE
         return PERMISSION_CHECK_UNAVAILABLE.format(tool=tool)
-
-
-def _format_mesh_call_result(target: str, action: str, mc: dict[str, Any]) -> str:
-    if not mc.get("ok"):
-        return f"[mesh_call {target}.{action}] FAILED: {mc.get('error', 'unknown error')}"
-    result = mc.get("result", {})
-    result_str = (
-        json.dumps(result, ensure_ascii=False, indent=2)[:2000]
-        if isinstance(result, (dict, list))
-        else str(result)[:2000]
-    )
-    return f"[mesh_call {target}.{action}] SUCCESS:\n{result_str}"
 
 
 def _format_github_results(query: str, gs: dict[str, Any]) -> str:
@@ -2134,51 +2103,12 @@ class Daedalus:
                     tool_results_text_parts.append(_denied)
                     tool_calls_used.append({"tool": "web_search", "ok": False, "denied": True})
                 else:
-                    # NEED_SEARCH → Perplexity/Sonar (synthesized answer + citations)
-                    try:
-                        from argos_data_nexus.modules.web_search import smart_search as _smart_search
-                        sr = await _smart_search(search_q, mode="sonar")
-                        _mode = sr.get("mode", "sonar")
-                        if _mode in ("sonar", "sonar-pro"):
-                            _answer = sr.get("answer", "")
-                            _cits   = sr.get("citations", [])
-                            _cit_block = ""
-                            if _cits:
-                                _cit_lines = "\n".join(f"  [{i+1}] {u}" for i, u in enumerate(_cits[:8]))
-                                _cit_block = f"\nSources:\n{_cit_lines}"
-                            tool_results_text_parts.append(
-                                f"━━━ TOOL RESULTS — NEED_SEARCH (Sonar) [{search_q!r}] ━━━\n"
-                                f"{_answer}{_cit_block}"
-                            )
-                        else:
-                            # DDG fallback
-                            tool_results_text_parts.append(_format_web_results(search_q, {
-                                "ok": True,
-                                "result_count": sr.get("result_count", 0),
-                                "results": sr.get("results", []),
-                            }))
-                        tool_calls_used.append({
-                            "tool": "smart_search", "query": search_q,
-                            "mode": sr.get("mode"), "source": sr.get("source"),
-                        })
-                        # Запомняме в Дедал discoveries
-                        try:
-                            from argos_data_nexus.modules.web_search import smart_search as _ss
-                            _answer_text = sr.get("answer") or ""
-                            if _answer_text and len(_answer_text) > 40:
-                                self.memory.store_discovery(
-                                    title=f"[Sonar] {search_q[:80]}",
-                                    content=_answer_text[:1200],
-                                    source="sonar",
-                                    tags=["search", "sonar", "live"],
-                                )
-                        except Exception:
-                            pass
-                    except Exception as _se:
-                        log.warning("NEED_SEARCH failed (%s) — falling back to NEED_WEB DDG", _se)
-                        ws = await web_search_tool(self.memory, search_q, limit=5, for_self=for_self)
-                        tool_results_text_parts.append(_format_web_results(search_q, ws))
-                        tool_calls_used.append({"tool": "web_search_fallback", "query": search_q})
+                    # NEED_SEARCH → the same DDG search as NEED_WEB. R5 (retired 2026-11-09): the Perplexity/Sonar
+                    # route lived only on the old ADN host (argos_data_nexus.modules.web_search) and is gone.
+                    ws = await web_search_tool(self.memory, search_q, limit=5, for_self=for_self)
+                    tool_results_text_parts.append(_format_web_results(search_q, ws))
+                    tool_calls_used.append({"tool": "web_search", "query": search_q,
+                                            "result_count": ws.get("result_count", 0)})
             if web_q:
                 _denied = _perm_gate("web_search", "NEED_WEB")
                 if _denied:
@@ -2267,23 +2197,13 @@ class Daedalus:
                                             "for_self": for_self})
                     tool_results_text_parts.append(_format_github_results(gh_q, gs))
             if mesh_marker:
-                _denied = _perm_gate("mesh_call", "NEED_MESH")
-                if _denied:
-                    tool_results_text_parts.append(_denied)
-                    tool_calls_used.append({"tool": "mesh_call", "ok": False, "denied": True})
-                else:
-                    m_target, m_action, m_payload = mesh_marker
-                    mc = await mesh_call_tool(m_target, m_action, m_payload, timeout=30.0)
-                    tool_calls_used.append({
-                        "tool": "mesh_call",
-                        "target": m_target,
-                        "action": m_action,
-                        "ok": mc.get("ok", False),
-                    })
-                    tool_results_text_parts.append(
-                        f"━━━ TOOL RESULTS — MESH CALL ━━━\n"
-                        + _format_mesh_call_result(m_target, m_action, mc)
-                    )
+                # R5 (retired 2026-11-09): NEED_MESH called services of the old Iyveris mesh, which standalone Daedalus
+                # does not have. Answer honestly instead of calling anything.
+                tool_calls_used.append({"tool": "mesh_call", "ok": False, "error": "retired"})
+                tool_results_text_parts.append(
+                    "━━━ TOOL RESULTS — MESH CALL ━━━\n"
+                    "[NEED_MESH] unavailable: the Iyveris mesh is retired in standalone Daedalus. Nothing was called."
+                )
             if skill_q:
                 try:
                     from .skill_acquisition import analyze_github_repo, format_skill_analysis_for_prompt, log_skill_interest
@@ -4539,25 +4459,17 @@ class Daedalus:
                                         limit=limit, min_stars=min_stars,
                                         for_self=for_self)
 
-    async def mesh_call(self, target: str, action: str,
-                        payload: dict[str, Any] | None = None,
-                        timeout: float = 30.0) -> dict[str, Any]:
-        """Directly call an Iyveris mesh service. Used by Mesh Hub + mesh_call_tool."""
-        return await mesh_call_tool(target, action, payload, timeout=timeout)
-
     def list_discoveries(self, status: str | None = None, limit: int = 100) -> dict[str, Any]:
         items = self.memory.list_discoveries(status=status, limit=limit)
         return {"count": len(items), "status_filter": status, "discoveries": items}
 
     def approve_discovery(self, discovery_id: str) -> dict[str, Any]:
         ok = self.memory.set_discovery_status(discovery_id, "approved")
-        plan_id: str | None = None
         if ok:
             # Promote to lesson on approval
             res = self.memory.discoveries_col.get(ids=[discovery_id])
             if res.get("ids"):
                 meta = (res.get("metadatas") or [{}])[0] or {}
-                doc = (res.get("documents") or [""])[0]
                 title = meta.get("title", "")
                 url = meta.get("url", "")
                 kind = meta.get("kind", "discovery")
@@ -4569,41 +4481,9 @@ class Daedalus:
                     )
                 except Exception as exc:
                     log.debug("approve→lesson failed: %s", exc)
-                # Trigger async plan generation (fire-and-forget)
-                try:
-                    discovery = {
-                        "id": discovery_id,
-                        "content": doc,
-                        "metadata": meta,
-                    }
-                    plan_id = self._schedule_plan_generation(discovery)
-                except Exception as exc:
-                    log.debug("approve→plan schedule failed: %s", exc)
-        return {"discovery_id": discovery_id, "approved": ok, "plan_id": plan_id}
-
-    def _schedule_plan_generation(self, discovery: dict[str, Any]) -> str | None:
-        """Fire-and-forget background plan generation. Returns plan placeholder id."""
-        from . import plans as plans_mod
-        from argos_data_nexus import mesh as mesh_mod
-
-        registry = mesh_mod._load_registry()
-
-        async def _runner():
-            try:
-                await plans_mod.generate_plan(discovery, registry, self)
-            except Exception as exc:
-                log.exception("Background plan generation failed: %s", exc)
-
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(_runner())
-            else:
-                asyncio.run(_runner())
-        except RuntimeError:
-            # No running loop — schedule on a new one
-            asyncio.run(_runner())
-        return "pending"
+                # R5 (retired 2026-11-09): approving no longer schedules a plan through the old ADN mesh registry.
+                # A plan is made on request (Review → Discoveries → Regenerate plan), so plan_id stays None.
+        return {"discovery_id": discovery_id, "approved": ok, "plan_id": None}
 
     def reject_discovery(self, discovery_id: str) -> dict[str, Any]:
         ok = self.memory.set_discovery_status(discovery_id, "rejected")

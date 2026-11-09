@@ -60,7 +60,6 @@ _PUBLIC_EXACT = frozenset({
     "/admin/daedalus/bundles",
     "/admin/llm-router",
     "/api/v1/auth/bootstrap",
-    "/api/iyveris",
 })
 
 
@@ -174,8 +173,6 @@ def is_public_request(method: str, path: str) -> bool:
     if m == "OPTIONS":
         return True
     p = path.split("?", 1)[0]
-    if p == "/api/iyveris":
-        return True
     if p.startswith("/apps/"):
         if m in ("GET", "HEAD"):
             return True

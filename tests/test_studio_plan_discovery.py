@@ -261,14 +261,12 @@ def test_temp_plan_and_discovery_do_not_call_the_provider(tmp_path, monkeypatch)
     DaedalusMemory._instance = None
     chat_calls = []
     claude_calls = []
-    schedule_calls = []
     mode = {
         "reply": json.dumps({
             "title": "Maze",
             "description": "walk",
             "steps": [{"title": "Lay tiles", "description": "place them"}],
         }),
-        "schedule": "pending",
     }
 
     async def fake_chat(self, message, session_id=None, for_self=False, **kwargs):
@@ -279,14 +277,11 @@ def test_temp_plan_and_discovery_do_not_call_the_provider(tmp_path, monkeypatch)
         claude_calls.append("called")
         return "stub"
 
-    def fake_schedule(self, discovery):
-        schedule_calls.append(discovery.get("id"))
-        if mode["schedule"] == "boom":
-            raise RuntimeError("mesh missing")
-        return "pending"
+    async def no_plan(*_args, **_kwargs):
+        raise AssertionError("R5: approving a discovery must not generate a plan")
 
     monkeypatch.setattr(Daedalus, "chat", fake_chat)
-    monkeypatch.setattr(Daedalus, "_schedule_plan_generation", fake_schedule)
+    monkeypatch.setattr("daedalus.plans.generate_plan", no_plan)
     monkeypatch.setattr("daedalus.agent._call_claude", fake_claude)
     try:
         from fastapi.testclient import TestClient
@@ -358,17 +353,16 @@ def test_temp_plan_and_discovery_do_not_call_the_provider(tmp_path, monkeypatch)
                 "Other find", "https://example.test/other", "manual", "also", kind="article",
             )
             assert kept and other
+            # R5 (owner sign-off 2026-11-09): approval no longer schedules a plan through the old mesh registry.
             partial = client.post(f"/admin/daedalus/discoveries/{other}/approve")
             assert partial.status_code == 200
             assert partial.json()["approved"] is True
-            assert partial.json()["plan_id"] == "pending"
-            assert schedule_calls == [other]
+            assert partial.json()["plan_id"] is None
             assert agent.memory.lessons_col.count() == lessons_before + 1
-            mode["schedule"] = "boom"
-            broken = client.post(f"/admin/daedalus/discoveries/{kept}/approve")
-            assert broken.status_code == 200
-            assert broken.json()["approved"] is True
-            assert broken.json()["plan_id"] is None
+            second = client.post(f"/admin/daedalus/discoveries/{kept}/approve")
+            assert second.status_code == 200
+            assert second.json()["approved"] is True
+            assert second.json()["plan_id"] is None
             assert agent.memory.lessons_col.count() == lessons_before + 2
             lesson_docs = agent.memory.lessons_col.get().get("documents") or []
             assert any("Find tiles" in (doc or "") for doc in lesson_docs)
@@ -377,12 +371,10 @@ def test_temp_plan_and_discovery_do_not_call_the_provider(tmp_path, monkeypatch)
                 "Skip me", "https://example.test/skip", "manual", "no", kind="tool",
             )
             lessons_now = agent.memory.lessons_col.count()
-            scheduled_now = len(schedule_calls)
             denied = client.post(f"/admin/daedalus/discoveries/{skipped}/reject")
             assert denied.status_code == 200
             assert denied.json()["rejected"] is True
             assert agent.memory.lessons_col.count() == lessons_now
-            assert len(schedule_calls) == scheduled_now
             row = agent.memory.list_discoveries()
             saved = next(item for item in row if item["id"] == skipped)
             assert saved["metadata"]["status"] == "rejected"

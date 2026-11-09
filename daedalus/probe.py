@@ -302,24 +302,9 @@ async def probe_service(
             "max_depth": max_depth, "start_line": start_line, "end_line": end_line,
         })
 
-    from .tools import mesh_call_tool
-    payload: dict[str, Any] = {"op": op}
-    if path:
-        payload["path"] = path
-    if glob_pattern:
-        payload["glob"] = glob_pattern
-    if op == "file_tree":
-        payload["max_depth"] = max_depth
-    if op == "read_file":
-        payload["start_line"] = start_line
-        if end_line:
-            payload["end_line"] = end_line
-
-    try:
-        result = await mesh_call_tool(slug, "daedalus.probe", payload, timeout=timeout)
-        return result
-    except Exception as exc:
-        return {"ok": False, "error": str(exc)}
+    # R5 (retired 2026-11-09): probing another service went over the old Iyveris mesh, which standalone Daedalus
+    # does not have. Only the self-probe above is real.
+    return {"ok": False, "error": "mesh_retired", "slug": slug}
 
 
 # ---------------------------------------------------------------------------

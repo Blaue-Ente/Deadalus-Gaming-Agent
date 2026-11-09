@@ -344,13 +344,7 @@ async def regenerate_start(discovery_id: str, confirm: Any) -> dict[str, Any]:
     from ..plans import generate_plan
 
     agent = get_daedalus()
-    registry: dict = {}
-    try:
-        from argos_data_nexus import mesh as mesh_mod                       # only on the old host; standalone has none
-
-        registry = mesh_mod._load_registry()
-    except Exception:
-        pass
+    registry: dict = {}      # R5: the old ADN mesh service registry is retired; plans match no external services
 
     async def run() -> None:
         started = time.time()

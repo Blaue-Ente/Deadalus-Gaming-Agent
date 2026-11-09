@@ -2827,12 +2827,7 @@ async def daedalus_regenerate_plan(discovery_id: str):
         "content": (res.get("documents") or [""])[0],
         "metadata": (res.get("metadatas") or [{}])[0] or {},
     }
-    registry: dict = {}
-    try:
-        from argos_data_nexus import mesh as mesh_mod
-        registry = mesh_mod._load_registry()
-    except Exception:
-        pass
+    registry: dict = {}      # R5: the old ADN mesh service registry is retired; plans match no external services
     try:
         plan = await generate_plan(discovery, registry, daedalus)
         return JSONResponse({"ok": True, "plan_id": plan["id"]})

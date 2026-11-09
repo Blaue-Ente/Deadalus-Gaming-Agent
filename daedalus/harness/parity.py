@@ -146,9 +146,18 @@ PARITY_ROWS: tuple[ParityRow, ...] = (
     # ---- owner-approved retirements (nothing is deleted before the A6.5 sign-off) -------------
     _r("retire-outbox-apply", "Outbox apply and raw SQL (needs the legacy ADN host)", "classic", None,
        f"POST {_A}/outbox/{{item_id}}/apply", "retired:R2"),
-    _r("retire-dead-buttons", "Playground buttons served only by the old catch-all", "playground", None, "", "retire:R3"),
+    _r("retire-dead-buttons", "Playground buttons served only by the old catch-all", "playground", None,
+       f"POST {_PG}/projects/{{slug}}/ai-build; GET {_PG}/projects/{{slug}}/ai-build/stream; "
+       f"GET {_PG}/projects/{{slug}}/ai-build/active; POST {_PG}/projects/{{slug}}/ai-build/stop; "
+       f"POST {_PG}/projects/{{slug}}/revive-pipeline; POST {_PG}/projects/{{slug}}/revive-repair; "
+       f"GET {_PG}/projects/{{slug}}/upstream-diff; POST {_PG}/projects/{{slug}}/eas-build; "
+       f"POST {_PG}/projects/{{slug}}/delete-published; POST {_PG}/projects/{{slug}}/publish; "
+       f"POST {_PG}/projects/{{slug}}/rebuild; POST {_PG}/projects/{{slug}}/unpublish; "
+       f"GET {_PG}/projects/{{slug}}/assets/raw; POST {_PG}/projects/{{slug}}/netlify-deploy; "
+       f"POST {_PG}/projects/{{slug}}/studio/unity-export", "retired:R3"),
     _r("retire-unmounted-routers", "builder_router and knowledge_books (never mounted)", "none", None, "", "retired:R4"),
-    _r("retire-adn-only", "ADN-only paths (Sonar search, mesh_call, /api/iyveris, discovery-to-plan)", "classic", None, "", "retire:R5"),
+    _r("retire-adn-only", "ADN-only paths (Sonar search, mesh_call, /api/iyveris, discovery-to-plan)", "classic", None,
+       "POST /api/iyveris", "retired:R5"),
 )
 
 

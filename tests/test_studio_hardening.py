@@ -1,4 +1,4 @@
-"""Studio top-10: chat jobs, mesh fail-closed, sandbox strip, published list."""
+"""Studio top-10: chat jobs, retired mesh endpoint, sandbox strip, published list."""
 from __future__ import annotations
 
 import asyncio
@@ -31,40 +31,24 @@ def standalone_tmp(tmp_path, monkeypatch):
     reset()
 
 
-def test_mesh_ask_without_key_is_401(standalone_tmp, raw_http, monkeypatch):
-    monkeypatch.delenv("IYVERIS_MESH_KEY", raising=False)
-    from app.main import app
-    client = TestClient(app)
-    res = client.post("/api/iyveris", json={"action": "ask", "payload": {"message": "hello there"}})
-    assert res.status_code == 401
-    assert "mesh key" in (res.json().get("detail") or "").lower()
-
-
-def test_mesh_ping_loopback_without_key_ok(standalone_tmp, raw_http, monkeypatch):
-    monkeypatch.delenv("IYVERIS_MESH_KEY", raising=False)
-    from app.main import app
-    client = TestClient(app)
-    res = client.post("/api/iyveris", json={"action": "ping"})
-    assert res.status_code == 200
-    assert res.json().get("ok") is True
-
-
-def test_mesh_wrong_key_is_401(standalone_tmp, raw_http, monkeypatch):
+def test_retired_mesh_endpoint_is_gone_and_never_reaches_chat(standalone_tmp, monkeypatch):
+    """R5 (owner sign-off 2026-11-09): POST /api/iyveris is retired. No action, with or without a mesh key, may reach
+    the agent; the path is not public any more either."""
     monkeypatch.setenv("IYVERIS_MESH_KEY", "correct-mesh-key-value-32ok")
+    import daedalus.agent as agent_mod
+
+    def _no_agent():
+        raise AssertionError("a retired mesh route reached the agent")
+
+    monkeypatch.setattr(agent_mod, "get_daedalus", _no_agent)
     from app.main import app
+    from daedalus.owner_auth import is_public_request
     client = TestClient(app)
-    bad = client.post(
-        "/api/iyveris",
-        json={"action": "ping"},
-        headers={"X-Iyveris-Mesh-Key": "short"},
-    )
-    assert bad.status_code == 401
-    good = client.post(
-        "/api/iyveris",
-        json={"action": "ping"},
-        headers={"X-Iyveris-Mesh-Key": "correct-mesh-key-value-32ok"},
-    )
-    assert good.status_code == 200
+    for body in ({"action": "ping"}, {"action": "capabilities"}, {"action": "ask", "payload": {"message": "hello"}}):
+        res = client.post("/api/iyveris", json=body, headers={"X-Iyveris-Mesh-Key": "correct-mesh-key-value-32ok"})
+        assert res.status_code == 404, (body, res.status_code)
+        assert res.json().get("ok") is not True
+    assert is_public_request("POST", "/api/iyveris") is False
 
 
 def test_sandbox_snippet_strips_llm_key(standalone_tmp, monkeypatch):

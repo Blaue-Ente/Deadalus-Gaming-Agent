@@ -1,14 +1,12 @@
-"""Standalone Daedalus FastAPI service — equal Iyveris mesh peer."""
+"""Standalone Daedalus FastAPI service."""
 from __future__ import annotations
 
 import asyncio
-import hmac
 import logging
-import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -75,41 +73,6 @@ def _llm_status_payload() -> dict:
         },
         "overlays": overlays,
     }
-
-
-def _mesh_key() -> str:
-    return os.environ.get("IYVERIS_MESH_KEY", "").strip()
-
-
-def _mesh_ok(provided: str | None, expected: str) -> bool:
-    got = (provided or "").strip()
-    if not expected or not got:
-        return False
-    if len(got) != len(expected):
-        return False
-    return hmac.compare_digest(got, expected)
-
-
-def _check_mesh(
-    x_iyveris_mesh_key: str | None,
-    *,
-    loopback: bool,
-    require_key: bool = False,
-) -> None:
-    """Peer HTTP auth.
-
-    Ping/health/capabilities: loopback may skip an unset key.
-    Ask/chat always need a configured key (fail closed).
-    """
-    expected = _mesh_key()
-    if require_key and not expected:
-        raise HTTPException(status_code=401, detail="mesh key required")
-    if expected:
-        if not _mesh_ok(x_iyveris_mesh_key, expected):
-            raise HTTPException(status_code=401, detail="invalid mesh key")
-        return
-    if not loopback:
-        raise HTTPException(status_code=401, detail="mesh key required for non-loopback")
 
 
 @asynccontextmanager
@@ -191,12 +154,6 @@ class ChatBody(BaseModel):
     attachment_ids: list[str] = Field(default_factory=list)
 
 
-class MeshBody(BaseModel):
-    action: str = ""
-    payload: dict = Field(default_factory=dict)
-    from_service: str = ""
-
-
 @app.get("/health")
 async def health() -> dict:
     from daedalus.host import adn_available, standalone_mode
@@ -251,7 +208,6 @@ async def capabilities() -> dict:
             "math3d", "game-lint", "profiler", "game-canon", "spatial",
             "tool-router", "session-context", "skill-catalog",
         ],
-        "mesh_endpoint": "/api/iyveris",
         "studio": "/",
     }
 
@@ -275,34 +231,6 @@ async def auth_bootstrap(request: Request) -> dict:
         "header": "Authorization",
         "scheme": "Bearer",
     }
-
-
-@app.post("/api/iyveris")
-async def iyveris_mesh(
-    request: Request,
-    body: MeshBody,
-    x_iyveris_mesh_key: str | None = Header(default=None, alias="X-Iyveris-Mesh-Key"),
-) -> dict:
-    action = (body.action or "ping").strip().lower()
-    ask = action in ("ask", "daedalus.ask", "chat")
-    _check_mesh(
-        x_iyveris_mesh_key,
-        loopback=client_is_loopback_scope(request.scope),
-        require_key=ask,
-    )
-    if action in ("ping", "health"):
-        return {"ok": True, "result": {"service": "daedalus", "status": "ok"}, "error": None}
-    if action == "capabilities":
-        caps = await capabilities()
-        return {"ok": True, "result": caps, "error": None}
-    if ask:
-        msg = str((body.payload or {}).get("message") or (body.payload or {}).get("prompt") or "")
-        if not msg:
-            return {"ok": False, "result": None, "error": "payload.message required"}
-        from daedalus.agent import get_daedalus
-        reply = await get_daedalus().chat(message=msg, session_id="mesh")
-        return {"ok": True, "result": reply, "error": None}
-    return {"ok": False, "result": None, "error": f"unknown action: {action}"}
 
 
 @app.post("/api/v1/daedalus/chat")
@@ -345,7 +273,6 @@ async def studio() -> FileResponse:
         "service": "Daedalus",
         "docs": "/docs",
         "health": "/health",
-        "mesh": "/api/iyveris",
         "chat": "/api/v1/daedalus/chat",
     })
 
