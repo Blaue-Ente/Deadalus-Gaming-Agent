@@ -818,3 +818,12 @@ label.grow { flex: 1; min-width: 7rem; }
 .run-controls .fa-log { margin: 0.3rem 0 0; padding-left: 1.2rem; font-size: 0.76rem; color: var(--muted); }
 .run-controls .fa-log li[data-state="succeeded"] { color: var(--gold-2); }
 .run-controls .fa-log li[data-state="failed"], .run-controls .fa-log li[data-state="blocked"] { color: var(--err); }
+/* A6.3c: git browse, app data editor */
+.git-browse { margin-top: 0.6rem; padding-top: 0.5rem; border-top: 1px solid var(--line); }
+.git-browse > .kicker { margin: 0 0 0.3rem; }
+#git-browse-list .item b { overflow-wrap: anywhere; }
+.app-data { margin-top: 0.9rem; padding: 0.55rem 0.7rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--bg-deep); }
+.app-data > .kicker { margin: 0 0 0.3rem; }
+.app-data-form { display: grid; gap: 0.35rem; margin-top: 0.5rem; }
+.app-data-form textarea { font-family: var(--mono); font-size: 0.78rem; }
+#app-data-list .item b { font-family: var(--mono); overflow-wrap: anywhere; }

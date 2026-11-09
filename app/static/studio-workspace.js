@@ -45,6 +45,8 @@
   const discoveryApproveOp = new Map();
   let skillGen = 0;
   let skillOp = null;
+  let gistFlight = false;
+  let gistDone = null;                             // {id, url} of the gist published for a skill session
   let skillView = null;
   let skillFiles = null;
   let skillNote = "";
@@ -1658,6 +1660,11 @@
     const bundle = $("skill-bundle");
     if (download) download.hidden = !skillMdPath();
     if (bundle) bundle.hidden = skillFileNames().length === 0;
+    const gist = $("skill-gist");                         // publishing (A6.3c): only a generated skill, one request at a time
+    if (gist) {
+      gist.hidden = !(skillView && skillView.phase === "generated") || !!(gistDone && skillView && gistDone.id === skillView.session_id);
+      gist.disabled = locked || gistFlight;
+    }
   }
 
   function describeSkillStart(data) {
@@ -3128,6 +3135,252 @@
       faTimer = setTimeout(look, 2000);
     }
   }
+
+  // ---- A6.3c: git browse, per-app data, skill gist ------------------------------------------------------------
+  // Reads (git status, repos, branches, projects, compat) only fill the list and the Remote URL field. The app data
+  // editor writes only to a PUBLISHED app's store; a delete or clear asks first. A gist is public, so it asks first.
+  const PG_API = "/admin/daedalus/playground/api";
+  let gitBrowseGen = 0;
+  let appDataGen = 0;
+  let appDataFlight = false;
+
+  function gbBtn(label, role, handler) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.dataset.gb = role;
+    b.textContent = label;
+    b.addEventListener("click", () => handler(b));
+    return b;
+  }
+
+  function useRemote(url) {
+    $("git-url").value = url || "";
+    showStatus("git-browse-status", dx.t("studio.gitUsed", { url: url || "" }), false);
+  }
+
+  async function gitBrowse(btn, work) {
+    const gen = ++gitBrowseGen;
+    const list = $("git-browse-list");
+    dx.busy(btn, true, "…");
+    try {
+      const out = await work();
+      if (gen !== gitBrowseGen) return;
+      list.replaceChildren(...out.rows);
+      if (!out.rows.length) emptyNote(list);
+      showStatus("git-browse-status", out.note || "", !!out.bad);
+    } catch (err) {
+      if (gen !== gitBrowseGen) return;
+      list.replaceChildren();
+      showStatus("git-browse-status", gitBrowseErr(err), true);
+    } finally {
+      dx.busy(btn, false);
+    }
+  }
+
+  function gitBrowseErr(err) {
+    const msg = String((err && err.message) || "");
+    if (/GITHUB_TOKEN not configured/.test(msg)) return dx.t("studio.gitNoGithub");
+    if (/GITLAB_TOKEN not configured/.test(msg)) return dx.t("studio.gitNoGitlab");
+    return failText(err);
+  }
+
+  function repoRows(repos, provider) {
+    return repos.map((r) => {
+      const buttons = [gbBtn(dx.t("studio.gitUse"), "use", () => useRemote(r.clone_url || r.url))];
+      if (provider === "github" && /^[^/\s]+\/[^/\s]+$/.test(r.full_name || "")) {
+        buttons.unshift(gbBtn(dx.t("studio.gitBranches"), "branches", (b) => showBranches(b, r)));
+      }
+      const bits = [r.private ? dx.t("studio.gitPrivate") : dx.t("studio.gitPublic"), r.language, r.default_branch];
+      if (r.compat && r.compat.level) bits.push(dx.t("studio.gitCompatLevel", { level: r.compat.level, score: r.compat.score }));
+      const item = row(r.full_name || r.url, bits.filter(Boolean).join(" · "), buttons);
+      item.dataset.repo = r.full_name || "";
+      return item;
+    });
+  }
+
+  function showBranches(btn, repo) {
+    const [owner, name] = repo.full_name.split("/");
+    gitBrowse(btn, async () => {
+      const data = await dx.api(PG_API + "/github/repos/" + encodeURIComponent(owner) + "/" + encodeURIComponent(name) + "/branches");
+      const rows = (data.branches || []).map((br) => {
+        const nameText = typeof br === "string" ? br : String(br.name || "");
+        return row(nameText, nameText === data.default_branch ? dx.t("studio.gitDefault") : "", []);
+      });
+      const tags = (data.tags || []).map((t) => (typeof t === "string" ? t : String(t.name || ""))).filter(Boolean);
+      return { rows, note: dx.t("studio.gitBranchesOf", { repo: repo.full_name, n: rows.length, tags: tags.join(", ") || "—" }) };
+    });
+  }
+
+  $("git-connections").addEventListener("click", (ev) => gitBrowse(ev.currentTarget, async () => {
+    const st = await dx.api(PG_API + "/git/status", { timeoutMs: 30000 });
+    const line = (name, part) => {
+      const p = part || {};
+      if (!p.configured) return row(name, dx.t("studio.gitNotConfigured"), []);
+      if (p.ok) return row(name, dx.t("studio.gitConnected", { user: p.login || p.username || "?" }), []);
+      // the server's own error text is not UI copy (it is not in the owner's language): say its code instead
+      return row(name, dx.t("studio.gitBroken", { why: tOr(GIT_CODE_KEYS[p.code], dx.t("studio.errUnknown")) }), []);
+    };
+    return { rows: [line("GitHub", st.github), line("GitLab", st.gitlab)], note: "" };
+  }));
+  $("git-gh-repos").addEventListener("click", (ev) => gitBrowse(ev.currentTarget, async () => {
+    const data = await dx.api(PG_API + "/github/repos?limit=30", { timeoutMs: 30000 });
+    return { rows: repoRows(data.repos || [], "github"), note: dx.t("studio.gitRepoCount", { n: (data.repos || []).length }) };
+  }));
+  $("git-gl-projects").addEventListener("click", (ev) => gitBrowse(ev.currentTarget, async () => {
+    const data = await dx.api(PG_API + "/gitlab/projects?limit=30", { timeoutMs: 30000 });
+    return { rows: repoRows(data.projects || [], "gitlab"), note: dx.t("studio.gitRepoCount", { n: (data.projects || []).length }) };
+  }));
+  $("git-compat").addEventListener("click", (ev) => {
+    const url = ($("git-url").value || "").trim();
+    if (!url) { showStatus("git-browse-status", dx.t("studio.gitNeedUrl"), true); return; }
+    gitBrowse(ev.currentTarget, async () => {
+      const data = await postJson(PG_API + "/github/compat-check", { url });
+      const c = data.compat || {};
+      const rows = (c.warnings || []).map((w) => row(String(w), "", []));
+      return { rows, note: dx.t("studio.gitCompatResult", { level: c.level || "?", score: c.score == null ? "?" : c.score, kind: c.kind || "?" }) };
+    });
+  });
+
+  // -- per-app data (PlaygroundDB of a published app) --
+  function appDataSlug() {
+    const slug = dx.getSlug();
+    if (!slug) showStatus("app-data-status", dx.t("studio.noProject"), true);
+    return slug;
+  }
+
+  function appDataPath(slug, key) {
+    return "/apps/" + encodeURIComponent(slug) + "/db/" + (key == null ? "" : key.split("/").map(encodeURIComponent).join("/"));
+  }
+
+  function appDataErr(err) {
+    const msg = String((err && err.message) || "");
+    if (msg === "not a published app") return dx.t("studio.appDataNotPublished");
+    if (msg === "not found") return dx.t("studio.appDataGone");
+    if (/^value too large/.test(msg)) return dx.t("studio.appDataTooLarge");
+    if (/^key limit/.test(msg)) return dx.t("studio.appDataLimit");
+    return failText(err);
+  }
+
+  async function appDataRun(btn, work) {
+    if (appDataFlight) return;
+    const slug = appDataSlug();
+    if (!slug) return;
+    const gen = ++appDataGen;
+    appDataFlight = true;
+    document.querySelectorAll("#app-data button").forEach((b) => { b.disabled = true; });
+    dx.busy(btn, true, "…");
+    const say = (text, bad) => { if (gen === appDataGen && dx.getSlug() === slug) showStatus("app-data-status", text, bad); };
+    try {
+      await work(slug, say, gen);
+    } catch (err) {
+      say(appDataErr(err), true);
+    } finally {
+      dx.busy(btn, false);
+      appDataFlight = false;
+      document.querySelectorAll("#app-data button").forEach((b) => { b.disabled = false; });
+    }
+  }
+
+  // Another project: what is on screen belongs to the old one, and every button would act on the new one. Clear it.
+  let appDataShown = "";
+  dx.watchSlug((snap) => {
+    const next = snap.slug || "";
+    if (next === appDataShown) return;
+    const before = appDataShown;
+    appDataShown = next;
+    if (!before) return;                                   // the first project of the page: nothing of another one is shown
+    appDataGen += 1;
+    $("app-data-list").replaceChildren();
+    $("app-data-key").value = "";
+    $("app-data-value").value = "";
+    showStatus("app-data-status", "", false);
+  });
+
+  async function loadAppKeys(slug, gen) {
+    const data = await dx.api(appDataPath(slug, null));
+    if (gen !== appDataGen || dx.getSlug() !== slug) return 0;
+    const list = $("app-data-list");
+    list.replaceChildren();
+    const keys = data.keys || [];
+    keys.forEach((key) => {
+      const view = document.createElement("button");
+      view.type = "button";
+      view.textContent = dx.t("studio.appDataView");
+      view.addEventListener("click", () => appDataRun(view, async (s, say) => {
+        if (s !== slug) return;                            // listed for another project (the list is cleared on a switch)
+        const res = await dx.api(appDataPath(s, key));
+        $("app-data-key").value = key;
+        $("app-data-value").value = JSON.stringify(res.value, null, 2);
+        say(dx.t("studio.appDataShown", { key }), false);
+      }));
+      const del = document.createElement("button");
+      del.type = "button";
+      del.textContent = dx.t("studio.appDataDelete");
+      del.addEventListener("click", () => {
+        if (!window.confirm(dx.t("studio.appDataDeleteConfirm", { key }))) return;
+        appDataRun(del, async (s, say, g) => {
+          if (s !== slug) return;
+          await dx.api(appDataPath(s, key), { method: "DELETE" });
+          await loadAppKeys(s, g);
+          say(dx.t("studio.appDataDeleted", { key }), false);
+        });
+      });
+      const item = row(key, "", [view, del]);
+      item.dataset.key = key;
+      list.appendChild(item);
+    });
+    if (!keys.length) emptyNote(list);
+    return keys.length;
+  }
+
+  $("app-data-load").addEventListener("click", (ev) => appDataRun(ev.currentTarget, async (slug, say, gen) => {
+    const n = await loadAppKeys(slug, gen);
+    say(dx.t("studio.appDataCount", { n }), false);
+  }));
+  $("app-data-save").addEventListener("click", (ev) => {
+    const key = ($("app-data-key").value || "").trim();
+    const raw = $("app-data-value").value || "";
+    if (!key) { showStatus("app-data-status", dx.t("studio.appDataNeedKey"), true); return; }
+    let value;
+    try { value = JSON.parse(raw); } catch (err) { showStatus("app-data-status", dx.t("studio.appDataBadJson"), true); return; }
+    appDataRun(ev.currentTarget, async (slug, say, gen) => {
+      await postJson(appDataPath(slug, key), { value });
+      await loadAppKeys(slug, gen);
+      say(dx.t("studio.appDataSaved", { key }), false);
+    });
+  });
+  $("app-data-clear").addEventListener("click", (ev) => {
+    const slug = appDataSlug();
+    if (!slug || !window.confirm(dx.t("studio.appDataClearConfirm", { slug }))) return;
+    appDataRun(ev.currentTarget, async (s, say, gen) => {
+      const res = await dx.api(appDataPath(s, null), { method: "DELETE" });
+      await loadAppKeys(s, gen);
+      say(dx.t("studio.appDataCleared", { n: res.deleted || 0 }), false);
+    });
+  });
+
+  // -- publish a generated skill as a PUBLIC gist --
+  $("skill-gist").addEventListener("click", async () => {
+    const id = skillView && skillView.session_id;
+    if (!id || gistFlight || skillOp) return;
+    if (!window.confirm(dx.t("studio.skillGistConfirm"))) return;
+    gistFlight = true;
+    syncSkillButtons();
+    try {
+      const res = await postJson(PG_API + "/skill-creator/github-gist", { session_id: id, confirm_public: true });
+      gistDone = { id, url: res.gist_url || res.gist_id || "?" };       // published once: the button goes, the link stays
+      skillNote = dx.t("studio.skillGistDone", { url: gistDone.url });
+      skillNoteBad = false;
+    } catch (err) {
+      const msg = String((err && err.message) || "");
+      skillNote = /GITHUB_TOKEN not configured/.test(msg) ? dx.t("studio.gitNoGithub") : dx.t("studio.skillGistFailed", { why: failText(err) });
+      skillNoteBad = true;
+    } finally {
+      gistFlight = false;
+      if (skillVisible()) paintSkill();
+      else syncSkillButtons();
+    }
+  });
 
   function paintBrain(data) {
     const box = $("settings-brain");

@@ -2151,6 +2151,9 @@ async def skill_creator_github_gist(request: Request):
     session_id = str(body.get("session_id") or "").strip()
     if not session_id:
         return JSONResponse({"ok": False, "error": "session_id required"}, status_code=400)
+    if body.get("confirm_public") is not True:
+        # a gist is created PUBLIC (anyone can read it, and it is indexed): only after the owner said yes to that
+        return JSONResponse({"ok": False, "error": "confirm_required"}, status_code=409)
     session = sc.get_session(session_id)
     if not session or session.get("phase") != "generated":
         return JSONResponse({"ok": False, "error": "generate skill first"}, status_code=400)

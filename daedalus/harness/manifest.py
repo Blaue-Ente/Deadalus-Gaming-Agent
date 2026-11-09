@@ -76,8 +76,8 @@ PANELS: dict[str, tuple[str, str, str]] = {
     "panel:settings/engines": ("Settings: engine binaries and proof levels", "planned", "A5, A6.1"),
     "panel:chat/attachments": ("Chat: documents and project chat", "planned", "A6.4"),
     "panel:build/controls": ("Build: autopilot controls, Unity, presets, dissect", "implemented", "A6.3a: pause/resume, continue, plan create/expand/clear, Full Auto M0→M8; A6.3b: Unity init/attach/build scripts and presets (ship menu), Unity/proof waivers, dissection and labs (World rail)"),
-    "panel:preview/apps": ("Preview: app data editor and tunnel", "planned", "A6.3"),
-    "panel:rail/git": ("Project git menu: browse and status", "planned", "A6.3"),
+    "panel:preview/apps": ("Preview: app data editor and tunnel", "implemented", "A6.3c app data editor; standalone has no Expo tunnel/QR route, so none is offered"),
+    "panel:rail/git": ("Project git menu: browse and status", "implemented", "A6.3c: connections, GitHub repos/branches, GitLab projects, compat check"),
 }
 
 SETTINGS: dict[str, tuple[str, str]] = {

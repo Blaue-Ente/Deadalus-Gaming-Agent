@@ -225,7 +225,12 @@ def test_skill_and_reference_contract_names_the_real_routes():
     assert 'id="ref-controls"' in review
     assert review.index("discovery-controls") < review.index("skill-controls") < review.index("ref-controls")
     assert "panel-skill" not in HTML
-    assert "gist" not in review.lower()
+    # A6.3c ports "publish a skill as a gist" (parity row skill-creator-gist): one button, hidden until a skill is
+    # generated, and its handler asks first and sends confirm_public (the server refuses without it).
+    assert 'id="skill-gist"' in review and 'data-i18n="studio.skillGist" hidden' in review
+    gist = WORK[WORK.find('$("skill-gist").addEventListener'):]
+    gist = gist[:gist.find("});\n")]
+    assert 'window.confirm(dx.t("studio.skillGistConfirm"))' in gist and "confirm_public: true" in gist
     assert "innerHTML" not in review
     for key in (
         "studio.skillStartConfirm",

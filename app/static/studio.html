@@ -174,6 +174,17 @@
             <button id="project-delete" type="button" data-i18n="studio.delete">Delete</button>
           </div>
           <p id="git-status" class="workspace-status" role="status" hidden></p>
+          <div class="git-browse" id="git-browse">
+            <p class="kicker" data-i18n="studio.gitBrowse">Browse</p>
+            <div class="row tight">
+              <button id="git-connections" type="button" data-i18n="studio.gitConnections">Connections</button>
+              <button id="git-gh-repos" type="button" data-i18n="studio.gitGhRepos">GitHub repos</button>
+              <button id="git-gl-projects" type="button" data-i18n="studio.gitGlProjects">GitLab projects</button>
+              <button id="git-compat" type="button" data-i18n="studio.gitCompat">Check URL</button>
+            </div>
+            <p id="git-browse-status" class="workspace-status" role="status" hidden></p>
+            <div id="git-browse-list"></div>
+          </div>
         </details>
       </div>
       <div class="prefs">
@@ -362,6 +373,21 @@
           <button id="preview-live" type="button" data-i18n="studio.liveBtn">Live</button>
           <button id="preview-capsule" type="button" data-i18n="studio.capsuleBtn">Capsule</button>
         </div>
+        <div class="app-data" id="app-data">
+          <p class="kicker" data-i18n="studio.appData">App data</p>
+          <p class="hint" data-i18n="studio.appDataHint">What a published app stored (its PlaygroundDB). Values are JSON. Only a published app can be written to.</p>
+          <div class="row tight">
+            <button id="app-data-load" type="button" data-i18n="studio.appDataLoad">Show stored keys</button>
+            <button id="app-data-clear" type="button" data-i18n="studio.appDataClear">Clear all</button>
+          </div>
+          <p id="app-data-status" class="workspace-status" role="status" hidden></p>
+          <div id="app-data-list"></div>
+          <div class="app-data-form">
+            <input id="app-data-key" type="text" autocomplete="off" spellcheck="false" data-i18n-placeholder="studio.appDataKey" placeholder="Key" data-i18n-aria="studio.appDataKey" aria-label="Key" />
+            <textarea id="app-data-value" rows="3" spellcheck="false" data-i18n-placeholder="studio.appDataValue" placeholder="Value (JSON)" data-i18n-aria="studio.appDataValue" aria-label="Value (JSON)"></textarea>
+            <button id="app-data-save" type="button" data-i18n="studio.appDataSave">Save value</button>
+          </div>
+        </div>
       </section>
       <section id="panel-review" class="workspace-panel" data-panel="review" hidden>
         <p class="kicker" data-i18n="studio.panel.review">Review</p>
@@ -472,8 +498,9 @@
           <div class="row">
             <button id="skill-download" type="button" data-i18n="studio.skillDownload" hidden>Download SKILL.md</button>
             <button id="skill-bundle" type="button" data-i18n="studio.skillBundle" hidden>Download text bundle</button>
+            <button id="skill-gist" type="button" data-i18n="studio.skillGist" hidden>Publish as public gist</button>
           </div>
-          <p class="hint" data-i18n="studio.skillHint">Skills are global. Start sends one configured-provider call and does not search the web. Generate returns files in that response. Nothing is published.</p>
+          <p class="hint" data-i18n="studio.skillHint">Skills are global. Start sends one configured-provider call and does not search the web. Generate returns files in that response. Nothing is published unless you choose Publish as public gist, which asks first.</p>
         </div>
         <div class="ref-controls" id="ref-controls">
           <p class="kicker" data-i18n="studio.refTitle">Reference brief</p>
