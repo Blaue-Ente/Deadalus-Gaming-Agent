@@ -59,7 +59,6 @@ SUMMARY = {
         "auto_approve",
         "deep_worker",
         "web_search",
-        "mesh_call",
         "planner_auto_run",
     ],
 }

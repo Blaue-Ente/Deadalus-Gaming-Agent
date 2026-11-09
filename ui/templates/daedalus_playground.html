@@ -838,7 +838,7 @@ async function loadProjects() {
         ${unityPushBtn}
         ${!isPublishable && !isUnity ? `<span class="text-[10px] font-mono text-yellow-500/80 px-2 py-1 rounded bg-yellow-900/20 border border-yellow-700/30">dev-only</span>` : ''}
         ${isUnity ? `<span class="text-[10px] font-mono text-sky-400/90 px-2 py-1 rounded bg-sky-950/30 border border-sky-700/30" title="Unity Hub">Unity Hub</span>` : ''}
-        ${projectOverflowMenu(p, isStatic, isPublishable, running)}
+        ${projectOverflowMenu(p, isStatic, running)}
       </div>
     </div>`;
   }).join('');
@@ -1097,7 +1097,7 @@ function toggleDesc(slug, btn) {
   f.classList.toggle('hidden', !showFull);
   if (btn) btn.textContent = showFull ? t('pg.hide') : t('pg.seeMore');
 }
-function projectOverflowMenu(p, isStatic, isPublishable, running) {
+function projectOverflowMenu(p, isStatic, running) {
   const sn = p.name.replace(/'/g, "\\'");
   const items = [];
   items.push(`<button onclick="aiEdit('${p.slug}','${sn}')" class="pg-menu-item">🤖 AI edit</button>`);
@@ -3562,7 +3562,7 @@ async function loadAssets() {
       const kb = a.bytes ? `${Math.round(a.bytes / 1024)} KB` : '';
       const thumb = a.missing
         ? '<div class="h-24 flex items-center justify-center text-gray-600 text-xs">' + t('pg.missing') + '</div>'
-        : '<div class="h-24 flex items-center justify-center text-2xl text-gray-600 bg-gray-950 rounded">🖼</div>';   // R3: no raw-file route
+        : `<img src="/api/v1/playground/projects/${encodeURIComponent(slug)}/preview/${a.path.split('/').map(encodeURIComponent).join('/')}" alt="" class="w-full h-24 object-contain bg-gray-950 rounded" loading="lazy">`;   // R3: the served preview route (the old raw-asset route never existed)
       return `<div class="p-2 rounded-lg border border-gray-700 bg-gray-800/60 ${missing}">
         ${thumb}
         <div class="mt-1 text-[10px] font-mono text-pink-300 truncate" title="${escHtml(a.path)}">${escHtml(a.path.split('/').pop())}</div>

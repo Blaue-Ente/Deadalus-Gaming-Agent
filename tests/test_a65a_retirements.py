@@ -104,8 +104,8 @@ def test_unmounted_routers_are_deleted(mod):
 def test_need_search_uses_the_kept_ddg_path_not_the_old_sonar_host():
     src = (ROOT / "daedalus" / "agent.py").read_text(encoding="utf-8")
     assert "smart_search" not in src and 'mode="sonar"' not in src
-    block = src.split("            if search_q:\n", 1)[1].split("            if web_q:\n", 1)[0]
-    assert "await web_search_tool(self.memory, search_q" in block
+    assert "web_q = hit.web_q or search_q" in src          # NEED_SEARCH runs the one NEED_WEB search
+    assert "            if search_q:\n" not in src           # no second, duplicate search branch
 
 
 def test_mesh_call_tool_and_agent_method_are_gone():

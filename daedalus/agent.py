@@ -1863,7 +1863,8 @@ class Daedalus:
             # Tool re-roll: if Claude emitted any NEED_* marker, execute tools and re-call.
             hit = scan_need_markers(raw)
             search_q = hit.search_q
-            web_q = hit.web_q
+            # R5: NEED_SEARCH is the same DDG search as NEED_WEB now (Sonar retired); one search, not two.
+            web_q = hit.web_q or search_q
             fetch_url = hit.fetch_url
             screenshot_u = hit.screenshot_u
             gh_q = hit.gh_q
@@ -2097,18 +2098,6 @@ class Daedalus:
                 raw = strip_tool_dumps(raw, _json_dumps)
             if propose_result_text:
                 tool_results_text_parts.append(propose_result_text)
-            if search_q:
-                _denied = _perm_gate("web_search", "NEED_SEARCH")
-                if _denied:
-                    tool_results_text_parts.append(_denied)
-                    tool_calls_used.append({"tool": "web_search", "ok": False, "denied": True})
-                else:
-                    # NEED_SEARCH → the same DDG search as NEED_WEB. R5 (retired 2026-11-09): the Perplexity/Sonar
-                    # route lived only on the old ADN host (argos_data_nexus.modules.web_search) and is gone.
-                    ws = await web_search_tool(self.memory, search_q, limit=5, for_self=for_self)
-                    tool_results_text_parts.append(_format_web_results(search_q, ws))
-                    tool_calls_used.append({"tool": "web_search", "query": search_q,
-                                            "result_count": ws.get("result_count", 0)})
             if web_q:
                 _denied = _perm_gate("web_search", "NEED_WEB")
                 if _denied:

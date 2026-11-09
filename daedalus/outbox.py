@@ -8,7 +8,6 @@ Persistent storage via Replit DB. Powers:
 """
 from __future__ import annotations
 
-import json
 import logging
 import time
 import uuid
@@ -225,7 +224,6 @@ KNOWN_PERMISSION_CLASSES: list[dict[str, str]] = [
     {"id": "claude_worker",           "label": "Claude worker",  "group": "workers"},
     {"id": "planner_auto_run",        "label": "Auto planner",   "group": "workers"},
     # Mesh
-    {"id": "mesh_call",               "label": "Iyveris Mesh",   "group": "external"},
     # Builder tools. On by default for Playground projects (see DEFAULT_GRANTED_CLASSES); revocable.
     {"id": "run_command",             "label": "Run commands",   "group": "builder"},
     {"id": "write_file",              "label": "Write files",    "group": "builder"},
@@ -318,16 +316,6 @@ def check_permission(perm_class: str, *, default_ok: bool = True) -> bool:
     # An expired explicit grant is left in place (list_permissions shows it as inactive, renew replaces it): a
     # read check must not rewrite the whole permission map and race a concurrent grant or revoke.
     return bool(default_ok and default_grant_active(perm_class))
-
-
-def has_insert_permission(category: str) -> bool:
-    """True if insert for category is allowed (specific or generic insert_data)."""
-    if check_permission("insert_data"):
-        return True
-    cat = (category or "").strip()
-    if not cat:
-        return False
-    return check_permission(f"insert_{cat}")
 
 
 def format_permission_denied(perm_class: str, *, tool: str = "") -> str:

@@ -415,7 +415,7 @@ def proposal_enforcement_check(pg_query: str) -> dict | None:
             f"Direct INSERT INTO {table} is disallowed — this is a curated table. "
             f"Use NEED_DATA_PROPOSAL instead:\n"
             f"  <NEED_DATA_PROPOSAL: {table} | Batch Title | [{{...}}, {{...}}]>\n"
-            f"Owner approves via outbox UI before the data goes live."
+            f"The batch is only recorded in the Outbox for the owner to see; standalone Daedalus does not apply it."
         ),
         "table": table,
         "redirect_marker": "NEED_DATA_PROPOSAL",

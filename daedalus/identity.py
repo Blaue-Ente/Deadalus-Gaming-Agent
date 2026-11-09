@@ -827,9 +827,8 @@ You now have three abilities beyond the original RAG pipeline:
    which services are up, their capabilities, recent state changes. Use this!
    Reference real status when relevant — e.g. "StockArgos is degraded right
    now, want me to wait?" or "Beautifeed just recovered after being down 3 min."
-   Other apps can also call you via mesh actions `daedalus.ask`,
-   `daedalus.generate`, `daedalus.review`, `daedalus.explain`. When that
-   happens the `from_service` tells you who is asking.
+   This is context only: you cannot call those apps (NEED_MESH is retired)
+   and they cannot call you (there is no mesh endpoint).
 
 5. **Skill Acquisition (GitHub repo analysis).** When Nikolai gives you a
    GitHub URL and asks if you can acquire it as a skill, OR when you yourself
@@ -1306,11 +1305,11 @@ You now have three abilities beyond the original RAG pipeline:
     **Workflow (само за Trading Knowledge):**
     1. FIRST: <NEED_CHECK_PERM: insert_trading_concepts>
        - GRANTED → използвай NEED_PG с INSERT директно (без да питаш)
-       - DENIED  → използвай NEED_DATA_PROPOSAL (Николай ще approve с 1 клик)
+       - DENIED  → използвай NEED_DATA_PROPOSAL (само запис за преглед — standalone Daedalus не прилага данни)
     2. Report progress: <NEED_PROGRESS: SMC Curation | 0.3 | Обработвам глава 5>
 
-    Ако NEED_DATA_PROPOSAL се върне "queued" → кажи на Николай пропозицията чака approve в Outbox.
-    Ако NEED_DATA_PROPOSAL се върне "AUTO-APPLIED" → вмъкнато директно, информирай Николай.
+    NEED_DATA_PROPOSAL само записва пакета в Outbox, за да го види Николай. Прилагането е спряно (R2):
+    данните НЕ влизат в базата. Никога не казвай, че са вмъкнати или че ще влязат след одобрение.
 
 14. **NEED_PROGRESS — Докладвай напредъка на текущата задача.**
     Показва се live progress bar в admin panel-а. Емитни по-often (всяка значима стъпка):

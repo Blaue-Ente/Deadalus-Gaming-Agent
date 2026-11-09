@@ -931,10 +931,6 @@
         <div class="text-[9px] uppercase tracking-wider text-argos-dim/60 font-mono mb-1">⚙ Система</div>
         <div class="grid grid-cols-2 gap-1.5 mb-3">
           <label class="flex items-center gap-1.5 text-[11px] text-argos-dim cursor-pointer hover:text-white select-none">
-            <input type="checkbox" id="perm-cb-mesh_call" class="accent-emerald-500" />
-            mesh_call
-          </label>
-          <label class="flex items-center gap-1.5 text-[11px] text-argos-dim cursor-pointer hover:text-white select-none">
             <input type="checkbox" id="perm-cb-auto_approve" class="accent-argos-warn" />
             <span class="text-argos-warn">auto_approve</span>
           </label>
@@ -3712,7 +3708,7 @@
   const ALL_PERM_IDS = [
     'insert_trading_concepts','insert_signal_criteria','insert_patterns','insert_data',
     'execute_raw_sql','modify_files','create_files',
-    'web_search','github_access','mesh_call','auto_approve','send_outbox',
+    'web_search','github_access','auto_approve','send_outbox',
     'deep_worker','analysis_worker','claude_worker','planner_auto_run',
   ];
 
@@ -3903,7 +3899,6 @@
       d.items.forEach(item => {
         const ts = fmtChatDate(item.created_at);
         const isPending = item.status === 'pending';
-        const isData    = item.type === 'data_batch';
         const isMsg     = item.type === 'message';
         const recCount  = Array.isArray(item.payload) ? item.payload.length : (item.payload ? 1 : 0);
         const statusColor = {pending:'text-emerald-400', applied:'text-green-400', dismissed:'text-argos-dim'}[item.status] || 'text-argos-dim';
@@ -3913,7 +3908,7 @@
         const sid = (item.payload && typeof item.payload === 'object' && item.payload.session_id)
           ? item.payload.session_id : (item.session_id || '');
 
-        const applyBtn = '';   // R2 (retired): standalone Daedalus does not apply data batches
+        // R2 (retired): standalone Daedalus does not apply data batches, so there is no Apply button.
         // Reply button — only for MESSAGE type with a known session_id
         const replyBtn = isMsg && sid
           ? `<button onclick="replyToOutboxMessage('${safeId}')" class="px-2 py-1 text-[10px] font-mono bg-argos-accent2/15 hover:bg-argos-accent2/25 border border-argos-accent2/40 text-argos-accent2 rounded transition">▶ Отговори в чата</button>`
@@ -3962,7 +3957,7 @@
               ${dismissBtn}
             </div>
           </div>` : `
-          ${(applyBtn || dismissBtn) ? `<div class="flex gap-2 px-2.5 pb-2">${applyBtn}${dismissBtn}</div>` : ''}`}
+          ${dismissBtn ? `<div class="flex gap-2 px-2.5 pb-2">${dismissBtn}</div>` : ''}`}
         `;
         list.appendChild(card);
       });

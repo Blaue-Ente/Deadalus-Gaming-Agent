@@ -353,7 +353,9 @@ def test_grant_all_asks_with_the_real_count_and_sends_the_chosen_hours(studio_se
         page.locator(box + " button", has_text="Grant all").click()
         assert _until(page, lambda: asked)                       # the question was asked...
         page.wait_for_timeout(200)                               # ...and a wrong request would have left by now
-        assert posts == [] and len(asked) == 1 and "19 permission classes" in asked[0] and "4 hours" in asked[0]      # declined: nothing sent
+        from daedalus.outbox import KNOWN_PERMISSION_CLASSES
+        real = len(KNOWN_PERMISSION_CLASSES)                    # the real catalog (18 since R5 removed mesh_call)
+        assert posts == [] and len(asked) == 1 and f"{real} permission classes" in asked[0] and "4 hours" in asked[0]      # declined: nothing sent
         page.locator(box + " button", has_text="Grant all").click()
         assert "Granted 19 classes for 4 hours" in _bulk_note(page, "bulk-permissions", "Granted")
         assert posts == [{"hours": 4.0, "confirm": True}]

@@ -207,8 +207,6 @@ def extract_permission_hints(blocker: dict[str, Any]) -> list[str]:
         _add("claude_worker")
     if "auto approve" in low or "auto_approve" in low:
         _add("auto_approve")
-    if "mesh" in low and ("call" in low or "iyveris" in low):
-        _add("mesh_call")
     if any(
         p in low
         for p in (
@@ -376,7 +374,6 @@ def blockers_summary(blockers: list[dict[str, Any]] | None = None) -> dict[str, 
             "auto_approve",
             "deep_worker",
             "web_search",
-            "mesh_call",
             "planner_auto_run",
         ],
     }
