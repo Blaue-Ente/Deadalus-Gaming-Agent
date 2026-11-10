@@ -709,11 +709,6 @@ async def playground_list_assets(slug: str):
     return JSONResponse({"ok": True, "assets": pa.list_assets(slug)})
 
 
-@router.get("/daedalus/playground/api/projects/{slug}/errors")
-async def playground_errors_get(slug: str):
-    return JSONResponse({"ok": True, "errors": [], "slug": slug})
-
-
 @router.post("/daedalus/playground/api/projects/{slug}/suggest")
 async def playground_suggest(slug: str, request: Request):
     """Five ideas for a project. ``fallback`` is true when the model gave none and the fixed generic list is returned:

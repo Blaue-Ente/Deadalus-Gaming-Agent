@@ -59,9 +59,9 @@ def test_only_rows_that_still_wait_keep_a_page_and_nothing_is_guessed():
 
     waiting = {r.id: r.disposition for r in PARITY_ROWS if r.disposition.startswith(("port:", "held:"))}
     assert waiting["settings-auto-apply"] == "port:A6.1" and waiting["review-radar-journal"] == "held:MR126"
-    # A6.5c moved the Playground-only tools; what is left is the error history, whose route is a stub (owner decides).
-    assert {i: d for i, d in waiting.items() if i.startswith("pg-")} == {"pg-preview-errors": "port:A6.5c"}
-    assert redirect_target("/admin/daedalus/playground") is None and blocking_rows("playground") == ["pg-preview-errors"]
+    # A6.5c moved the Playground-only tools and the owner retired the error-history stub (R7): nothing keeps that page.
+    assert sorted(waiting) == ["review-radar-journal", "settings-auto-apply"]
+    assert blocking_rows("playground") == [] and redirect_target("/admin/daedalus/playground") == "/?panel=build"
     assert redirect_target("/admin/daedalus") is None                      # the classic page is kept by the owner
 
 
@@ -69,6 +69,7 @@ REDIRECTS = {
     "/admin/": "/",
     "/admin/daedalus/hub": "/",
     "/admin/daedalus/game-studio": "/?panel=build",
+    "/admin/daedalus/playground": "/?panel=build",
     "/admin/daedalus/connectors": "/?panel=settings",
     "/admin/daedalus/proposals": "/?panel=review&tab=proposals",
     "/admin/daedalus/skills": "/?panel=review&tab=skills",
@@ -85,12 +86,11 @@ def test_old_pages_redirect_with_302_and_the_kept_pages_stay(a0_tmp):  # noqa: F
         res = client.get(old, follow_redirects=False)
         assert res.status_code == 302, old
         assert res.headers["location"] == new, old
-    for kept in ("/admin/daedalus", "/admin/daedalus/playground"):
-        res = client.get(kept, follow_redirects=False)
-        assert res.status_code == 200 and "<html" in res.text.lower(), kept
+    kept = client.get("/admin/daedalus", follow_redirects=False)          # the classic page: kept by the owner
+    assert kept.status_code == 200 and "<html" in kept.text.lower()
     # an old bookmark that named a project keeps it; the value is escaped and the target stays on this site
-    kept = client.get("/admin/daedalus/game-studio?project=old-game", follow_redirects=False)
-    assert kept.headers["location"] == "/?panel=build&slug=old-game"
+    named = client.get("/admin/daedalus/game-studio?project=old-game", follow_redirects=False)
+    assert named.headers["location"] == "/?panel=build&slug=old-game"
     odd = client.get("/admin/daedalus/hub?slug=a%20b%26panel%3Dx%2F%2Fevil.test", follow_redirects=False)
     assert odd.headers["location"] == "/?slug=a%20b%26panel%3Dx%2F%2Fevil.test"
     # JSON APIs under the old pages are untouched (phase 3 redirects HTML pages only)

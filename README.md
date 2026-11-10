@@ -231,11 +231,10 @@ Everything lives in Studio panels (same process, same brain):
 | Review (proposals, skills, bundles, permissions, memory) | http://127.0.0.1:8787/?panel=review |
 | Settings (brain, keys, MCP, workers) | http://127.0.0.1:8787/?panel=settings |
 | Classic page (radar/journal, auto-apply) | http://127.0.0.1:8787/admin/daedalus |
-| Playground (until its last tools move) | http://127.0.0.1:8787/admin/daedalus/playground |
 | OpenAPI | http://127.0.0.1:8787/docs |
 | Health | http://127.0.0.1:8787/health |
 
-The old Hub, Game Studio, Proposals, Skills, Bundles, Connectors and LLM-router pages redirect (302) to these panels.
+The old Hub, Playground, Game Studio, Proposals, Skills, Bundles, Connectors and LLM-router pages redirect (302) to these panels.
 Their JSON APIs under `/admin/daedalus/*` are unchanged.
 
 ---

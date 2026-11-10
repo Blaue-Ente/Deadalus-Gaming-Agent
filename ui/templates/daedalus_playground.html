@@ -458,7 +458,6 @@
       <div class="flex items-center justify-between p-3 border-b border-gray-700">
         <h2 class="text-sm font-bold text-white" id="pv-title">Preview</h2>
         <div class="flex gap-2 items-center">
-          <button onclick="toggleErrHistory()" id="pv-err-hist-btn" class="hidden text-xs px-2 py-1 rounded bg-red-900/60 hover:bg-red-800/80 text-red-300 font-mono" title="Error history" data-i18n-title="pg.errHistory">📋 <span id="pv-err-count">0</span></button>
           <a id="pv-open" href="#" target="_blank" class="text-xs text-blue-400 hover:text-blue-300" data-i18n="pg.newTab">↗ New tab</a>
           <button onclick="closePreview()" class="text-gray-400 hover:text-white text-xl leading-none">✕</button>
         </div>
@@ -474,14 +473,6 @@
         <button id="pv-error-fix" onclick="fixPreviewError()"
           class="shrink-0 px-3 py-1 rounded bg-red-700 hover:bg-red-600 text-white font-medium whitespace-nowrap" data-i18n="pg.fixAi">🔧 Fix with AI</button>
         <button onclick="dismissError()" class="shrink-0 text-red-400 hover:text-red-200 text-base leading-none px-1">✕</button>
-      </div>
-      <!-- Error history panel -->
-      <div id="pv-err-history" class="hidden border-b border-gray-700 bg-gray-950 max-h-48 overflow-auto">
-        <div class="flex items-center justify-between px-3 py-1.5 border-b border-gray-800">
-          <span class="text-[10px] font-mono text-red-400" data-i18n="pg.errHistory">Error history</span>
-          <button onclick="clearErrHistory()" class="text-[10px] text-red-400 hover:text-red-200" data-i18n="pg.clear">🗑 Clear</button>
-        </div>
-        <div id="pv-err-history-body" class="p-2 space-y-1.5 text-[10px] font-mono text-gray-400"></div>
       </div>
       <iframe id="pv-frame" class="flex-1 w-full bg-white rounded-b-xl" src="about:blank"></iframe>
     </div>
@@ -2682,13 +2673,6 @@ window.addEventListener('message', function(e) {
   $('pv-error-msg').textContent = '⚠ ' + msg;
   bar.classList.remove('hidden');
   bar.classList.add('flex');
-  // Persist to server (B)
-  if (slug) {
-    api(`/admin/daedalus/playground/api/projects/${slug}/errors`, {
-      method: 'POST',
-      body: JSON.stringify({msg, stack})
-    }).then(() => refreshErrCount(slug)).catch(() => {});
-  }
 });
 
 function dismissError() {
@@ -3135,8 +3119,6 @@ function preview(slug, name, kind) {
   }
 
   $('preview-modal').classList.remove('hidden');
-  $('pv-err-history').classList.add('hidden');
-  refreshErrCount(slug);
 }
 function closePreview() {
   $('preview-modal').classList.add('hidden');
@@ -3145,58 +3127,8 @@ function closePreview() {
   $('pv-iframe-banner').classList.add('hidden');
   _previewSlug = null;
   dismissError();
-  $('pv-err-history').classList.add('hidden');
 }
 
-// ── Error history (B) ─────────────────────────────────────────
-async function refreshErrCount(slug) {
-  try {
-    const d = await api(`/admin/daedalus/playground/api/projects/${slug}/errors`);
-    const n = (d.errors || []).length;
-    const btn = $('pv-err-hist-btn');
-    if (n > 0) {
-      $('pv-err-count').textContent = n;
-      btn.classList.remove('hidden');
-    } else {
-      btn.classList.add('hidden');
-    }
-  } catch(e) {}
-}
-function toggleErrHistory() {
-  const panel = $('pv-err-history');
-  if (panel.classList.contains('hidden')) {
-    loadErrHistory();
-    panel.classList.remove('hidden');
-  } else {
-    panel.classList.add('hidden');
-  }
-}
-async function loadErrHistory() {
-  const slug = _previewSlug;
-  if (!slug) return;
-  const body = $('pv-err-history-body');
-  body.innerHTML = window.DaedalusUI ? DaedalusUI.loadingHtml(3) : '<p class="text-gray-500">…</p>';
-  try {
-    const d = await api(`/admin/daedalus/playground/api/projects/${slug}/errors`);
-    const errors = d.errors || [];
-    if (!errors.length) { body.innerHTML = '<p class="text-gray-500">' + t('pg.noErrs') + '</p>'; return; }
-    body.innerHTML = errors.map(e => {
-      const dt = new Date(e.ts * 1000).toLocaleTimeString();
-      return `<div class="border border-red-900/50 rounded px-2 py-1 bg-red-950/30">
-        <div class="text-red-300 flex justify-between"><span class="truncate flex-1">${escHtml(e.msg)}</span><span class="text-gray-500 ml-2 shrink-0">${dt}</span></div>
-        ${e.stack ? `<div class="text-gray-500 mt-0.5 truncate">${escHtml(e.stack.split('\n')[0] || '')}</div>` : ''}
-      </div>`;
-    }).join('');
-  } catch(e) { body.innerHTML = '<p class="text-red-500">' + t('pg.loadFailShort') + '</p>'; }
-}
-async function clearErrHistory() {
-  if (!_previewSlug) return;
-  try {
-    await api(`/admin/daedalus/playground/api/projects/${_previewSlug}/errors`, {method:'DELETE'});
-  } catch(e) {}
-  $('pv-err-history-body').innerHTML = '<p class="text-gray-500">' + t('pg.cleared') + '</p>';
-  $('pv-err-hist-btn').classList.add('hidden');
-}
 function escHtml(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }

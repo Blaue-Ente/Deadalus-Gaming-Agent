@@ -12,6 +12,7 @@ from a0_support import a0_tmp  # noqa: F401
 from fastapi.testclient import TestClient
 
 _PG = "/admin/daedalus/playground/api"
+ROOT = __import__("pathlib").Path(__file__).resolve().parents[1]
 
 
 @pytest.fixture
@@ -102,7 +103,7 @@ def test_coding_mode_is_saved_on_the_project_and_a_wrong_one_is_refused(client, 
     assert client.post(f"{_PG}/projects/{slug}/set-mode", json={"mode": "turbo"}).status_code == 400
 
 
-def test_the_ported_rows_are_home_and_only_the_error_history_keeps_the_playground_page(client):
+def test_the_ported_rows_are_home_the_error_stub_is_retired_and_the_playground_page_redirects(client):
     from daedalus.harness.parity import PARITY_ROWS
     from daedalus.harness.parity_gate import blocking_rows, redirect_target
 
@@ -110,10 +111,16 @@ def test_the_ported_rows_are_home_and_only_the_error_history_keeps_the_playgroun
     for row in ("pg-suggestions", "pg-backup-workspace", "pg-expo-tunnel", "pg-game-hints", "pg-ai-description",
                 "pg-learning", "pg-coding-mode", "pg-published-list"):
         assert by[row] == "in_studio", row
-    assert by["pg-preview-errors"] == "port:A6.5c"            # a stub that always answers []: the owner decides its fate
-    assert blocking_rows("playground") == ["pg-preview-errors"]
-    assert redirect_target("/admin/daedalus/playground") is None
-    assert client.get("/admin/daedalus/playground", follow_redirects=False).status_code == 200
+    # R7 (owner sign-off 2026-11-10): the error history was a stub that always answered []. It is gone, not ported.
+    assert "pg-preview-errors" not in by and by["retire-preview-errors"] == "retired:R7"
+    for method in ("get", "post", "delete"):
+        assert getattr(client, method)(f"{_PG}/projects/any/errors").status_code == 404
+    page = (ROOT / "ui" / "templates" / "daedalus_playground.html").read_text(encoding="utf-8")
+    assert "/errors" not in page and "ErrHistory" not in page and "pv-err-hist" not in page
+    assert 'id="pv-error-bar"' in page                         # the live error bar of the running preview stays
+    assert blocking_rows("playground") == [] and redirect_target("/admin/daedalus/playground") == "/?panel=build"
+    res = client.get("/admin/daedalus/playground", follow_redirects=False)
+    assert res.status_code == 302 and res.headers["location"] == "/?panel=build"
 
 
 # ---- Studio: real clicks -------------------------------------------------------------------------------------------

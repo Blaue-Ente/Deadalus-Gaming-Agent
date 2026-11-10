@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-10T09:27:02.580289+00:00",
+  "generated_at": "2026-11-10T09:36:28.732984+00:00",
   "package_version": "0.3.8",
-  "git_commit": "1f590588997eb5c2c61610fd0f6567c4ca4111a1",
+  "git_commit": "3dce31eb1c415e7386aa4d6281ba8201ea671c24",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -14,7 +14,7 @@
     },
     {
       "path": "app/admin_compat.py",
-      "lines": 3066,
+      "lines": 3061,
       "broad_excepts": 70
     },
     {

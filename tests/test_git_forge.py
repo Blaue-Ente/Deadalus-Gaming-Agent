@@ -258,10 +258,11 @@ def test_http_without_tokens(forge_tmp):
     assert pr.status_code == 500
     assert pr.json().get("ok") is False
 
-    page = client.get("/admin/daedalus/playground")
-    assert page.status_code == 200
-    assert "create-upstream-pr" in page.text
-    assert "PR / MR" in page.text
+    # A6.5c: the Playground page redirects to the Studio, whose git menu has the same PR/MR action.
+    page = client.get("/admin/daedalus/playground", follow_redirects=False)
+    assert page.status_code == 302 and page.headers["location"] == "/?panel=build"
+    assert "/create-upstream-pr" in client.get("/static/studio-workspace.js").text
+    assert 'id="git-pr"' in client.get("/").text
 
 
 def test_git_forge_native_status(forge_tmp):
