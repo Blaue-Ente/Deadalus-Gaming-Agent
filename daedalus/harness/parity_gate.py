@@ -14,6 +14,7 @@ from .parity import PARITY_ROWS
 P1 = "test_studio_phase1_header.py::"
 P2 = "test_studio_phase2_workspace.py::"
 GATE = "test_a65b_parity_gate.py::"
+PORTS = "test_a65c_playground_ports.py::"
 
 EVIDENCE: dict[str, tuple[str, ...]] = {
     "projects": (P2 + "test_old_projects_filter_files_and_deep_link",),
@@ -81,6 +82,15 @@ EVIDENCE: dict[str, tuple[str, ...]] = {
     "review-ledger": ("test_a62c_memory.py::test_adding_a_task_sends_the_fields_and_reports_a_missing_title",
                       "test_a62c_memory.py::test_a_session_opens_and_hides_its_turns",
                       "test_a62c_memory.py::test_a_search_shows_links_only_for_web_addresses_and_says_what_was_saved"),
+    # A6.5c: what only the Playground page had
+    "pg-suggestions": (PORTS + "test_ideas_ask_first_show_what_came_back_and_one_goes_to_the_chat",),
+    "pg-game-hints": (PORTS + "test_hints_and_a_description_use_the_idea_and_say_when_the_model_did_not_write_it",),
+    "pg-ai-description": (PORTS + "test_hints_and_a_description_use_the_idea_and_say_when_the_model_did_not_write_it",),
+    "pg-coding-mode": (PORTS + "test_the_coding_mode_shows_the_saved_one_and_a_change_is_saved_on_the_real_server",),
+    "pg-backup-workspace": (PORTS + "test_backup_asks_first_and_tells_done_skipped_and_failed_apart",),
+    "pg-published-list": (PORTS + "test_published_apps_are_listed_with_links_and_a_failed_read_is_not_an_empty_list",),
+    "pg-expo-tunnel": (PORTS + "test_the_tunnel_is_offered_only_for_expo_asks_first_and_the_qr_loads_only_after_a_second_yes",),
+    "pg-learning": (PORTS + "test_learning_is_read_on_request_and_a_failed_read_is_said",),
 }
 
 # The nine phase-3 checks of docs/superpowers/specs/2026-11-07-unified-game-studio-design.md. Check 6 names "apply an

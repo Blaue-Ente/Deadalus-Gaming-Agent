@@ -224,3 +224,50 @@ def test_a_late_workspace_refresh_does_not_erase_what_a_click_reported(studio_se
         page.wait_for_timeout(800)
         assert page.evaluate("() => document.getElementById('build-status').textContent") == said
         browser.close()
+
+
+def test_a_late_project_list_after_a_deep_link_pick_does_not_erase_what_a_click_reported(studio_server):
+    """Root cause of test_preview_git_and_publish_failures failing on CI (2026-11-10): opening /?slug=x picks the
+    project at once, but the panels used to reload only when the refreshed project list arrived. A click made in
+    between reported its result, and then that reload (begun after the click) replaced it. Now a pick notifies the
+    panels immediately, so their reload begins before anything the owner can click, and the list refresh is passive.
+    Driven here deterministically by holding the refresh that follows the pick."""
+    from playwright.sync_api import sync_playwright
+
+    game = studio_server["game"]
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1280, "height": 800})
+        seen = {"n": 0}
+        held = []
+
+        def projects(route):
+            if route.request.method != "GET":
+                return route.fallback()
+            seen["n"] += 1
+            if seen["n"] == 2:
+                held.append(route)                       # the refresh that follows the deep-link pick answers late
+                return None
+            return route.fallback()
+
+        try:
+            page.route("**/api/v1/playground/projects", projects)
+            page.route("**/admin/daedalus/playground/api/projects/" + game + "/run",
+                       lambda route: _fulfill(route, 500, {"detail": "preview down"}))
+            page.goto(studio_server["url"] + f"/?panel=preview&slug={game}", wait_until="domcontentloaded")
+            page.locator(f"#plist [data-slug='{game}']").wait_for()
+            page.wait_for_function("(slug) => window.dxStudio.getSlug() === slug", arg=game)
+            page.locator("#preview-run").click()
+            page.wait_for_function("() => document.getElementById('preview-status').textContent.includes('preview down')")
+            assert len(held) == 1
+            logs = []
+            page.on("request", lambda r: logs.append(r.url) if r.url.split("?", 1)[0].endswith("/" + game + "/logs") else None)
+            with page.expect_response(lambda r: r.url.split("?", 1)[0].endswith("/api/v1/playground/projects")):
+                held[0].fallback()
+            page.evaluate("() => 1")
+            page.wait_for_timeout(300)
+            assert logs == []                            # the late list is passive: it starts no preview reload
+            assert "preview down" in _status(page)
+            assert page.evaluate("() => document.getElementById('preview-status').dataset.state") == "error"
+        finally:
+            browser.close()

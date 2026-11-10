@@ -2639,6 +2639,7 @@
       else msection(list, key, role).appendChild(mnote(dx.t("studio.memPartFailed", { why: memErr(settled[i].reason) }), "note mem-failed"));
     });
     paintMemSearch(list);
+    paintMemLearning(list);
     watchMemJobs(part(0) && part(0).jobs);
   }
 
@@ -2850,6 +2851,36 @@
     });
     form.append(q, mbtn(dx.t("studio.memSearchWeb"), "search-web", go("web")), mbtn(dx.t("studio.memSearchGithub"), "search-github", go("github")));
     box.append(form, results);
+  }
+
+  // What past builds recorded (the Playground page's learning stats). Read only on request.
+  function paintMemLearning(list) {
+    const box = msection(list, "studio.memLearning", "learning");
+    box.appendChild(mnote(dx.t("studio.memLearningHint"), "hint"));
+    const results = document.createElement("div");
+    results.className = "mem-results";
+    box.append(mbtn(dx.t("studio.memLearningShow"), "learning", (b) => memRun(b, async (say) => {
+      const stats = await dx.api("/admin/daedalus/playground/api/learning/stats");
+      if (!stats || stats.ok !== true) throw new Error((stats && stats.error) || "?");     // a failed read is not "no builds"
+      let recent = null;
+      try { recent = await dx.api("/admin/daedalus/playground/api/learning/recent?limit=20"); } catch (err) { recent = { ok: false, error: failText(err) }; }
+      results.replaceChildren();
+      if (!stats.total) results.appendChild(mnote(dx.t("studio.memLearningNone")));
+      else results.appendChild(mnote(dx.t("studio.memLearningStats", { total: stats.total, rate: stats.success_rate, attempts: stats.avg_attempts })));
+      const models = (stats.top_models || []).map((m) => (m.model || "?") + " " + (m.success_rate || 0) + "% / " + (m.total || 0));
+      if (models.length) results.appendChild(mnote(dx.t("studio.memLearningModels") + ": " + models.join(" · ")));
+      const errors = (stats.common_errors || []).map((e) => (e.error || e.pattern || "?") + " ×" + (e.count || 0));
+      if (errors.length) results.appendChild(mnote(dx.t("studio.memLearningErrors") + ": " + errors.join(" · ")));
+      if (!recent || recent.ok === false) results.appendChild(mnote(dx.t("studio.memLearningRecentFailed", { why: (recent && recent.error) || "?" }), "note mem-failed"));
+      else if ((recent.records || []).length) {
+        results.appendChild(mnote(dx.t("studio.memLearningRecent"), "kicker"));
+        recent.records.forEach((r) => {
+          results.appendChild(mnote((r.slug || "?") + " · " + (r.kind || "?") + " · " + (r.build_model || "?") + " · "
+            + dx.t(r.success ? "studio.memLearningOk" : "studio.memLearningFail") + " · " + Math.round(r.duration_sec || 0) + "s"));
+        });
+      }
+      say(dx.t("studio.memLearningDone", { total: stats.total || 0 }), false);
+    })), results);
   }
 
   // Consolidate and the style lesson run on the server: look every few seconds while one runs, then show how it ended.
@@ -3237,6 +3268,250 @@
       const c = data.compat || {};
       const rows = (c.warnings || []).map((w) => row(String(w), "", []));
       return { rows, note: dx.t("studio.gitCompatResult", { level: c.level || "?", score: c.score == null ? "?" : c.score, kind: c.kind || "?" }) };
+    });
+  });
+
+  // -- A6.5c: what only the Playground page had (ideas, hints, description, coding mode, published apps, backup, tunnel) --
+  const PGX = "/admin/daedalus/playground/api";
+  let extrasGen = 0;
+  let extrasFlight = false;
+  let codingDirty = false;
+  const codingSaved = {};          // slug -> mode saved in this page (the project list may still hold the old one)
+
+  function projectOf(slug) {
+    return (dx.projects() || []).filter((p) => p.slug === slug)[0] || null;
+  }
+
+  function uiLang() {
+    return window.DaedalusI18n && window.DaedalusI18n.lang() === "bg" ? "bg" : "en";
+  }
+
+  function xline(text, cls) {
+    const p = document.createElement("p");
+    p.className = cls || "note";
+    p.textContent = text;
+    return p;
+  }
+
+  // One action at a time per box; a result that arrives after the project changed is dropped.
+  async function extrasRun(boxId, btn, work) {
+    const statusId = boxId + "-status";
+    if (extrasFlight) return;
+    const slug = dx.getSlug();
+    if (!slug) { showStatus(statusId, dx.t("studio.noProject"), true); return; }
+    const gen = ++extrasGen;
+    extrasFlight = true;
+    const controls = Array.from(document.querySelectorAll("#" + boxId + " button, #" + boxId + " select"));
+    controls.forEach((c) => { c.disabled = true; });
+    dx.busy(btn, true, "…");
+    const live = () => gen === extrasGen && dx.getSlug() === slug;
+    const say = (text, bad) => { if (live()) showStatus(statusId, text, bad); };
+    try {
+      await work(slug, say, live);
+    } catch (err) {
+      say(dx.t("studio.requestFailed") + ": " + failText(err), true);
+    } finally {
+      dx.busy(btn, false);
+      extrasFlight = false;
+      controls.forEach((c) => { if (c.isConnected) c.disabled = false; });
+    }
+  }
+
+  function syncExtras(slug) {
+    const project = slug ? projectOf(slug) : null;
+    const select = $("build-coding-mode");
+    if (!extrasFlight) select.disabled = !project;
+    if (project && !codingDirty) select.value = codingSaved[slug] || project.coding_mode || "lite";
+    $("preview-tunnel").hidden = !(project && project.kind === "expo");
+  }
+
+  let extrasShown = "";
+  dx.watchSlug((snap) => {
+    const next = snap.slug || "";
+    if (next !== extrasShown) {                 // another project: what is on screen belongs to the old one
+      extrasShown = next;
+      extrasGen += 1;
+      codingDirty = false;
+      ["build-extras", "preview-extras"].forEach((id) => {
+        $(id + "-out").replaceChildren();
+        showStatus(id + "-status", "", false);
+      });
+    }
+    syncExtras(next);
+  });
+  $("build-coding-mode").addEventListener("change", () => { codingDirty = true; });
+
+  $("build-coding-save").addEventListener("click", (ev) => extrasRun("build-extras", ev.currentTarget, async (slug, say, live) => {
+    const mode = $("build-coding-mode").value;
+    const res = await postJson(PGX + "/projects/" + slugPath(slug) + "/set-mode", { mode });
+    if (!res || res.ok !== true) throw new Error((res && res.error) || dx.t("studio.requestFailed"));
+    codingSaved[slug] = res.coding_mode || mode;
+    if (live()) codingDirty = false;
+    say(dx.t("studio.codingSaved", { slug, mode: codingSaved[slug] }), false);
+  }));
+
+  $("build-ideas").addEventListener("click", (ev) => {
+    const slug = dx.getSlug();
+    if (slug && !window.confirm(dx.t("studio.ideasConfirm", { slug }))) return;
+    extrasRun("build-extras", ev.currentTarget, async (slug2, say, live) => {
+      const res = await postJson(PGX + "/projects/" + slugPath(slug2) + "/suggest", { lang: uiLang() });
+      if (!live()) return;
+      const ideas = (res && res.suggestions) || [];
+      if (!res || res.ok !== true || !ideas.length) throw new Error((res && res.error) || dx.t("studio.requestFailed"));
+      const out = $("build-extras-out");
+      out.replaceChildren();
+      ideas.forEach((idea) => {
+        const row = document.createElement("div");
+        row.className = "idea item";
+        const span = document.createElement("span");
+        span.textContent = String(idea);
+        const use = document.createElement("button");
+        use.type = "button";
+        use.textContent = dx.t("studio.ideaUse");
+        use.addEventListener("click", () => {            // the classic page sent an idea to project chat: same here
+          showPanel("chat");
+          const prompt = document.getElementById("prompt");
+          if (prompt) { prompt.value = String(idea); prompt.focus(); }
+        });
+        row.append(span, use);
+        out.appendChild(row);
+      });
+      // Generic ideas are not ideas about this project: say so instead of presenting them as the model's answer.
+      if (res.fallback) say(dx.t("studio.ideasGeneric"), true);
+      else say(dx.t("studio.ideasDone", { n: ideas.length }), false);
+    });
+  });
+
+  $("build-hints").addEventListener("click", (ev) => extrasRun("build-extras", ev.currentTarget, async (slug, say, live) => {
+    const project = projectOf(slug) || {};
+    const q = new URLSearchParams({ kind: project.kind || "auto", name: project.name || slug, description: ($("build-idea").value || "").trim() });
+    const res = await dx.api(PGX + "/game-hints?" + q.toString());
+    if (!live()) return;
+    if (!res || res.ok !== true) throw new Error((res && res.error) || dx.t("studio.requestFailed"));
+    const out = $("build-extras-out");
+    out.replaceChildren();
+    if (res.ui_short) out.appendChild(xline(String(res.ui_short)));
+    if (res.architecture) out.appendChild(xline(dx.t("studio.hintsArch") + ": " + res.architecture));
+    if ((res.libraries || []).length) out.appendChild(xline(dx.t("studio.hintsLibs") + ": " + res.libraries.join(", ")));
+    if ((res.staging || []).length) out.appendChild(xline(dx.t("studio.hintsStaging") + ": " + res.staging.join(" → ")));
+    say(dx.t("studio.hintsDone", { kind: res.effective_kind || project.kind || "?" }), false);
+  }));
+
+  $("build-describe").addEventListener("click", (ev) => {
+    const slug = dx.getSlug();
+    if (slug && !window.confirm(dx.t("studio.describeConfirm", { slug }))) return;
+    extrasRun("build-extras", ev.currentTarget, async (slug2, say, live) => {
+      const project = projectOf(slug2) || {};
+      const res = await postJson(PGX + "/ai-gen-desc", {
+        name: project.name || slug2, kind: project.kind || "static", criteria: ($("build-idea").value || "").trim(), lang: uiLang(),
+      });
+      if (!live()) return;
+      const text = String((res && res.description) || "");
+      if (!res || res.ok !== true || !text) throw new Error((res && res.error) || dx.t("studio.requestFailed"));
+      const out = $("build-extras-out");
+      out.replaceChildren();
+      out.appendChild(xline(text));
+      const use = document.createElement("button");
+      use.type = "button";
+      use.id = "build-describe-use";
+      use.textContent = dx.t("studio.describeUse");
+      use.addEventListener("click", () => {              // the idea field is the owner's text: never replaced without a yes
+        const idea = $("build-idea");
+        if ((idea.value || "").trim() && !window.confirm(dx.t("studio.describeReplaceConfirm"))) return;
+        idea.value = text;
+      });
+      out.appendChild(use);
+      if (res.generated === false) say(dx.t("studio.describeTemplate"), true);
+      else say(dx.t("studio.describeDone"), false);
+    });
+  });
+
+  $("preview-published").addEventListener("click", (ev) => extrasRun("preview-extras", ev.currentTarget, async (slug, say, live) => {
+    const res = await dx.api(PGX + "/published");
+    if (!live()) return;
+    const out = $("preview-extras-out");
+    out.replaceChildren();
+    if (!res || res.ok !== true) { say(dx.t("studio.publishedFailed", { why: (res && res.error) || "?" }), true); return; }
+    const apps = res.apps || [];
+    if (!apps.length) { say(dx.t("studio.publishedNone"), false); return; }
+    apps.forEach((app) => {
+      const row = document.createElement("div");
+      row.className = "item";
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = (app.icon ? app.icon + " " : "") + (app.name || app.slug || "");
+      const sub = document.createElement("small");
+      sub.textContent = " " + (app.slug || "") + " ";
+      row.append(name, sub);
+      if (app.enabled !== false && app.slug) {
+        const a = document.createElement("a");
+        a.href = "/apps/" + encodeURIComponent(app.slug) + "/";
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = dx.t("studio.publishedOpen");
+        row.appendChild(a);
+      } else {
+        const off = document.createElement("small");
+        off.textContent = dx.t("studio.publishedOff");
+        row.appendChild(off);
+      }
+      out.appendChild(row);
+    });
+    say(dx.t("studio.publishedDone", { n: apps.length }), false);
+  }));
+
+  $("preview-backup").addEventListener("click", (ev) => {
+    const slug = dx.getSlug();
+    if (slug && !window.confirm(dx.t("studio.backupConfirm", { slug }))) return;
+    extrasRun("preview-extras", ev.currentTarget, async (slug2, say) => {
+      const res = await postJson(PGX + "/projects/" + slugPath(slug2) + "/backup-workspace", {});
+      if (res && res.ok === true) say(dx.t("studio.backupDone", { kb: Math.round((res.size_bytes || 0) / 1024) }), false);
+      else if (res && res.skipped) say(dx.t("studio.backupSkipped", { why: res.reason || "?" }), true);   // skipped is not done
+      else throw new Error((res && (res.error || res.reason)) || dx.t("studio.requestFailed"));
+    });
+  });
+
+  function paintTunnel(status) {
+    const out = $("preview-extras-out");
+    out.replaceChildren();
+    out.appendChild(xline(String(status.expo_url), "note mono"));
+    const qr = String(status.qr_url || "");
+    if (!/^https:\/\/api\.qrserver\.com\//.test(qr)) return;      // only the known QR service, and only on request
+    const show = document.createElement("button");
+    show.type = "button";
+    show.id = "preview-qr-show";
+    show.textContent = dx.t("studio.qrShow");
+    show.addEventListener("click", () => {
+      if (!window.confirm(dx.t("studio.qrConfirm"))) return;
+      const img = document.createElement("img");
+      img.id = "preview-qr";
+      img.alt = dx.t("studio.qrAlt");
+      img.width = 220;
+      img.height = 220;
+      img.src = qr;
+      show.replaceWith(img);
+    });
+    out.appendChild(show);
+  }
+
+  $("preview-tunnel").addEventListener("click", (ev) => {
+    const slug = dx.getSlug();
+    if (slug && !window.confirm(dx.t("studio.tunnelConfirm", { slug }))) return;
+    extrasRun("preview-extras", ev.currentTarget, async (slug2, say, live) => {
+      const res = await postJson(PGX + "/projects/" + slugPath(slug2) + "/run", { install_deps: true, tunnel: true });
+      if (!res || res.ok !== true) throw new Error((res && res.error) || dx.t("studio.requestFailed"));
+      let status = res.run || {};
+      say(dx.t("studio.tunnelWaiting"), false);
+      for (let i = 0; i < 20 && live() && !status.expo_url; i += 1) {       // the tunnel address shows up in the logs
+        if (i) await new Promise((done) => setTimeout(done, 3000));
+        if (!live()) return;
+        const logs = await dx.api(PGX + "/projects/" + slugPath(slug2) + "/logs");
+        status = (logs && logs.status) || {};
+      }
+      if (!live()) return;
+      if (!status.expo_url) { say(dx.t("studio.tunnelNoUrl"), true); return; }
+      paintTunnel(status);
+      say(dx.t("studio.tunnelReady"), false);
     });
   });
 

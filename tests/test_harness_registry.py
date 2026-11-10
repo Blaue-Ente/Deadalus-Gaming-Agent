@@ -76,7 +76,8 @@ def test_catch_all_is_marked_stub_and_new_routes_present(app_and_caps):
     assert by_id["route:POST /api/v1/daedalus/mentor"].ui_home == "setting:mentor"
     assert by_id["route:GET /admin/daedalus/memory/stats"].ui_home == "panel:review/memory"        # home since A6.2 (gate A6.5b)
     assert by_id["route:POST /admin/daedalus/permissions/grant-all"].ui_home == "panel:review/permissions"
-    assert by_id["route:POST /admin/daedalus/playground/api/projects/{slug}/suggest"].ui_home is None   # still legacy-only (A6.5c)
+    assert by_id["route:POST /admin/daedalus/playground/api/projects/{slug}/suggest"].ui_home == "panel:build"     # home since A6.5c
+    assert "route:GET /admin/daedalus/playground/api/projects/{slug}/errors" not in by_id                       # R7: the stub is retired
     assert by_id["route:POST /admin/daedalus/permissions/grant"].ui_home == "panel:review/permissions"
     assert by_id["route:GET /api/v1/playground/projects"].surface == "api-v1"
     assert by_id["route:GET /admin/daedalus/blockers"].surface == "legacy-admin"
@@ -192,9 +193,9 @@ def test_endpoints_serve_and_filter(a0_tmp):
     parity = client.get("/api/v1/harness/parity").json()
     assert parity["ok"] is True and parity["problems"] == []
     assert parity["by_disposition"]["in_studio"] >= 20
-    assert sum(v for k, v in parity["by_disposition"].items() if k.startswith(("retire:", "retired:"))) == 4
+    assert sum(v for k, v in parity["by_disposition"].items() if k.startswith(("retire:", "retired:"))) == 5     # R2-R5, R7
     # A6.5b: every row ported in A6.1-A6.4 is home after its real-click check; what still waits is named.
-    assert parity["by_disposition"]["port:A6.5c"] == 9 and parity["by_disposition"]["port:A6.1"] == 1
+    assert "port:A6.5c" not in parity["by_disposition"] and parity["by_disposition"]["port:A6.1"] == 1
     assert not [k for k in parity["by_disposition"] if k in ("port:A6.2", "port:A6.3", "port:A6.4")]
     assert parity["by_disposition"]["held:MR126"] == 1
 

@@ -315,6 +315,27 @@
           <p id="build-ctl-status" class="workspace-status" role="status" hidden></p>
           <div id="build-ctl-body"></div>
         </div>
+        <div class="app-data" id="build-extras">
+          <p class="kicker" data-i18n="studio.extrasTitle">Project tools</p>
+          <p class="hint" data-i18n="studio.extrasHint">Ideas and a description each make one model call. Hints are a read. Nothing here changes project files.</p>
+          <div class="row tight">
+            <label><span data-i18n="studio.codingMode">Coding mode</span>
+              <select id="build-coding-mode" disabled data-i18n-aria="studio.codingMode" aria-label="Coding mode">
+                <option value="lite">lite</option>
+                <option value="pro">pro</option>
+                <option value="premium">premium</option>
+              </select>
+            </label>
+            <button id="build-coding-save" type="button" data-i18n="studio.codingSave">Save mode</button>
+          </div>
+          <div class="row tight">
+            <button id="build-ideas" type="button" data-i18n="studio.ideas">Ideas</button>
+            <button id="build-hints" type="button" data-i18n="studio.hints">Hints</button>
+            <button id="build-describe" type="button" data-i18n="studio.describe">Write description</button>
+          </div>
+          <p id="build-extras-status" class="workspace-status" role="status" hidden></p>
+          <div id="build-extras-out"></div>
+        </div>
         <div class="ship-controls" id="ship-controls">
           <p class="kicker" data-i18n="studio.shipTitle">Init and export</p>
           <p id="ship-status" class="workspace-status" role="status" hidden></p>
@@ -392,6 +413,16 @@
             <textarea id="app-data-value" rows="3" spellcheck="false" data-i18n-placeholder="studio.appDataValue" placeholder="Value (JSON)" data-i18n-aria="studio.appDataValue" aria-label="Value (JSON)"></textarea>
             <button id="app-data-save" type="button" data-i18n="studio.appDataSave">Save value</button>
           </div>
+        </div>
+        <div class="app-data" id="preview-extras">
+          <p class="kicker" data-i18n="studio.previewExtras">Published apps and backup</p>
+          <div class="row tight">
+            <button id="preview-published" type="button" data-i18n="studio.publishedList">Published apps</button>
+            <button id="preview-backup" type="button" data-i18n="studio.backup">Back up workspace</button>
+            <button id="preview-tunnel" type="button" hidden data-i18n="studio.tunnel">Run with tunnel</button>
+          </div>
+          <p id="preview-extras-status" class="workspace-status" role="status" hidden></p>
+          <div id="preview-extras-out"></div>
         </div>
       </section>
       <section id="panel-review" class="workspace-panel" data-panel="review" hidden>

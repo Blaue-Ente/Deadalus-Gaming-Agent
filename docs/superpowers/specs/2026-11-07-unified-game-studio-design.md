@@ -251,14 +251,16 @@ for every parity row that is home in the Studio; `tests/test_a65b_parity_gate.py
 exist, or never clicks. Check 6's "apply an outbox item" was retired (R2, owner sign-off 2026-11-09): outbox is list
 and dismiss.
 
-Redirected (302): `/admin/`, hub, game-studio, connectors, proposals, skills, bundles, llm-router. An old bookmark
-with `?project=` or `?slug=` keeps its project. Deviations from the map above, both deliberate:
+Redirected (302): `/admin/`, hub, playground, game-studio, connectors, proposals, skills, bundles, llm-router. An old
+bookmark with `?project=` or `?slug=` keeps its project. One deliberate deviation from the map above:
 
 - `/admin/daedalus` stays a real page (owner decision 2026-11-09). It still holds radar/journal (MR126 hold) and
   auto-apply (R6 kept).
-- `/admin/daedalus/playground` stays a real page. The page audit found nine capabilities with no Studio home yet
-  (`port:A6.5c` rows in `parity.py`: suggestions, workspace backup, Expo tunnel and QR, game hints, AI description,
-  learning stats, preview error history, coding mode, published list). It redirects by itself once those rows are home.
+
+The Playground page redirects since A6.5c (2026-11-10). The page audit had found nine capabilities with no Studio
+home. Eight moved into the Studio: ideas, game hints, AI description and coding mode (Build → Project tools),
+published apps, workspace backup and the Expo tunnel with QR (Preview), learning stats (Review → Memory). The ninth,
+the preview error history, was a stub that always answered an empty list; the owner retired it (R7, 2026-11-10).
 
 The old templates stay in the tree: a redirect is decided per request from the parity rows, so reverting a row brings
 its page back without a code change.
