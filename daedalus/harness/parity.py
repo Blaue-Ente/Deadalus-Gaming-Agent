@@ -140,26 +140,28 @@ PARITY_ROWS: tuple[ParityRow, ...] = (
     _r("review-ledger", "Tasks, sessions, progress, mode, manual search, clarification stats, style lesson", "classic", "panel:review/memory",
        f"GET {_A}/tasks; POST {_A}/tasks; GET {_A}/sessions; GET {_A}/progress; POST {_A}/progress/clear; GET {_A}/mode; POST {_A}/mode; "
        f"POST {_A}/web-search; POST {_A}/github-search; GET {_A}/clarification-stats; POST {_A}/generate-style-lesson", "in_studio"),
-    # ---- legacy-only today (found in the A6.5b page audit): the Playground page is not redirected before these move ----
+    # ---- Playground-only until A6.5c (found in the A6.5b page audit); now home in the Studio --------------------------
+    # pg-preview-errors is the exception: its GET is a stub that always answers [], so there is nothing to port. It keeps
+    # the Playground page until the owner decides (retire it, or build a real error history).
     _r("pg-suggestions", "AI ideas for a project (suggest)", "playground", "panel:build",
-       f"POST {_PG}/projects/{{slug}}/suggest", "port:A6.5c"),
+       f"POST {_PG}/projects/{{slug}}/suggest", "in_studio"),
     _r("pg-backup-workspace", "Back up a workspace to object storage", "playground", "panel:preview",
-       f"POST {_PG}/projects/{{slug}}/backup-workspace", "port:A6.5c"),
+       f"POST {_PG}/projects/{{slug}}/backup-workspace", "in_studio"),
     _r("pg-expo-tunnel", "Expo run with tunnel and a QR code", "playground", "panel:preview",
-       f"POST {_PG}/projects/{{slug}}/run; GET {_PG}/projects/{{slug}}/logs", "port:A6.5c"),
+       f"POST {_PG}/projects/{{slug}}/run; GET {_PG}/projects/{{slug}}/logs", "in_studio"),
     _r("pg-game-hints", "Engine/kind hints while creating a project", "playground", "panel:build",
-       f"GET {_PG}/game-hints", "port:A6.5c"),
+       f"GET {_PG}/game-hints", "in_studio"),
     _r("pg-ai-description", "AI-written project description", "playground", "panel:build",
-       f"POST {_PG}/ai-gen-desc", "port:A6.5c"),
+       f"POST {_PG}/ai-gen-desc", "in_studio"),
     _r("pg-learning", "Learning stats and recent lessons", "playground", "panel:review/memory",
-       f"GET {_PG}/learning/stats; GET {_PG}/learning/recent", "port:A6.5c"),
+       f"GET {_PG}/learning/stats; GET {_PG}/learning/recent", "in_studio"),
     # The page also POSTs and DELETEs .../errors, but only GET is served: those two halves never worked (like R3).
     _r("pg-preview-errors", "Preview error history (read)", "playground", "panel:preview",
        f"GET {_PG}/projects/{{slug}}/errors", "port:A6.5c"),
     _r("pg-coding-mode", "Per-project coding mode", "playground", "panel:build",
-       f"POST {_PG}/projects/{{slug}}/set-mode", "port:A6.5c"),
+       f"POST {_PG}/projects/{{slug}}/set-mode", "in_studio"),
     _r("pg-published-list", "List of published apps", "playground", "panel:preview",
-       f"GET {_PG}/published", "port:A6.5c"),
+       f"GET {_PG}/published", "in_studio"),
     _r("review-radar-journal", "Radar scan and scratch journal", "classic", "panel:review/radar-journal",
        f"POST {_A}/radar/scan; GET {_A}/radar/state; GET {_A}/radar/sources; GET {_A}/journal/list; POST {_A}/journal/{{session_id}}/pause; "
        f"POST {_A}/journal/{{session_id}}/clear", "held:MR126"),

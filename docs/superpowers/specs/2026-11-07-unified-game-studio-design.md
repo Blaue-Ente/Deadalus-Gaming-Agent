@@ -256,9 +256,11 @@ with `?project=` or `?slug=` keeps its project. Deviations from the map above, b
 
 - `/admin/daedalus` stays a real page (owner decision 2026-11-09). It still holds radar/journal (MR126 hold) and
   auto-apply (R6 kept).
-- `/admin/daedalus/playground` stays a real page. The page audit found nine capabilities with no Studio home yet
-  (`port:A6.5c` rows in `parity.py`: suggestions, workspace backup, Expo tunnel and QR, game hints, AI description,
-  learning stats, preview error history, coding mode, published list). It redirects by itself once those rows are home.
+- `/admin/daedalus/playground` stays a real page. The page audit found nine capabilities with no Studio home.
+  A6.5c (2026-11-10) moved eight into the Studio: ideas, game hints, AI description and coding mode (Build → Project
+  tools), published apps, workspace backup and the Expo tunnel with QR (Preview), learning stats (Review → Memory).
+  The ninth, the preview error history, has nothing to move: its only served route is a stub that always answers
+  an empty list. The page redirects by itself once the owner decides that row (retire it, or build a real history).
 
 The old templates stay in the tree: a redirect is decided per request from the parity rows, so reverting a row brings
 its page back without a code change.

@@ -59,8 +59,9 @@ def test_only_rows_that_still_wait_keep_a_page_and_nothing_is_guessed():
 
     waiting = {r.id: r.disposition for r in PARITY_ROWS if r.disposition.startswith(("port:", "held:"))}
     assert waiting["settings-auto-apply"] == "port:A6.1" and waiting["review-radar-journal"] == "held:MR126"
-    assert {d for i, d in waiting.items() if i.startswith("pg-")} == {"port:A6.5c"}
-    assert redirect_target("/admin/daedalus/playground") is None and "pg-suggestions" in blocking_rows("playground")
+    # A6.5c moved the Playground-only tools; what is left is the error history, whose route is a stub (owner decides).
+    assert {i: d for i, d in waiting.items() if i.startswith("pg-")} == {"pg-preview-errors": "port:A6.5c"}
+    assert redirect_target("/admin/daedalus/playground") is None and blocking_rows("playground") == ["pg-preview-errors"]
     assert redirect_target("/admin/daedalus") is None                      # the classic page is kept by the owner
 
 

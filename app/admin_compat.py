@@ -32,6 +32,13 @@ _FALLBACK_SUGGESTIONS = [
     "Подобри мобилния layout и touch controls",
     "Добави екран с инструкции преди старт",
 ]
+_FALLBACK_SUGGESTIONS_EN = [
+    "Add a high-score table kept in localStorage",
+    "Animate the background with a particle effect",
+    "Add a sound on win and on loss",
+    "Improve the mobile layout and the touch controls",
+    "Add an instructions screen before the start",
+]
 
 
 def _jsonable(row: dict[str, Any] | None) -> dict[str, Any]:
@@ -708,27 +715,39 @@ async def playground_errors_get(slug: str):
 
 
 @router.post("/daedalus/playground/api/projects/{slug}/suggest")
-async def playground_suggest(slug: str):
+async def playground_suggest(slug: str, request: Request):
+    """Five ideas for a project. ``fallback`` is true when the model gave none and the fixed generic list is returned:
+    a caller must never show those as ideas about this project. ``lang`` (en|bg, default bg as the classic page) picks
+    the language asked for."""
     from daedalus import playground as pg
     proj = await pg.get_project(slug)
     if not proj:
         return JSONResponse({"ok": False, "error": "project not found"}, status_code=404)
+    english = str((await _body(request)).get("lang") or "bg").lower().startswith("en")
     try:
-        from daedalus.llm_client import complete
-        prompt = (
-            f"Проект: \"{proj.get('name', slug)}\" · Тип: {proj.get('kind','static')}\n"
-            "Дай точно 5 конкретни предложения за подобрение. "
-            "Отговори САМО с JSON масив от 5 низа на български."
-        )
-        result = await complete(user=prompt, intent="json", max_tokens=400, temperature=0.8)
+        from daedalus import llm_client
+        if english:
+            prompt = (
+                f"Project: \"{proj.get('name', slug)}\" · Kind: {proj.get('kind','static')}\n"
+                "Give exactly 5 concrete suggestions to improve it. "
+                "Answer ONLY with a JSON array of 5 strings in English."
+            )
+        else:
+            prompt = (
+                f"Проект: \"{proj.get('name', slug)}\" · Тип: {proj.get('kind','static')}\n"
+                "Дай точно 5 конкретни предложения за подобрение. "
+                "Отговори САМО с JSON масив от 5 низа на български."
+            )
+        result = await llm_client.complete(user=prompt, intent="json", max_tokens=400, temperature=0.8)
         text = (result.get("reply") or "") if isinstance(result, dict) else str(result)
         suggestions = _extract_json_list(text) or []
         suggestions = [str(s).strip() for s in suggestions if s][:6]
         if suggestions:
-            return JSONResponse({"ok": True, "suggestions": suggestions})
+            return JSONResponse({"ok": True, "suggestions": suggestions, "fallback": False})
     except Exception as exc:
         log.debug("suggest llm failed: %s", exc)
-    return JSONResponse({"ok": True, "suggestions": list(_FALLBACK_SUGGESTIONS)})
+    generic = _FALLBACK_SUGGESTIONS_EN if english else _FALLBACK_SUGGESTIONS
+    return JSONResponse({"ok": True, "suggestions": list(generic), "fallback": True})
 
 
 # ── Autopilot (SSE, same contract as ADN) ───────────────────────────────────
@@ -1126,12 +1145,12 @@ async def durability_status():
 
 @router.get("/daedalus/playground/api/published")
 async def playground_published():
-    from daedalus.playground_publish import list_published
+    from daedalus import playground_publish
     try:
-        apps = [_jsonable(a) for a in await list_published(enabled_only=False)]
-    except Exception:
+        apps = [_jsonable(a) for a in await playground_publish.list_published(enabled_only=False)]
+    except Exception as exc:
         log.exception("list published apps failed")
-        apps = []
+        return JSONResponse({"ok": False, "apps": [], "error": type(exc).__name__})   # a failed read is not "nothing published"
     return JSONResponse({"ok": True, "apps": apps})
 
 
@@ -1358,6 +1377,8 @@ async def playground_ai_gen_desc(request: Request):
     kind = (body.get("kind") or "static").strip()
     criteria = (body.get("criteria") or "").strip()
     reference = (body.get("reference") or "").strip()
+    language = "English" if str(body.get("lang") or "bg").lower().startswith("en") else "Bulgarian"
+    generated = False            # true only when the model wrote the text; otherwise the template below is returned
     if not name:
         return JSONResponse({"ok": False, "error": "name required"}, status_code=400)
     brief = (
@@ -1378,30 +1399,32 @@ async def playground_ai_gen_desc(request: Request):
         except Exception as exc:
             log.debug("ai-gen-desc scout skipped: %s", exc)
     try:
-        from daedalus.llm_client import complete
+        from daedalus import llm_client
         user = f"Name: {name}\nKind: {kind}\nCriteria: {criteria}"
         if specimen:
             user += f"\n\n{specimen}"
-        result = await complete(
-            system="You write a ready-to-build product brief. Reply in Bulgarian. No markdown fences. If a specimen is present, treat it as inspiration, never a clone.",
+        result = await llm_client.complete(
+            system=f"You write a ready-to-build product brief. Reply in {language}. No markdown fences. If a specimen is present, treat it as inspiration, never a clone.",
             user=user,
             max_tokens=800,
         )
         text = (result.get("reply") or "").strip() if isinstance(result, dict) else ""
         if text:
             brief = text
+            generated = True
     except Exception as exc:
         log.debug("ai-gen-desc llm skipped: %s", exc)
-    return JSONResponse({"ok": True, "description": brief, "brief": brief})
+    return JSONResponse({"ok": True, "description": brief, "brief": brief, "generated": generated})
 
 
 @router.get("/daedalus/playground/api/learning/stats")
 async def learning_stats(kind: str | None = None, coding_mode: str | None = None):
     try:
         from daedalus import learning as dlearn
-        return await dlearn.get_stats(kind=kind, coding_mode=coding_mode)
+        return {"ok": True, **(await dlearn.get_stats(kind=kind, coding_mode=coding_mode))}
     except Exception as exc:
-        return JSONResponse({"ok": True, "stats": {}, "error": str(exc)[:200]})
+        log.warning("learning stats failed: %s", exc)
+        return JSONResponse({"ok": False, "error": type(exc).__name__})          # a failed read is not "no builds yet"
 
 
 @router.get("/daedalus/playground/api/learning/advice")
@@ -1417,9 +1440,10 @@ async def learning_advice(kind: str = "static", coding_mode: str = "lite"):
 async def learning_recent(limit: int = 50):
     try:
         from daedalus import learning as dlearn
-        return {"records": await dlearn.list_recent(limit=limit)}
-    except Exception:
-        return {"records": []}
+        return {"ok": True, "records": await dlearn.list_recent(limit=limit)}
+    except Exception as exc:
+        log.warning("learning recent failed: %s", exc)
+        return {"ok": False, "records": [], "error": type(exc).__name__}
 
 
 # ── Skills / proposals / bundles ────────────────────────────────────────────
