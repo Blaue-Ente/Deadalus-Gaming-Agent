@@ -26,7 +26,9 @@ EVIDENCE: dict[str, tuple[str, ...]] = {
     "run-preview": (P2 + "test_preview_git_and_publish_failures",),
     "publish": (P2 + "test_preview_rejects_false_ok_and_distinguishes_publish_copy",
                 "test_a0_studio_confirm.py::test_live_publish_asks_before_public_backends"),
-    "git-core": ("test_a0_studio_confirm.py::test_git_push_force_only_after_confirm",),
+    "git-core": ("test_a0_studio_confirm.py::test_git_push_force_only_after_confirm",          # push
+                 P2 + "test_preview_git_and_publish_failures",                                # clone
+                 GATE + "test_revive_and_pull_request_are_clicked_send_their_bodies_and_a_refusal_stays_an_error"),
     "proposals": (P2 + "test_review_actions_and_write_only_secret",),
     "skills-toggle": (P2 + "test_review_actions_and_write_only_secret",),
     "bundles": (P2 + "test_review_actions_and_write_only_secret",),

@@ -87,6 +87,11 @@ def test_old_pages_redirect_with_302_and_the_kept_pages_stay(a0_tmp):  # noqa: F
     for kept in ("/admin/daedalus", "/admin/daedalus/playground"):
         res = client.get(kept, follow_redirects=False)
         assert res.status_code == 200 and "<html" in res.text.lower(), kept
+    # an old bookmark that named a project keeps it; the value is escaped and the target stays on this site
+    kept = client.get("/admin/daedalus/game-studio?project=old-game", follow_redirects=False)
+    assert kept.headers["location"] == "/?panel=build&slug=old-game"
+    odd = client.get("/admin/daedalus/hub?slug=a%20b%26panel%3Dx%2F%2Fevil.test", follow_redirects=False)
+    assert odd.headers["location"] == "/?slug=a%20b%26panel%3Dx%2F%2Fevil.test"
     # JSON APIs under the old pages are untouched (phase 3 redirects HTML pages only)
     assert client.get("/admin/daedalus/connectors/overview", follow_redirects=False).status_code == 200
     assert client.get("/admin/daedalus/proposals/api", follow_redirects=False).status_code == 200
@@ -106,6 +111,10 @@ def test_every_redirect_lands_on_the_panel_it_names(studio_server):
                 assert page.locator(f'#workspace-nav button[data-panel="{panel}"]').get_attribute("aria-selected") == "true", old
                 if "tab" in q:
                     assert page.locator(f'#review-tabs [data-tab="{q["tab"]}"]').get_attribute("aria-selected") == "true", old
+            game = studio_server["game"]                       # an old game-studio bookmark opens that project in Build
+            page.goto(studio_server["url"] + f"/admin/daedalus/game-studio?project={game}", wait_until="domcontentloaded")
+            page.wait_for_selector("#panel-build:not([hidden])")
+            page.wait_for_function("(slug) => window.dxStudio && window.dxStudio.getSlug() === slug", arg=game)
         finally:
             browser.close()
 
@@ -260,6 +269,40 @@ def test_gates_and_verify_are_clicked_and_report_what_came_back(studio_server):
             page.wait_for_function("() => document.getElementById('build-out').textContent.includes('M3-verified')")
             assert posts == ["gates", "verify"]
             assert page.locator("#build-status").get_attribute("data-state") == "ok"
+        finally:
+            browser.close()
+
+
+def test_revive_and_pull_request_are_clicked_send_their_bodies_and_a_refusal_stays_an_error(studio_server):
+    from playwright.sync_api import sync_playwright
+
+    game = studio_server["game"]
+    with sync_playwright() as pw:
+        browser, page = _browser(pw)
+        revives, prs = [], []
+        answers = {"revive": (200, {"ok": False, "error": "not a game repository"}),
+                   "pr": (200, {"ok": True, "pr": {"url": "https://example.test/pr/7"}})}
+        try:
+            page.route("**/admin/daedalus/playground/api/revive",
+                       lambda r: (revives.append(json.loads(r.request.post_data or "{}")), _fulfill(r, *answers["revive"])))
+            page.route(f"**/admin/daedalus/playground/api/projects/{game}/create-upstream-pr",
+                       lambda r: (prs.append(json.loads(r.request.post_data or "{}")), _fulfill(r, *answers["pr"])))
+            page.add_init_script("try { localStorage.setItem('dx.lang', 'en'); } catch (e) {}")
+            page.goto(studio_server["url"] + f"/?panel=preview&slug={game}", wait_until="domcontentloaded")
+            page.locator(f"#plist [data-slug='{game}']").wait_for()
+            page.locator("#git-menu summary").click()
+            page.locator("#git-revive").click()                                    # no URL: asked for, nothing sent
+            page.wait_for_function("() => document.getElementById('git-status').dataset.state === 'error'")
+            assert revives == []
+            page.locator("#git-url").fill("https://example.test/old-game.git")
+            page.locator("#git-revive").click()
+            page.wait_for_function("() => document.getElementById('git-status').textContent.includes('not a game repository')")
+            assert revives == [{"url": "https://example.test/old-game.git"}]
+            assert page.locator("#git-status").get_attribute("data-state") == "error"   # ok:false is never shown as saved
+            page.wait_for_function("() => !document.getElementById('git-pr').disabled")
+            page.locator("#git-pr").click()
+            page.wait_for_function("() => document.getElementById('git-status').dataset.state === 'ok' && !document.getElementById('git-status').hidden")
+            assert prs == [{"title": game}]
         finally:
             browser.close()
 

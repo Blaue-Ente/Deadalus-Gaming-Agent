@@ -58,12 +58,25 @@ def _page(request: Request, name: str, extra: dict[str, Any] | None = None) -> H
 def _old_page(request: Request, path: str, name: str, extra: dict[str, Any] | None = None) -> Response:
     """An old HTML page: a 302 to its Studio panel once the parity gate allows it (every row naming the page is home in
     the Studio or retired, and the owner has not kept it), otherwise still the real page. JSON APIs are never redirected."""
-    from daedalus.harness.parity_gate import redirect_target
-
-    target = redirect_target(path)
+    target = _studio_target(request, path)
     if target:
         return RedirectResponse(target, status_code=302)
     return _page(request, name, extra)
+
+
+def _studio_target(request: Request, path: str) -> str | None:
+    """The Studio address an old page redirects to, keeping the project an old bookmark named (?project= or ?slug=)."""
+    from urllib.parse import quote
+
+    from daedalus.harness.parity_gate import redirect_target
+
+    target = redirect_target(path)
+    if not target:
+        return None
+    slug = (request.query_params.get("project") or request.query_params.get("slug") or "").strip()
+    if slug:
+        target += ("&" if "?" in target else "?") + "slug=" + quote(slug, safe="")
+    return target
 
 
 def _sse(event: str, data: dict) -> str:
@@ -206,9 +219,7 @@ async def bundles_page(request: Request):
 
 @router.get("/llm-router", response_class=HTMLResponse)
 async def llm_router_page(request: Request):
-    from daedalus.harness.parity_gate import redirect_target
-
-    if (target := redirect_target("/admin/llm-router")):
+    if (target := _studio_target(request, "/admin/llm-router")):
         return RedirectResponse(target, status_code=302)
     ctx = {"provider": None, "model": None, "source": None, "has_key": False}
     try:
