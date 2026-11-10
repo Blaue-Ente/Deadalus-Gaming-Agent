@@ -640,11 +640,42 @@
       selected: !!selected,
     };
   }
+  // A watcher may pick a project itself (the deep link ?slug=x does). That pick must reach every watcher as one newer
+  // snapshot after the current round, never interleaved with it: so a notify made during a round is run when it ends.
+  let notifying = false;
+  let notifyAgain = null;
   function notifySlug(opts) {
-    const snap = slugSnapshot(opts && opts.selected);
-    slugWatchers.slice().forEach((fn) => {
-      try { fn(snap); } catch (err) { /* a panel watcher must not break the list */ }
-    });
+    const selected = !!(opts && opts.selected);
+    if (notifying) {
+      notifyAgain = { selected: selected || !!(notifyAgain && notifyAgain.selected) };
+      return;
+    }
+    notifying = true;
+    try {
+      const snap = slugSnapshot(selected);
+      slugWatchers.slice().forEach((fn) => {
+        try { fn(snap); } catch (err) { /* a panel watcher must not break the list */ }
+      });
+    } finally {
+      notifying = false;
+    }
+    if (notifyAgain) {
+      const next = notifyAgain;
+      notifyAgain = null;
+      notifySlug(next);
+    }
+  }
+
+  // An explicit pick tells the panels at once, with the list as it is now, and then refreshes the list passively.
+  // The panels' reload therefore begins at the pick, before anything the owner can click next; if it began only when
+  // the refreshed list arrived, it would start after such a click and replace what the click reported.
+  function pickProject(slug) {
+    state.slug = slug || null;
+    if (state.slug) localStorage.setItem("dx.slug", state.slug);
+    else localStorage.removeItem("dx.slug");
+    renderProjectList({ selected: true });
+    syncProjectChrome();
+    refreshProjects();
   }
 
   function renderProjectList(opts) {
@@ -666,9 +697,7 @@
       el.dataset.slug = p.slug;
       el.dataset.bucket = indexed ? projectBucket(p) : "pending";
       el.onclick = () => {
-        state.slug = p.slug;
-        localStorage.setItem("dx.slug", state.slug);
-        refreshProjects({ selected: true });
+        pickProject(p.slug);
       };
       box.appendChild(el);
     });
@@ -2136,10 +2165,7 @@
     getSlug() { return state.slug; },
     projects() { return state.projects.slice(); },
     selectSlug(slug) {
-      state.slug = slug || null;
-      if (state.slug) localStorage.setItem("dx.slug", state.slug);
-      else localStorage.removeItem("dx.slug");
-      refreshProjects({ selected: true });
+      pickProject(slug);
     },
     watchSlug(fn) {
       slugWatchers.push(fn);
