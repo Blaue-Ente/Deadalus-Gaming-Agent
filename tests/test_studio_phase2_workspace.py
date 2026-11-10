@@ -255,8 +255,8 @@ def test_old_projects_filter_files_and_deep_link(studio_server):
         page.wait_for_function("() => document.getElementById('workspace-status').textContent.includes('missing-project')")
         listed = _api(studio_server, "GET", "/api/v1/playground/projects")
         assert "missing-project" not in [p["slug"] for p in listed["projects"]]
-        with urllib.request.urlopen(studio_server["url"] + "/admin/daedalus/connectors") as res:
-            assert res.status == 200
+        with urllib.request.urlopen(studio_server["url"] + "/admin/daedalus/connectors") as res:   # A6.5b: 302 -> Settings
+            assert res.status == 200 and res.url.endswith("/?panel=settings")
         browser.close()
 
 

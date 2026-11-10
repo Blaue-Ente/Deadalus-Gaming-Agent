@@ -119,11 +119,11 @@ def test_connectors_http_save_and_page(conn_tmp):
     from app.main import app
     client = TestClient(app)
 
-    page = client.get("/admin/daedalus/connectors")
-    assert page.status_code == 200
-    assert "Connectors" in page.text
-    assert "secrets.env" in page.text
-    assert 'id="brain"' in page.text
+    # A6.5b: the old page redirects to the Studio's Settings, which holds the connectors and the write-only secrets.
+    page = client.get("/admin/daedalus/connectors", follow_redirects=False)
+    assert page.status_code == 302 and page.headers["location"] == "/?panel=settings"
+    studio = client.get("/").text
+    assert 'id="panel-settings"' in studio and 'id="secret-value" type="password"' in studio
 
     overview = client.get("/admin/daedalus/connectors/overview")
     assert overview.status_code == 200

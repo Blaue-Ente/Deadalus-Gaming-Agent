@@ -34,7 +34,7 @@ def test_header_css_contract():
     header = HTML.split("<header", 1)[1].split("</header>", 1)[0]
     assert '<button type="button" id="settings-link"' in header
     assert 'href="/admin/daedalus/connectors"' not in header
-    assert 'href="/admin/daedalus/connectors"' in HTML
+    assert 'href="/admin/daedalus/connectors"' not in HTML          # A6.5b: the old page redirects to Settings, no link left
 
 
 def test_settings_string_pair():

@@ -202,12 +202,12 @@ def test_http_unity_and_studio_copy(harness_tmp):
     assert refused.json().get("honest") is True
     assert refused.json().get("ok") is False
 
-    gs = client.get("/admin/daedalus/game-studio")
-    assert gs.status_code == 200
-    assert "No Editor in this cloud" in gs.text
-    assert 'data-i18n="gs.noEditor"' in gs.text
-    i18n = client.get("/static/i18n.js")
-    assert "Няма Editor в този облак" in i18n.text
+    # A6.5b: the game-studio page redirects to the Studio; its Unity row says the Editor is not in this cloud (EN and BG).
+    gs = client.get("/admin/daedalus/game-studio", follow_redirects=False)
+    assert gs.status_code == 302 and gs.headers["location"] == "/?panel=build"
+    i18n = client.get("/static/i18n.js").text
+    assert '"studio.unityHub": "Hub locally · not in this cloud"' in i18n and "не в този облак" in i18n
+    assert 'let sub = t("studio.unityHub");' in client.get("/static/studio.js").text
 
     caps = client.get("/capabilities")
     assert "unity-mcp" in caps.json()["capabilities"]

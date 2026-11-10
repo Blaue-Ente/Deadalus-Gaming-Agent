@@ -234,13 +234,13 @@ def test_http_production_and_studio_copy(harness_tmp):
     assert wall.status_code == 200
     assert wall.json()["ok"] is False
 
-    gs = client.get("/admin/daedalus/game-studio")
-    assert gs.status_code == 200
-    assert "Layer" in gs.text
-    assert 'data-i18n="gs.layer"' in gs.text
-    assert "not a store build" in gs.text
-    i18n = client.get("/static/i18n.js")
-    assert "не билд за стора" in i18n.text
+    # A6.5b: the game-studio page redirects to the Studio; the Studio's layer row says "not a store build" until the
+    # production wall is clear (EN and BG).
+    gs = client.get("/admin/daedalus/game-studio", follow_redirects=False)
+    assert gs.status_code == 302 and gs.headers["location"] == "/?panel=build"
+    i18n = client.get("/static/i18n.js").text
+    assert '"studio.notStoreBuild": "not a store build"' in i18n and '"studio.notStoreBuild": "не е билд за стора"' in i18n
+    assert '(done ? "" : " · " + t("studio.notStoreBuild"))' in client.get("/static/studio.js").text
 
     caps = client.get("/capabilities")
     assert "production-layer" in caps.json()["capabilities"]

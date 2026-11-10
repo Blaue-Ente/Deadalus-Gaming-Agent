@@ -74,8 +74,9 @@ def test_catch_all_is_marked_stub_and_new_routes_present(app_and_caps):
     assert "route:POST /admin/daedalus/outbox/{item_id}/apply" not in by_id          # R2 retired (owner sign-off)
     # ui_home comes from the parity table: in_studio rows get their home, legacy-only routes get none.
     assert by_id["route:POST /api/v1/daedalus/mentor"].ui_home == "setting:mentor"
-    assert by_id["route:GET /admin/daedalus/memory/stats"].ui_home is None  # legacy-only until A6.2
-    assert by_id["route:POST /admin/daedalus/permissions/grant-all"].ui_home is None
+    assert by_id["route:GET /admin/daedalus/memory/stats"].ui_home == "panel:review/memory"        # home since A6.2 (gate A6.5b)
+    assert by_id["route:POST /admin/daedalus/permissions/grant-all"].ui_home == "panel:review/permissions"
+    assert by_id["route:POST /admin/daedalus/playground/api/projects/{slug}/suggest"].ui_home is None   # still legacy-only (A6.5c)
     assert by_id["route:POST /admin/daedalus/permissions/grant"].ui_home == "panel:review/permissions"
     assert by_id["route:GET /api/v1/playground/projects"].surface == "api-v1"
     assert by_id["route:GET /admin/daedalus/blockers"].surface == "legacy-admin"
@@ -192,7 +193,10 @@ def test_endpoints_serve_and_filter(a0_tmp):
     assert parity["ok"] is True and parity["problems"] == []
     assert parity["by_disposition"]["in_studio"] >= 20
     assert sum(v for k, v in parity["by_disposition"].items() if k.startswith(("retire:", "retired:"))) == 4
-    assert parity["by_disposition"]["port:A6.2"] >= 1 and parity["by_disposition"]["held:MR126"] == 1
+    # A6.5b: every row ported in A6.1-A6.4 is home after its real-click check; what still waits is named.
+    assert parity["by_disposition"]["port:A6.5c"] == 9 and parity["by_disposition"]["port:A6.1"] == 1
+    assert not [k for k in parity["by_disposition"] if k in ("port:A6.2", "port:A6.3", "port:A6.4")]
+    assert parity["by_disposition"]["held:MR126"] == 1
 
 
 def test_endpoints_require_the_owner_token(a0_tmp, raw_http):

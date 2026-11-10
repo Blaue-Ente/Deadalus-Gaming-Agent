@@ -244,6 +244,25 @@ Redirect map, added only after those nine checks:
 
 Rollback of phase 3 is revert of the redirect change. The shell from phase 2 keeps working. Old templates stay in the tree until the redirect commit, then the duplicate HTML can be deleted in that same commit only if the nine checks passed. If a check fails, the templates stay and that redirect is not added.
 
+#### Phase 3 status (A6.5b, 2026-11-10)
+
+The gate is data: `daedalus/harness/parity_gate.py` names the real-click browser tests for each of the nine checks and
+for every parity row that is home in the Studio; `tests/test_a65b_parity_gate.py` fails if one is missing, does not
+exist, or never clicks. Check 6's "apply an outbox item" was retired (R2, owner sign-off 2026-11-09): outbox is list
+and dismiss.
+
+Redirected (302): `/admin/`, hub, game-studio, connectors, proposals, skills, bundles, llm-router. An old bookmark
+with `?project=` or `?slug=` keeps its project. Deviations from the map above, both deliberate:
+
+- `/admin/daedalus` stays a real page (owner decision 2026-11-09). It still holds radar/journal (MR126 hold) and
+  auto-apply (R6 kept).
+- `/admin/daedalus/playground` stays a real page. The page audit found nine capabilities with no Studio home yet
+  (`port:A6.5c` rows in `parity.py`: suggestions, workspace backup, Expo tunnel and QR, game hints, AI description,
+  learning stats, preview error history, coding mode, published list). It redirects by itself once those rows are home.
+
+The old templates stay in the tree: a redirect is decided per request from the parity rows, so reverting a row brings
+its page back without a code change.
+
 ### Phase 4 — backend cleanup, separate plan
 
 Depends on phase 3 on `main`. Not started from the phase 1 plan.
