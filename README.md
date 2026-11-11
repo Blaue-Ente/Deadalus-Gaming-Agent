@@ -306,6 +306,13 @@ Each project is `playground/projects/{slug}/` with a kind:
    - **Git** — push to GitLab if `GITLAB_TOKEN` is set, else GitHub. Clone from either host. Open a GitHub Pull Request or GitLab Merge Request from Playground (🔀 PR / MR) or the `git_forge` tool. Tokens live in Studio → **Connectors**.
    - Unity and Godot: open the folder in the matching Editor.
 
+**What the brain can do by itself, and what it only asks for.** During a build Daedalus has these tools:
+`milestones` (state, gates, verify; advance only when the checks allow it, never with a waiver), `preview`
+(run, stop, logs on this machine, never a public tunnel), `play` (a rendered Godot or Unity session: frames, keys,
+mouse, game state), and `runs` (the run ledger, read only). Publishing and pushing are never done by the brain:
+`ship_request` records a request that you run or decline in Studio → Preview → **Requests from Daedalus**, with the
+Studio's own buttons and their questions.
+
 ---
 
 ## Offline atelier

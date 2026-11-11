@@ -826,3 +826,26 @@ async def harness_full_auto_stop(slug: str) -> Any:
     from daedalus.harness import full_auto
 
     return _build_reply(await full_auto.stop(slug))
+
+
+# ── A7: ship requests (the brain asks to publish or push; the owner answers here, from the Studio) ─────────────────
+
+_SHIP_STATUS = {"not_found": 404, "already_resolved": 409, "bad_outcome": 400}
+
+
+class ShipResolveBody(BaseModel):
+    outcome: str = ""
+
+
+@router.get("/api/v1/harness/ship-requests")
+async def ship_requests(slug: str = "", status: str = "") -> dict[str, Any]:
+    from daedalus.harness.brain_tools import list_ship_requests
+
+    return {"ok": True, "requests": list_ship_requests(slug=slug, status=status)}
+
+
+@router.post("/api/v1/harness/ship-requests/{req_id}/resolve")
+async def ship_request_resolve(req_id: str, body: ShipResolveBody) -> Any:
+    from daedalus.harness.brain_tools import resolve_ship_request
+
+    return _coded(resolve_ship_request(req_id, (body.outcome or "").strip().lower()), _SHIP_STATUS)

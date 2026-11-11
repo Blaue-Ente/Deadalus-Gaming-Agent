@@ -1719,7 +1719,7 @@ class Daedalus:
                         user_message, session_id=session_id or "",
                     )
                     _nt_sys = format_system(
-                        _route, extra=_consult_extra, user_message=user_message,
+                        _route, extra=_consult_extra, user_message=user_message, offered=_nt_specs,
                     )
                     _loop = BuildLoop(_route, user_message, seed_log=_consult_log)
                     max_native = 10

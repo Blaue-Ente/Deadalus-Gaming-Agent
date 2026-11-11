@@ -88,7 +88,8 @@ class GatewayCallError(RuntimeError):
     """Raised by the legacy shims so existing ``except`` / rate-limit string checks keep working."""
 
     def __init__(self, error: GatewayError):
-        super().__init__(error.message)
+        # A timeout has no message of its own: say its type, never an empty error (seen live as "GatewayCallError: ").
+        super().__init__(error.message or error.type)
         self.error = error
 
 

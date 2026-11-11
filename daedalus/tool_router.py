@@ -9,6 +9,7 @@ functions for the build turn.
 from __future__ import annotations
 
 import logging
+import functools
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -126,7 +127,20 @@ def _kw_hit(pb: Playbook, blob: str, kind: str) -> bool:
     low = _strip_negations(blob).lower()
     if pb.regex and re.search(pb.regex, _strip_negations(blob), re.I):
         return True
-    return any(k.lower() in low for k in pb.keywords)
+    return any(_keyword_re(k).search(low) for k in pb.keywords)
+
+
+@functools.lru_cache(maxsize=512)
+def _keyword_re(keyword: str) -> "re.Pattern[str]":
+    """A keyword is a word, not a substring (found live: "eas" in "please" picked the mobile build, "urp" in
+    "purpose" Unity, "quest" in "request" the epic one). It must start a word; a Latin keyword must also end one,
+    while a Cyrillic one is a stem ("камер" matches "камерата"). Symbols at either end (".tscn", "levels/", "c#")
+    are their own boundary."""
+    k = keyword.lower()
+    start = r"(?<!\w)" if k[:1].isalnum() or k[:1] == "_" else ""
+    latin = all(ord(ch) < 128 for ch in k)
+    end = r"(?!\w)" if latin and (k[-1:].isalnum() or k[-1:] == "_") else ""
+    return re.compile(start + re.escape(k) + end)
 
 
 _NEGATED = re.compile(
@@ -306,7 +320,7 @@ def _docs_block(steps: list[Step]) -> str:
     return "\n\n".join(parts)
 
 
-def format_system(rt: Route, *, extra: str = "", user_message: str = "") -> str:
+def format_system(rt: Route, *, extra: str = "", user_message: str = "", offered: Any = None) -> str:
     from .game_engineer import attach_to_sys
 
     pb = rt.playbook
@@ -326,6 +340,10 @@ def format_system(rt: Route, *, extra: str = "", user_message: str = "") -> str:
         if s.docs:
             lines.append(f"      docs: {', '.join(s.docs)}")
     lines.append("When the slice files exist, stop and summarize. No NEED_* dumps, no SQL.")
+    from .harness.brain_tools import NAMES as _harness_tools, SYSTEM_HINT as _harness_hint
+    names = {str(s.get("name") if isinstance(s, dict) else s) for s in offered} if offered is not None else set(pb.tools)
+    if _harness_tools & names:                # A7: say what the harness tools are for whenever they are offered
+        lines.append(_harness_hint)
     sys = "\n".join(lines)
     docs = _docs_block(rt.ordered_steps)
     if docs:

@@ -117,6 +117,19 @@ def _as_openai_response(text: str, *, provider: str, model: str) -> dict[str, An
     }
 
 
+def mark_empty_reply(out: dict[str, Any], *, max_tokens: int) -> dict[str, Any]:
+    """An answer with no text is not a success. Found live (2026-11-11): reasoning models given a small max_tokens
+    spend every token thinking and return nothing, and that came back as ok:true. ``truncated`` says the token
+    budget ran out (the likely cause), so a caller can retry with more room or say so."""
+    if str(out.get("reply") or "").strip():
+        return out
+    used = int(((out.get("usage") or {}).get("completion_tokens")) or 0)
+    out["ok"] = False
+    out["error"] = "empty_reply"
+    out["truncated"] = bool(max_tokens and used >= int(max_tokens))
+    return out
+
+
 def _is_recoverable_llm_error(text: str) -> bool:
     """True when failing the primary call might succeed on another backend (credits, auth, missing model)."""
     t = (text or "").lower()
@@ -230,6 +243,7 @@ async def _complete_with_cfg(
         "completion_tokens": int(billed.get("completion_tokens") or 0),
         "cost_usd": billed.get("cost_usd"),
     }
+    mark_empty_reply(out, max_tokens=max_tokens)
     try:
         routing_watchdog.note_success(source="llm_client._complete_with_cfg")
     except Exception:

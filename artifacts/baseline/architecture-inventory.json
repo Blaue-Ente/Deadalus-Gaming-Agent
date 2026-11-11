@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-10T14:25:54.342861+00:00",
+  "generated_at": "2026-11-11T10:14:51.278319+00:00",
   "package_version": "0.3.8",
-  "git_commit": "87c91a3d7592898af6c2459402fe823495de4613",
+  "git_commit": "70f9ec27a877d7598b33f6c65f7b41ef867c842d",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -19,8 +19,8 @@
     },
     {
       "path": "daedalus/native_tools.py",
-      "lines": 2193,
-      "broad_excepts": 21
+      "lines": 2234,
+      "broad_excepts": 22
     },
     {
       "path": "daedalus/identity.py",
@@ -130,8 +130,8 @@
     ]
   },
   "tests": {
-    "modules": 113,
-    "functions": 1314
+    "modules": 116,
+    "functions": 1344
   },
   "modules": {
     "daedalus": [
@@ -208,6 +208,7 @@
       "daedalus/godot_tools.py",
       "daedalus/guided_jobs.py",
       "daedalus/harness/__init__.py",
+      "daedalus/harness/brain_tools.py",
       "daedalus/harness/build_controls.py",
       "daedalus/harness/config_view.py",
       "daedalus/harness/connections.py",

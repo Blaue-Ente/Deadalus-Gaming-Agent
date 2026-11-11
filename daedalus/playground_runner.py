@@ -580,5 +580,10 @@ def start_idle_reaper(interval: float | None = None) -> "asyncio.Task[None]":
                     log.info("runner: stopped %d idle app(s)", n)
             except Exception:
                 log.debug("idle reaper tick failed", exc_info=True)
+            try:                                   # A7: play sessions the brain left open
+                from .harness.brain_tools import reap_play_sessions
+                await asyncio.to_thread(reap_play_sessions)
+            except Exception:
+                log.debug("play session reaper tick failed", exc_info=True)
 
     return asyncio.get_running_loop().create_task(_loop(), name="daedalus-idle-reaper")

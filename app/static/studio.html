@@ -414,6 +414,15 @@
             <button id="app-data-save" type="button" data-i18n="studio.appDataSave">Save value</button>
           </div>
         </div>
+        <div class="app-data" id="ship-requests">
+          <p class="kicker" data-i18n="studio.shipReqTitle">Requests from Daedalus</p>
+          <p class="hint" data-i18n="studio.shipReqHint">Daedalus cannot publish or push by itself. It asks here. Run uses the Studio's own button, with its own questions.</p>
+          <div class="row tight">
+            <button id="ship-req-refresh" type="button" data-i18n="studio.shipReqRefresh">Show requests</button>
+          </div>
+          <p id="ship-requests-status" class="workspace-status" role="status" hidden></p>
+          <div id="ship-requests-list"></div>
+        </div>
         <div class="app-data" id="preview-extras">
           <p class="kicker" data-i18n="studio.previewExtras">Published apps and backup</p>
           <div class="row tight">
