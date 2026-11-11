@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 log = logging.getLogger(__name__)
@@ -100,10 +102,7 @@ def _project_snapshot(slug: str, *, max_chars: int = 5000) -> str:
     if not root.is_dir():
         return f"(missing project {slug})"
     bits: list[str] = []
-    for rel in (
-        "index.html", "main.js", "src/main.js", "src/App.jsx", "game.js", "README.md",
-        "src/racer/vehicle.js", "src/racer/track.js", "src/racer/boot.js",
-    ):
+    for rel in _snapshot_files(root):
         path = root / rel
         if path.is_file():
             bits.append(f"=== {rel} ===\n{path.read_text(encoding='utf-8', errors='replace')[:1800]}")
@@ -112,6 +111,39 @@ def _project_snapshot(slug: str, *, max_chars: int = 5000) -> str:
         bits.append("files: " + ", ".join(names))
     text = "\n\n".join(bits)
     return text[:max_chars]
+
+
+_KNOWN_FILES = (
+    "index.html", "main.js", "src/main.js", "src/App.jsx", "game.js", "README.md",
+    "src/racer/vehicle.js", "src/racer/track.js", "src/racer/boot.js",
+)
+_SCRIPT_SRC = re.compile(r"""<script[^>]+src\s*=\s*["']([^"':?#]+)["']""", re.I)
+
+
+def _snapshot_files(root: Path) -> list[str]:
+    """The files that are the game: index.html, the scripts it loads, the known entry names, then the other scripts.
+
+    Found live (2026-11-11): an Autopilot game kept its code in script.js; only fixed names were read, so the critic
+    saw no input handler and no game loop and failed a working game."""
+    out: list[str] = []
+
+    def add(rel: str) -> None:
+        rel = rel.lstrip("./")
+        if rel and rel not in out and (root / rel).is_file():
+            out.append(rel)
+
+    add("index.html")
+    index = root / "index.html"
+    if index.is_file():
+        for src in _SCRIPT_SRC.findall(index.read_text(encoding="utf-8", errors="replace")):
+            if not src.startswith(("//", "http")):
+                add(src)
+    for rel in _KNOWN_FILES:
+        add(rel)
+    others = [p for pat in ("*.js", "src/*.js", "src/**/*.ts", "src/*.jsx") for p in root.glob(pat)]
+    for p in sorted(others, key=lambda p: -p.stat().st_size):
+        add(p.relative_to(root).as_posix())
+    return out
 
 
 def _heuristic(snapshot: str) -> dict[str, Any]:

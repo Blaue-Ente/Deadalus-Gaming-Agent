@@ -162,6 +162,87 @@ async def _browser_verify(backend: BuilderBackend) -> dict[str, Any]:
     return {"ok": False, "skipped": True, "summary": "browser verify unavailable — not evidence"}
 
 
+async def _smoke_and_repair(backend: BuilderBackend, state: PipelineState, *, kind: str, build_sys: str,
+                            max_repair_rounds: int) -> None:
+    """Smoke test; on a build error ask the coder for a fix and test again (up to ``max_repair_rounds``)."""
+    for attempt in range(1, max_repair_rounds + 1):
+        result = await backend.smoke_test()
+        if result.get("ok"):
+            state.test_ok = True
+            break
+        if result.get("skipped"):
+            err = (result.get("error") or result.get("summary") or "smoke skipped — not evidence")[:500]
+            await backend.emit("log", {"line": f"⚠ Тест skipped — not evidence: {err[:120]}", "level": "warn"})
+            state.errors.append(err)
+            break
+        err = (result.get("error") or "")[:2500]
+        logs = "\n".join((result.get("logs") or [])[-35:])
+        await backend.emit("log", {"line": f"⚠ Тест {attempt}/{max_repair_rounds}: {err[:120]}", "level": "warn"})
+        fix_raw = await backend.llm(
+            AgentRole.CODER,
+            f"Поправи build грешката.\n\nГрешка:\n{err}\n\nЛогове:\n{logs}\n\n"
+            f"Платформа: {kind}. Върни JSON files или ===FILE=== блокове.",
+            system=build_sys,
+        )
+        fix_map = extract_coder_files(fix_raw, state.slug)
+        if fix_map:
+            changes = [FileChange(path=p, action="update", content=c) for p, c in fix_map.items()]
+            await backend.write_changes(changes)
+            for c in changes:
+                _upsert_change(state, c)
+
+
+QUALITY_REPAIR_ROUNDS = 2
+
+
+def _quality_repair_rounds() -> int:
+    import os
+    raw = (os.environ.get("DAEDALUS_QUALITY_REPAIR_ROUNDS") or "").strip()
+    try:
+        return max(0, min(5, int(raw))) if raw else QUALITY_REPAIR_ROUNDS
+    except ValueError:
+        return QUALITY_REPAIR_ROUNDS
+
+
+def _current_files(state: PipelineState, *, budget: int = 40_000) -> str:
+    """The latest content of every file the run wrote, newest wins, within ``budget`` chars."""
+    latest: dict[str, str] = {}
+    for c in state.changes:
+        if c.action != "delete" and c.content:
+            latest[c.path] = c.content
+    out, left = [], budget
+    for path, content in latest.items():
+        piece = content[: max(0, left - 40)]
+        if not piece:
+            break
+        out.append(f"===FILE: {path}===\n{piece}\n===END===")
+        left -= len(out[-1])
+    return "\n\n".join(out)
+
+
+async def _quality_repair(backend: BuilderBackend, state: PipelineState, *, kind: str, build_sys: str,
+                          problems: list[str]) -> int:
+    """Ask the coder to fix what the gameplay check, the quality critic and the playtest found. Returns files written."""
+    listed = "\n".join(f"- {p}" for p in problems[:10])
+    fix_raw = await backend.llm(
+        AgentRole.CODER,
+        f"Играта се изгражда, но проверките намериха проблеми. Поправи ги в кода.\n\nПроблеми:\n{listed}\n\n"
+        f"Задача на собственика: {state.description[:1500]}\n\nТекущи файлове:\n{_current_files(state)}\n\n"
+        f"Платформа: {kind}. Върни само променените файлове изцяло като JSON files или ===FILE=== блокове.",
+        system=build_sys,
+    )
+    fix_map = extract_coder_files(fix_raw, state.slug)
+    if not fix_map:
+        await backend.emit("log", {"line": "⚠ Поправката не върна файлове", "level": "warn"})
+        return 0
+    changes = [FileChange(path=p, action="update", content=c, summary="quality-repair") for p, c in fix_map.items()]
+    n = await backend.write_changes(changes)
+    for c in changes:
+        _upsert_change(state, c)
+    await backend.emit("log", {"line": f"  ✓ поправени {n} файл(а)", "level": "dim"})
+    return n
+
+
 async def run_full_autopilot(
     backend: BuilderBackend,
     state: PipelineState,
@@ -301,149 +382,143 @@ async def run_full_autopilot(
     await backend.emit("phase", {"n": 3, "label": "Тестване"})
     state.set_agent_status(AgentRole.TESTER, "running")
 
-    for attempt in range(1, max_repair_rounds + 1):
-        result = await backend.smoke_test()
-        if result.get("ok"):
-            state.test_ok = True
-            break
-        if result.get("skipped"):
-            err = (result.get("error") or result.get("summary") or "smoke skipped — not evidence")[:500]
-            await backend.emit("log", {"line": f"⚠ Тест skipped — not evidence: {err[:120]}", "level": "warn"})
-            state.errors.append(err)
-            break
-        err = (result.get("error") or "")[:2500]
-        logs = "\n".join((result.get("logs") or [])[-35:])
-        await backend.emit("log", {"line": f"⚠ Тест {attempt}/{max_repair_rounds}: {err[:120]}", "level": "warn"})
-        fix_raw = await backend.llm(
-            AgentRole.CODER,
-            f"Поправи build грешката.\n\nГрешка:\n{err}\n\nЛогове:\n{logs}\n\n"
-            f"Платформа: {kind}. Върни JSON files или ===FILE=== блокове.",
-            system=build_sys,
-        )
-        fix_map = extract_coder_files(fix_raw, state.slug)
-        if fix_map:
-            changes = [FileChange(path=p, action="update", content=c) for p, c in fix_map.items()]
-            await backend.write_changes(changes)
-            for c in changes:
-                _upsert_change(state, c)
+    await _smoke_and_repair(backend, state, kind=kind, build_sys=build_sys, max_repair_rounds=max_repair_rounds)
 
     state.set_agent_status(AgentRole.TESTER, "done" if state.test_ok else "blocked")
 
-    # ── VERIFY (visual / engine / device — never a silent skip-pass) ─────
-    from daedalus.capability_registry import BROWSER_VISUAL_KINDS
-    from daedalus.game_build_contract import skip_is_not_ok, verified
-    from daedalus.quality_gate import critic_counts_as_pass, maybe_critic
+    # ── QUALITY REPAIR LOOP ──────────────────────────────────────────────
+    # Found live (2026-11-11): a game that built but failed gameplay / the quality critic / the playtest ended the run in
+    # error with no attempt to fix it. Now those findings go back to the coder and everything is verified again.
+    quality_rounds = _quality_repair_rounds()
+    errors_before_verify = list(state.errors)
+    browser_ok = gameplay_ok = quality_ok = True
+    playtest_block = ""
+    for qround in range(quality_rounds + 1):
+        state.errors = list(errors_before_verify)
+        # ── VERIFY (visual / engine / device — never a silent skip-pass) ─────
+        from daedalus.capability_registry import BROWSER_VISUAL_KINDS
+        from daedalus.game_build_contract import skip_is_not_ok, verified
+        from daedalus.quality_gate import critic_counts_as_pass, maybe_critic
 
-    platform = platform_for_kind(kind)
-    browser_ok = True
-    bresult: dict[str, Any] = {}
-    visual = kind in BROWSER_VISUAL_KINDS and platform == "web"
-    engine_kind = platform == "godot"
-    mobile_kind = platform in {"expo", "capacitor"}
-    if state.test_ok and visual:
-        await backend.emit("phase", {"n": 4, "label": "Browser verify"})
-        bresult = skip_is_not_ok(await _browser_verify(backend))
-        browser_ok = verified(bresult)
-        if not browser_ok:
-            err = (bresult.get("summary") or "browser verify failed")[:500]
-            if bresult.get("skipped"):
-                err = "browser verify skipped — not evidence"
-            await backend.emit("log", {"line": f"⚠ Browser: {err}", "level": "warn"})
-            state.errors.append(err)
-        else:
-            await backend.emit("log", {"line": "✓ Browser verify OK", "level": "info"})
-    elif state.test_ok and engine_kind:
-        await backend.emit("phase", {"n": 4, "label": "Engine verify"})
-        try:
-            from daedalus.engine_runners import run_godot
-            bresult = skip_is_not_ok(run_godot(state.slug))
+        platform = platform_for_kind(kind)
+        browser_ok = True
+        bresult: dict[str, Any] = {}
+        visual = kind in BROWSER_VISUAL_KINDS and platform == "web"
+        engine_kind = platform == "godot"
+        mobile_kind = platform in {"expo", "capacitor"}
+        if state.test_ok and visual:
+            await backend.emit("phase", {"n": 4, "label": "Browser verify"})
+            bresult = skip_is_not_ok(await _browser_verify(backend))
             browser_ok = verified(bresult)
-        except Exception as exc:
-            browser_ok = False
-            bresult = {"ok": False, "skipped": False, "summary": str(exc)[:300]}
-        if not browser_ok:
-            err = (bresult.get("summary") or bresult.get("error") or "engine verify failed")[:500]
-            await backend.emit("log", {"line": f"⚠ Engine: {err}", "level": "warn"})
-            state.errors.append(err)
-        else:
-            await backend.emit("log", {"line": "✓ Engine verify OK", "level": "info"})
-    elif state.test_ok and mobile_kind:
-        browser_ok = False
-        err = "web preview does not replace device_smoke"
-        await backend.emit("log", {"line": f"⚠ Device: {err}", "level": "warn"})
-        state.errors.append(err)
-
-    # ── GAMEPLAY PROOF (adapter-specific; Chromium is not Godot/mobile) ──
-    gameplay_ok = True
-    need_gameplay = visual or engine_kind or mobile_kind
-    if state.test_ok and need_gameplay and (browser_ok or engine_kind or mobile_kind):
-        await backend.emit("phase", {"n": 4, "label": "Gameplay"})
-        try:
-            from daedalus.engine_runners import gameplay_for_kind
-            gp = await gameplay_for_kind(state.slug, kind)
-            gameplay_ok = verified(gp)
-            if not gameplay_ok:
-                err = (gp.get("summary") or "gameplay verify failed")[:500]
-                await backend.emit("log", {"line": f"⚠ Gameplay: {err}", "level": "warn"})
+            if not browser_ok:
+                err = (bresult.get("summary") or "browser verify failed")[:500]
+                if bresult.get("skipped"):
+                    err = "browser verify skipped — not evidence"
+                await backend.emit("log", {"line": f"⚠ Browser: {err}", "level": "warn"})
                 state.errors.append(err)
             else:
-                await backend.emit("log", {"line": "✓ Gameplay interaction OK", "level": "info"})
-        except Exception as exc:
-            gameplay_ok = False
-            state.errors.append(f"gameplay verify error: {exc}"[:200])
-            await backend.emit("log", {"line": f"⚠ Gameplay: {exc}", "level": "warn"})
+                await backend.emit("log", {"line": "✓ Browser verify OK", "level": "info"})
+        elif state.test_ok and engine_kind:
+            await backend.emit("phase", {"n": 4, "label": "Engine verify"})
+            try:
+                from daedalus.engine_runners import run_godot
+                bresult = skip_is_not_ok(run_godot(state.slug))
+                browser_ok = verified(bresult)
+            except Exception as exc:
+                browser_ok = False
+                bresult = {"ok": False, "skipped": False, "summary": str(exc)[:300]}
+            if not browser_ok:
+                err = (bresult.get("summary") or bresult.get("error") or "engine verify failed")[:500]
+                await backend.emit("log", {"line": f"⚠ Engine: {err}", "level": "warn"})
+                state.errors.append(err)
+            else:
+                await backend.emit("log", {"line": "✓ Engine verify OK", "level": "info"})
+        elif state.test_ok and mobile_kind:
+            browser_ok = False
+            err = "web preview does not replace device_smoke"
+            await backend.emit("log", {"line": f"⚠ Device: {err}", "level": "warn"})
+            state.errors.append(err)
 
-    # ── QUALITY CRITIC (default on; unparsed is not a pass) ──────────────
-    quality_ok = True
-    if state.test_ok and visual and browser_ok:
-        critic = await maybe_critic(
-            slug=state.slug,
-            kind=kind,
-            description=state.description,
-            plan=state.plan,
-            bv=bresult,
-            visual=True,
-        )
-        if critic.get("na"):
-            quality_ok = True
-        else:
-            quality_ok = critic_counts_as_pass(critic)
-            score = critic.get("overall")
-            await backend.emit(
-                "log",
-                {
-                    "line": (
-                        f"Quality critic overall={score} parsed={critic.get('parsed')} "
-                        f"passed={quality_ok}"
-                    ),
-                    "level": "info" if quality_ok else "warn",
-                },
+        # ── GAMEPLAY PROOF (adapter-specific; Chromium is not Godot/mobile) ──
+        gameplay_ok = True
+        need_gameplay = visual or engine_kind or mobile_kind
+        if state.test_ok and need_gameplay and (browser_ok or engine_kind or mobile_kind):
+            await backend.emit("phase", {"n": 4, "label": "Gameplay"})
+            try:
+                from daedalus.engine_runners import gameplay_for_kind
+                gp = await gameplay_for_kind(state.slug, kind)
+                gameplay_ok = verified(gp)
+                if not gameplay_ok:
+                    err = (gp.get("summary") or "gameplay verify failed")[:500]
+                    await backend.emit("log", {"line": f"⚠ Gameplay: {err}", "level": "warn"})
+                    state.errors.append(err)
+                else:
+                    await backend.emit("log", {"line": "✓ Gameplay interaction OK", "level": "info"})
+            except Exception as exc:
+                gameplay_ok = False
+                state.errors.append(f"gameplay verify error: {exc}"[:200])
+                await backend.emit("log", {"line": f"⚠ Gameplay: {exc}", "level": "warn"})
+
+        # ── QUALITY CRITIC (default on; unparsed is not a pass) ──────────────
+        quality_ok = True
+        if state.test_ok and visual and browser_ok:
+            critic = await maybe_critic(
+                slug=state.slug,
+                kind=kind,
+                description=state.description,
+                plan=state.plan,
+                bv=bresult,
+                visual=True,
             )
-            if not quality_ok:
-                err = critic.get("error") or critic.get("summary") or "quality critic did not pass"
-                state.errors.append(str(err)[:300])
+            if critic.get("na"):
+                quality_ok = True
+            else:
+                quality_ok = critic_counts_as_pass(critic)
+                score = critic.get("overall")
+                await backend.emit(
+                    "log",
+                    {
+                        "line": (
+                            f"Quality critic overall={score} parsed={critic.get('parsed')} "
+                            f"passed={quality_ok}"
+                        ),
+                        "level": "info" if quality_ok else "warn",
+                    },
+                )
+                if not quality_ok:
+                    err = critic.get("error") or critic.get("summary") or "quality critic did not pass"
+                    state.errors.append(str(err)[:300])
 
-    # ── PLAYTEST personas (extra signal, not a substitute for Playwright) ─
-    playtest_block = ""
-    if visual:
-        await backend.emit("phase", {"n": 4, "label": "Playtest personas"})
-        try:
-            from daedalus.playtest import format_for_prompt, run_playtest
+        # ── PLAYTEST personas (extra signal, not a substitute for Playwright) ─
+        playtest_block = ""
+        if visual:
+            await backend.emit("phase", {"n": 4, "label": "Playtest personas"})
+            try:
+                from daedalus.playtest import format_for_prompt, run_playtest
 
-            async def _play_llm(system: str, user: str) -> str:
-                return await backend.llm(AgentRole.REVIEWER, user, system=system)
+                async def _play_llm(system: str, user: str) -> str:
+                    return await backend.llm(AgentRole.REVIEWER, user, system=system)
 
-            report = await run_playtest(
-                state.slug, kind=kind, n=3, llm_fn=_play_llm,
-            )
-            playtest_block = format_for_prompt(report)
-            await backend.emit("log", {"line": report.get("summary") or "playtest", "level": "info"})
-            if not report.get("ship_ready"):
-                for b in (report.get("blockers") or [])[:4]:
-                    state.errors.append(str(b)[:200])
-        except Exception as exc:
-            log.debug("persona playtest skipped: %s", exc)
-            await backend.emit("log", {"line": f"persona playtest skipped: {exc}", "level": "dim"})
+                report = await run_playtest(
+                    state.slug, kind=kind, n=3, llm_fn=_play_llm,
+                )
+                playtest_block = format_for_prompt(report)
+                await backend.emit("log", {"line": report.get("summary") or "playtest", "level": "info"})
+                if not report.get("ship_ready"):
+                    for b in (report.get("blockers") or [])[:4]:
+                        state.errors.append(str(b)[:200])
+            except Exception as exc:
+                log.debug("persona playtest skipped: %s", exc)
+                await backend.emit("log", {"line": f"persona playtest skipped: {exc}", "level": "dim"})
+
+        problems = state.errors[len(errors_before_verify):]
+        if not problems or not state.test_ok or qround >= quality_rounds or mobile_kind:
+            break                                  # a device check is not fixed by editing code again
+        await backend.emit("log", {"line": f"↻ Поправка на качеството {qround + 1}/{quality_rounds}: "
+                                           f"{len(problems)} проблем(а)", "level": "warn"})
+        await _quality_repair(backend, state, kind=kind, build_sys=build_sys, problems=problems)
+        state.test_ok = False
+        await _smoke_and_repair(backend, state, kind=kind, build_sys=build_sys, max_repair_rounds=max_repair_rounds)
 
     # ── REVIEW ───────────────────────────────────────────────────────────
     await backend.emit("phase", {"n": 5, "label": "Review"})

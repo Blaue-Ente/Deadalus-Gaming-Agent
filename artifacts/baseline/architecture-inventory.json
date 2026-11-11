@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-11T14:41:51.909223+00:00",
+  "generated_at": "2026-11-11T15:28:15.357284+00:00",
   "package_version": "0.3.8",
-  "git_commit": "42245fa8e6b7810a0cd0d7e75602066b6e1743f9",
+  "git_commit": "d4cc5904dd1c5dcc2a9f4fe1570c055a6e64e2ca",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -44,7 +44,7 @@
     },
     {
       "path": "daedalus/kernel/full_autopilot.py",
-      "lines": 500,
+      "lines": 575,
       "broad_excepts": 12
     }
   ],
@@ -130,8 +130,8 @@
     ]
   },
   "tests": {
-    "modules": 119,
-    "functions": 1376
+    "modules": 121,
+    "functions": 1380
   },
   "modules": {
     "daedalus": [
