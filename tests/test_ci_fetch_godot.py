@@ -105,5 +105,6 @@ def test_apt_prereqs_survive_an_unreachable_security_mirror():
     text = script.read_text(encoding="utf-8")
     assert subprocess.run(["bash", "-n", str(script)]).returncode == 0
     assert "security\\.ubuntu\\.com" in text and "--no-install-recommends" in text and "xdotool" in text
+    assert "getent hosts security.ubuntu.com" in text                 # check DNS before apt waits on it
     wf = (root / ".github" / "workflows" / "docker.yml").read_text(encoding="utf-8")
     assert "bash scripts/ci/apt_prereqs.sh" in wf and "apt-get install" not in wf
