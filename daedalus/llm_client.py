@@ -130,6 +130,11 @@ def mark_cut_tool_input(args: Any, *, cut: bool, max_tokens: int) -> Any:
     return out
 
 
+def _hidden_reasoning_ate_it(out: dict[str, Any], max_tokens: int) -> bool:
+    """An empty answer that used the whole budget: the model thought and never got to reply."""
+    return bool(out.get("error") == "empty_reply" and out.get("truncated") and max_tokens and max_tokens < 6000)
+
+
 def mark_empty_reply(out: dict[str, Any], *, max_tokens: int) -> dict[str, Any]:
     """An answer with no text is not a success. Found live (2026-11-11): reasoning models given a small max_tokens
     spend every token thinking and return nothing, and that came back as ok:true. ``truncated`` says the token
@@ -313,6 +318,17 @@ async def complete(
             cfg, system=system, user=user, intent=intent, client_id=client_id,
             max_tokens=max_tokens, temperature=temperature, json_mode=json_mode,
         )
+        if _hidden_reasoning_ate_it(out, max_tokens):
+            # Found live (2026-11-11): Haiku 5.5 on OpenRouter reasons by default; a 400-token code review spent every
+            # token thinking and returned "", which the stage builder read as a rejection five times in a row. Some
+            # models cannot turn reasoning off, so give the answer room instead, once.
+            bigger = min(max(max_tokens * 4, 1600), 6000)
+            log.info("empty reply at max_tokens=%d (hidden reasoning); retrying once at %d", max_tokens, bigger)
+            out, _billed = await _complete_with_cfg(
+                cfg, system=system, user=user, intent=intent, client_id=client_id,
+                max_tokens=bigger, temperature=temperature, json_mode=json_mode,
+            )
+            out["retried_for_reasoning"] = bigger
         return out
     except Exception as exc:
         first_err = str(exc)[:500]
