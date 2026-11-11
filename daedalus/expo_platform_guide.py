@@ -84,7 +84,9 @@ def expo_fix_addendum() -> str:
     return (
         "EXPO FIX HINTS:\n"
         "- Провери expo-router entry: package.json main = expo-router/entry\n"
-        "- babel.config.js: expo-router/babel plugin + @ alias към ./src\n"
+        "- babel.config.js: presets ['babel-preset-expo'] + module-resolver @ alias към ./src; БЕЗ 'expo-router/babel' "
+        "(премахнат в SDK 50 — спира bundle-а)\n"
+        "- Всеки import на пакет (напр. @tanstack/react-query, zustand) трябва да е в package.json dependencies\n"
         "- Несъвместими peer deps → коригирай версии в package.json (без --legacy-peer-deps в кода)\n"
         "- Import paths: @/components/... от src/\n"
         "- Не ползвай web-only API; Image от react-native за assets/*.png\n"

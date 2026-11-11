@@ -98,9 +98,10 @@ module.exports = function (api) {
   api.cache(true);
   return {
     presets: ['babel-preset-expo'],
+    // No 'expo-router/babel': since SDK 50 babel-preset-expo does it, and the old plugin stops the bundle
+    // ("expo-router/babel is deprecated"). Found live 2026-11-11: no Daedalus Expo project bundled for the web.
     plugins: [
       ['module-resolver', { alias: { '@': './src' } }],
-      'expo-router/babel',
     ],
   };
 };

@@ -1380,6 +1380,13 @@ async def execute_native_tool(
                 record_built(_pdir(slug), f"wrote {path}")
             except Exception:
                 pass
+            missing = ""
+            try:
+                from .js_deps import undeclared_note
+                from .playground import project_dir as _pdir2
+                missing = undeclared_note(_pdir2(slug))
+            except Exception:
+                log.debug("dependency check skipped", exc_info=True)
             return (
                 f"── write_file OK {slug}/{path} ({len(content)} chars) ──\n"
                 f"File is `{path}` in Playground slug `{slug}` "
@@ -1387,6 +1394,7 @@ async def execute_native_tool(
                 "Do not find /workspace or list the harness. "
                 "Keep write_file with this slug. "
                 "When you stop, the kernel opens the running game for visual proof."
+                + missing
             )
 
         if name == "edit_file":

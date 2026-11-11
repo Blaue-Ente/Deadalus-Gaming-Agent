@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-11T19:57:29.199645+00:00",
+  "generated_at": "2026-11-11T21:02:27.933438+00:00",
   "package_version": "0.3.8",
-  "git_commit": "4efe75d172e05094c4aa92ac8a9711ee463ba72f",
+  "git_commit": "c8a928179393b18f76a21afce113c90ba85e5be4",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -19,8 +19,8 @@
     },
     {
       "path": "daedalus/native_tools.py",
-      "lines": 2298,
-      "broad_excepts": 23
+      "lines": 2306,
+      "broad_excepts": 24
     },
     {
       "path": "daedalus/identity.py",
@@ -130,8 +130,8 @@
     ]
   },
   "tests": {
-    "modules": 126,
-    "functions": 1393
+    "modules": 127,
+    "functions": 1396
   },
   "modules": {
     "daedalus": [
@@ -249,6 +249,7 @@
       "daedalus/improvements.py",
       "daedalus/job_contract.py",
       "daedalus/job_ledger.py",
+      "daedalus/js_deps.py",
       "daedalus/kernel/__init__.py",
       "daedalus/kernel/changeset.py",
       "daedalus/kernel/command_runner.py",
