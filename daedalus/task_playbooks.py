@@ -86,8 +86,10 @@ PLAYBOOKS: tuple[Playbook, ...] = (
         kind="static",
         keywords=(
             "slerp", "quaternion", "quat", "look-at", "look_at", "lookat",
-            "ray-triangle", "raycast", "ray-cast", "perspective",
-            "камера", "camera", "projection", "матриц",
+            "ray-triangle", "raycast", "ray-cast", "perspective", "projection", "матриц",
+            # "camera"/"камера" alone is not 3D math: a 2D platformer's camera follows the player (found live
+            # 2026-11-11: it routed Moss Runner to math3d and the loop demanded a math3d call). 3D asks still match.
+            "3d camera", "3d камера",
         ),
         # "look at" with a space is plain English ("look at its runs"); the 3D call is look-at / look_at / lookat
         regex=r"\b(slerp|quaternion|look[-_]?at|ray[-_ ]?(cast|triangle)|3d demo)\b|(?<!phaser\.)webgl",
