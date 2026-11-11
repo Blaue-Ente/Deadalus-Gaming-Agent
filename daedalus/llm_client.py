@@ -423,7 +423,9 @@ async def call_with_tools(
             tools=anthropic_tools,
         )
         content = []
-        for block in resp.content:
+        _blocks = list(resp.content or [])
+        _last_use = max((i for i, b in enumerate(_blocks) if b.type == "tool_use"), default=-1)
+        for _i, block in enumerate(_blocks):
             if block.type == "text":
                 content.append({"type": "text", "text": block.text})
             elif block.type == "tool_use":
@@ -431,7 +433,7 @@ async def call_with_tools(
                     "type": "tool_use",
                     "id": block.id,
                     "name": block.name,
-                    "input": mark_cut_tool_input(block.input, cut=resp.stop_reason == "max_tokens",
+                    "input": mark_cut_tool_input(block.input, cut=resp.stop_reason == "max_tokens" and _i == _last_use,
                                                  max_tokens=max_tokens),
                 })
         billed = _meter(resp, model=model, role="writer")
@@ -532,14 +534,17 @@ async def call_with_tools(
                 content.append({"type": "text", "text": str(block.get("text") or "")})
             elif isinstance(block, str) and block:
                 content.append({"type": "text", "text": block})
-    for tc in (getattr(msg, "tool_calls", None) or []):
+    _calls = list(getattr(msg, "tool_calls", None) or [])
+    _cut = getattr(choice, "finish_reason", "") == "length"
+    for _i, tc in enumerate(_calls):
         args: Any = {}
         raw_args = getattr(getattr(tc, "function", None), "arguments", "") or "{}"
         try:
             args = json.loads(raw_args)
         except json.JSONDecodeError:
             args = {"raw": raw_args}
-        args = mark_cut_tool_input(args, cut=getattr(choice, "finish_reason", "") == "length", max_tokens=max_tokens)
+        # Only the call the limit interrupted (the last one) is incomplete; the earlier calls are whole.
+        args = mark_cut_tool_input(args, cut=_cut and _i == len(_calls) - 1, max_tokens=max_tokens)
         content.append({
             "type": "tool_use",
             "id": tc.id,

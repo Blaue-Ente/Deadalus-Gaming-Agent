@@ -30,9 +30,11 @@ def test_a_cut_call_is_refused_with_the_fix(monkeypatch):
 
 def test_openai_compatible_length_finish_marks_the_call(monkeypatch):
     """The OpenAI-compatible path (OpenRouter and the rest) reads finish_reason == "length"."""
+    whole = SimpleNamespace(id="t0", function=SimpleNamespace(name="write_file",
+                                                              arguments='{"path": "game.js", "content": "ok"}'))
     tc = SimpleNamespace(id="t1", function=SimpleNamespace(name="write_file", arguments='{"path": "index.html", "con'))
     resp = SimpleNamespace(choices=[SimpleNamespace(finish_reason="length",
-                                                    message=SimpleNamespace(content=None, tool_calls=[tc]))],
+                                                    message=SimpleNamespace(content=None, tool_calls=[whole, tc]))],
                            usage=None)
 
     class Client:
@@ -50,7 +52,9 @@ def test_openai_compatible_length_finish_marks_the_call(monkeypatch):
     out = asyncio.run(llm_client.call_with_tools("sys", [{"role": "user", "content": "hi"}], [{"name": "write_file", "description": "w"}],
                                                  max_tokens=8192))
     use = [b for b in out["content"] if b["type"] == "tool_use"]
-    assert use and use[0]["input"]["_cut_at_output_limit"] == 8192
+    # found live: marking every call of a cut reply refused five whole files; only the interrupted last one is cut
+    assert use[0]["input"] == {"path": "game.js", "content": "ok"}
+    assert use[1]["input"]["_cut_at_output_limit"] == 8192 and out["cut_at_output_limit"] == 8192
 
 
 def test_a_reply_cut_with_no_tool_call_is_explained_not_ended():
