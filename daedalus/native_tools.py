@@ -829,6 +829,30 @@ def _playground_session(session_id: str) -> bool:
     return sid.startswith(("playground:", "pg-", "pg_auto", "autopilot", "pg-auto"))
 
 
+def _bound_project(session_id: str) -> str:
+    """The project a project chat is about (session ``pg-<slug>`` from chat_jobs.project_message), else ''.
+    Found live (2026-11-11): asked to look at neon-maze, the model made a new project and reported on that one."""
+    sid = (session_id or "").strip()
+    if not sid.startswith("pg-") or sid.lower().startswith("pg-auto"):
+        return ""
+    slug = sid[3:]
+    try:
+        from . import playground as pg
+
+        return slug if slug and pg.project_dir(slug).is_dir() else ""
+    except Exception:
+        return ""
+
+
+def _outside_bound_project(tool: str, session_id: str, slug: str) -> str | None:
+    bound = _bound_project(session_id)
+    if not bound or (slug or "").strip() == bound:
+        return None
+    return (f"── {tool} REFUSED: this chat is about project {bound} ──\n"
+            f"Work in {bound} (slug={bound}). Do not create or change another project from this chat; "
+            "if the owner wants a new project, say so and let them start it.")
+
+
 _PG_SLUG_IN_URL = re.compile(
     r"(?:playground/projects/|(?:localhost|127\.0\.0\.1):\d+/)([A-Za-z0-9_-]+)",
     re.I,
@@ -1196,6 +1220,9 @@ async def execute_native_tool(
             name_ = str(args.get("name") or args.get("slug") or "").strip()
             if not name_:
                 return "── playground_new FAILED: name required ──"
+            bound = _bound_project(session_id)
+            if bound:                                   # a project chat never starts another project
+                return _outside_bound_project("playground_new", session_id, "") or ""
             kind = str(args.get("kind") or "static").strip() or "static"
             desc = str(args.get("description") or "")
             slug_in = str(args.get("slug") or "")
@@ -1235,6 +1262,8 @@ async def execute_native_tool(
             content = str(args.get("content") or args.get("text") or args.get("code") or "")
             if "/" in slug and not path:
                 slug, path = slug.split("/", 1)
+            if (refused := _outside_bound_project("write_file", session_id, slug)):
+                return refused
             if not slug or not path:
                 keys = ",".join(sorted(str(k) for k in args if k != "content"))
                 return (
@@ -1300,6 +1329,8 @@ async def execute_native_tool(
             from . import playground as pg
             slug = str(args.get("slug") or args.get("project") or "").strip()
             path = str(args.get("path") or args.get("file") or "").strip()
+            if (refused := _outside_bound_project("edit_file", session_id, slug)):
+                return refused
             search = str(args.get("search") or args.get("old") or "")
             replace = str(args.get("replace") or args.get("new") or "")
             if not slug or not path:

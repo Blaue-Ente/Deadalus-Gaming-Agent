@@ -74,6 +74,22 @@ def test_game_playbooks_route_the_new_tools_and_native_engines_get_play():
     assert not ({"milestones", "preview", "play", "runs", "ship_request"} & by["harness.fix"])
 
 
+def test_a_route_that_offers_the_tools_also_says_what_they_are_for(a0_tmp):  # noqa: F811
+    from daedalus.tool_router import format_system, route
+
+    build = route("make a neon maze game in this project", session_id="pg-neon-maze")
+    text = format_system(build, user_message="make a neon maze game")
+    assert "HARNESS TOOLS" in text and "ship_request" in text and "cannot publish or push" in text
+    # a project chat routed as talk still gets the build tool list; the hint follows what is offered
+    from daedalus.native_tools import playground_build_specs
+    talk_pg = route("check the preview logs", session_id="pg-neon-maze")
+    assert "HARNESS TOOLS" in format_system(talk_pg, user_message="x", offered=playground_build_specs())
+    assert "HARNESS TOOLS" not in format_system(talk_pg, user_message="x", offered=[{"name": "read_file"}])
+    talk = route("hi, how are you?", session_id="studio-x")
+    if not ({"milestones", "preview", "runs", "ship_request"} & set(talk.playbook.tools)):
+        assert "HARNESS TOOLS" not in format_system(talk, user_message="hi")
+
+
 def test_no_spec_offers_a_force_a_public_flag_or_a_waiver():
     from daedalus.harness import brain_tools
 
@@ -478,3 +494,22 @@ def test_a_request_answered_elsewhere_is_said_and_bulgarian_has_no_raw_keys(stud
             assert "studio." not in text and "Заявки от Дедал" in text
         finally:
             browser.close()
+
+
+def test_a_project_chat_cannot_start_or_write_another_project(slug):
+    from daedalus import playground as pg
+
+    sid = f"pg-{slug}"
+    made = _call("playground_new", {"name": "Camera Slerp Arcade", "kind": "static"}, session_id=sid)
+    assert "REFUSED" in made and f"about project {slug}" in made
+    assert not pg.project_dir("camera-slerp-arcade").exists()
+    other = _call("write_file", {"slug": "other-game", "path": "index.html", "content": "<h1>x</h1>"}, session_id=sid)
+    assert "REFUSED" in other and not pg.project_dir("other-game").exists()
+    edit = _call("edit_file", {"slug": "other-game", "path": "index.html", "search": "a", "replace": "b"}, session_id=sid)
+    assert "REFUSED" in edit
+    own = _call("write_file", {"slug": slug, "path": "notes.txt", "content": "kept"}, session_id=sid)
+    assert "REFUSED" not in own and pg.read_file(slug, "notes.txt") == "kept"
+    free = _call("playground_new", {"name": "Free Game", "kind": "static"}, session_id="studio-x")   # not a project chat
+    assert "OK" in free.split("\n", 1)[0]
+    auto = _call("playground_new", {"name": "Auto Game", "kind": "static"}, session_id="pg-auto-123")  # autopilot
+    assert "REFUSED" not in auto

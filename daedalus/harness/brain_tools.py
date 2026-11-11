@@ -133,6 +133,18 @@ SPECS: tuple[dict[str, Any], ...] = (
 )
 
 NAMES = frozenset(s["name"] for s in SPECS)
+
+# Said to the model whenever a route offers these tools. Found live (2026-11-11, Haiku 5.5): offered but never named,
+# they went unused; asked for preview logs and runs, the model searched the project files for log files instead.
+SYSTEM_HINT = (
+    "HARNESS TOOLS (use them; do not look for log or status files on disk):\n"
+    "- preview: status | run | stop | logs of this project's preview server.\n"
+    "- runs: list | get | events of build, verify, play and chat runs (read only).\n"
+    "- milestones: state | gates | verify | advance (Game Studio projects; advance never waives a check).\n"
+    "- play: a rendered native game session (frames, keys, mouse, state); stop it when done.\n"
+    "- ship_request: you cannot publish or push. Ask the owner with ship_request (kind local | live | push, "
+    "and a note why). Never claim something was published or pushed."
+)
 # What a tool can do decides its permission class (checked by before_tool_call, like every native tool):
 # verify and advance rewrite project files (verify runs repair attempts); preview and play start processes.
 # In a Playground build these classes are granted by default and stay revocable; runs and ship requests only read

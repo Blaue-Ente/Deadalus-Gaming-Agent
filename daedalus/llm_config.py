@@ -598,7 +598,8 @@ def _resolve_llm_config() -> dict:
     if or_key:
         return _apply_nvidia_free_policy({
             "provider":  "openrouter",
-            "model":     "anthropic/claude-sonnet-4-5",
+            # The owner's DAEDALUS_MODEL wins for every keyed provider (it was ignored here: Sonnet 4.5 was billed).
+            "model":     (env_model or "").strip() or "anthropic/claude-sonnet-4-5",
             "api_key":   or_key,
             "base_url":  "https://openrouter.ai/api/v1",
             "sdk":       "openai",
@@ -621,7 +622,7 @@ def _resolve_llm_config() -> dict:
     if novita_key:
         return _apply_nvidia_free_policy({
             "provider":  "novita",
-            "model":     "deepseek/deepseek-v3.2",
+            "model":     (env_model or "").strip() or "deepseek/deepseek-v3.2",
             "api_key":   novita_key,
             "base_url":  "https://api.novita.ai/v3/openai",
             "sdk":       "openai",
@@ -633,7 +634,7 @@ def _resolve_llm_config() -> dict:
         pd = PROVIDER_DEFAULTS["nvidia"]
         return _apply_nvidia_free_policy({
             "provider":  "nvidia",
-            "model":     pd["default_model"],
+            "model":     (env_model or "").strip() or pd["default_model"],
             "api_key":   nvidia_key,
             "base_url":  pd["base_url"],
             "sdk":       pd["sdk"],
