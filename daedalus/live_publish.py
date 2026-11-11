@@ -254,7 +254,88 @@ async def _run(args: list[str], *, cwd: Path | None = None, timeout: int = 180,
     return proc.returncode or 0, text
 
 
+NETLIFY_API = "https://api.netlify.com/api/v1"
+
+
+def _zip_static(static_dir: Path) -> bytes:
+    """The published folder as a zip, without secret files (same rule as the capsule)."""
+    import io
+    import zipfile
+
+    from .secret_paths import is_secret_path
+
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for path in sorted(static_dir.rglob("*")):
+            rel = path.relative_to(static_dir)
+            if path.is_file() and not path.is_symlink() and not is_secret_path(rel):
+                zf.write(path, rel.as_posix())
+    return buf.getvalue()
+
+
+def _api_error(resp: Any) -> str:
+    try:
+        body = resp.json()
+        msg = body.get("message") or body.get("error") or str(body)
+    except Exception:
+        msg = (resp.text or "")[:200]
+    return f"HTTP {resp.status_code}: {str(msg)[:200]}"
+
+
+async def deploy_netlify_api(static_dir: Path, slug: str, *, poll_s: float = 90.0) -> dict[str, Any]:
+    """Deploy with the owner's token through the Netlify API: create (or reuse) the site, upload a zip, wait for it.
+
+    Found live (2026-11-11): netlify-cli in non-interactive mode stopped at "No teams available" on an account that has
+    a team, and it needed the token in its argv (``--auth``), where any process listing shows it. The API path needs no
+    CLI download and keeps the token in a request header only."""
+    import asyncio
+
+    import httpx
+
+    token = netlify_token()
+    if not token:
+        raise RuntimeError("NETLIFY_AUTH_TOKEN липсва")
+    headers = {"Authorization": f"Bearer {token}", "User-Agent": "daedalus-live-publish"}
+    prev = get_site(slug) or {}
+    site_id = prev.get("site_id") if prev.get("backend") == "netlify" else None
+    async with httpx.AsyncClient(base_url=NETLIFY_API, timeout=120) as client:
+        site: dict[str, Any] = {}
+        if site_id:
+            r = await client.get(f"/sites/{site_id}", headers=headers)
+            site = r.json() if r.status_code == 200 else {}
+            site_id = site.get("id")
+        if not site_id:
+            r = await client.post("/sites", headers=headers, json={})
+            if r.status_code >= 300:
+                raise RuntimeError(f"netlify could not create a site: {_api_error(r)}")
+            site = r.json()
+            site_id = site.get("id")
+        r = await client.post(f"/sites/{site_id}/deploys", headers={**headers, "Content-Type": "application/zip"},
+                              content=_zip_static(static_dir))
+        if r.status_code >= 300:
+            raise RuntimeError(f"netlify deploy upload failed: {_api_error(r)}")
+        deploy = r.json()
+        state = str(deploy.get("state") or "")
+        waited = 0.0
+        while state not in ("ready", "error") and waited < poll_s:
+            await asyncio.sleep(2.0)
+            waited += 2.0
+            r = await client.get(f"/deploys/{deploy.get('id')}", headers=headers)
+            if r.status_code == 200:
+                deploy = r.json()
+                state = str(deploy.get("state") or "")
+        if state == "error":
+            raise RuntimeError(f"netlify deploy failed: {str(deploy.get('error_message') or 'error')[:200]}")
+    url = site.get("ssl_url") or site.get("url") or deploy.get("ssl_url") or deploy.get("deploy_ssl_url")
+    if not url:
+        raise RuntimeError("netlify did not return a URL")
+    return {"ok": True, "backend": "netlify", "url": url, "site_id": site_id,
+            "note": "Публичният линк е готов." if state == "ready" else f"Качено; Netlify още обработва ({state})."}
+
+
 async def deploy_netlify(static_dir: Path, slug: str, *, anonymous: bool = False) -> dict[str, Any]:
+    if not anonymous:
+        return await deploy_netlify_api(static_dir, slug)
     npx = _npx()
     if not npx:
         raise RuntimeError("npx липсва — инсталирай Node.js, за да качваме на Netlify")
@@ -446,11 +527,15 @@ async def publish_live(
     result["ok"] = True
     if skipped:
         result["needs_confirm"] = skipped
-    result["note"] = (
-        "Локално е готово. За публичен линк сложи NETLIFY_AUTH_TOKEN "
-        "(https://app.netlify.com/user/applications#personal-access-tokens) "
-        "или GITLAB_TOKEN, или инсталирай Node.js (npx) за едночасов Netlify preview."
-    )
+    if errors:
+        # A tried backend failed: say why, instead of asking for a token the owner already gave (found live).
+        result["note"] = "Локално е готово. Публичното качване не мина: " + "; ".join(e[:200] for e in errors[:3])
+    else:
+        result["note"] = (
+            "Локално е готово. За публичен линк сложи NETLIFY_AUTH_TOKEN "
+            "(https://app.netlify.com/user/applications#personal-access-tokens) "
+            "или GITLAB_TOKEN, или инсталирай Node.js (npx) за едночасов Netlify preview."
+        )
     if errors:
         result["errors"] = errors
     record_site(slug, {k: v for k, v in result.items() if k != "chain"})
