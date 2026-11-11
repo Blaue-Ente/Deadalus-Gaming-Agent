@@ -403,6 +403,12 @@ async def _run_guided_parallel_batch(
     }
     await job.enter_checkpoint(cp_data)
     job.retry_notes = ""
+    if job.auto_approve:
+        # Found live (2026-11-11): Full Auto starts Guided with auto_approve, but a parallel batch stopped at its
+        # checkpoint like a manual one; Full Auto waited 120 s and ended "guided_stuck" on every multi-file milestone.
+        result = await continue_job(job.id, "approve")
+        if not result.get("ok"):
+            await job.fail(result.get("error") or "auto-approve failed")
 
 
 async def _run_guided_step(job: GuidedJob) -> None:
