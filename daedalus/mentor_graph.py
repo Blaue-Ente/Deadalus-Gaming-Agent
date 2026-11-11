@@ -223,6 +223,24 @@ def guard_steer(
         parsed["action"] = rules_steer.get("action") or "continue"
         parsed["reason"] = str(parsed.get("reason") or rules_steer.get("reason") or "")[:140]
 
+    if nxt == "playground_new" and (inspect.get("project_exists") or inspect.get("slug")):
+        # The project already exists (project chat, or created earlier this turn): never start a second one.
+        parsed["next_tool"] = "write_file"
+        parsed["next_args"] = {"slug": inspect.get("slug")} if inspect.get("slug") else {}
+        parsed["action"] = "call_tool"
+        parsed["forbid_tools"] = list(dict.fromkeys(list(parsed.get("forbid_tools") or []) + ["playground_new"]))
+        parsed["reason"] = "Project exists; write into it."
+        return parsed
+
+    if nxt in PROOF_REOPEN and inspect.get("wrote_source") is False:
+        # Nothing written this turn yet: there is no new game to open (found live 2026-11-11: "browser" before any
+        # write_file, after a reply was cut off at the output limit).
+        parsed["next_tool"] = "write_file"
+        parsed["next_args"] = {"slug": inspect.get("slug")} if inspect.get("slug") else {}
+        parsed["action"] = "call_tool"
+        parsed["reason"] = "Nothing written yet; write the game first."
+        return parsed
+
     if flags.get("proof_failed") and nxt in PROOF_REOPEN:
         if rec.get("next"):
             apply_recovery()

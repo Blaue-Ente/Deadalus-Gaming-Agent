@@ -49,6 +49,7 @@ def get_job(job_id: str) -> dict[str, Any] | None:
         "cancelled": bool(row.get("cancelled")),
         "project": row.get("project") or None,
         "changes": None if row.get("changes") is None else _tc.public(row["changes"]),
+        "mode": row.get("mode") or None,
     }
 
 
@@ -66,7 +67,16 @@ async def start_chat(
     job_id = uuid.uuid4().hex[:12]
     sid = (session_id or "").strip() or f"studio-{job_id}"
     before: dict[str, Any] | None = None
+    mode = ""
+    owner_words = message
     if project:
+        from .project_chat_intent import ANSWER_NOTE, wants_change
+
+        # A question is answered, not built (owner decision 2026-11-11): the owner's own words decide, before the
+        # project's files are added to the prompt.
+        mode = "build" if wants_change(message) else "ask"
+        if mode == "ask":
+            message = f"{message}\n\n{ANSWER_NOTE}"
         # Project chat (the classic page's project chat): the turn sees the project's files, keeps the project's own
         # history (pg-<slug>, which also puts the agent in project mode), and what it changes is recorded for review.
         message, sid = await project_message(project, message)
@@ -82,6 +92,7 @@ async def start_chat(
         "task": None,
         "project": project or None,
         "changes": None,
+        "mode": mode or None,
     }
     _jobs[job_id] = row
     row["run_id"] = _runs.safe_open("chat", ref=f"chat:{job_id}", summary=message[:200], effort=effort,
@@ -103,16 +114,21 @@ async def start_chat(
         _runs.bind(row.get("run_id", ""))
         try:
             set_live(sid, "thinking", 0, "Започвам…")
-            from daedalus.agent import get_daedalus
+            import contextlib
 
-            result = await get_daedalus().chat(
-                message=message,
-                session_id=sid,
-                effort=effort,
-                skill_ids=skill_ids,
-                mcp_ids=mcp_ids,
-                attachment_ids=attachment_ids,
-            )
+            from daedalus.agent import get_daedalus
+            from daedalus.mentor_lead import owner_request
+            from daedalus.project_chat_intent import answering
+
+            with answering(project) if mode == "ask" else contextlib.nullcontext(), owner_request(owner_words):
+                result = await get_daedalus().chat(
+                    message=message,
+                    session_id=sid,
+                    effort=effort,
+                    skill_ids=skill_ids,
+                    mcp_ids=mcp_ids,
+                    attachment_ids=attachment_ids,
+                )
             if project:
                 await asyncio.to_thread(_record_changes)
             if row.get("cancelled"):

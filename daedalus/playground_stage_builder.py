@@ -321,13 +321,18 @@ async def build_stage(
                 ],
                 model=ctx.build_model,
                 intent="chat",
-                max_tokens=400,
+                max_tokens=1200,
                 temperature=0.1,
                 client_id=f"{ctx.client_prefix}-review/{ctx.slug}/s{sid}",
             )
             review_notes = extract_llm_text(rev) or ""
         except Exception:
             review_notes = "РЕЗУЛТАТ: ОДОБРЕН"
+        if not review_notes.strip():
+            # An empty review is no review, not a rejection: rewriting a file against an empty reason five times
+            # cannot fix anything (found live 2026-11-11). The build checks above already passed; say so plainly.
+            await on_log("  ⚠️ Code review returned nothing — accepted on the build checks", "warn")
+            review_notes = "РЕЗУЛТАТ: ОДОБРЕН (code review unavailable: empty reply; build checks passed)"
 
         if "ОДОБРЕН" in review_notes.upper():
             build_ok = True

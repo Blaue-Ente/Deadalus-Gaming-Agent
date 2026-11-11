@@ -13,6 +13,8 @@ import pytest
     ("I have a request about the logs", "playground.epic"),  # "quest" inside "request"
     ("solve this equation for me", "playground.math3d"),     # "quat" inside "equation"
     ("look at its runs, please", "playground.math3d"),       # plain English "look at"
+    ("2D платформър: камерата следва играча", "playground.math3d"),   # a 2D camera is not 3D math (live 2026-11-11)
+    ("a 2D platformer where the camera follows the player", "playground.math3d"),
 ])
 def test_a_word_inside_another_word_does_not_pick_a_build_playbook(text, banned):
     from daedalus.tool_router import match_playbook
@@ -25,7 +27,7 @@ def test_a_word_inside_another_word_does_not_pick_a_build_playbook(text, banned)
     ("ship it with EAS build", "playground.mobile"),
     ("make the camera look-at the player with slerp", "playground.math3d"),
     ("use quaternion rotation", "playground.math3d"),
-    ("камерата да следи играча", "playground.math3d"),      # a Cyrillic stem still matches the start of a word
+    ("матрицата на проекцията", "playground.math3d"),      # a Cyrillic stem still matches the start of a word
     ("Unity URP project", "playground.unity"),
     ("an epic quest with dialogue", "playground.epic"),
     ("write it in levels/ folder", "playground.epic"),        # a keyword that ends in a symbol

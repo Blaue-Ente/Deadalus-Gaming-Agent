@@ -787,3 +787,19 @@ def test_a_workspace_repaint_keeps_the_manual_steps_off_while_full_auto_owns_the
         page.wait_for_timeout(400)
         assert page.evaluate(f"() => {ids}.every((id) => document.getElementById(id).disabled)")
         browser.close()
+
+
+def test_an_unparsable_plan_reply_is_tried_once_more(client, slug, monkeypatch):
+    """Found live (2026-11-11): the same request failed once with an unparsable reply and passed the next time."""
+    good = json.dumps({"title": "Comet plan", "stages": [{"id": 1, "title": "Ship", "instructions": "x"}]})
+    replies = ["Sure! Here is the plan: (no json)", good]
+    systems = []
+
+    async def fake(**kw):
+        systems.append(kw.get("system", ""))
+        return {"reply": replies.pop(0)}
+
+    monkeypatch.setattr("daedalus.llm_client.complete", fake)
+    made = client.post(f"{B}/{slug}/plan/create", json={"description": "a game"}).json()
+    assert made["ok"] is True and made["plan"]["stages"] == 1 and _load(slug)["stages"][0]["title"] == "Ship"
+    assert len(systems) == 2 and "not valid plan JSON" in systems[1]

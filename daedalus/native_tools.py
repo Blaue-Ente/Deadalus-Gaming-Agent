@@ -853,6 +853,21 @@ def _outside_bound_project(tool: str, session_id: str, slug: str) -> str | None:
             "if the owner wants a new project, say so and let them start it.")
 
 
+_CODE_HINT = re.compile(r"<!doctype|<script|<canvas|```|\bfunction\b|\bconst\b|\blet\b|=>|\bclass\s+\w+", re.I)
+
+
+def _cut_was_code(text_parts: list[str], specs: list[dict[str, Any]] | None) -> bool:
+    """A reply cut by the output limit was a file being written: write tools are offered and the text is code (or there
+    is no text). A long answer or summary that got cut is just a long answer (review 2026-11-11)."""
+    names = {s.get("name") for s in (specs or [])}
+    if not names & {"write_file", "edit_file"}:
+        return False
+    text = "\n".join(text_parts or [])
+    return not text.strip() or bool(_CODE_HINT.search(text[:4000]))
+
+
+_REFUSED_HEAD = re.compile(r"\s*── \S+ (?:REFUSED|NOT RUN)\b")
+
 _PG_SLUG_IN_URL = re.compile(
     r"(?:playground/projects/|(?:localhost|127\.0\.0\.1):\d+/)([A-Za-z0-9_-]+)",
     re.I,
@@ -1083,6 +1098,11 @@ def _leaves_playground(args: dict[str, Any] | None) -> bool:
 def before_tool_call(
     tool_name: str, *, marker_name: str | None = None, args: dict[str, Any] | None = None,
 ) -> tuple[bool, str]:
+    from .project_chat_intent import tool_refusal
+
+    refusal = tool_refusal(tool_name, args)
+    if refusal:
+        return False, refusal
     perm = PERM_MAP.get(tool_name)
     if perm is None:
         return True, ""
@@ -1112,6 +1132,12 @@ async def execute_native_tool(
     allowed, denial = before_tool_call(name, args=args)
     if not allowed:
         return denial
+    if isinstance(args, dict) and args.get("_cut_at_output_limit") is not None:
+        return (f"── {name} NOT RUN: your reply hit the output limit ({args['_cut_at_output_limit']} tokens) while you "
+                "were still writing this call, so its arguments are incomplete ──\n"
+                "Nothing was written. Split the work: write the game as several smaller files (for example "
+                "index.html, style.css, game.js, entities.js, effects.js), one write_file per call, each well under "
+                "the limit. Then continue.")
 
     try:
         from .offline import deny
@@ -2042,6 +2068,7 @@ async def run_native_discovery_pass(
     all_results: list[str] = []
 
     budget = max_rounds
+    cut_replies = 0
     _round = -1
     while True:
         if _round + 1 >= budget:
@@ -2123,6 +2150,19 @@ async def run_native_discovery_pass(
                 })
                 assistant_content.append(tool_uses[-1])
 
+        if not tool_uses and resp.get("cut_at_output_limit") and _cut_was_code(text_parts, specs):
+            # Found live 2026-11-11: the writer put a whole game in one call, the output limit cut it, and the provider
+            # returned no tool call at all. Say what happened instead of treating the cut as "done talking".
+            messages.append({"role": "assistant", "content": assistant_content or [
+                {"type": "text", "text": "(reply cut off at the output limit)"}]})
+            messages.append({"role": "user", "content": (
+                f"Your last reply hit the output limit ({resp['cut_at_output_limit']} tokens) before it finished, so "
+                "nothing was written. Split the work: several smaller files (for example index.html, style.css, "
+                "game.js, entities.js, effects.js), one write_file per call, each well under the limit. Start now.")})
+            cut_replies += 1
+            if cut_replies <= 2:
+                budget += 1                      # the cut round produced nothing; give it back, at most twice
+            continue
         if not tool_uses:
             final = "\n".join(text_parts).strip()
             proof_block = ""
@@ -2151,6 +2191,14 @@ async def run_native_discovery_pass(
                 except Exception:
                     pass
                 nudge = loop.on_quiet(final)
+                if nudge is None and loop.stop_reason == "complete":
+                    # The kernel's checks say it runs; the lead (Mentor) decides whether it is what the owner asked.
+                    try:
+                        from . import mentor_lead as _lead
+                        nudge = await _lead.acceptance_nudge(loop, loop.user_message)  # the owner's words (agent.py)
+                    except Exception:
+                        log.warning("mentor lead review failed", exc_info=True)
+                        nudge = None
             if nudge:
                 extra = "\n\n".join(p for p in (proof_block, play_block, nudge) if p)
                 messages.append({
@@ -2197,6 +2245,10 @@ async def run_native_discovery_pass(
 
             ok = native_tool_result_ok(result_text)
             blocked = "BLOCKED" in result_text
+            if _REFUSED_HEAD.match(result_text or ""):
+                # Refused or not run (cut by the output limit, a question turn, another project): nothing happened.
+                # Not a write, and not a defect of the work either.
+                ok, blocked = False, True
             tool_log.append({
                 "tool": tname,
                 "input": {k: v for k, v in tinput.items() if k != "content"} if isinstance(tinput, dict) else {},

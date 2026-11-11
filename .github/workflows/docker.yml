@@ -27,9 +27,7 @@ jobs:
           GODOT_SHA512: fd52bb4ba8acc30ca5accd1c566d470ad7282f891ccc0995dfafabcf92bcf76280ce182bf9d80ebd885f3ed2165d01e1fc3f2928436b15498dfbd98656c2a45a
           GH_TOKEN: ${{ github.token }}
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq xvfb xdotool imagemagick libgl1 libgl1-mesa-dri libxcursor1 libxinerama1 \
-            libxi6 libxrandr2 libxkbcommon0 libfontconfig1 libasound2t64
+          bash scripts/ci/apt_prereqs.sh
           mkdir -p "$RUNNER_TEMP/godot-dl" "$RUNNER_TEMP/godot"
           bash scripts/ci/fetch_godot.sh "$RUNNER_TEMP/godot-dl" "$GODOT_ZIP" "$GODOT_SHA512"
           cd "$RUNNER_TEMP/godot"

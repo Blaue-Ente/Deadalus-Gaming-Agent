@@ -141,6 +141,12 @@ class BuildLoop:
         self.play_bot_ok = False
         self.play_bot_gap = ""
         self.play_bot_summary = ""
+        # Mentor as lead programmer (daedalus.mentor_lead): its plan, its reviews, its verdict.
+        self.lead_plan: dict[str, Any] | None = None
+        self.lead_review: dict[str, Any] | None = None
+        self.lead_reviews = 0
+        self.lead_fix_used = 0
+        self.lead_accepted: bool | None = None
         for row in self.seed_log:
             self._capture_slug(row.get("input") or {}, "")
             self._capture_kind("playground_new", row.get("input") or {}, "")
@@ -592,6 +598,11 @@ class BuildLoop:
             lines.extend(f"  • {b}" for b in v.blockers)
             if self.proof_frames:
                 lines.append("Last proof frames: " + ", ".join(self.proof_frames[:4]))
+        try:
+            from .mentor_lead import summary_lines
+            lines.extend(summary_lines(self))
+        except Exception:
+            log.debug("lead summary skipped", exc_info=True)
         return "\n".join(lines)
 
     def log_row(self) -> dict[str, Any]:

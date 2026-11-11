@@ -1699,11 +1699,17 @@ class Daedalus:
                 from .game_engineer import looks_like_game as _looks_game
                 from .native_tools import playground_build_specs
                 from .tool_router import format_system, native_specs, route, run_consult
+                from . import mentor_lead as _lead
+                # The owner's own words (project chat wraps them in file context): route and plan on those, not on
+                # the code in the prompt (found live 2026-11-11: keywords in file contents chose the playbook).
+                _owner_words = _lead.take_request()   # once per turn: nested chats (subagents, planner) keep theirs
+                if not _owner_words or _owner_words not in user_message:
+                    _owner_words = user_message
                 _pg_build = is_playground_work_session(session_id, user_message) or _looks_game(
-                    user_message
+                    _owner_words
                 )
                 _route = route(
-                    user_message,
+                    _owner_words,
                     session_id=session_id or "",
                     intent=(briefing_dict or {}).get("intent") or "",
                 )
@@ -1712,16 +1718,29 @@ class Daedalus:
                 _consult_log: list[dict[str, Any]] = []
                 _nt_specs = None
                 _loop = None
-                if _pg_build or _route.use_build_subset:
+                from . import project_chat_intent as _pci
+                if not _pci.build_allowed():
+                    # Project chat, owner asked a question: read and answer, no build loop, no write tools.
+                    _nt_specs = _pci.read_only_specs()
+                    _nt_sys = _pci.ANSWER_SYSTEM
+                    max_native = 6
+                elif _pg_build or _route.use_build_subset:
                     from .build_loop import BuildLoop
                     _consult_log, _consult_extra = run_consult(_route)
                     _nt_specs = native_specs(_route) or playground_build_specs(
-                        user_message, session_id=session_id or "",
+                        _owner_words, session_id=session_id or "",
                     )
                     _nt_sys = format_system(
-                        _route, extra=_consult_extra, user_message=user_message, offered=_nt_specs,
+                        _route, extra=_consult_extra, user_message=_owner_words, offered=_nt_specs,
                     )
-                    _loop = BuildLoop(_route, user_message, seed_log=_consult_log)
+                    _loop = BuildLoop(_route, _owner_words, seed_log=_consult_log)
+                    from .native_tools import _bound_project
+                    _bound = _bound_project(session_id or "")
+                    if _bound and not _loop.slug:
+                        _loop.slug = _bound          # project chat: the project exists; never steer to a new one
+                    _loop.lead_plan = await _lead.kickoff(   # never raises: no plan just means no plan
+                        _owner_words, slug=_loop.slug, kind=getattr(_route, "kind", "") or "",
+                    )
                     max_native = 10
                     try:
                         from . import mentor as _mentor
@@ -1754,9 +1773,16 @@ class Daedalus:
                     )
                     max_native = 8
                 _set_live(session_id, "native_tools", 0, "Native tools…")
+                _native_in = user_content
+                if _owner_words.strip() != (user_message or "").strip():
+                    # Project chat: the request sits after the project's files; put it first so the cut below never
+                    # drops it (a substring test is not enough: "continue" also appears in the code).
+                    _native_in = f"OWNER REQUEST (this turn):\n{_owner_words}\n\n{user_content}"
+                if _loop is not None and getattr(_loop, "lead_plan", None):
+                    _native_in = _lead.plan_block(_loop.lead_plan) + "\n\n" + _native_in
                 _native_text, _native_log = await run_native_discovery_pass(
                     _nt_sys,
-                    user_content[:8000],
+                    _native_in[:12000],
                     _call_claude_with_tools,
                     memory=self.memory,
                     session_id=session_id or "",

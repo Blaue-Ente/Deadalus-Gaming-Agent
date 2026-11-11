@@ -95,3 +95,16 @@ def test_the_workflow_uses_the_script_and_keeps_the_pin_and_a_cache():
     assert "scripts/ci/fetch_godot.sh" in text and "actions/cache@v4" in text
     assert "fd52bb4ba8acc30ca5accd1c566d470ad7282f891ccc0995dfafabcf92bcf76280ce182bf9d80ebd885f3ed2165d01e1fc3f2928436b15498dfbd98656c2a45a" in text
     assert "curl -fsSL" not in text                                           # no unverified download left in the workflow itself
+
+
+def test_apt_prereqs_survive_an_unreachable_security_mirror():
+    """Seen 2026-11-11: the runner could not resolve security.ubuntu.com for over an hour; apt-get install exited
+    100 and every run was red before a test ran. The install falls back to the main archive."""
+    root = SCRIPT.parent.parent.parent
+    script = root / "scripts" / "ci" / "apt_prereqs.sh"
+    text = script.read_text(encoding="utf-8")
+    assert subprocess.run(["bash", "-n", str(script)]).returncode == 0
+    assert "security\\.ubuntu\\.com" in text and "--no-install-recommends" in text and "xdotool" in text
+    assert "getent hosts security.ubuntu.com" in text                 # check DNS before apt waits on it
+    wf = (root / ".github" / "workflows" / "docker.yml").read_text(encoding="utf-8")
+    assert "bash scripts/ci/apt_prereqs.sh" in wf and "apt-get install" not in wf

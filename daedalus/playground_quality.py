@@ -59,6 +59,31 @@ def _clamp_score(v: Any) -> float:
     return max(0.0, min(10.0, f))
 
 
+def _salvage_truncated(text: str) -> dict[str, Any]:
+    """The scores of a critic reply cut off by the output limit (its long issue list comes last).
+
+    Found live (2026-11-11): a Bulgarian critique used all 1800 tokens, the JSON never closed, and every game scored
+    0.0 "unparsed", so the critic failed every build whatever it looked like."""
+    out: dict[str, Any] = {}
+    dec = json.JSONDecoder()
+    i = text.find('"scores"')
+    if i >= 0:
+        j = text.find("{", i)
+        try:
+            out["scores"], _ = dec.raw_decode(text[j:])
+        except Exception:
+            pass
+    m = re.search(r'"overall"\s*:\s*(-?\d+(?:\.\d+)?)', text)
+    if m:
+        out["overall"] = float(m.group(1))
+    m = re.search(r'"summary"\s*:\s*"((?:[^"\\]|\\.)*)"', text)
+    if m:
+        out["summary"] = m.group(1)
+    if out:
+        out["truncated"] = True
+    return out
+
+
 def parse_quality_result(text: str) -> dict[str, Any]:
     """Extract & normalize the critic JSON into a stable shape.
 
@@ -71,7 +96,7 @@ def parse_quality_result(text: str) -> dict[str, Any]:
         try:
             raw = json.loads(m.group(0))
         except Exception:
-            raw = {}
+            raw = _salvage_truncated(text or "")
     scores_in = raw.get("scores") if isinstance(raw.get("scores"), dict) else raw
     scores: dict[str, float] = {}
     if isinstance(scores_in, dict):
@@ -97,6 +122,7 @@ def parse_quality_result(text: str) -> dict[str, Any]:
         "patch_targets": [str(x)[:200] for x in patch_targets][:12],
         "summary": str(raw.get("summary") or "")[:600],
         "parsed": bool(scores or issues),
+        "truncated": bool(raw.get("truncated")),
     }
 
 
@@ -207,7 +233,7 @@ async def evaluate(
                 dom_excerpt=dom_excerpt, code_index=code_index,
                 screenshot_b64=screenshot_b64,
             ),
-            intent="vision", max_tokens=1800, temperature=0.0,
+            intent="vision", max_tokens=4000, temperature=0.0,
             client_id=client_id,
         )
         out = parse_quality_result(extract_text_fn(res))

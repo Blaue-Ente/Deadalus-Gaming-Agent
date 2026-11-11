@@ -117,6 +117,24 @@ def _as_openai_response(text: str, *, provider: str, model: str) -> dict[str, An
     }
 
 
+def mark_cut_tool_input(args: Any, *, cut: bool, max_tokens: int) -> Any:
+    """A tool call the model was still writing when the output limit hit is incomplete: say so in its input.
+
+    Found live (2026-11-11): asked for a full game, the writer put it all in one write_file, hit the output limit, and
+    the cut call failed with no reason the model could act on. ``native_tools`` refuses a marked call with the fix:
+    write the game as several smaller files."""
+    if not cut:
+        return args
+    out = dict(args) if isinstance(args, dict) else {"raw": str(args)}
+    out["_cut_at_output_limit"] = int(max_tokens or 0)
+    return out
+
+
+def _hidden_reasoning_ate_it(out: dict[str, Any], max_tokens: int) -> bool:
+    """An empty answer that used the whole budget: the model thought and never got to reply."""
+    return bool(out.get("error") == "empty_reply" and out.get("truncated") and max_tokens and max_tokens < 6000)
+
+
 def mark_empty_reply(out: dict[str, Any], *, max_tokens: int) -> dict[str, Any]:
     """An answer with no text is not a success. Found live (2026-11-11): reasoning models given a small max_tokens
     spend every token thinking and return nothing, and that came back as ok:true. ``truncated`` says the token
@@ -300,6 +318,17 @@ async def complete(
             cfg, system=system, user=user, intent=intent, client_id=client_id,
             max_tokens=max_tokens, temperature=temperature, json_mode=json_mode,
         )
+        if _hidden_reasoning_ate_it(out, max_tokens):
+            # Found live (2026-11-11): Haiku 5.5 on OpenRouter reasons by default; a 400-token code review spent every
+            # token thinking and returned "", which the stage builder read as a rejection five times in a row. Some
+            # models cannot turn reasoning off, so give the answer room instead, once.
+            bigger = min(max(max_tokens * 4, 1600), 6000)
+            log.info("empty reply at max_tokens=%d (hidden reasoning); retrying once at %d", max_tokens, bigger)
+            out, _billed = await _complete_with_cfg(
+                cfg, system=system, user=user, intent=intent, client_id=client_id,
+                max_tokens=bigger, temperature=temperature, json_mode=json_mode,
+            )
+            out["retried_for_reasoning"] = bigger
         return out
     except Exception as exc:
         first_err = str(exc)[:500]
@@ -410,7 +439,9 @@ async def call_with_tools(
             tools=anthropic_tools,
         )
         content = []
-        for block in resp.content:
+        _blocks = list(resp.content or [])
+        _last_use = max((i for i, b in enumerate(_blocks) if b.type == "tool_use"), default=-1)
+        for _i, block in enumerate(_blocks):
             if block.type == "text":
                 content.append({"type": "text", "text": block.text})
             elif block.type == "tool_use":
@@ -418,7 +449,8 @@ async def call_with_tools(
                     "type": "tool_use",
                     "id": block.id,
                     "name": block.name,
-                    "input": block.input,
+                    "input": mark_cut_tool_input(block.input, cut=resp.stop_reason == "max_tokens" and _i == _last_use,
+                                                 max_tokens=max_tokens),
                 })
         billed = _meter(resp, model=model, role="writer")
         try:
@@ -430,6 +462,7 @@ async def call_with_tools(
             "content": content,
             "usage": _usage_dict(getattr(resp, "usage", None)),
             "cost_usd": billed.get("cost_usd"),
+            "cut_at_output_limit": max_tokens if resp.stop_reason == "max_tokens" else 0,
         }
 
     try:
@@ -517,13 +550,17 @@ async def call_with_tools(
                 content.append({"type": "text", "text": str(block.get("text") or "")})
             elif isinstance(block, str) and block:
                 content.append({"type": "text", "text": block})
-    for tc in (getattr(msg, "tool_calls", None) or []):
+    _calls = list(getattr(msg, "tool_calls", None) or [])
+    _cut = getattr(choice, "finish_reason", "") == "length"
+    for _i, tc in enumerate(_calls):
         args: Any = {}
         raw_args = getattr(getattr(tc, "function", None), "arguments", "") or "{}"
         try:
             args = json.loads(raw_args)
         except json.JSONDecodeError:
             args = {"raw": raw_args}
+        # Only the call the limit interrupted (the last one) is incomplete; the earlier calls are whole.
+        args = mark_cut_tool_input(args, cut=_cut and _i == len(_calls) - 1, max_tokens=max_tokens)
         content.append({
             "type": "tool_use",
             "id": tc.id,
@@ -552,4 +589,5 @@ async def call_with_tools(
         "content": content,
         "usage": _usage_dict(getattr(resp, "usage", None)),
         "cost_usd": billed.get("cost_usd"),
+        "cut_at_output_limit": max_tokens if getattr(choice, "finish_reason", "") == "length" else 0,
     }

@@ -38,6 +38,11 @@ def _call_name(call: dict[str, Any]) -> str:
     return str(call.get("tool") or call.get("name") or "")
 
 
+# A failed look (reading a file that does not exist yet, listing an empty folder) changes nothing and is not a defect
+# of the work. Found live 2026-11-11: one such read_file kept a finished, playable build "not complete" for the turn.
+_READ_PROBES = frozenset({"read_file", "list_dir", "NEED_PLAYGROUND_READ", "NEED_READ"})
+
+
 def unrecovered_failure_indexes(tool_calls: list[dict[str, Any]] | None) -> list[int]:
     """Indexes of failed calls that no later successful call of the same tool repaired.
 
@@ -50,6 +55,8 @@ def unrecovered_failure_indexes(tool_calls: list[dict[str, Any]] | None) -> list
         if call.get("ok") is not False or call.get("blocked"):
             continue
         name = _call_name(call)
+        if name in _READ_PROBES:
+            continue
         recovered = any(
             later.get("ok") is True and _call_name(later) == name
             for later in calls[i + 1:]
@@ -62,16 +69,20 @@ def unrecovered_failure_indexes(tool_calls: list[dict[str, Any]] | None) -> list
 def _tools_ok(tool_calls: list[dict[str, Any]] | None) -> tuple[bool, bool, bool]:
     calls = tool_calls or []
     wrote = any(
-        str(c.get("tool") or c.get("name") or "") in {
-            "NEED_PLAYGROUND_WRITE", "NEED_PLAYGROUND_EDIT", "write_file",
-            "edit_file", "propose_patch", "NEED_PROPOSE", "NEED_EDIT",
-        }
-        or "write" in str(c.get("tool") or "").lower()
-        or (
-            str(c.get("tool") or "") in {"spawn_subagent", "subagent"}
-            and any(
-                str(role).lower() == "coder"
-                for role in (c.get("roles") or [c.get("role") or "coder"])
+        # A write that was refused or not run wrote nothing (found 2026-11-11: cut and refused calls counted).
+        not (c.get("ok") is False and c.get("blocked"))
+        and (
+            str(c.get("tool") or c.get("name") or "") in {
+                "NEED_PLAYGROUND_WRITE", "NEED_PLAYGROUND_EDIT", "write_file",
+                "edit_file", "propose_patch", "NEED_PROPOSE", "NEED_EDIT",
+            }
+            or "write" in str(c.get("tool") or "").lower()
+            or (
+                str(c.get("tool") or "") in {"spawn_subagent", "subagent"}
+                and any(
+                    str(role).lower() == "coder"
+                    for role in (c.get("roles") or [c.get("role") or "coder"])
+                )
             )
         )
         for c in calls

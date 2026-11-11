@@ -413,6 +413,33 @@ from .playground_expo_scaffold import EXPO_SCAFFOLD as _EXPO_SCAFFOLD  # noqa: E
 _SCAFFOLD["expo"] = _EXPO_SCAFFOLD
 
 
+def _scaffold_line(text: str, limit: int = 200) -> str:
+    """One short line for a placeholder page. Found live (2026-11-11): Game Studio passes its whole GDD (kilobytes of
+    Markdown with backticks) as the description; pasted into src/main.js it broke the JS, every Guided stage failed
+    the build check, and all its files were rejected."""
+    line = " ".join((text or "").split())
+    return line if len(line) <= limit else line[: limit - 1].rstrip() + "…"
+
+
+def _code_ctx(rel_path: str, ctx: dict[str, str]) -> dict[str, str]:
+    """``ctx`` made safe for the code file it is formatted into (the placeholder text only, never logic)."""
+    def js(v: str) -> str:            # inside a template literal that is set as innerHTML
+        v = html.escape(_scaffold_line(v), quote=True)
+        return v.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
+
+    def jsx(v: str) -> str:           # JSX text: braces and tags are syntax
+        return html.escape(_scaffold_line(v), quote=True).replace("{", "&#123;").replace("}", "&#125;")
+
+    def py(v: str) -> str:            # inside a "..." string
+        return _scaffold_line(v).replace("\\", "\\\\").replace('"', '\\"')
+
+    ext = rel_path.rsplit(".", 1)[-1].lower() if "." in rel_path else ""
+    fn = {"js": js, "mjs": js, "ts": js, "jsx": jsx, "tsx": jsx, "py": py}.get(ext)
+    if fn is None:
+        return ctx
+    return {k: fn(v) if k in ("name", "description") else v for k, v in ctx.items()}
+
+
 def _write_scaffold(pdir: Path, kind: str, name: str, slug: str, description: str) -> None:
     """Write initial scaffold files if directory is empty (new project)."""
     requested = (kind or "").strip().lower()
@@ -455,7 +482,7 @@ def _write_scaffold(pdir: Path, kind: str, name: str, slug: str, description: st
         if target.exists():
             continue
         target.parent.mkdir(parents=True, exist_ok=True)
-        fmt_ctx = html_ctx if rel_path.endswith((".html", ".htm")) else ctx
+        fmt_ctx = html_ctx if rel_path.endswith((".html", ".htm")) else _code_ctx(rel_path, ctx)
         try:
             if kind == "expo" and not rel_path.endswith(".json"):
                 text = _expo_ctx(content, name, slug, ctx["description"])
@@ -481,6 +508,9 @@ async def create_project(
     effort: str = "auto",
 ) -> dict[str, Any]:
     """Create a project row + workspace dir with scaffold files."""
+    from .project_chat_intent import guard_write
+
+    guard_write(slug or name, "(new project)")
     slug = slugify(slug or name)
     pid = uuid.uuid4().hex[:12]
     pdir = project_dir(slug)
@@ -647,6 +677,9 @@ def write_file(slug: str, path: str, content: str) -> None:
 
 def write_files(slug: str, files: dict[str, str]) -> int:
     """Write {relpath: content} into the project workspace. Returns count."""
+    from .project_chat_intent import guard_write
+
+    guard_write(slug, ", ".join(files))
     root = project_dir(slug)
     root.mkdir(parents=True, exist_ok=True)
     n = 0
@@ -664,6 +697,9 @@ def write_files(slug: str, files: dict[str, str]) -> int:
 
 def write_bytes(slug: str, rel: str, data: bytes) -> int:
     """Write binary content (image/audio asset) into the project workspace. Returns byte count."""
+    from .project_chat_intent import guard_write
+
+    guard_write(slug, rel)
     root = project_dir(slug)
     root.mkdir(parents=True, exist_ok=True)
     target = _safe_join(root, rel)
@@ -682,6 +718,9 @@ def edit_file(slug: str, rel: str, search: str, replace: str) -> dict[str, Any]:
     enough to identify a single location; if it appears more than once we refuse,
     to avoid editing the wrong spot.
     """
+    from .project_chat_intent import guard_write
+
+    guard_write(slug, rel)
     target = _safe_join(project_dir(slug), rel)
     if not target.exists() or not target.is_file():
         return {"ok": False, "error": f"файлът не съществува: {rel}", "file": rel}
