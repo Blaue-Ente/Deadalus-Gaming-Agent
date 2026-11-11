@@ -42,3 +42,26 @@ def test_the_game_loop_late_in_a_long_script_is_seen(a0_tmp):  # noqa: F811
                   "addEventListener('keydown', e => {});\nfunction loop(){ requestAnimationFrame(loop) }\nlet score=0;\n")
     verdict = playtest._heuristic(playtest._project_snapshot(slug))
     assert not any("game loop" in b for b in verdict.get("blockers", []))
+
+
+def test_a_critic_reply_cut_by_the_output_limit_still_has_its_scores():
+    """Found live: a long Bulgarian critique hit 1800 tokens, the JSON never closed, and every game scored 0.0."""
+    from daedalus.playground_quality import parse_quality_result
+
+    cut = ('{\n  "scores": {"visual_polish": 2, "coherence": 3, "gameplay_loop": 3, "controls": 3},\n  "overall": 2,\n'
+           '  "summary": "Лабиринтът е почти невидим.",\n  "issues": [\n    "HUD е обикновен текст", "Hit feedback: доба')
+    out = parse_quality_result(cut)
+    assert out["parsed"] is True and out["truncated"] is True and out["overall"] == 2.0
+    assert out["scores"]["coherence"] == 3.0 and "невидим" in out["summary"]
+    assert parse_quality_result("no json here")["parsed"] is False
+
+
+def test_a_failed_gameplay_check_says_which_and_why():
+    from daedalus.playground_gameplay_verify import failed_summary
+
+    checks = [{"id": "canvas_or_visual", "ok": True, "detail": "canvas"},
+              {"id": "post_start_state", "ok": False, "detail": "canvas=True game=False body=12"},
+              {"id": "keyboard_input", "ok": False, "detail": "key_events=0 canvas=True game=False"}]
+    text = failed_summary(checks)
+    assert text.startswith("gameplay checks failed: ") and "post_start_state: canvas=True game=False" in text
+    assert "keyboard_input" in text and "canvas_or_visual" not in text

@@ -179,6 +179,19 @@ def _aggregate_checks(
     return checks
 
 
+def failed_summary(checks: list[dict[str, Any]]) -> str:
+    """Which checks failed and why: the coder cannot fix "gameplay checks failed" (found live 2026-11-11, Autopilot
+    spent both repair rounds blind)."""
+    bad = [c for c in checks if not c.get("ok")]
+    if not bad:
+        return "gameplay checks failed"
+    parts = []
+    for c in bad[:5]:
+        detail = str(c.get("detail") or c.get("message") or c.get("label") or "").strip()
+        parts.append(f"{c.get('id')}: {detail}"[:200] if detail else str(c.get("id")))
+    return "gameplay checks failed: " + "; ".join(parts)
+
+
 def gameplay_passed(checks: list[dict[str, Any]], milestone_id: str = "M0") -> bool:
     if not checks:
         return False
@@ -291,7 +304,7 @@ async def _run_gameplay_on_url(
     return {
         "ok": ok,
         "skipped": False,
-        "summary": "gameplay checks passed" if ok else "gameplay checks failed",
+        "summary": "gameplay checks passed" if ok else failed_summary(checks),
         "checks": checks,
         "screenshot_path": screenshot_path,
         "kind": kind,
