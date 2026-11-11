@@ -7,6 +7,7 @@ Enabled by default. Set ``DAEDALUS_NATIVE_TOOLS=0`` to disable.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -1121,6 +1122,43 @@ def before_tool_call(
         return False, PERMISSION_CHECK_UNAVAILABLE.format(tool=marker_name or f"native:{tool_name}")
 
 
+def _play_lab_sync(action: str, args: dict[str, Any]) -> dict[str, Any]:
+    from . import play_lab as pl
+    if action == "list":
+        r = {"ok": True, "labs": pl.list_labs(), "host": pl.probe_host()}
+    elif action == "create":
+        r = pl.create_lab(
+            title=str(args.get("title") or ""),
+            source=str(args.get("source") or ""),
+        )
+        r = {"ok": True, **r}
+    elif action == "install":
+        r = pl.install_into_lab(str(args.get("lab_id") or ""), str(args.get("path") or ""))
+    elif action == "start":
+        r = pl.start_vm(str(args.get("lab_id") or ""))
+    elif action == "stop":
+        r = pl.stop_vm(str(args.get("lab_id") or ""))
+    elif action == "destroy":
+        r = pl.destroy_lab(str(args.get("lab_id") or ""))
+    elif action in ("open", "watch", "computer"):
+        from .computer import open_project_computer
+        lab_id = str(args.get("lab_id") or "")
+        try:
+            if lab_id:
+                r = pl.start_vm(lab_id)
+            else:
+                r = open_project_computer(str(args.get("slug") or args.get("title") or ""))
+            r = {"ok": True, **r} if isinstance(r, dict) and "ok" not in r else r
+        except ValueError as extra:
+            r = {"ok": False, "error": str(extra)}
+    else:
+        r = pl.probe_host()
+        lab_id = str(args.get("lab_id") or "")
+        if lab_id:
+            r["lab"] = pl.load_lab(lab_id)
+    return r
+
+
 async def execute_native_tool(
     name: str,
     args: dict[str, Any],
@@ -1398,7 +1436,10 @@ async def execute_native_tool(
             if _playground_session(session_id) and re.search(r"\bfind\s+/", cmd):
                 return f"── run_command BLOCKED ──\n{_HARNESS_JAIL}"
             from .shell_center import run_command
-            r = run_command(
+            # Blocking subprocess (npm install, builds): off the event loop, or every Studio request waits for it
+            # (found live 2026-11-11: the server stopped answering for 180 s twice during one app build).
+            r = await asyncio.to_thread(
+                run_command,
                 cmd,
                 cwd=str(args.get("cwd") or "") or None,
                 slug=str(args.get("slug") or ""),
@@ -1596,40 +1637,8 @@ async def execute_native_tool(
             return "── playtest ──\n" + format_for_prompt(r)
 
         if name == "play_lab":
-            from . import play_lab as pl
             action = str(args.get("action") or "status").lower().strip()
-            if action == "list":
-                r = {"ok": True, "labs": pl.list_labs(), "host": pl.probe_host()}
-            elif action == "create":
-                r = pl.create_lab(
-                    title=str(args.get("title") or ""),
-                    source=str(args.get("source") or ""),
-                )
-                r = {"ok": True, **r}
-            elif action == "install":
-                r = pl.install_into_lab(str(args.get("lab_id") or ""), str(args.get("path") or ""))
-            elif action == "start":
-                r = pl.start_vm(str(args.get("lab_id") or ""))
-            elif action == "stop":
-                r = pl.stop_vm(str(args.get("lab_id") or ""))
-            elif action == "destroy":
-                r = pl.destroy_lab(str(args.get("lab_id") or ""))
-            elif action in ("open", "watch", "computer"):
-                from .computer import open_project_computer
-                lab_id = str(args.get("lab_id") or "")
-                try:
-                    if lab_id:
-                        r = pl.start_vm(lab_id)
-                    else:
-                        r = open_project_computer(str(args.get("slug") or args.get("title") or ""))
-                    r = {"ok": True, **r} if isinstance(r, dict) and "ok" not in r else r
-                except ValueError as extra:
-                    r = {"ok": False, "error": str(extra)}
-            else:
-                r = pl.probe_host()
-                lab_id = str(args.get("lab_id") or "")
-                if lab_id:
-                    r["lab"] = pl.load_lab(lab_id)
+            r = await asyncio.to_thread(_play_lab_sync, action, args)     # VMs and probes block: off the loop
             return f"── play_lab {action} ──\n{json.dumps(r, ensure_ascii=False, default=str)[:5000]}"
 
         if name == "dissect_game":
@@ -1690,7 +1699,8 @@ async def execute_native_tool(
 
         if name == "world":
             from .world_runtime import run_action as world_action
-            r = world_action(
+            r = await asyncio.to_thread(
+                world_action,
                 str(args.get("action") or "status"),
                 str(args.get("slug") or ""),
                 who=str(args.get("who") or ""),
@@ -1707,7 +1717,8 @@ async def execute_native_tool(
 
         if name == "assets":
             from .asset_pipeline import run_action as assets_action
-            r = assets_action(
+            r = await asyncio.to_thread(
+                assets_action,
                 str(args.get("action") or "status"),
                 str(args.get("slug") or ""),
                 sources=args.get("sources"),
@@ -1738,7 +1749,8 @@ async def execute_native_tool(
 
         if name == "production":
             from .production_layer import run_action as production_action
-            r = production_action(
+            r = await asyncio.to_thread(
+                production_action,
                 str(args.get("action") or "status"),
                 str(args.get("slug") or ""),
                 claim=str(args.get("claim") or ""),
