@@ -749,6 +749,12 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
     },
 ]
 
+# A7: the harness as brain tools (milestones, preview, play, runs, ship_request). One table in the harness defines them.
+from .harness import brain_tools as _brain_tools  # noqa: E402
+
+NATIVE_TOOL_SPECS.extend(_brain_tools.SPECS)
+PERM_MAP.update(_brain_tools.PERMS)
+
 
 def native_tools_enabled() -> bool:
     flag = os.environ.get("DAEDALUS_NATIVE_TOOLS", "").strip().lower()
@@ -762,6 +768,7 @@ _PLAYGROUND_BUILD_NAMES = frozenset({
     "math3d", "spatial", "game_canon", "game_lint", "profiler",
     "assets", "generate_image", "playtest", "browser",
     "run_command", "skill", "engine", "world",
+    "milestones", "preview", "play", "runs", "ship_request",
 })
 
 _HARNESS_JAIL = (
@@ -1096,6 +1103,9 @@ async def execute_native_tool(
     )
 
     try:
+        if name in _brain_tools.NAMES:
+            res = await _brain_tools.run(name, args, session_id=session_id)
+            return _brain_tools.format_result(name, args, res)
         if name == "read_file":
             path = str(args.get("path", ""))
             slug_h = str(args.get("slug") or "").strip() or _slug_from_text(path)

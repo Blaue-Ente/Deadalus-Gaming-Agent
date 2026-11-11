@@ -124,6 +124,11 @@ async def lifespan(_app: FastAPI):
             await stop_gardener()
         except Exception:
             log.debug("evolution gardener stop failed", exc_info=True)
+        try:
+            from daedalus.harness.brain_tools import stop_play_sessions
+            stop_play_sessions()                 # no game or display started by the brain outlives the server
+        except Exception:
+            log.debug("brain play sessions stop failed", exc_info=True)
 
 
 app = FastAPI(

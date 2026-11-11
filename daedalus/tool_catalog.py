@@ -324,6 +324,16 @@ _NATIVE_META: dict[str, dict[str, Any]] = {
     },
 }
 
+def _with_brain_tools() -> None:
+    """A7: the harness brain tools carry their own catalog entries (one table in daedalus.harness.brain_tools)."""
+    from .harness.brain_tools import META
+
+    for name, meta in META.items():
+        _NATIVE_META.setdefault(name, dict(meta))
+
+
+_with_brain_tools()
+
 # Markers that are not native function calls (persona / NEED loop only).
 _NEED_ONLY: tuple[ToolEntry, ...] = (
     ToolEntry(

@@ -154,6 +154,7 @@
     });
     if (panel === "build") loadWorkspace(dx.getSlug());
     if (panel === "preview") loadPreviewStatus(dx.getSlug());
+    if (panel === "preview") loadShipRequests();          // what Daedalus asked to publish or push
     if (panel === "review") {
       loadReview(currentTab);
       loadBlockers();
@@ -3269,6 +3270,88 @@
       const rows = (c.warnings || []).map((w) => row(String(w), "", []));
       return { rows, note: dx.t("studio.gitCompatResult", { level: c.level || "?", score: c.score == null ? "?" : c.score, kind: c.kind || "?" }) };
     });
+  });
+
+  // -- A7: requests from Daedalus (the brain asks to publish or push; only the owner runs them) --
+  const SHIP_BUTTON = { local: "preview-local", live: "preview-live", push: "git-push" };
+  let shipReqGen = 0;
+
+  // keepStatus: a reload after an action's message keeps that message on the line.
+  async function loadShipRequests(keepStatus) {
+    const slug = dx.getSlug();
+    const list = $("ship-requests-list");
+    const gen = ++shipReqGen;
+    if (!slug) { list.replaceChildren(); showStatus("ship-requests-status", dx.t("studio.noProject"), true); return; }
+    let res;
+    try {
+      res = await dx.api("/api/v1/harness/ship-requests?status=pending&slug=" + encodeURIComponent(slug));
+    } catch (err) {
+      if (gen === shipReqGen) showStatus("ship-requests-status", dx.t("studio.requestFailed") + ": " + failText(err), true);
+      return;
+    }
+    if (gen !== shipReqGen || dx.getSlug() !== slug) return;
+    list.replaceChildren();
+    const rows = (res && res.requests) || [];
+    if (!rows.length) { if (!keepStatus) showStatus("ship-requests-status", dx.t("studio.shipReqNone"), false); return; }
+    rows.forEach((req) => {
+      const kindLabel = dx.t("studio.shipReqKind." + req.kind);
+      const row = document.createElement("div");
+      row.className = "item";
+      row.dataset.id = req.id;
+      const head = document.createElement("span");
+      head.className = "name";
+      head.textContent = kindLabel;
+      const note = document.createElement("small");
+      note.textContent = " " + (req.note || "");
+      const runBtn = document.createElement("button");
+      runBtn.type = "button";
+      runBtn.dataset.act = "run";
+      runBtn.textContent = dx.t("studio.shipReqRun");
+      const noBtn = document.createElement("button");
+      noBtn.type = "button";
+      noBtn.dataset.act = "decline";
+      noBtn.textContent = dx.t("studio.shipReqDecline");
+      const answer = async (outcome) => {
+        runBtn.disabled = true;
+        noBtn.disabled = true;
+        try {
+          await postJson("/api/v1/harness/ship-requests/" + encodeURIComponent(req.id) + "/resolve", { outcome });
+        } catch (err) {
+          const gone = /already_resolved|not_found/.test(String((err && err.message) || ""));
+          showStatus("ship-requests-status", gone ? dx.t("studio.shipReqGone") : dx.t("studio.requestFailed") + ": " + failText(err), true);
+          loadShipRequests(true);
+          return false;
+        }
+        row.remove();
+        return true;
+      };
+      runBtn.addEventListener("click", async () => {
+        if (!window.confirm(dx.t("studio.shipReqRunConfirm", { kind: kindLabel, slug: req.slug }))) return;
+        if (!(await answer("approved"))) return;
+        showStatus("ship-requests-status", dx.t("studio.shipReqStarted", { kind: kindLabel }), false);
+        if (req.kind === "push") { const menu = $("git-menu"); if (menu) menu.open = true; }
+        const target = $(SHIP_BUTTON[req.kind]);
+        if (target) target.click();                  // the Studio's own action, with its own questions
+      });
+      noBtn.addEventListener("click", async () => {
+        if (await answer("declined")) showStatus("ship-requests-status", dx.t("studio.shipReqDeclined"), false);
+      });
+      row.append(head, note, runBtn, noBtn);
+      list.appendChild(row);
+    });
+    if (!keepStatus) showStatus("ship-requests-status", dx.t("studio.shipReqCount", { n: rows.length }), false);
+  }
+
+  $("ship-req-refresh").addEventListener("click", () => loadShipRequests());
+  let shipReqShown = "";
+  dx.watchSlug((snap) => {
+    const next = snap.slug || "";
+    if (next === shipReqShown) return;
+    shipReqShown = next;
+    shipReqGen += 1;
+    $("ship-requests-list").replaceChildren();
+    showStatus("ship-requests-status", "", false);
+    if (currentPanel === "preview" && next) loadShipRequests();      // another project: its own requests
   });
 
   // -- A6.5c: what only the Playground page had (ideas, hints, description, coding mode, published apps, backup, tunnel) --

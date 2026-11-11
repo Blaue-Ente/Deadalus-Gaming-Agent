@@ -65,6 +65,8 @@ class Playbook:
 _CORE = (
     "playground_new", "write_file", "read_file", "list_dir",
     "run_command", "skill",
+    # A7: the harness for every game build: milestones and verify, preview, runs, and asking the owner to ship
+    "milestones", "preview", "runs", "ship_request",
 )
 
 PLAYBOOKS: tuple[Playbook, ...] = (
@@ -204,7 +206,7 @@ PLAYBOOKS: tuple[Playbook, ...] = (
         keywords=("godot", "gdscript", ".tscn", "метroid", "metroidvania"),
         regex=r"\b(godot|gdscript|\.tscn)\b",
         tools=_CORE + (
-            "edit_file", "engine", "game_canon", "game_lint", "assets", "world", "browser",
+            "edit_file", "engine", "game_canon", "game_lint", "assets", "world", "browser", "play",
         ),
         expected_files=("project.godot", "scenes/main.tscn"),
         notes=(
@@ -270,7 +272,7 @@ PLAYBOOKS: tuple[Playbook, ...] = (
         kinds=("unity",),
         keywords=("unity", "c#", "csharp", "urp", "scriptableobject"),
         regex=r"\b(unity|urp|scriptableobject)\b",
-        tools=_CORE + ("engine", "game_lint", "profiler", "game_canon", "git_forge"),
+        tools=_CORE + ("engine", "game_lint", "profiler", "game_canon", "git_forge", "play"),
         notes=(
             "This cloud has no Editor. Scaffold + Git. "
             "engine needs DAEDALUS_UNITY_MCP or UNITY_PATH. Scaffold is not Play."
@@ -518,7 +520,7 @@ PLAYBOOKS: tuple[Playbook, ...] = (
         regex=r"\b(игра|game|playground|phaser|three\.?js|webgpu)\b",
         tools=_CORE + (
             "math3d", "spatial", "game_canon", "assets", "generate_image",
-            "playtest", "browser", "engine", "world", "game_lint",
+            "playtest", "browser", "engine", "world", "game_lint", "play",
         ),
         notes="Unknown game: keep the senior kit available, build in the Playground slug.",
         steps=(
