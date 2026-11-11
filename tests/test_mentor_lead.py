@@ -215,19 +215,25 @@ def test_kernel_status_files_do_not_hide_the_proof_frame(project):
     import os
     import time
 
-    from PIL import Image
+    import struct
+    import zlib
 
     from daedalus import playground as pg
     from daedalus.harness import perception
 
+    def png(w: int, h: int) -> bytes:                     # a gradient RGB PNG without PIL (CI has no Pillow)
+        rows = b"".join(b"\x00" + bytes(v for x in range(w) for v in (x * 4, y * 5, 120)) for y in range(h))
+
+        def chunk(tag: bytes, data: bytes) -> bytes:
+            return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", zlib.crc32(tag + data))
+
+        return (b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0))
+                + chunk(b"IDAT", zlib.compress(rows)) + chunk(b"IEND", b""))
+
     root = pg.project_dir(project)
     proof = root / "studio" / "proof"
     proof.mkdir(parents=True, exist_ok=True)
-    img = Image.new("RGB", (64, 48))
-    for x in range(64):
-        for y in range(48):
-            img.putpixel((x, y), (x * 4, y * 5, 120))
-    img.save(proof / "frame_000.png")
+    (proof / "frame_000.png").write_bytes(png(64, 48))
     later = time.time() + 5
     for rel in ("README.md", "assets/_verify_screenshot.png"):
         (root / rel).parent.mkdir(parents=True, exist_ok=True)
