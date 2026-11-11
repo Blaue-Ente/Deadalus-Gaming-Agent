@@ -74,7 +74,35 @@ def test_a_reply_cut_with_no_tool_call_is_explained_not_ended():
 
     asyncio.run(native_tools.run_native_discovery_pass(
         "sys", "make a game", model, memory=None, session_id="", read_file_fn=lambda *a, **k: {"content": ""},
-        max_rounds=2, tools=[{"name": "read_file"}]))
+        max_rounds=2, tools=[{"name": "read_file"}, {"name": "write_file"}]))
     told = [m for m in seen if "output limit" in str(m.get("content"))]
     assert len(told) == 1 and "8192" in str(told[0]["content"]) and "smaller files" in str(told[0]["content"])
     assert not replies                                   # the cut round did not use up the two real rounds
+
+
+def test_a_long_answer_that_got_cut_is_not_a_failed_write():
+    """In a question turn (read tools only), or when the text is prose, a cut reply is just a long reply."""
+    for tools, text in (([{"name": "read_file"}], "<!doctype html> ..."),
+                        ([{"name": "read_file"}, {"name": "write_file"}], "The game has three levels and ...")):
+        replies = [{"stop_reason": "end_turn", "content": [{"type": "text", "text": text}],
+                    "cut_at_output_limit": 8192}]
+        seen = []
+
+        async def model(system, messages, tools_, _r=replies):
+            seen.append(messages[-1])
+            return _r.pop(0) if _r else {"stop_reason": "end_turn", "content": [{"type": "text", "text": "x"}]}
+
+        asyncio.run(native_tools.run_native_discovery_pass(
+            "sys", "q", model, memory=None, session_id="", read_file_fn=lambda *a, **k: {}, max_rounds=2,
+            tools=tools))
+        assert len(seen) == 1, tools                       # ended with the answer; no "write it in smaller files"
+
+
+def test_refused_and_cut_calls_are_not_writes():
+    from daedalus.job_contract import _tools_ok, unrecovered_failure_indexes
+
+    calls = [{"tool": "write_file", "ok": False, "blocked": True}]
+    assert _tools_ok(calls)[0] is False and unrecovered_failure_indexes(calls) == []
+    assert native_tools._REFUSED_HEAD.match("── write_file NOT RUN: cut ──")
+    assert native_tools._REFUSED_HEAD.match("── write_file REFUSED: question ──")
+    assert not native_tools._REFUSED_HEAD.match("── write_file OK x/index.html ──")

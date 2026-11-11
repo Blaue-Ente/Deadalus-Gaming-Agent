@@ -84,6 +84,15 @@ def request_text(fallback: str = "") -> str:
     return _REQUEST.get() or (fallback or "").strip()[-REQUEST_MAX_CHARS:]
 
 
+def take_request() -> str:
+    """The owner's words, once: the first agent turn reads them and clears them, so a nested turn started inside it
+    (a subagent quoting the request, the planner, a self-review) is routed and planned on its own text."""
+    value = _REQUEST.get()
+    if value:
+        _REQUEST.set("")
+    return value
+
+
 # ── availability ─────────────────────────────────────────────────────────────
 
 def unavailable_reason() -> str | None:
@@ -193,15 +202,21 @@ def project_files(slug: str, limit: int = 30) -> list[tuple[str, int]]:
     root = _project_root(slug)
     if root is None:
         return []
+    import os
+
     out: list[tuple[str, int]] = []
-    for p in sorted(root.rglob("*")):
-        rel = p.relative_to(root)
-        if any(part in _SKIP_DIRS or part.startswith(".") for part in rel.parts[:-1]) or not p.is_file():
-            continue
-        if p.suffix.lower() in _SOURCE_EXT or p.name == "README.md":
-            out.append((rel.as_posix(), p.stat().st_size))
-        if len(out) >= limit:
-            break
+    for base, dirs, files in os.walk(root):          # prune node_modules & co. before descending (not rglob + sort)
+        dirs[:] = sorted(d for d in dirs if d not in _SKIP_DIRS and not d.startswith("."))
+        for name in sorted(files):
+            if not (name.lower().endswith(_SOURCE_EXT) or name == "README.md"):
+                continue
+            path = Path(base) / name
+            try:
+                out.append((path.relative_to(root).as_posix(), path.stat().st_size))
+            except OSError:
+                continue
+            if len(out) >= limit:
+                return out
     return out
 
 
@@ -231,7 +246,17 @@ def main_source(slug: str, budget: int = SOURCE_MAX_CHARS) -> str:
 # ── kickoff ─────────────────────────────────────────────────────────────────
 
 async def kickoff(request: str, *, slug: str = "", kind: str = "") -> dict[str, Any] | None:
-    """The lead's plan for this build turn, or None (reason in the log and Run ledger)."""
+    """The lead's plan for this build turn, or None (reason in the log and Run ledger). Never raises: the build must
+    run whether or not the lead could plan it."""
+    try:
+        return await _kickoff(request, slug=slug, kind=kind)
+    except Exception:
+        log.warning("mentor lead plan crashed", exc_info=True)
+        _event("mentor_plan", {"skipped": "error"})
+        return None
+
+
+async def _kickoff(request: str, *, slug: str = "", kind: str = "") -> dict[str, Any] | None:
     request = (request or "").strip()[-REQUEST_MAX_CHARS:]
     if not request:
         return None
@@ -240,7 +265,7 @@ async def kickoff(request: str, *, slug: str = "", kind: str = "") -> dict[str, 
         log.info("mentor lead plan skipped: %s", why)
         _event("mentor_plan", {"skipped": why})
         return None
-    files = project_files(slug)
+    files = await asyncio.to_thread(project_files, slug)
     user = (f"OWNER REQUEST:\n{request}\n\nPROJECT: {slug or '(new)'} · kind {kind or 'unknown'}\n"
             "FILES NOW: " + (", ".join(f"{p} ({n} B)" for p, n in files) or "(none)"))
     try:
@@ -302,8 +327,22 @@ async def play_frames(slug: str, kind: str = "static") -> tuple[list[dict[str, A
     root = _project_root(slug)
     if root is None:
         return [], []
-    serve_dir = root / "dist" if (root / "dist" / "index.html").is_file() else root
-    if not (serve_dir / "index.html").is_file() or kind in {"godot", "unity", "expo"}:
+    if kind in {"vite", "vite-react", "phaser"}:
+        # Only a build of the current source is the game: raw /src is not runnable, an old dist is an old game.
+        dist = root / "dist" / "index.html"
+        try:
+            from .harness.perception import _project_edit_mtime
+            fresh = dist.is_file() and dist.stat().st_mtime >= _project_edit_mtime(slug)
+        except Exception:
+            fresh = False
+        if not fresh:
+            return [], []
+        serve_dir = root / "dist"
+    elif kind in {"static", "", "html"}:
+        serve_dir = root
+    else:
+        return [], []
+    if not (serve_dir / "index.html").is_file():
         return [], []
     try:
         from playwright.async_api import async_playwright
@@ -451,7 +490,8 @@ async def acceptance_nudge(loop: Any, request: str) -> str | None:
         loop.lead_accepted = False
         return None
     loop.lead_fix_used = used + 1
-    loop.stop_reason = ""
+    # stop_reason stays "complete": that is the kernel's verdict and it stands; the lead's own verdict is reported
+    # separately, so a writer still fixing when the rounds run out is not turned into "round budget exhausted".
     return review_block(rev, rounds_left=LEAD_FIX_ROUNDS - loop.lead_fix_used)
 
 

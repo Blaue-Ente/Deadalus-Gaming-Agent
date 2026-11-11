@@ -5,8 +5,7 @@ so a question ("what does the game do?") still rewrote index.html. Owner decisio
 does not ask for a change, the turn only reads and answers. ``answering(slug)`` marks such a turn; while it is set,
 every playground write raises ``ReadOnlyTurn`` and only read tools run.
 
-The classifier reads the owner's own words (never the injected file context). When in doubt it builds: a change
-verb anywhere wins, unless the message is plainly a question ("how do I add sound?").
+The classifier reads the owner's own words (never the injected file context). When in doubt it builds.
 """
 from __future__ import annotations
 
@@ -40,7 +39,8 @@ _BG_CHANGE = (
     "ползвай", "вкарай", "оцвети", "преобраз", "изгради",
 )
 _CHANGE_RE = re.compile(
-    r"(?<!\w)(?:" + "|".join(re.escape(w) for w in _EN_CHANGE) + r")(?:s|es|ed|ing)?(?!\w)"
+    r"(?<!\w)(?:" + "|".join(re.escape(w.rstrip("e")) + ("e?" if w.endswith("e") else "") for w in _EN_CHANGE)
+    + r")(?:s|es|ed|d|ing)?(?!\w)"
     r"|(?<!\w)(?:" + "|".join(re.escape(w) for w in _BG_CHANGE) + r")\w*",
     re.I,
 )
@@ -57,15 +57,34 @@ _POLITE_REQUEST = re.compile(
 )
 
 
+# Asking for words, not work: "explain", "tell me", "what do you think", "обясни", "кажи", "опиши".
+_ASK_FOR_WORDS = re.compile(
+    r"(?<!\w)(?:explain|describe|tell\s+me|what\s+do\s+you\s+think|your\s+opinion|review\s+it|summari[sz]e|"
+    r"обясни\w*|опиши\w*|разкажи\w*|кажи\w*|какво\s+мислиш|мнение\w*|обобщи\w*)(?!\w)",
+    re.I,
+)
+_SMALL_TALK = re.compile(
+    r"^\s*(?:hi|hello|hey|thanks|thank\s+you|ok|okay|cool|great|здравей\w*|здрасти|благодар\w*|мерси|ок|окей|"
+    r"добре|супер|чудесно)[\s!.,]*$",
+    re.I,
+)
+
+
 def wants_change(message: str) -> bool:
-    """True when the owner asks Daedalus to change the project; False for a question or small talk."""
+    """True when the owner asks Daedalus to change the project; False for a question or small talk.
+
+    Builds by default (owner decision: a missed change is worse than a build turn the owner can revert). Answers only
+    when the message is plainly a question ("how do I add sound?"), a request for words ("explain the update loop",
+    "разгледай и ми кажи какво мислиш"), or small talk. A polite request with a change verb still builds
+    ("можеш ли да добавиш звук?"), unless it asks for words ("can you explain what update does?")."""
     text = (message or "").strip()
-    if not text or not _CHANGE_RE.search(text):
+    if not text or _SMALL_TALK.match(text):
         return False
-    if _POLITE_REQUEST.search(text):
-        return True
-    if _QUESTION_START.search(text) and text.rstrip().endswith("?"):
+    if _ASK_FOR_WORDS.search(text):
         return False
+    question = text.rstrip().endswith("?") or bool(_QUESTION_START.search(text))
+    if question:
+        return bool(_POLITE_REQUEST.search(text) and _CHANGE_RE.search(text))
     return True
 
 

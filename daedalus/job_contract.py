@@ -69,16 +69,20 @@ def unrecovered_failure_indexes(tool_calls: list[dict[str, Any]] | None) -> list
 def _tools_ok(tool_calls: list[dict[str, Any]] | None) -> tuple[bool, bool, bool]:
     calls = tool_calls or []
     wrote = any(
-        str(c.get("tool") or c.get("name") or "") in {
-            "NEED_PLAYGROUND_WRITE", "NEED_PLAYGROUND_EDIT", "write_file",
-            "edit_file", "propose_patch", "NEED_PROPOSE", "NEED_EDIT",
-        }
-        or "write" in str(c.get("tool") or "").lower()
-        or (
-            str(c.get("tool") or "") in {"spawn_subagent", "subagent"}
-            and any(
-                str(role).lower() == "coder"
-                for role in (c.get("roles") or [c.get("role") or "coder"])
+        # A write that was refused or not run wrote nothing (found 2026-11-11: cut and refused calls counted).
+        not (c.get("ok") is False and c.get("blocked"))
+        and (
+            str(c.get("tool") or c.get("name") or "") in {
+                "NEED_PLAYGROUND_WRITE", "NEED_PLAYGROUND_EDIT", "write_file",
+                "edit_file", "propose_patch", "NEED_PROPOSE", "NEED_EDIT",
+            }
+            or "write" in str(c.get("tool") or "").lower()
+            or (
+                str(c.get("tool") or "") in {"spawn_subagent", "subagent"}
+                and any(
+                    str(role).lower() == "coder"
+                    for role in (c.get("roles") or [c.get("role") or "coder"])
+                )
             )
         )
         for c in calls

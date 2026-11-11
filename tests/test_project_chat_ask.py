@@ -23,6 +23,13 @@ from a0_support import a0_tmp  # noqa: F401
     "продължи",
     "Could you change the colours to blue?",
     "Пренапиши играта с Phaser",
+    # review 2026-11-11: change requests without a listed verb, or with an e-dropping inflection, must build
+    "The jump feels too floaty",
+    "more enemies and a boss please",
+    "Bigger player sprite please",
+    "Stop the player from moving through walls",
+    "I want it removed",
+    "enemies are too fast",
 ])
 def test_change_requests_build(message):
     from daedalus import project_chat_intent as pci
@@ -41,6 +48,10 @@ def test_change_requests_build(message):
     "Разгледай проекта и ми кажи какво мислиш",
     "здравей",
     "",
+    # review 2026-11-11: a polite ask for words is a question even when a code noun looks like a verb
+    "Could you tell me what the update loop does?",
+    "Can you explain what the update function does?",
+    "Is the jump working now?",
 ])
 def test_questions_do_not_build(message):
     from daedalus import project_chat_intent as pci

@@ -853,6 +853,21 @@ def _outside_bound_project(tool: str, session_id: str, slug: str) -> str | None:
             "if the owner wants a new project, say so and let them start it.")
 
 
+_CODE_HINT = re.compile(r"<!doctype|<script|<canvas|```|\bfunction\b|\bconst\b|\blet\b|=>|\bclass\s+\w+", re.I)
+
+
+def _cut_was_code(text_parts: list[str], specs: list[dict[str, Any]] | None) -> bool:
+    """A reply cut by the output limit was a file being written: write tools are offered and the text is code (or there
+    is no text). A long answer or summary that got cut is just a long answer (review 2026-11-11)."""
+    names = {s.get("name") for s in (specs or [])}
+    if not names & {"write_file", "edit_file"}:
+        return False
+    text = "\n".join(text_parts or [])
+    return not text.strip() or bool(_CODE_HINT.search(text[:4000]))
+
+
+_REFUSED_HEAD = re.compile(r"\s*── \S+ (?:REFUSED|NOT RUN)\b")
+
 _PG_SLUG_IN_URL = re.compile(
     r"(?:playground/projects/|(?:localhost|127\.0\.0\.1):\d+/)([A-Za-z0-9_-]+)",
     re.I,
@@ -2135,7 +2150,7 @@ async def run_native_discovery_pass(
                 })
                 assistant_content.append(tool_uses[-1])
 
-        if not tool_uses and resp.get("cut_at_output_limit"):
+        if not tool_uses and resp.get("cut_at_output_limit") and _cut_was_code(text_parts, specs):
             # Found live 2026-11-11: the writer put a whole game in one call, the output limit cut it, and the provider
             # returned no tool call at all. Say what happened instead of treating the cut as "done talking".
             messages.append({"role": "assistant", "content": assistant_content or [
@@ -2230,6 +2245,10 @@ async def run_native_discovery_pass(
 
             ok = native_tool_result_ok(result_text)
             blocked = "BLOCKED" in result_text
+            if _REFUSED_HEAD.match(result_text or ""):
+                # Refused or not run (cut by the output limit, a question turn, another project): nothing happened.
+                # Not a write, and not a defect of the work either.
+                ok, blocked = False, True
             tool_log.append({
                 "tool": tname,
                 "input": {k: v for k, v in tinput.items() if k != "content"} if isinstance(tinput, dict) else {},

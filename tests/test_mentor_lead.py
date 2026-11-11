@@ -102,7 +102,8 @@ def test_the_lead_sends_back_what_is_missing_then_accepts(lead_on, monkeypatch, 
     loop.lead_plan = {"checklist": ["3 lives", "meteors to dodge"]}
     nudge = asyncio.run(mentor_lead.acceptance_nudge(loop, GAME))
     assert "LEAD REVIEW" in nudge and "[ ] meteors to dodge" in nudge and "spawn meteors" in nudge
-    assert loop.stop_reason == "" and loop.lead_fix_used == 1 and loop.lead_accepted is None
+    # the kernel's verdict stands; the lead's own verdict is separate (review 2026-11-11)
+    assert loop.stop_reason == "complete" and loop.lead_fix_used == 1 and loop.lead_accepted is None
     assert "=== index.html ===" in calls.seen[0]["user"] and "- meteors to dodge" in calls.seen[0]["user"]
     assert asyncio.run(mentor_lead.acceptance_nudge(loop, GAME)) is None
     assert loop.lead_accepted is True
@@ -287,3 +288,35 @@ def test_the_lead_plays_a_web_game_before_judging_it(project):
         pytest.skip("chromium unavailable in this environment")
     assert len(parts) == 3 and len(set(shas)) >= 2          # play changed the picture
     assert all(p["type"] == "image" for p in parts)
+
+
+def test_the_owners_words_are_taken_once():
+    """A nested turn inside the first one (subagent, planner) is routed on its own text (review 2026-11-11)."""
+    with mentor_lead.owner_request("make a game"):
+        assert mentor_lead.take_request() == "make a game"
+        assert mentor_lead.take_request() == ""
+    assert mentor_lead.take_request() == ""
+
+
+def test_a_crash_while_planning_never_stops_the_build(lead_on, monkeypatch):
+    def boom(slug, limit=30):
+        raise FileNotFoundError("gone between walk and stat")
+
+    monkeypatch.setattr(mentor_lead, "project_files", boom)
+    assert asyncio.run(mentor_lead.kickoff(GAME, slug="x")) is None
+
+
+def test_project_files_skip_node_modules(project):
+    from daedalus import playground as pg
+
+    nm = pg.project_dir(project) / "node_modules" / "phaser"
+    nm.mkdir(parents=True)
+    (nm / "phaser.js").write_text("x")
+    assert all("node_modules" not in p for p, _ in mentor_lead.project_files(project))
+
+
+def test_an_unbuilt_vite_game_is_not_played(project):
+    from daedalus import playground as pg
+
+    pg.write_file(project, "src/main.js", "console.log(1)")
+    assert asyncio.run(_REAL_PLAY_FRAMES(project, "vite")) == ([], [])

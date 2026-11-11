@@ -1702,9 +1702,9 @@ class Daedalus:
                 from . import mentor_lead as _lead
                 # The owner's own words (project chat wraps them in file context): route and plan on those, not on
                 # the code in the prompt (found live 2026-11-11: keywords in file contents chose the playbook).
-                _owner_words = _lead.request_text("")
+                _owner_words = _lead.take_request()   # once per turn: nested chats (subagents, planner) keep theirs
                 if not _owner_words or _owner_words not in user_message:
-                    _owner_words = user_message      # a nested turn (planner, self-review) keeps its own text
+                    _owner_words = user_message
                 _pg_build = is_playground_work_session(session_id, user_message) or _looks_game(
                     _owner_words
                 )
@@ -1738,7 +1738,7 @@ class Daedalus:
                     _bound = _bound_project(session_id or "")
                     if _bound and not _loop.slug:
                         _loop.slug = _bound          # project chat: the project exists; never steer to a new one
-                    _loop.lead_plan = await _lead.kickoff(
+                    _loop.lead_plan = await _lead.kickoff(   # never raises: no plan just means no plan
                         _owner_words, slug=_loop.slug, kind=getattr(_route, "kind", "") or "",
                     )
                     max_native = 10
@@ -1774,8 +1774,9 @@ class Daedalus:
                     max_native = 8
                 _set_live(session_id, "native_tools", 0, "Native tools…")
                 _native_in = user_content
-                if _owner_words is not user_message and _owner_words not in user_content[:8000]:
-                    # The request sits after the project's files; put it first so the cut below never drops it.
+                if _owner_words.strip() != (user_message or "").strip():
+                    # Project chat: the request sits after the project's files; put it first so the cut below never
+                    # drops it (a substring test is not enough: "continue" also appears in the code).
                     _native_in = f"OWNER REQUEST (this turn):\n{_owner_words}\n\n{user_content}"
                 if _loop is not None and getattr(_loop, "lead_plan", None):
                     _native_in = _lead.plan_block(_loop.lead_plan) + "\n\n" + _native_in
