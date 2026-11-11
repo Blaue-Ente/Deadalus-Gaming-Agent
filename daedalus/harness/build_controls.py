@@ -124,16 +124,25 @@ async def make_plan(slug: str, description: str, *, ultra: bool, studio: bool, s
         is_game=is_likely_game(f"{proj.get('name', '')} {description}"), ultra=ultra, studio=studio, studio_preset=preset,
         description=f"{proj.get('name', '')} {description}", slug=slug)
     plan: dict[str, Any] | None = None
-    try:
-        from ..kernel.full_autopilot import _extract_json
-        from ..llm_client import complete
+    # Two tries: found live (2026-11-11) the same request failed once with an unparsable reply and passed the next time.
+    for attempt in range(2):
+        try:
+            from ..kernel.full_autopilot import _extract_json
+            from ..llm_client import complete
 
-        result = await complete(system=system, user=description, intent="json", max_tokens=4000)
-        text = (result.get("reply") or "") if isinstance(result, dict) else str(result)
-        found = _extract_json(text)
-        plan = found if isinstance(found, dict) else None
-    except Exception as exc:
-        log.warning("plan/create llm failed: %s", exc)
+            sys_text = system if attempt == 0 else system + (
+                "\n\nYour previous reply was not valid plan JSON. Return ONLY one JSON object with a non-empty "
+                "\"stages\" list. No prose, no markdown fences.")
+            result = await complete(system=sys_text, user=description, intent="json", max_tokens=6000)
+            text = (result.get("reply") or "") if isinstance(result, dict) else str(result)
+            found = _extract_json(text)
+            plan = found if isinstance(found, dict) else None
+        except Exception as exc:
+            log.warning("plan/create llm failed (try %d): %s", attempt + 1, exc)
+            plan = None
+        if plan and isinstance(plan.get("stages"), list) and plan["stages"]:
+            break
+        log.warning("plan/create: no usable plan on try %d", attempt + 1)
     if not plan or not isinstance(plan.get("stages"), list) or not plan["stages"]:
         if not fallback:
             return {"ok": False, "error": "plan_failed"}

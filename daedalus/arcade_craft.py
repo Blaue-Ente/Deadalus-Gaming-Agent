@@ -51,6 +51,7 @@ _RACER_SCAFFOLD_RE = re.compile(
     r"grand prix|състезан|писта|обиколк)\b",
     re.I,
 )
+_RACER_CODE_RE = re.compile(r"\b(laps?|turbo|race|lap_?time|checkpoints?)\b", re.I)
 _PIXEL_TRAP_RE = re.compile(r"\b(pixel art|8-?bit|low.?fi template|css gradient hero)\b", re.I)
 _MESH_FROM_LLM_RE = re.compile(
     r"\b(write (a )?(gltf|obj) by hand|hardcoded vertices for (the )?(ship|car|hero))\b",
@@ -261,7 +262,9 @@ def scope_warnings(brainstorm: dict[str, Any] | None) -> list[str]:
 def fun_signals(snapshot: str) -> dict[str, Any]:
     """Playtest extras — wayfinding, fail, pickups, challenge. Conservative: blockers only for racers."""
     low = (snapshot or "").lower()
-    racer = looks_like_racer(low) or "turbo" in low or "lap" in low
+    # Found live (2026-11-11): CSS ":hover" in a maze game's code matched "hover", and "lap" matched "overlap", so the
+    # maze was judged as a racer ("no wayfinding chevrons"). Code needs racer words, not substrings.
+    racer = bool(_RACER_SCAFFOLD_RE.search(low) or _RACER_CODE_RE.search(low))
     has_fail = any(tok in low for tok in ("gameover", "game over", "crash", "damage", "integrity", "offtrack", "off-track", "destroyed"))
     has_way = any(tok in low for tok in ("checkpoint", "chevron", "arrow", "spline", "racingline", "racing_line", "waypoint"))
     has_pickup = any(tok in low for tok in ("boost", "turbo", "pad", "pickup", "item"))

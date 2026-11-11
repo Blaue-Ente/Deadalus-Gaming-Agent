@@ -95,7 +95,7 @@ def list_personas() -> list[dict[str, Any]]:
     return list(PERSONAS)
 
 
-def _project_snapshot(slug: str, *, max_chars: int = 5000) -> str:
+def _project_snapshot(slug: str, *, max_chars: int = 16000) -> str:
     from .paths import playground_projects_dir
     from .playground import slugify
     root = playground_projects_dir() / slugify(slug)
@@ -105,7 +105,8 @@ def _project_snapshot(slug: str, *, max_chars: int = 5000) -> str:
     for rel in _snapshot_files(root):
         path = root / rel
         if path.is_file():
-            bits.append(f"=== {rel} ===\n{path.read_text(encoding='utf-8', errors='replace')[:1800]}")
+            # 1800 chars per file cut the game loop off a 10 kB script.js (found live 2026-11-11)
+            bits.append(f"=== {rel} ===\n{path.read_text(encoding='utf-8', errors='replace')[:8000]}")
     if not bits:
         names = sorted(p.name for p in root.iterdir())[:40]
         bits.append("files: " + ", ".join(names))

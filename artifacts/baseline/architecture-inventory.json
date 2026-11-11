@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-11T15:28:15.357284+00:00",
+  "generated_at": "2026-11-11T15:37:30.173640+00:00",
   "package_version": "0.3.8",
-  "git_commit": "d4cc5904dd1c5dcc2a9f4fe1570c055a6e64e2ca",
+  "git_commit": "e253165ab57b1e7d611a6edc3156a77bf09d18c9",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -131,7 +131,7 @@
   },
   "tests": {
     "modules": 121,
-    "functions": 1380
+    "functions": 1383
   },
   "modules": {
     "daedalus": [
