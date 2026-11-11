@@ -38,7 +38,7 @@ MAX_REVIEWS = LEAD_FIX_ROUNDS + 1   # lead reviews per turn: one per fix round, 
 PLAN_MAX_OUT = 900
 REVIEW_MAX_OUT = 700
 LEAD_TIMEOUT_MIN_S = 45.0
-SOURCE_MAX_CHARS = 14_000    # ~3.5k tokens of the main source for the review
+SOURCE_MAX_CHARS = 40_000    # ~10k tokens: the lead must see every file it judges (found live: 14k cut half a game)
 REQUEST_MAX_CHARS = 1_500
 _SOURCE_EXT = (".html", ".js", ".mjs", ".ts", ".jsx", ".tsx", ".css", ".gd", ".cs", ".py", ".json")
 _SKIP_DIRS = {"node_modules", ".git", "dist", "build", "studio", "playtest", ".godot", "assets"}
@@ -56,12 +56,14 @@ PLAN_SYSTEM = (
 
 REVIEW_SYSTEM = (
     "You are the Daedalus Mentor: the lead programmer. You never write code. The builder says the work is done. Check "
-    "it against the checklist using the frames of the running game (images, newest last) and the main source. An item "
-    "is met only if you can see it in a frame or clearly in the code. Return JSON only, no markdown: {\"accept\": "
-    "true|false, \"met\": [\"checklist items that are met\"], \"missing\": [\"checklist items not met, max 8\"], "
-    "\"fixes\": [\"concrete instructions for the builder, max 6, each names the file and what to change\"], "
-    "\"observations\": [\"up to 3 short things visibly on screen\"]}. Accept only when every checklist item is met "
-    "and the game looks finished. Never claim to see what is not in the images. Write in the owner's language."
+    "it against the checklist using the frames of the running game (images in order: start screen, then after the "
+    "kernel pressed start and played a few seconds) and the source. Return JSON only, no markdown: {\"accept\": "
+    "true|false, \"met\": [\"checklist items that are met\"], \"missing\": [\"real defects only: an item that is "
+    "absent or broken in the code or on screen, max 8\"], \"unverified\": [\"items you could not check from these "
+    "frames and files, max 6\"], \"fixes\": [\"one concrete instruction per missing item: the file and what to "
+    "change\"], \"observations\": [\"up to 3 short things visibly on screen\"]}. Missing means the builder must "
+    "change something; lack of evidence is 'unverified', never 'missing'. Accept when nothing is missing and the game "
+    "looks finished. Never claim to see what is not in the images. Write in the owner's language."
 )
 
 
@@ -287,6 +289,65 @@ def plan_block(plan: dict[str, Any] | None) -> str:
 
 # ── review ──────────────────────────────────────────────────────────────────
 
+PLAY_SCRIPT = (("Enter", 0), ("click", 0), ("Space", 0), ("ArrowRight", 900), ("Space", 0), ("ArrowRight", 700),
+               ("ArrowLeft", 500))
+
+
+async def play_frames(slug: str, kind: str = "static") -> tuple[list[dict[str, Any]], list[str]]:
+    """Frames the lead can judge a game by: the start screen, then a few seconds of play after pressing start keys.
+
+    The kernel's proof frame is the first paint (often a title screen); found live, the lead could not see a single
+    platform. Web projects with an index.html only; anything else returns no frames (the stored proof frames are used).
+    """
+    root = _project_root(slug)
+    if root is None:
+        return [], []
+    serve_dir = root / "dist" if (root / "dist" / "index.html").is_file() else root
+    if not (serve_dir / "index.html").is_file() or kind in {"godot", "unity", "expo"}:
+        return [], []
+    try:
+        from playwright.async_api import async_playwright
+
+        from .harness import gateway as gw
+        from .playground_browser import CHROME_ARGS, _serve_static, chromium_executable
+    except Exception:
+        return [], []
+    base, stop = _serve_static(serve_dir)
+    shots: list[bytes] = []
+    try:
+        async with async_playwright() as p:
+            exe = chromium_executable()
+            browser = await p.chromium.launch(args=list(CHROME_ARGS), **({"executable_path": exe} if exe else {}))
+            try:
+                page = await browser.new_page(viewport={"width": 960, "height": 640})
+                await page.goto(base + "/", wait_until="load", timeout=20_000)
+                await page.wait_for_timeout(1200)
+                shots.append(await page.screenshot(type="png"))
+                for key, hold in PLAY_SCRIPT:
+                    if key == "click":
+                        await page.mouse.click(480, 320)
+                    elif hold:
+                        await page.keyboard.down(key)
+                        await page.wait_for_timeout(hold)
+                        await page.keyboard.up(key)
+                    else:
+                        await page.keyboard.press(key)
+                    await page.wait_for_timeout(150)
+                await page.wait_for_timeout(600)
+                shots.append(await page.screenshot(type="png"))
+                await page.wait_for_timeout(1800)
+                shots.append(await page.screenshot(type="png"))
+            finally:
+                await browser.close()
+    except Exception:
+        log.info("lead play frames failed for %s", slug, exc_info=True)
+        return [], []
+    finally:
+        stop()
+    parts = [gw.image_part(media_type="image/png", data=b) for b in shots if b and len(b) > 64]
+    return parts, [str(part.get("sha256") or "") for part in parts]
+
+
 def _frames(slug: str) -> tuple[list[dict[str, Any]], list[str]]:
     try:
         from .harness import perception
@@ -313,7 +374,9 @@ async def review(loop: Any, request: str) -> dict[str, Any] | None:
         log.info("mentor lead review skipped: %s", why)
         _event("mentor_review", {"skipped": why})
         return None
-    images, shas = await asyncio.to_thread(_frames, slug)
+    images, shas = await play_frames(slug, str(getattr(loop, "kind", "") or "static"))
+    if not images:
+        images, shas = await asyncio.to_thread(_frames, slug)
     source = await asyncio.to_thread(main_source, slug)
     user = (f"OWNER REQUEST:\n{request}\n\nCHECKLIST:\n" + ("\n".join(f"- {c}" for c in checklist) or "(derive it from "
             "the request)") + f"\n\nPROJECT {slug}. Kernel checks: {getattr(loop, 'proof_summary', '') or 'n/a'}; "
@@ -331,9 +394,12 @@ async def review(loop: Any, request: str) -> dict[str, Any] | None:
         return None
     missing = _strs(data.get("missing"), 8)
     out = {
-        "accept": bool(data.get("accept")) and not missing,
+        # Accepted exactly when no real defect is named: a bare "no" with nothing to fix only burns a writer round
+        # (found live), and a "yes" that still lists missing items is not a yes.
+        "accept": not missing,
         "met": _strs(data.get("met"), 12),
         "missing": missing,
+        "unverified": _strs(data.get("unverified"), 6),
         "fixes": _strs(data.get("fixes"), 6, 300),
         "observations": _strs(data.get("observations"), 3, 160) if images else [],
         "saw_frames": len(images), "frame_sha256s": shas,
@@ -341,7 +407,8 @@ async def review(loop: Any, request: str) -> dict[str, Any] | None:
     }
     log.info("mentor lead review model=%s accept=%s missing=%d frames=%d ms=%s", out["model"], out["accept"],
              len(missing), len(images), out["ms"])
-    _event("mentor_review", {k: out[k] for k in ("accept", "met", "missing", "fixes", "observations", "saw_frames",
+    _event("mentor_review", {k: out[k] for k in ("accept", "met", "missing", "unverified", "fixes", "observations",
+                                                 "saw_frames",
                                                  "frame_sha256s", "model")})
     return out
 
@@ -355,6 +422,9 @@ def review_block(rev: dict[str, Any], *, rounds_left: int) -> str:
     if rev.get("missing"):
         lines.append("Missing:")
         lines.extend(f"  [ ] {m}" for m in rev["missing"])
+    if rev.get("unverified"):
+        lines.append("The lead could not check (make them visible and working, but do not chase them): "
+                     + "; ".join(rev["unverified"]))
     if rev.get("fixes"):
         lines.append("Do this now:")
         lines.extend(f"  {i}. {f}" for i, f in enumerate(rev["fixes"], 1))

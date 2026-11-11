@@ -29,6 +29,18 @@ class Calls:
         return self.answers.pop(0), {"model": "lead-model", "provider": "openrouter", "ms": 5}
 
 
+_REAL_PLAY_FRAMES = mentor_lead.play_frames
+
+
+@pytest.fixture(autouse=True)
+def _no_browser_play(monkeypatch):
+    """Reviews in these tests judge source only; one test below drives real Chromium on purpose."""
+    async def none(slug, kind="static"):
+        return [], []
+
+    monkeypatch.setattr(mentor_lead, "play_frames", none)
+
+
 @pytest.fixture
 def lead_on(monkeypatch):
     monkeypatch.setattr(mentor_lead, "unavailable_reason", lambda: None)
@@ -236,3 +248,42 @@ def test_director_never_opens_a_game_nothing_was_written_for():
                        {"slug": "moss", "project_exists": True, "wrote_source": True,
                         "graph": {"tools": ["browser", "write_file"]}}, {"next_tool": "browser"})
     assert kept["next_tool"] == "browser"
+
+
+def test_a_no_without_a_defect_is_not_a_rejection(lead_on, monkeypatch, project):
+    """Found live: the lead said accept=false with nothing missing; the writer got a round with nothing to do."""
+    monkeypatch.setattr(mentor_lead, "_ask", Calls(
+        {"accept": False, "missing": [], "unverified": ["3 levels: levels.js not shown"]},
+        {"accept": True, "missing": ["Enter does not restart"], "fixes": ["game.js: restart on Enter"]}))
+    monkeypatch.setattr(mentor_lead, "play_frames", _no_frames)
+    loop = BuildLoop(route(GAME), GAME)
+    loop.slug = project
+    assert asyncio.run(mentor_lead.acceptance_nudge(loop, GAME)) is None and loop.lead_accepted is True
+    assert loop.lead_review["unverified"] == ["3 levels: levels.js not shown"]
+    loop.lead_reviews = 0
+    nudge = asyncio.run(mentor_lead.acceptance_nudge(loop, GAME))
+    assert nudge and "Enter does not restart" in nudge
+
+
+async def _no_frames(slug, kind="static"):
+    return [], []
+
+
+def test_the_lead_plays_a_web_game_before_judging_it(project):
+    """Start screen, then frames after pressing start keys and moving (real Chromium)."""
+    pytest.importorskip("playwright")
+    from daedalus import playground as pg
+
+    pg.write_file(project, "index.html", (
+        "<canvas id=c width=320 height=200></canvas><script>let s='title',x=10;"
+        "addEventListener('keydown',e=>{if(e.key==='Enter')s='play';if(e.key==='ArrowRight')x+=40});"
+        "const g=c.getContext('2d');(function f(){g.fillStyle=s==='play'?'#204':'#000';g.fillRect(0,0,320,200);"
+        "g.fillStyle='#0f0';g.fillRect(x,100,20,20);requestAnimationFrame(f)})()</script>"))
+    try:
+        parts, shas = asyncio.run(_REAL_PLAY_FRAMES(project, "static"))
+    except Exception as exc:  # pragma: no cover - only when Chromium itself cannot start here
+        pytest.skip(f"chromium unavailable: {exc}")
+    if not parts:
+        pytest.skip("chromium unavailable in this environment")
+    assert len(parts) == 3 and len(set(shas)) >= 2          # play changed the picture
+    assert all(p["type"] == "image" for p in parts)
