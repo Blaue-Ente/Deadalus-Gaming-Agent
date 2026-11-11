@@ -878,7 +878,16 @@ def inspect_digest(loop: Any) -> dict[str, Any]:
         pb = getattr(route, "playbook", None)
         playbook_id = str(getattr(pb, "id", "") or "")
     from .mentor_graph import for_inspect
+    plan = getattr(loop, "lead_plan", None) or {}
+    request = str(getattr(loop, "user_message", "") or "").strip()[-400:]   # the owner's words (agent.py)
     return {
+        # Found live 2026-11-11: shown neither the project nor the request, the director advised playground_new on a
+        # project that already existed.
+        "slug": slug,
+        "project_exists": bool(slug and view.exists),
+        "wrote_source": bool(getattr(loop, "_has_source_writes", lambda: True)()),
+        "owner_request": request,
+        "checklist": list(plan.get("checklist") or [])[:12],
         "kind": kind,
         "playbook": playbook_id,
         "scaffold": bool(view.scaffold_main),

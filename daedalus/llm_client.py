@@ -117,6 +117,19 @@ def _as_openai_response(text: str, *, provider: str, model: str) -> dict[str, An
     }
 
 
+def mark_cut_tool_input(args: Any, *, cut: bool, max_tokens: int) -> Any:
+    """A tool call the model was still writing when the output limit hit is incomplete: say so in its input.
+
+    Found live (2026-11-11): asked for a full game, the writer put it all in one write_file, hit the output limit, and
+    the cut call failed with no reason the model could act on. ``native_tools`` refuses a marked call with the fix:
+    write the game as several smaller files."""
+    if not cut:
+        return args
+    out = dict(args) if isinstance(args, dict) else {"raw": str(args)}
+    out["_cut_at_output_limit"] = int(max_tokens or 0)
+    return out
+
+
 def mark_empty_reply(out: dict[str, Any], *, max_tokens: int) -> dict[str, Any]:
     """An answer with no text is not a success. Found live (2026-11-11): reasoning models given a small max_tokens
     spend every token thinking and return nothing, and that came back as ok:true. ``truncated`` says the token
@@ -418,7 +431,8 @@ async def call_with_tools(
                     "type": "tool_use",
                     "id": block.id,
                     "name": block.name,
-                    "input": block.input,
+                    "input": mark_cut_tool_input(block.input, cut=resp.stop_reason == "max_tokens",
+                                                 max_tokens=max_tokens),
                 })
         billed = _meter(resp, model=model, role="writer")
         try:
@@ -430,6 +444,7 @@ async def call_with_tools(
             "content": content,
             "usage": _usage_dict(getattr(resp, "usage", None)),
             "cost_usd": billed.get("cost_usd"),
+            "cut_at_output_limit": max_tokens if resp.stop_reason == "max_tokens" else 0,
         }
 
     try:
@@ -524,6 +539,7 @@ async def call_with_tools(
             args = json.loads(raw_args)
         except json.JSONDecodeError:
             args = {"raw": raw_args}
+        args = mark_cut_tool_input(args, cut=getattr(choice, "finish_reason", "") == "length", max_tokens=max_tokens)
         content.append({
             "type": "tool_use",
             "id": tc.id,
@@ -552,4 +568,5 @@ async def call_with_tools(
         "content": content,
         "usage": _usage_dict(getattr(resp, "usage", None)),
         "cost_usd": billed.get("cost_usd"),
+        "cut_at_output_limit": max_tokens if getattr(choice, "finish_reason", "") == "length" else 0,
     }

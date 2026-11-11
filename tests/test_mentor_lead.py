@@ -1,0 +1,238 @@
+"""Mentor as lead programmer: plans the build, then accepts it or sends it back. It never writes code.
+
+Owner's design (2026-11-11): the Mentor is the stronger, more expensive model and supervises like a lead programmer.
+The Daedalus model does the work. Found live the same day: a build passed every kernel check with half the request
+missing, and the director, never told the project existed, advised playground_new."""
+from __future__ import annotations
+
+import asyncio
+
+import pytest
+from a0_support import a0_tmp  # noqa: F401
+
+from daedalus import mentor_lead, native_tools
+from daedalus.build_loop import BuildLoop
+from daedalus.tool_router import route
+
+GAME = ("Направи игра Star Catcher: кораб долу със стрелките хваща падащи звезди, метеорите се избягват, "
+        "3 живота, Game Over с рестарт с Enter.")
+
+
+class Calls:
+    """Stands in for the Mentor model: answers in order, records what it was asked."""
+
+    def __init__(self, *answers):
+        self.answers, self.seen = list(answers), []
+
+    async def __call__(self, system, user, *, max_tokens, images=None, client_id):
+        self.seen.append({"system": system, "user": user, "images": len(images or []), "client": client_id})
+        return self.answers.pop(0), {"model": "lead-model", "provider": "openrouter", "ms": 5}
+
+
+@pytest.fixture
+def lead_on(monkeypatch):
+    monkeypatch.setattr(mentor_lead, "unavailable_reason", lambda: None)
+
+
+def test_the_lead_plans_from_the_owners_words(lead_on, monkeypatch):
+    calls = Calls({"brief": "Arcade catcher.", "checklist": ["ship moves with arrows", "meteors to dodge",
+                                                             "3 lives", "Enter restarts"],
+                   "look": ["neon glow"], "steps": ["write index.html"]})
+    monkeypatch.setattr(mentor_lead, "_ask", calls)
+    plan = asyncio.run(mentor_lead.kickoff(GAME, slug="", kind="static"))
+    assert plan["checklist"][1] == "meteors to dodge" and plan["model"] == "lead-model"
+    assert "OWNER REQUEST" in calls.seen[0]["user"] and "метеорите" in calls.seen[0]["user"]
+    assert "never write code" in calls.seen[0]["system"]
+    block = mentor_lead.plan_block(plan)
+    assert "LEAD PLAN" in block and "[ ] meteors to dodge" in block and "1. write index.html" in block
+
+
+def test_no_lead_means_no_call_and_no_block(monkeypatch):
+    monkeypatch.setenv("DAEDALUS_MENTOR", "0")
+
+    async def never(*a, **k):
+        raise AssertionError("the Mentor model must not be called when the Mentor is off")
+
+    monkeypatch.setattr(mentor_lead, "_ask", never)
+    assert mentor_lead.unavailable_reason() == "mentor_off"
+    assert asyncio.run(mentor_lead.kickoff(GAME)) is None
+    loop = BuildLoop(route(GAME), GAME)
+    loop.slug = "star"
+    assert asyncio.run(mentor_lead.acceptance_nudge(loop, GAME)) is None
+    assert loop.lead_accepted is None                              # no review happened, and none is claimed
+
+
+def test_a_bad_answer_is_no_plan(lead_on, monkeypatch):
+    monkeypatch.setattr(mentor_lead, "_ask", Calls(None))
+    assert asyncio.run(mentor_lead.kickoff(GAME)) is None
+    monkeypatch.setattr(mentor_lead, "_ask", Calls({"brief": "x", "checklist": []}))
+    assert asyncio.run(mentor_lead.kickoff(GAME)) is None
+
+
+@pytest.fixture
+def project(a0_tmp):  # noqa: F811
+    from daedalus import playground as pg
+
+    slug = asyncio.run(pg.create_project("Star", kind="static"))["slug"]
+    pg.write_file(slug, "index.html", "<canvas id=c></canvas><script>/* stars */</script>\n")
+    return slug
+
+
+def test_the_lead_sends_back_what_is_missing_then_accepts(lead_on, monkeypatch, project):
+    calls = Calls(
+        {"accept": False, "met": ["3 lives"], "missing": ["meteors to dodge"],
+         "fixes": ["index.html: spawn meteors that cost a life"], "observations": ["stars fall"]},
+        {"accept": True, "met": ["3 lives", "meteors to dodge"], "missing": []},
+    )
+    monkeypatch.setattr(mentor_lead, "_ask", calls)
+    loop = BuildLoop(route(GAME), GAME)
+    loop.slug, loop.stop_reason = project, "complete"
+    loop.lead_plan = {"checklist": ["3 lives", "meteors to dodge"]}
+    nudge = asyncio.run(mentor_lead.acceptance_nudge(loop, GAME))
+    assert "LEAD REVIEW" in nudge and "[ ] meteors to dodge" in nudge and "spawn meteors" in nudge
+    assert loop.stop_reason == "" and loop.lead_fix_used == 1 and loop.lead_accepted is None
+    assert "=== index.html ===" in calls.seen[0]["user"] and "- meteors to dodge" in calls.seen[0]["user"]
+    assert asyncio.run(mentor_lead.acceptance_nudge(loop, GAME)) is None
+    assert loop.lead_accepted is True
+    assert any("ACCEPTED" in line for line in mentor_lead.summary_lines(loop))
+
+
+def test_the_lead_cannot_hold_a_turn_forever(lead_on, monkeypatch, project):
+    no = {"accept": False, "missing": ["particles"], "fixes": ["add particles"]}
+    monkeypatch.setattr(mentor_lead, "_ask", Calls(*[dict(no) for _ in range(5)]))
+    loop = BuildLoop(route(GAME), GAME)
+    loop.slug = project
+    nudges = [asyncio.run(mentor_lead.acceptance_nudge(loop, GAME)) for _ in range(5)]
+    assert sum(1 for n in nudges if n) == mentor_lead.LEAD_FIX_ROUNDS
+    assert loop.lead_reviews == mentor_lead.MAX_REVIEWS and loop.lead_accepted is False
+    assert any("NOT accepted" in line and "particles" in line for line in mentor_lead.summary_lines(loop))
+
+
+def test_observations_without_frames_are_dropped(lead_on, monkeypatch, project):
+    monkeypatch.setattr(mentor_lead, "_ask", Calls({"accept": True, "observations": ["a ship"], "missing": []}))
+    loop = BuildLoop(route(GAME), GAME)
+    loop.slug = project
+    asyncio.run(mentor_lead.acceptance_nudge(loop, GAME))
+    assert loop.lead_review["saw_frames"] == 0 and loop.lead_review["observations"] == []
+
+
+def test_the_build_loop_asks_the_lead_before_it_ends(lead_on, monkeypatch, project):
+    """Kernel says complete -> lead reviews -> one more writer round -> lead accepts."""
+    from daedalus.visual_proof import ProofResult
+
+    async def _exec(name, args, **_kw):
+        return f"── {name} OK {args.get('slug')}/{args.get('path')} ──"
+
+    async def _proof(slug, kind="static", **_k):
+        return ProofResult(ok=True, skipped=False, kind="static", slug=slug, tool="browser", summary="ok", frames=[])
+
+    monkeypatch.setattr(native_tools, "execute_native_tool", _exec)
+    monkeypatch.setattr("daedalus.visual_proof.run_visual_proof", _proof)
+    monkeypatch.setattr("daedalus.playable.loop_wants_computer_play", lambda loop: False)
+    calls = Calls({"accept": False, "missing": ["meteors"], "fixes": ["index.html: add meteors"]},
+                  {"accept": True, "missing": []})
+    monkeypatch.setattr(mentor_lead, "_ask", calls)
+
+    def use(tool, **args):
+        return {"type": "tool_use", "id": f"c{len(seen)}{tool}", "name": tool, "input": args}
+
+    seen: list = []
+    rounds = [
+        [use("write_file", slug=project, path="index.html", content="<canvas>")],
+        [use("run_command", command="ls", slug=project)],
+        [{"type": "text", "text": "Готово."}],
+        [use("write_file", slug=project, path="index.html", content="<canvas> meteors")],
+        [{"type": "text", "text": "Готово, с метеори."}],
+    ]
+
+    async def model(system, messages, tools):
+        seen.append(messages[-1])
+        r = rounds.pop(0) if rounds else [{"type": "text", "text": "done"}]
+        return {"stop_reason": "tool_use" if r[0]["type"] == "tool_use" else "end_turn", "content": r}
+
+    loop = BuildLoop(route(GAME), GAME, fix_rounds=3)
+    loop.slug = project
+    asyncio.run(native_tools.run_native_discovery_pass(
+        "sys", GAME, model, memory=None, session_id="", read_file_fn=lambda *a, **k: {},
+        max_rounds=4, tools=[{"name": "x"}], loop=loop))
+    assert len(calls.seen) == 2 and loop.lead_accepted is True and loop.stop_reason == "complete"
+    sent_back = [m for m in seen if "LEAD REVIEW" in str(m.get("content"))]
+    assert len(sent_back) == 1 and "add meteors" in str(sent_back[0]["content"])
+
+
+def test_director_never_steers_an_existing_project_to_playground_new():
+    from daedalus.mentor_graph import guard_steer
+
+    out = guard_steer({"action": "call_tool", "next_tool": "playground_new", "forbid_tools": []},
+                      {"slug": "star", "project_exists": True, "graph": {"tools": ["playground_new", "write_file"]}},
+                      {"next_tool": "write_file"})
+    assert out["next_tool"] == "write_file" and "playground_new" in out["forbid_tools"]
+
+
+def test_the_director_digest_names_the_project_and_the_request(project, monkeypatch):
+    from daedalus import mentor, mentor_helm
+
+    loop = BuildLoop(route(GAME), "add meteors please")
+    loop.slug = project
+    loop.lead_plan = {"checklist": ["meteors to dodge"]}
+    digest = mentor.inspect_digest(loop)
+    assert digest["slug"] == project and digest["project_exists"] is True
+    assert digest["owner_request"] == "add meteors please" and digest["checklist"] == ["meteors to dodge"]
+    prompt = mentor_helm.build_user_prompt(digest)
+    assert '"project_exists":true' in prompt and "add meteors please" in prompt
+
+
+def test_a_failed_look_is_not_a_failed_build():
+    from daedalus.job_contract import unrecovered_failure_indexes
+
+    calls = [{"tool": "read_file", "ok": False}, {"tool": "list_dir", "ok": False},
+             {"tool": "write_file", "ok": True}]
+    assert unrecovered_failure_indexes(calls) == []
+    assert unrecovered_failure_indexes([{"tool": "write_file", "ok": False}]) == [0]
+
+
+def test_owner_request_is_the_owners_words_not_the_prompt():
+    assert mentor_lead.request_text("fallback text") == "fallback text"
+    with mentor_lead.owner_request("make it red"):
+        assert mentor_lead.request_text("[PLAYGROUND x]\n<files>\n\nmake it red") == "make it red"
+
+
+def test_kernel_status_files_do_not_hide_the_proof_frame(project):
+    """The kernel rewrites README.md and the verify screenshot right after the proof; the frame must still count."""
+    import os
+    import time
+
+    from PIL import Image
+
+    from daedalus import playground as pg
+    from daedalus.harness import perception
+
+    root = pg.project_dir(project)
+    proof = root / "studio" / "proof"
+    proof.mkdir(parents=True, exist_ok=True)
+    img = Image.new("RGB", (64, 48))
+    for x in range(64):
+        for y in range(48):
+            img.putpixel((x, y), (x * 4, y * 5, 120))
+    img.save(proof / "frame_000.png")
+    later = time.time() + 5
+    for rel in ("README.md", "assets/_verify_screenshot.png"):
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_bytes(b"status")
+        os.utime(root / rel, (later, later))
+    assert [r.source for r in perception.latest_frames(project).refs] == ["visual_proof"]
+    os.utime(root / "index.html", (later, later))                     # a real source edit still makes it stale
+    assert perception.latest_frames(project).refs == []
+
+
+def test_director_never_opens_a_game_nothing_was_written_for():
+    from daedalus.mentor_graph import guard_steer
+
+    out = guard_steer({"action": "call_tool", "next_tool": "browser", "forbid_tools": []},
+                      {"slug": "moss", "project_exists": True, "wrote_source": False,
+                       "graph": {"tools": ["browser", "write_file"]}}, {"next_tool": "browser"})
+    assert out["next_tool"] == "write_file"
+    kept = guard_steer({"action": "call_tool", "next_tool": "browser", "forbid_tools": []},
+                       {"slug": "moss", "project_exists": True, "wrote_source": True,
+                        "graph": {"tools": ["browser", "write_file"]}}, {"next_tool": "browser"})
+    assert kept["next_tool"] == "browser"

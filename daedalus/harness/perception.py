@@ -24,6 +24,9 @@ _VERIFIED_KEY = "adn:daedalus_vision_verified"
 _NO_VISION_KEY = "adn:daedalus_no_vision"
 NO_VISION_TTL_S = 24 * 3600
 _SKIP_DIRS = {".git", "node_modules", ".godot", ".import", "studio", "dist", "build", "__pycache__", ".venv"}
+# Files the kernel itself writes right after taking a picture (proof status in README, verify screenshots). Counting
+# them made every proof frame look older than the project, so the Mentor never saw one (found live 2026-11-11).
+_KERNEL_FILES = {"README.md", "_verify_screenshot.png", "_gameplay_screenshot.png"}
 
 
 def frame_limit() -> int:
@@ -96,6 +99,8 @@ def _project_edit_mtime(slug: str) -> float:
     for base, dirs, files in os.walk(root):
         dirs[:] = [d for d in dirs if d not in _SKIP_DIRS]
         for name in files:
+            if name in _KERNEL_FILES:
+                continue
             seen += 1
             if seen > 3000:
                 return newest

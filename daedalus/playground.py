@@ -481,6 +481,9 @@ async def create_project(
     effort: str = "auto",
 ) -> dict[str, Any]:
     """Create a project row + workspace dir with scaffold files."""
+    from .project_chat_intent import guard_write
+
+    guard_write(slug or name, "(new project)")
     slug = slugify(slug or name)
     pid = uuid.uuid4().hex[:12]
     pdir = project_dir(slug)
@@ -647,6 +650,9 @@ def write_file(slug: str, path: str, content: str) -> None:
 
 def write_files(slug: str, files: dict[str, str]) -> int:
     """Write {relpath: content} into the project workspace. Returns count."""
+    from .project_chat_intent import guard_write
+
+    guard_write(slug, ", ".join(files))
     root = project_dir(slug)
     root.mkdir(parents=True, exist_ok=True)
     n = 0
@@ -664,6 +670,9 @@ def write_files(slug: str, files: dict[str, str]) -> int:
 
 def write_bytes(slug: str, rel: str, data: bytes) -> int:
     """Write binary content (image/audio asset) into the project workspace. Returns byte count."""
+    from .project_chat_intent import guard_write
+
+    guard_write(slug, rel)
     root = project_dir(slug)
     root.mkdir(parents=True, exist_ok=True)
     target = _safe_join(root, rel)
@@ -682,6 +691,9 @@ def edit_file(slug: str, rel: str, search: str, replace: str) -> dict[str, Any]:
     enough to identify a single location; if it appears more than once we refuse,
     to avoid editing the wrong spot.
     """
+    from .project_chat_intent import guard_write
+
+    guard_write(slug, rel)
     target = _safe_join(project_dir(slug), rel)
     if not target.exists() or not target.is_file():
         return {"ok": False, "error": f"файлът не съществува: {rel}", "file": rel}

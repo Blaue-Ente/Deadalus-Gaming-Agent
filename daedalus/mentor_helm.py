@@ -55,7 +55,8 @@ SYSTEM_PROMPT = (
     "Output JSON only, no markdown, no chain-of-thought. Schema: "
     '{"action":"call_tool|continue|stop|ship","next_tool":"string|null",'
     '"next_args":{},"reason":"<=140 chars","forbid_tools":[],"blockers":[]}. '
-    "Never invent tools. Spend few tokens."
+    "Never invent tools. Never pick playground_new when project_exists is true: the project is already there, "
+    "write into it. Judge against owner_request and checklist. Spend few tokens."
 )
 
 FRAMES_ADDENDUM = (
@@ -631,6 +632,10 @@ def build_user_prompt(inspect: dict[str, Any]) -> str:
     flags = inspect.get("flags") or {}
     compact_flags = {k: v for k, v in flags.items() if v}
     body = {
+        "slug": inspect.get("slug") or "",
+        "project_exists": bool(inspect.get("project_exists")),
+        "owner_request": inspect.get("owner_request") or "",
+        "checklist": inspect.get("checklist") or [],
         "kind": inspect.get("kind"),
         "playbook": inspect.get("playbook"),
         "scaffold": inspect.get("scaffold"),

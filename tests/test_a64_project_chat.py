@@ -321,7 +321,7 @@ def test_a_failed_or_stopped_turn_still_lists_what_it_wrote(project, monkeypatch
     monkeypatch.setattr("daedalus.agent.get_daedalus", lambda: Broken())
 
     async def go():
-        started = await chat_jobs.start_chat(message="m", session_id="s", project=project)
+        started = await chat_jobs.start_chat(message="make it red", session_id="s", project=project)
         task = chat_jobs._jobs[started["job_id"]]["task"]
         if how == "cancel":
             await asyncio.sleep(0.05)

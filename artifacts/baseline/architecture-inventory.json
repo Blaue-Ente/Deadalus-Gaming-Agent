@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-11T10:14:51.278319+00:00",
+  "generated_at": "2026-11-11T14:28:12.358145+00:00",
   "package_version": "0.3.8",
-  "git_commit": "70f9ec27a877d7598b33f6c65f7b41ef867c842d",
+  "git_commit": "d59575a0b6527203be0aa32fd41719f4bbed74d4",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -9,7 +9,7 @@
   "hotspots": [
     {
       "path": "daedalus/agent.py",
-      "lines": 4958,
+      "lines": 4983,
       "broad_excepts": 160
     },
     {
@@ -19,8 +19,8 @@
     },
     {
       "path": "daedalus/native_tools.py",
-      "lines": 2234,
-      "broad_excepts": 22
+      "lines": 2267,
+      "broad_excepts": 23
     },
     {
       "path": "daedalus/identity.py",
@@ -34,8 +34,8 @@
     },
     {
       "path": "daedalus/build_loop.py",
-      "lines": 645,
-      "broad_excepts": 3
+      "lines": 656,
+      "broad_excepts": 4
     },
     {
       "path": "daedalus/tdd_loop.py",
@@ -130,8 +130,8 @@
     ]
   },
   "tests": {
-    "modules": 116,
-    "functions": 1344
+    "modules": 119,
+    "functions": 1368
   },
   "modules": {
     "daedalus": [
@@ -280,6 +280,7 @@
       "daedalus/mentor.py",
       "daedalus/mentor_graph.py",
       "daedalus/mentor_helm.py",
+      "daedalus/mentor_lead.py",
       "daedalus/mesh_jobs.py",
       "daedalus/mesh_tools.py",
       "daedalus/mirofish_client.py",
@@ -364,6 +365,7 @@
       "daedalus/proc.py",
       "daedalus/production_layer.py",
       "daedalus/profiler.py",
+      "daedalus/project_chat_intent.py",
       "daedalus/project_status.py",
       "daedalus/protocols.py",
       "daedalus/quality_gate.py",
