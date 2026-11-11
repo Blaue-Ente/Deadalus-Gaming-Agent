@@ -73,6 +73,7 @@ PANELS: dict[str, tuple[str, str, str]] = {
     "panel:settings/engines": ("Settings: engine binaries and proof levels", "planned", "A5, A6.1"),
     "panel:chat/attachments": ("Chat: documents and project chat", "implemented", "documents: chat attachments; blocking chat: chat jobs; A6.4: project chat with a revertible record of the turn's file changes"),
     "panel:build/controls": ("Build: autopilot controls, Unity, presets, dissect", "implemented", "A6.3a: pause/resume, continue, plan create/expand/clear, Full Auto M0→M8; A6.3b: Unity init/attach/build scripts and presets (ship menu), Unity/proof waivers, dissection and labs (World rail)"),
+    "panel:preview/ship-requests": ("Preview: requests from Daedalus to publish or push", "implemented", "A7: the brain asks; the owner runs or declines"),
     "panel:preview/apps": ("Preview: app data editor and tunnel", "implemented", "A6.3c app data editor; A6.5c Expo tunnel with QR (run with tunnel), published apps, workspace backup"),
     "panel:rail/git": ("Project git menu: browse and status", "implemented", "A6.3c: connections, GitHub repos/branches, GitLab projects, compat check"),
 }
@@ -85,7 +86,6 @@ SETTINGS: dict[str, tuple[str, str]] = {
     "setting:language": ("Language EN/BG (client state)", "implemented"),
     "setting:brain": ("Brain provider and model", "partial"),
     "setting:intents": ("Per-intent model overrides", "planned"),
-    "panel:preview/ship-requests": ("Preview: requests from Daedalus to publish or push", "implemented"),
 }
 
 WORKFLOWS: dict[str, tuple[str, str]] = {

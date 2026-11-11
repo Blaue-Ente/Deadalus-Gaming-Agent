@@ -305,6 +305,90 @@ def test_the_owner_resolves_a_request_and_the_brain_cannot(slug, a0_tmp):  # noq
     assert client.get("/api/v1/harness/ship-requests?status=pending").json()["requests"] == []
 
 
+# ---- review fixes (A7 code review, 2026-11-11) -----------------------------------------------------------------------
+
+def test_tools_that_write_or_run_need_their_permission_and_a_revoke_blocks_them(slug, monkeypatch):
+    from daedalus.native_tools import PERM_MAP
+
+    assert PERM_MAP["milestones"] == "write_file" and PERM_MAP["preview"] == "run_command" and PERM_MAP["play"] == "run_command"
+    assert PERM_MAP["runs"] is None and PERM_MAP["ship_request"] is None
+    started = []
+
+    async def start(*a, **k):
+        started.append(a)
+        return {"status": "running"}
+
+    monkeypatch.setattr("daedalus.playground_runner.start", start)
+    monkeypatch.setattr("daedalus.outbox.check_permission", lambda cls: cls not in ("run_command", "write_file"))
+    for name, args in (("preview", {"action": "run", "slug": slug}), ("milestones", {"action": "verify", "slug": slug}),
+                       ("play", {"action": "start", "slug": slug})):
+        out = _call(name, args)
+        assert "OK ──" not in out.split("\n", 1)[0], (name, out[:200])
+    assert started == []
+
+
+def test_offline_mode_refuses_installs_and_full_auto_keeps_its_preview_and_config(slug, monkeypatch):
+    started = []
+
+    async def start(*a, **k):
+        started.append(k)
+        return {"status": "running"}
+
+    monkeypatch.setattr("daedalus.playground_runner.start", start)
+    monkeypatch.setattr("daedalus.offline.enabled", lambda: True)
+    out = _call("preview", {"action": "run", "slug": slug, "install_deps": True})
+    assert "FAILED" in out and "offline" in out and started == []
+    monkeypatch.setattr("daedalus.offline.enabled", lambda: False)
+    monkeypatch.setattr("daedalus.harness.full_auto.owns", lambda s: True)
+    for name, args in (("preview", {"action": "stop", "slug": slug}), ("preview", {"action": "run", "slug": slug}),
+                       ("milestones", {"action": "gates", "slug": slug}), ("milestones", {"action": "state", "slug": slug})):
+        assert "full_auto_running" in _call(name, args), args
+    assert started == []
+
+
+def test_play_input_is_bounded_and_idle_sessions_are_reaped(slug, monkeypatch):
+    from daedalus.harness import brain_tools
+
+    mgr = _FakeManager()
+    reaped = []
+    mgr.reap_idle = lambda: reaped.append(1) or []
+    monkeypatch.setattr(brain_tools, "_play_manager", lambda: mgr)
+    monkeypatch.setattr(brain_tools, "_manager", mgr)
+    too_many = _call("play", {"action": "input", "id": "s1", "keys": ["a"] * 33})
+    assert "FAILED" in too_many and "32 keys" in too_many and mgr.session.sent == []
+    sent = []
+    mgr.session.send = lambda **kw: sent.append(kw) or {"ok": True, "sent": []}
+    _call("play", {"action": "input", "id": "s1", "keys": ["a"], "hold_ms": 600000})
+    assert sent[0]["hold_ms"] == 5000
+    assert len(reaped) >= 2                                  # every play call sweeps idle sessions
+    assert brain_tools.reap_play_sessions() == 0
+
+
+def test_pending_requests_are_never_evicted_and_asking_again_does_not_stack(slug, monkeypatch):
+    from daedalus.harness import brain_tools
+
+    monkeypatch.setattr(brain_tools, "_SHIP_KEEP", 3)
+    first = _json(_call("ship_request", {"action": "request", "slug": slug, "kind": "local", "note": "a"}))["request"]
+    again = _json(_call("ship_request", {"action": "request", "slug": slug, "kind": "local", "note": "b"}))
+    assert again["request"]["id"] == first["id"] and "Already asked" in again["note"]
+    _call("ship_request", {"action": "request", "slug": slug, "kind": "live"})
+    _call("ship_request", {"action": "request", "slug": slug, "kind": "push"})
+    full = _call("ship_request", {"action": "request", "slug": slug, "kind": "local"})   # same as first: returned, not refused
+    assert "Already asked" in full
+    rows = brain_tools.list_ship_requests(status="pending")
+    assert {r["kind"] for r in rows} == {"local", "live", "push"} and first["id"] in {r["id"] for r in rows}
+    brain_tools.resolve_ship_request(first["id"], "declined")
+    brain_tools._ship_save(brain_tools._ship_load())
+    assert len(brain_tools.list_ship_requests()) == 3                            # answered ones go first, pending stay
+
+
+def test_the_ship_requests_panel_is_a_panel_in_the_registry(a0_tmp):  # noqa: F811
+    from daedalus.harness.registry import build_registry
+
+    cap = {c.id: c for c in build_registry()}["panel:preview/ship-requests"]
+    assert cap.kind == "panel" and cap.status == "implemented"
+
+
 # ---- Studio: the owner answers the requests with real clicks ----------------------------------------------------------
 
 from test_a61c_maintenance import _dialogs  # noqa: E402
@@ -356,6 +440,11 @@ def test_the_owner_runs_a_request_with_the_studios_own_button_and_declines_anoth
             page.locator(run).click()
             page.wait_for_function("() => document.getElementById('preview-status').textContent === 'Harness check'")
             assert publishes == ["POST"] and "Local copy" in asked[1]
+            page.locator("#git-menu summary").click()                       # a push needs the git menu's button
+            page.evaluate("() => { document.getElementById('git-push').disabled = true; }")   # it cannot run now
+            page.locator(f"#ship-requests-list [data-id='{push['id']}'] button[data-act='run']").click()
+            page.wait_for_function("() => document.getElementById('ship-requests-status').textContent.includes('Nothing was approved')")
+            assert _api(studio_server, "GET", "/api/v1/harness/ship-requests?status=pending")["requests"][0]["id"] == push["id"]
             page.locator(f"#ship-requests-list [data-id='{push['id']}'] button[data-act='decline']").click()
             page.wait_for_function("() => document.getElementById('ship-requests-status').textContent.includes('Declined')")
             assert page.locator("#ship-requests-list .item").count() == 0

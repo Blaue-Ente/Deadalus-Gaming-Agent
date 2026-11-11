@@ -3326,12 +3326,17 @@
         return true;
       };
       runBtn.addEventListener("click", async () => {
+        const target = $(SHIP_BUTTON[req.kind]);
+        // Approve only what can run now: a missing or disabled button would leave an approval with nothing behind it.
+        if (!target || target.disabled || req.slug !== dx.getSlug()) {
+          showStatus("ship-requests-status", dx.t("studio.shipReqCannot", { kind: kindLabel }), true);
+          return;
+        }
         if (!window.confirm(dx.t("studio.shipReqRunConfirm", { kind: kindLabel, slug: req.slug }))) return;
         if (!(await answer("approved"))) return;
         showStatus("ship-requests-status", dx.t("studio.shipReqStarted", { kind: kindLabel }), false);
         if (req.kind === "push") { const menu = $("git-menu"); if (menu) menu.open = true; }
-        const target = $(SHIP_BUTTON[req.kind]);
-        if (target) target.click();                  // the Studio's own action, with its own questions
+        target.click();                              // the Studio's own action, with its own questions
       });
       noBtn.addEventListener("click", async () => {
         if (await answer("declined")) showStatus("ship-requests-status", dx.t("studio.shipReqDeclined"), false);

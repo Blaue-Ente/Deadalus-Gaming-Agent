@@ -133,7 +133,17 @@ SPECS: tuple[dict[str, Any], ...] = (
 )
 
 NAMES = frozenset(s["name"] for s in SPECS)
-PERMS: dict[str, str | None] = {name: None for name in NAMES}
+# What a tool can do decides its permission class (checked by before_tool_call, like every native tool):
+# verify and advance rewrite project files (verify runs repair attempts); preview and play start processes.
+# In a Playground build these classes are granted by default and stay revocable; runs and ship requests only read
+# or record.
+PERMS: dict[str, str | None] = {
+    "milestones": "write_file",
+    "preview": "run_command",
+    "play": "run_command",
+    "runs": None,
+    "ship_request": None,
+}
 META: dict[str, dict[str, Any]] = {
     "milestones": {"module": "daedalus.harness.brain_tools", "tags": ("game", "studio", "verify", "milestone"),
                    "when": "Check gates, verify a milestone, or advance when the checks allow it"},
@@ -201,6 +211,7 @@ async def _milestones(args: dict[str, Any]) -> dict[str, Any]:
 
     action = _action(args, ("state", "gates", "verify", "advance"))
     slug = _slug(args)
+    _refuse_if_full_auto(slug)              # gates and state also write the project config Full Auto is writing
     try:
         if action == "state":
             ctx = await game_studio.get_workspace_context(slug)
@@ -209,7 +220,6 @@ async def _milestones(args: dict[str, Any]) -> dict[str, Any]:
             ids = args.get("gates")
             res = await game_studio.run_project_gates(slug, gate_ids=ids if isinstance(ids, list) else None)
             return _ok(slug=slug, **(res or {}))
-        _refuse_if_full_auto(slug)
         if action == "verify":
             from .. import game_studio_verify
 
@@ -248,6 +258,12 @@ async def _preview(args: dict[str, Any]) -> dict[str, Any]:
         tail = max(1, min(400, int(args.get("tail") or 80)))
         return _ok(slug=slug, logs=runner.logs(slug, tail=tail), status=_public_run(runner.status(slug)))
     proj = await _need_project(slug)
+    _refuse_if_full_auto(slug)              # its verify uses this server: the brain must not stop or restart it
+    if action == "run" and args.get("install_deps"):
+        from .. import offline
+
+        if offline.enabled():
+            raise ToolRefused("offline", "offline mode is on: installing dependencies needs the network")
     if action == "stop":
         return _ok(slug=slug, stopped=bool(await runner.stop(slug)))
     from ..playground_runtime import is_local_only_kind, local_only_kind_message
@@ -287,8 +303,26 @@ def stop_play_sessions() -> int:
         return 0
 
 
+def reap_play_sessions() -> int:
+    """Stop sessions the brain left idle (the server's reaper calls this; so does every play call)."""
+    if _manager is None:
+        return 0
+    try:
+        return len(_manager.reap_idle() or [])
+    except Exception:
+        return 0
+
+
+def _bounded(value: Any, low: int, high: int, default: int) -> int:
+    try:
+        return max(low, min(high, int(value)))
+    except (TypeError, ValueError):
+        return default
+
+
 def _play_sync(args: dict[str, Any], action: str, project_dir: Any) -> dict[str, Any]:
     mgr = _play_manager()
+    reap_play_sessions()
     if action == "list":
         return _ok(sessions=mgr.list())
     if action == "start":
@@ -307,10 +341,13 @@ def _play_sync(args: dict[str, Any], action: str, project_dir: Any) -> dict[str,
         return {k: v for k, v in res.items() if k != "path"}
     if action == "input":
         mouse = args.get("mouse") if isinstance(args.get("mouse"), dict) else None
-        keys = [str(k) for k in (args.get("keys") or [])] if isinstance(args.get("keys"), list) else None
-        return sess.send(keys=keys, mouse=mouse, hold_ms=int(args.get("hold_ms") or 80), via=str(args.get("via") or "os"))
+        keys = [str(k)[:32] for k in (args.get("keys") or [])] if isinstance(args.get("keys"), list) else None
+        if keys and len(keys) > 32:            # the worker's HTTP API has the same limit
+            raise ToolRefused("bad_request", "at most 32 keys per input")
+        return sess.send(keys=keys, mouse=mouse, hold_ms=_bounded(args.get("hold_ms"), 0, 5000, 80),
+                         via=str(args.get("via") or "os"))
     if action == "wait":
-        return sess.wait(frames=int(args.get("frames") or 0), ms=int(args.get("ms") or 0))
+        return sess.wait(frames=_bounded(args.get("frames"), 0, 600, 0), ms=_bounded(args.get("ms"), 0, 10000, 0))
     if action == "state":
         return sess.game_state(str(args.get("path") or ""))
     return sess.errors()
@@ -358,6 +395,41 @@ async def _runs(args: dict[str, Any]) -> dict[str, Any]:
 
 # ---- ship requests --------------------------------------------------------------------------------------------------
 
+class _ShipLock:
+    """The ship list is one JSON value that the brain (maybe in another process) and the Studio both update:
+    the read-modify-write holds this thread lock and, where the platform has it, a file lock beside the KV data."""
+
+    def __enter__(self):
+        _ship_lock.acquire()
+        self._fh = None
+        try:
+            import fcntl
+
+            from ..paths import data_root
+
+            path = data_root() / "kv" / "ship_requests.lock"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            self._fh = open(path, "a+")
+            fcntl.flock(self._fh, fcntl.LOCK_EX)
+        except ImportError:                    # Windows: one server process, the thread lock is the guard
+            self._fh = None
+        except Exception:
+            if self._fh:
+                self._fh.close()
+            self._fh = None
+        return self
+
+    def __exit__(self, *exc):
+        try:
+            if self._fh:
+                import fcntl
+
+                fcntl.flock(self._fh, fcntl.LOCK_UN)
+                self._fh.close()
+        finally:
+            _ship_lock.release()
+
+
 def _ship_load() -> list[dict[str, Any]]:
     from .. import kv
 
@@ -368,7 +440,12 @@ def _ship_load() -> list[dict[str, Any]]:
 def _ship_save(rows: list[dict[str, Any]]) -> None:
     from .. import kv
 
-    kv.set(_SHIP_KEY, rows[-_SHIP_KEEP:])
+    # Pending requests are never dropped; only the oldest answered ones go when the list grows.
+    pending = [r for r in rows if r.get("status") == "pending"]
+    answered = [r for r in rows if r.get("status") != "pending"]
+    keep_answered = answered[-max(0, _SHIP_KEEP - len(pending)):] if len(pending) < _SHIP_KEEP else []
+    keep = {id(r) for r in pending + keep_answered}
+    kv.set(_SHIP_KEY, [r for r in rows if id(r) in keep])
 
 
 def list_ship_requests(*, slug: str = "", status: str = "") -> list[dict[str, Any]]:
@@ -381,10 +458,11 @@ def list_ship_requests(*, slug: str = "", status: str = "") -> list[dict[str, An
 
 
 def resolve_ship_request(req_id: str, outcome: str) -> dict[str, Any]:
-    """The owner's answer (Studio route only): approved means the owner ran the Studio's own action for it."""
+    """The owner's answer (Studio route only). ``approved`` means the owner chose to run it with the Studio's own button;
+    that action asks its own questions and shows its own result, which this record does not claim."""
     if outcome not in ("approved", "declined"):
         return {"ok": False, "error": "bad_outcome"}
-    with _ship_lock:
+    with _ShipLock():
         rows = _ship_load()
         row = next((r for r in rows if r.get("id") == req_id), None)
         if row is None:
@@ -406,11 +484,16 @@ async def _ship(args: dict[str, Any], session_id: str) -> dict[str, Any]:
     if kind not in SHIP_KINDS:
         raise ToolRefused("bad_kind", "kind must be " + " | ".join(SHIP_KINDS))
     await _need_project(slug)
-    row = {"id": "ship-" + uuid.uuid4().hex[:10], "slug": slug, "kind": kind,
-           "note": str(args.get("note") or "")[:500], "status": "pending", "created_at": time.time(),
-           "session_id": str(session_id or "")[:80]}
-    with _ship_lock:
+    with _ShipLock():
         rows = _ship_load()
+        same = next((r for r in rows if r.get("status") == "pending" and r.get("slug") == slug and r.get("kind") == kind), None)
+        if same is not None:                   # asking again does not stack up requests for the owner
+            return _ok(request=same, note="Already asked; the owner has not answered yet. Nothing was published.")
+        if sum(1 for r in rows if r.get("status") == "pending") >= _SHIP_KEEP:
+            raise ToolRefused("too_many_pending", "too many requests wait for the owner; ask again after they answer")
+        row = {"id": "ship-" + uuid.uuid4().hex[:10], "slug": slug, "kind": kind,
+               "note": str(args.get("note") or "")[:500], "status": "pending", "created_at": time.time(),
+               "session_id": str(session_id or "")[:80]}
         rows.append(row)
         _ship_save(rows)
     return _ok(request=row, note="Recorded. The owner confirms or declines it in the Studio; nothing was published.")
