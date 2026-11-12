@@ -68,6 +68,10 @@ def compact(ev: dict[str, Any]) -> dict[str, Any] | None:
         row.update({"mode": p.get("mode"), "frames": int(p.get("frames") or 0), "players": int(p.get("players") or 0),
                     "would_quit": int(p.get("would_quit") or 0), "quotes": _strs(p.get("quotes"), 3, 200),
                     "fixes": _strs(p.get("fixes"), 3, 200)})
+        goals = p.get("goals") if isinstance(p.get("goals"), dict) else None
+        if goals:                                # a goal-directed session (goal_play)
+            row["goals"] = {"turns": int(goals.get("turns") or 0), "reached": _strs(goals.get("reached"), 6, 80),
+                            "missed": _strs(goals.get("missed"), 6, 80)}
     elif kind == "project_tests":
         row.update({"ok": bool(p.get("ok")), "ran": bool(p.get("ran")), "passed": int(p.get("passed") or 0),
                     "failed": int(p.get("failed") or 0), "failures": _strs(p.get("failures"), 4, 160),

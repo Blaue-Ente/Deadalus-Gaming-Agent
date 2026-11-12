@@ -360,15 +360,11 @@ _INTERACTIVE_AT = """([x, y]) => {
 }"""
 
 
-async def play_frames(slug: str, kind: str = "static") -> tuple[list[dict[str, Any]], list[str]]:
-    """Frames the lead can judge a game by: the start screen, then a few seconds of play after pressing start keys.
-
-    The kernel's proof frame is the first paint (often a title screen); found live, the lead could not see a single
-    platform. Web projects with an index.html only; anything else returns no frames (the stored proof frames are used).
-    """
+def playable_dir(slug: str, kind: str = "static") -> Path | None:
+    """The folder that is the game as it is now (served as-is in a browser), or None."""
     root = _project_root(slug)
     if root is None:
-        return [], []
+        return None
     if kind in {"vite", "vite-react", "phaser"}:
         # Only a build of the current source is the game: raw /src is not runnable, an old dist is an old game.
         dist = root / "dist" / "index.html"
@@ -378,13 +374,23 @@ async def play_frames(slug: str, kind: str = "static") -> tuple[list[dict[str, A
         except Exception:
             fresh = False
         if not fresh:
-            return [], []
+            return None
         serve_dir = root / "dist"
     elif kind in {"static", "", "html"}:
         serve_dir = root
     else:
-        return [], []
-    if not (serve_dir / "index.html").is_file():
+        return None
+    return serve_dir if (serve_dir / "index.html").is_file() else None
+
+
+async def play_frames(slug: str, kind: str = "static") -> tuple[list[dict[str, Any]], list[str]]:
+    """Frames the lead can judge a game by: the start screen, then a few seconds of play after pressing start keys.
+
+    The kernel's proof frame is the first paint (often a title screen); found live, the lead could not see a single
+    platform. Web projects with an index.html only; anything else returns no frames (the stored proof frames are used).
+    """
+    serve_dir = playable_dir(slug, kind)
+    if serve_dir is None:
         return [], []
     try:
         from playwright.async_api import async_playwright
@@ -583,26 +589,31 @@ async def audience_gate(loop: Any, request: str) -> str | None:
     kind = str(getattr(loop, "kind", "") or "static")
     if not slug or kind not in {"static", "", "html", "vite", "vite-react", "phaser"} or not is_game(loop, request):
         return None
-    try:
-        from .task_effort import current
-        if str((current() or {}).get("tier") or "") == "whisper":
-            return None
-    except Exception:
-        pass
+    from .task_effort import current
+
+    tier = str((current() or {}).get("tier") or "")
+    if tier == "whisper":
+        return None
     from .playtest import gateway_see, run_playtest
 
+    session = None
+    if tier == "epic":       # gap 5: a longer, goal-directed session (one model call a turn) instead of the script
+        from .goal_play import goal_play
+        session = await goal_play(slug, kind, see=gateway_see)
+        if not session.get("frames"):
+            session = None
     frames = getattr(loop, "lead_play_frames", None)          # what the lead just played, on this exact build
-    if frames is None:
+    if frames is None and session is None:
         frames = await play_frames(slug, kind)
-    if not frames[0]:
+    if session is None and not frames[0]:
         return None                                           # no play frames: no audience, and no calls spent
     try:
-        report = await run_playtest(slug, kind=kind, n=4, see_fn=gateway_see, frames=frames)
+        report = await run_playtest(slug, kind=kind, n=4, see_fn=gateway_see, frames=frames, session=session)
     except Exception:
         log.warning("audience test for %s failed", slug, exc_info=True)
         return None
     keep = not report.get("many_quit")       # the players' verdict, not the source heuristics (review 2026-11-12)
-    loop.audience = {**{k: report.get(k) for k in ("mode", "summary", "quotes", "fixes", "saw_frames")},
+    loop.audience = {**{k: report.get(k) for k in ("mode", "summary", "quotes", "fixes", "saw_frames", "goals")},
                      "ship_ready": keep}
     if report.get("mode") != "played" or keep:
         loop.audience_passed = report.get("mode") == "played"
@@ -614,8 +625,13 @@ async def audience_gate(loop: Any, request: str) -> str | None:
     loop.lead_accepted = False                # accepted again only after the fix is reviewed
     quotes = "\n".join(f"- {q}" for q in (report.get("quotes") or [])[:4])
     fixes = "\n".join(f"- {f}" for f in (report.get("fixes") or [])[:4])
+    goals = report.get("goals") or {}
+    goal_line = (f"In a {goals.get('turns')}-turn goal session the player never managed: "
+                 + "; ".join(goals["missed"]) + "\n") if goals.get("missed") else ""
+    if goals.get("errors"):
+        goal_line += "JavaScript errors while playing: " + "; ".join(goals["errors"]) + "\n"
     return ("━━━ AUDIENCE TEST: NOT YET ━━━\n"
-            f"{report.get('summary')}\n"
+            f"{report.get('summary')}\n{goal_line}"
             "Simulated players just played the game (the frames you saw are what they saw). Most would quit.\n"
             f"What they said:\n{quotes or '- (no quotes)'}\n"
             f"What would keep them:\n{fixes or '- (no fixes)'}\n"

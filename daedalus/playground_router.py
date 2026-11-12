@@ -66,7 +66,9 @@ _SDK_TEMPLATE = """\
 
 def _inject_playground_scripts(html: str, slug: str) -> str:
     """Inject PlaygroundDB client + error reporter into an HTML string."""
-    script = _SDK_TEMPLATE.format(slug_json=_json.dumps(slug))
+    from .play_analytics import snippet
+
+    script = _SDK_TEMPLATE.format(slug_json=_json.dumps(slug)) + "\n" + snippet(slug)   # gap 5: real-player numbers
     for marker in ("<head>", "<HEAD>", "<html>", "<HTML>", "<body>", "<BODY>"):
         idx = html.find(marker)
         if idx != -1:
@@ -204,6 +206,32 @@ async def apps_menu():
          "description": a.get("description", ""), "url": f"/apps/{a['slug']}/"}
         for a in apps
     ])
+
+
+@router.post("/{slug}/analytics")
+async def app_analytics_record(slug: str, request: Request):
+    """One anonymous visit record from a published game (play_analytics). Public: players are not signed in."""
+    if not await _published_app(slug):
+        return JSONResponse({"ok": False, "error": "not a published app"}, status_code=404)
+    from . import play_analytics
+
+    raw = await request.body()
+    stored, reason = play_analytics.record(slug, raw)
+    if not stored:
+        code = {"too_large": 413, "rate_limited": 429}.get(reason, 400)
+        return JSONResponse({"ok": False, "error": reason}, status_code=code)
+    return JSONResponse({"ok": True})
+
+
+@router.get("/api/{slug}/analytics")
+async def app_analytics_summary(slug: str, request: Request):
+    """The owner's view of what real players did with a published game."""
+    from .host import current_user
+    if current_user(request) is None:
+        return JSONResponse({"ok": False, "error": "Sign in to /admin to see analytics."}, status_code=401)
+    from . import play_analytics
+
+    return JSONResponse({"ok": True, "slug": slug, **play_analytics.summary(slug)})
 
 
 @router.post("/api/{slug}/delete")
@@ -474,9 +502,8 @@ async def _serve(slug: str, path: str, request: Request) -> Response:
                 proxy_base=f"/apps/{slug}",
             )
         return HTMLResponse(
-            f"<h1>{meta['name']}</h1><p>Това е <b>{meta['kind']}</b> app — "
-            f"изисква активен runner (само в dev средата). Стартирай го от "
-            f"Playground панела.</p>", status_code=503,
+            f"<h1>{meta['name']}</h1><p>This is a <b>{meta['kind']}</b> app: it needs a running runner "
+            f"(development only). Start it from the Playground panel.</p>", status_code=503,
         )
 
     base = pub.app_dir(slug)
