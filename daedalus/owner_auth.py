@@ -214,6 +214,15 @@ def is_public_request(method: str, path: str) -> bool:
     return False
 
 
+_PROXY_HEADERS = ("x-forwarded-for", "forwarded", "x-real-ip", "fly-client-ip", "cf-connecting-ip",
+                  "true-client-ip", "x-forwarded-host")
+
+
+def came_through_proxy(headers: dict[str, str]) -> bool:
+    """A request a proxy or tunnel forwarded: from loopback by address, from anywhere in fact (review 2026-11-12)."""
+    return any(headers.get(h) for h in _PROXY_HEADERS)
+
+
 def extract_token(headers: dict[str, str], query: dict[str, list[str]], method: str) -> str:
     auth = headers.get("authorization") or ""
     if auth.lower().startswith("bearer "):
@@ -292,4 +301,6 @@ class OwnerAuthMiddleware:
         finally:
             team.unbind(bound)
             if method not in ("GET", "HEAD"):
-                team.audit(member, method, path, status[0] if status else None)
+                import asyncio
+
+                await asyncio.to_thread(team.audit, member, method, path, status[0] if status else None)

@@ -7,9 +7,14 @@ owner token) opened everything. Now:
   nothing.
 - The owner invites people. Each gets a personal token, shown once; only its SHA-256 is kept (``team.json`` in the
   data folder, owner-only file permissions). A person can be given another role or disabled at any time.
-- Roles, from most to least: ``owner`` (everything), ``designer`` (builds games: chat, files, previews, the build and
-  the audience test, never settings, keys, publishing, git, deleting, or running a cloned repo) and ``tester`` (reads
-  projects, plays them, runs the audience test and reads player numbers; changes no file).
+- Roles, from most to least: ``owner`` (everything), ``designer`` (builds games: chat, files, the build controls and
+  assets; never settings, keys, publishing, git, deleting, a cloned repo or the runner) and ``tester`` (reads
+  projects, runs and player numbers, and plays previews in their own browser; sends no change at all).
+- Trust, said plainly (review 2026-11-12): until projects run in a sandbox (gap 7), building a game makes Daedalus run
+  code on this machine (its tests with Node, an npm build, a Godot check), and a designer's words shape that code. A
+  designer must be someone the owner trusts with this machine. The agent's own tools are limited for designers
+  (``MEMBER_TOOLS``: no git, shell, MCP, database, publishing or runner), which keeps honest use inside the role; it
+  is not a sandbox. A tester causes nothing to run here.
 - Default deny: a route no rule below names is the owner's. ``tests/test_team.py`` walks every route of the app, so
   a new route is the owner's until someone decides otherwise here.
 - Every change (any method but GET/HEAD) is written to the audit log with who made it.
@@ -70,7 +75,6 @@ def unbind(token: contextvars.Token) -> None:
 # ── who may call what ────────────────────────────────────────────────────────────────────────────────────────────
 # (methods, path regex, lowest role). The first rule that matches decides; no match = owner only.
 _R = "GET|HEAD"
-_W = "POST|PUT|PATCH|DELETE"
 _PG = r"/admin/daedalus/playground/api"
 _P = r"/projects/[^/]+"
 RULES: tuple[tuple[str, str, str], ...] = (
@@ -93,15 +97,15 @@ RULES: tuple[tuple[str, str, str], ...] = (
     (_R, r"/api/v1/daedalus/(identity|effort|tools|tools/.*|playtest/personas)", "tester"),
     (_R, r"/api/v1/llm/status", "tester"),
     (_R, r"/apps/api/[^/]+/analytics", "tester"),
-    # the audience test
-    ("POST", r"/api/v1/daedalus/playtest", "tester"),
-    # building: chat, files, previews, the build controls, assets, the game studio
+    # building (the audience test included: it builds and plays the game on this machine)
+    ("POST", r"/api/v1/daedalus/playtest", "designer"),
+    # chat, files, the build controls, assets, the game studio
     ("POST", r"/api/v1/daedalus/chat(/attachments(/project)?|/jobs|/jobs/[^/]+/(cancel|revert))?", "designer"),
     ("POST", r"/admin/daedalus/chat", "designer"),
     ("POST", r"/api/v1/playground/projects", "designer"),
     ("POST", rf"/api/v1/playground{_P}/(assets/generate|assets/pipeline|autopilot)", "designer"),
     ("POST", rf"{_PG}/projects", "designer"),
-    ("POST", rf"{_PG}{_P}/(file|chat|chat/apply|diff-preview|run|stop|suggest|set-mode|backup-workspace|"
+    ("POST", rf"{_PG}{_P}/(file|chat|chat/apply|diff-preview|suggest|set-mode|backup-workspace|"
              r"autopilot|autopilot/(pause|resume|stop|clear-plan)|guided/(start|continue|stop)|plan/create|"
              r"plan/expand-ultra|assets/(generate|pipeline|auto-pack)|reference-scout)", "designer"),
     ("POST", rf"{_PG}/(game-studio/(brainstorm|gdd|start)|reference-scout|ai-gen-desc)", "designer"),
@@ -109,6 +113,33 @@ RULES: tuple[tuple[str, str, str], ...] = (
              r"expand))", "designer"),
 )
 _COMPILED = tuple((frozenset(m.split("|")), re.compile(rf"^{p}/?$"), role) for m, p, role in RULES)
+
+
+# The agent's tools a designer's turn may use: reading and writing the project, game knowledge and checks that run in
+# a browser, the audience test, web search. Everything else (git, shell, MCP, database, publishing, the runner and
+# play workers, sub-agents, cloning) stays the owner's. A tester starts no turn.
+MEMBER_TOOLS = frozenset({
+    "read_file", "list_dir", "code_search", "write_file", "edit_file", "game_canon", "game_lint", "math3d",
+    "spatial", "world", "milestones", "playtest", "mirofish", "web_search", "browser", "runs", "reach_status",
+    "list_endpoints", "list_modules", "remember", "generate_image", "assets", "playground_new",
+})
+
+
+def tool_allowed(name: str) -> tuple[bool, str]:
+    """May the person this turn runs for use the agent tool ``name``? The owner (or no request: a server task) may."""
+    member = current()
+    if member is None or member.role == "owner":
+        return True, ""
+    if member.role == "designer" and name in MEMBER_TOOLS:
+        return True, ""
+    return False, (f"The tool {name} is the owner's: {member.name} is a {member.role} in this team. "
+                   "Ask the owner to do this step.")
+
+
+def may_touch(started_by: str | None) -> bool:
+    """A job's cancel or revert: the owner, or the person who started it."""
+    member = current()
+    return member is None or member.role == "owner" or (bool(started_by) and member.id == started_by)
 
 
 def required_role(method: str, path: str) -> str:
@@ -133,24 +164,43 @@ def _file() -> Path:
     return data_root() / "team.json"
 
 
+class TeamFileError(RuntimeError):
+    """team.json exists but cannot be read: nothing is written over it (review 2026-11-12: an invite would have
+    replaced every member with one)."""
+
+
+_cache: dict[str, Any] = {"key": None, "data": None}
+
+
 def _load() -> dict[str, Any]:
+    """The members file, re-read only when it changed (the middleware calls this on every member request)."""
+    path = _file()
     try:
-        data = json.loads(_file().read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) and isinstance(data.get("members"), list) else {"members": []}
-    except (OSError, ValueError):
+        st = path.stat()
+    except FileNotFoundError:
         return {"members": []}
+    key = (str(path), st.st_mtime_ns, st.st_size)
+    if _cache["key"] == key:
+        return json.loads(json.dumps(_cache["data"]))           # a copy: callers may change it
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise TeamFileError(f"{path.name} cannot be read: {exc}") from exc
+    if not (isinstance(data, dict) and isinstance(data.get("members"), list)):
+        raise TeamFileError(f"{path.name} is not a members file")
+    _cache.update(key=key, data=data)
+    return json.loads(json.dumps(data))
 
 
 def _save(data: dict[str, Any]) -> None:
     path = _file()
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    try:
-        os.chmod(tmp, 0o600)
-    except OSError:
-        pass
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)     # owner-only from the first byte
+    with os.fdopen(fd, "w", encoding="utf-8") as fh:
+        fh.write(json.dumps(data, indent=2))
     os.replace(tmp, path)
+    _cache.update(key=None, data=None)
 
 
 def _hash(token: str) -> str:
@@ -218,7 +268,12 @@ def resolve(token: str) -> Member | None:
         return None
     digest = _hash(got)
     found = None
-    for row in _load()["members"]:
+    try:
+        rows = _load()["members"]
+    except TeamFileError:
+        log.error("team members file unreadable: member tokens refused until it is fixed", exc_info=True)
+        return None
+    for row in rows:
         if hmac.compare_digest(str(row.get("token_sha256") or ""), digest):
             found = _member(row)
     return found if found and not found.disabled else None

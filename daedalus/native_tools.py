@@ -1151,7 +1151,11 @@ def before_tool_call(
     tool_name: str, *, marker_name: str | None = None, args: dict[str, Any] | None = None,
 ) -> tuple[bool, str]:
     from .project_chat_intent import tool_refusal
+    from .team import tool_allowed
 
+    ok_for_member, why = tool_allowed(tool_name)          # gap 3: a designer's turn uses the designer's tools
+    if not ok_for_member:
+        return False, why
     refusal = tool_refusal(tool_name, args)
     if refusal:
         return False, refusal

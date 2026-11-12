@@ -23,7 +23,9 @@ class UpdateBody(BaseModel):
 
 @router.get("/me")
 async def me() -> dict:
-    member = team.current() or team.OWNER        # loopback without a token never reaches here (middleware)
+    member = team.current()
+    if member is None:                            # fail closed: only the middleware says who this is
+        raise HTTPException(status_code=401, detail="not signed in")
     return {"ok": True, **team.public(member), "roles": list(team.ROLES)}
 
 
@@ -36,10 +38,15 @@ async def list_members() -> dict:
 async def invite(body: InviteBody) -> dict:
     try:
         member, token = team.invite(body.name, body.role)
+    except team.TeamFileError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     # The token is shown once, here; only its hash is kept.
-    return {"ok": True, "member": team.public(member), "token": token, "shown_once": True}
+    trust = ("A designer's builds run code on this machine (tests, builds, game checks) until projects run in a "
+             "sandbox: invite only someone you trust with it." if member.role == "designer" else
+             "A tester reads and plays; nothing they do runs on this machine.")
+    return {"ok": True, "member": team.public(member), "token": token, "shown_once": True, "trust": trust}
 
 
 @router.post("/members/{member_id}")
@@ -48,6 +55,8 @@ async def update(member_id: str, body: UpdateBody) -> dict:
         member = team.update(member_id, role=body.role, disabled=body.disabled, name=body.name)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail="member_not_found") from exc
+    except team.TeamFileError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"ok": True, "member": team.public(member)}

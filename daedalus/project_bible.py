@@ -106,7 +106,7 @@ def log_turn(slug: str, request: str, loop: Any) -> bool:
     from .team import current as _member
 
     who = _member()
-    by = f" (by {who.name}, {who.role})" if who is not None and who.id != "owner" else ""
+    by = ("" if who is None else " (by Owner)" if who.id == "owner" else f" (by {who.name}, {who.role})")
     entry = [f"### {time.strftime('%Y-%m-%d %H:%M', time.gmtime())} UTC{by}: "
              f"{' '.join((request or '').split())[:140]}",
              f"- Result: {'; '.join(result) or 'built (no review ran)'}"]

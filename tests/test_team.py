@@ -63,7 +63,8 @@ def test_a_designer_builds_and_a_tester_plays():
     chat, file_w = ("POST", "/api/v1/daedalus/chat"), ("POST", "/admin/daedalus/playground/api/projects/frog/file")
     read, play = ("GET", "/api/v1/playground/projects/frog/file"), ("POST", "/api/v1/daedalus/playtest")
     assert all(team.allowed(designer, *c) for c in (chat, file_w, read, play))
-    assert team.allowed(tester, *read) and team.allowed(tester, *play)
+    assert team.allowed(tester, *read) and not team.allowed(tester, *play)   # a tester starts nothing on this host
+    assert not team.allowed(designer, "POST", "/admin/daedalus/playground/api/projects/frog/run")
     assert not team.allowed(tester, *chat) and not team.allowed(tester, *file_w)
     assert not team.allowed(team.Member("t", "Tee", "tester", disabled=True), *read)
     assert team.allowed(team.OWNER, "POST", "/anything/new")
@@ -149,4 +150,90 @@ def test_the_bible_says_who_asked(a0_tmp):  # noqa: F811
         team.unbind(tok)
     bible.log_turn(slug, "faster frog", types.SimpleNamespace())
     text = bible.path(slug).read_text()
-    assert "(by Dee, designer): add lives" in text and "UTC: faster frog" in text
+    assert "(by Dee, designer): add lives" in text and "UTC: faster frog" in text      # no request: a server task
+
+
+# ── review fixes, 2026-11-12 ─────────────────────────────────────────────────────────────────────────────────────
+def test_a_tester_can_send_no_change_at_all():
+    from daedalus.team import _COMPILED
+
+    assert all(methods <= {"GET", "HEAD"} for methods, _rx, role in _COMPILED if role == "tester")
+
+
+def test_a_designers_turn_uses_only_the_designers_tools():
+    from daedalus.native_tools import NATIVE_TOOL_SPECS, before_tool_call
+
+    names = {s["name"] for s in NATIVE_TOOL_SPECS}
+    assert team.MEMBER_TOOLS <= names                                  # no stale name
+    tok = team.bind(team.Member("d", "Dee", "designer"))
+    try:
+        for owner_only in ("git_forge", "run_command", "mcp_call", "postgres_query", "play_lab", "spawn_subagent",
+                           "ship_request", "preview", "play", "web_fetch", "dissect_game"):
+            ok, why = before_tool_call(owner_only)
+            assert not ok and "owner" in why and "Dee" in why, owner_only
+        assert before_tool_call("read_file")[0]
+    finally:
+        team.unbind(tok)
+    assert before_tool_call("git_forge", args={})[0] in (True, False)       # the owner: the usual gate decides
+    assert team.tool_allowed("git_forge") == (True, "")
+
+
+def test_only_the_starter_or_the_owner_cancels_or_reverts_a_job():
+    from daedalus import chat_jobs
+
+    chat_jobs._jobs["j1"] = {"id": "j1", "status": "done", "started_by": "d1", "task": None, "project": None,
+                             "changes": [], "cancelled": False}
+    try:
+        tok = team.bind(team.Member("d2", "Other", "designer"))
+        try:
+            with pytest.raises(PermissionError):
+                chat_jobs.cancel("j1")
+            assert chat_jobs.revert_change("j1", "a.js")["error"] == "not_yours"
+        finally:
+            team.unbind(tok)
+        tok = team.bind(team.Member("d1", "Dee", "designer"))
+        try:
+            assert chat_jobs.cancel("j1")
+        finally:
+            team.unbind(tok)
+        assert chat_jobs.cancel("j1")                                     # the owner / a server task
+    finally:
+        chat_jobs._jobs.pop("j1", None)
+
+
+def test_a_broken_members_file_is_never_overwritten(a0_tmp):  # noqa: F811
+    from daedalus.paths import data_root
+
+    team.invite("Dee", "designer")
+    path = data_root() / "team.json"
+    path.write_text("{ half written")
+    with pytest.raises(team.TeamFileError):
+        team.invite("Tee", "tester")
+    assert path.read_text() == "{ half written"
+    assert team.resolve("dt_anything") is None
+
+
+def test_the_owner_token_is_never_handed_to_a_forwarded_request(a0_tmp, raw_http):  # noqa: F811
+    from app.main import app
+
+    client = TestClient(app)
+    assert client.get("/api/v1/auth/bootstrap").status_code == 200
+    for header in ("X-Forwarded-For", "Forwarded", "X-Real-IP", "CF-Connecting-IP"):
+        res = client.get("/api/v1/auth/bootstrap", headers={header: "203.0.113.9"})
+        assert res.status_code == 403, header
+
+
+def test_the_invite_says_what_a_designer_can_cause(people):
+    client, owner, _made = people
+    res = client.post("/api/v1/team/members", json={"name": "Ann", "role": "designer"}, headers=owner).json()
+    assert "runs code on this machine" in res["trust"] or "run code on this machine" in res["trust"]
+
+
+def test_me_fails_closed_without_the_middleware():
+    from fastapi import FastAPI
+
+    from app.team_api import router
+
+    bare = FastAPI()
+    bare.include_router(router)
+    assert TestClient(bare).get("/api/v1/team/me").status_code == 401
