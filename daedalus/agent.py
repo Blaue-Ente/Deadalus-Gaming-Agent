@@ -1811,6 +1811,11 @@ class Daedalus:
                     _native_in = f"OWNER REQUEST (this turn):\n{_owner_words}\n\n{user_content}"
                 if _loop is not None and getattr(_loop, "lead_plan", None):
                     _native_in = _lead.plan_block(_loop.lead_plan) + "\n\n" + _native_in
+                if _loop is not None and getattr(_loop, "slug", ""):
+                    from .project_bible import text as _bible_text
+                    _bible = _bible_text(_loop.slug, max_chars=2000)
+                    if _bible:          # the game's bible: what earlier sessions decided and left open
+                        _native_in = ("━━━ PROJECT BIBLE (earlier sessions) ━━━\n" + _bible + "\n\n" + _native_in)
                 _native_text, _native_log = await run_native_discovery_pass(
                     _nt_sys,
                     _native_in[:12000],

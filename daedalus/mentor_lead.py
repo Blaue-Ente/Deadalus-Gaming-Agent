@@ -292,6 +292,11 @@ async def _kickoff(request: str, *, slug: str = "", kind: str = "") -> dict[str,
     files = await asyncio.to_thread(project_files, slug)
     user = (f"OWNER REQUEST:\n{request}\n\nPROJECT: {slug or '(new)'} · kind {kind or 'unknown'}\n"
             "FILES NOW: " + (", ".join(f"{p} ({n} B)" for p, n in files) or "(none)"))
+    from .project_bible import text as bible_text
+    bible = await asyncio.to_thread(bible_text, slug) if slug else ""
+    if bible:   # earlier sessions: plan this turn as the next step of that game, not a new one (2026-11-12)
+        user += ("\n\nPROJECT BIBLE (kept across sessions; continue from it, do not contradict it unless the owner "
+                 "asks; its session log says what is still open):\n" + bible)
     try:
         data, meta = await asyncio.wait_for(
             _ask(PLAN_SYSTEM, user, max_tokens=PLAN_MAX_OUT, client_id="daedalus/mentor-plan"),

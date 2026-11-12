@@ -2336,6 +2336,9 @@ async def run_native_discovery_pass(
                 if block:
                     all_results.append(block)
             _mentor_record_outcome(loop)
+            if loop is not None:
+                from .project_bible import record_turn          # the next session starts from this one
+                await asyncio.to_thread(record_turn, loop, str(getattr(loop, "user_message", "") or ""))
             if all_results:
                 combined = (
                     "━━━ NATIVE TOOL RESULTS ━━━\n"
