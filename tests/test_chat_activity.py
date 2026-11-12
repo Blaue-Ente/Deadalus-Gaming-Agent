@@ -131,3 +131,13 @@ def test_a_text_tool_call_never_reaches_the_owner_and_self_review_is_an_activity
     assert strip_text_tool_calls('Done. <tool_call name="x">{"a": 1}') == "Done."
     row = activity.compact({"seq": 9, "ts": 1.0, "type": "self_review", "payload": {"issue": "no playtest", "fix": "run it"}})
     assert row == {"seq": 9, "ts": 1.0, "type": "self_review", "issue": "no playtest", "fix": "run it"}
+
+
+def test_a_bare_named_tool_call_line_is_stripped_but_prose_is_kept():
+    from daedalus.agent import strip_text_tool_calls
+
+    reply = ('I will check it in a browser before I call it done.\n\n\n<br>\n\n\n'
+             'browser({"action": "goto", "slug": "frog-hop",\n "url": "http://localhost/x"})\n')
+    assert strip_text_tool_calls(reply) == "I will check it in a browser before I call it done."
+    prose = "Use the browser (it opens the game) and write_file to save."
+    assert strip_text_tool_calls(prose) == prose

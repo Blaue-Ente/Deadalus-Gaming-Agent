@@ -530,9 +530,25 @@ def _self_improve_audit_log() -> "Path":
 _TEXT_TOOL_CALL = re.compile(r"<tool_call\b[^>]*>.*?(?:</tool_call>|$)", re.DOTALL)
 
 
+_NAMED_CALL: re.Pattern[str] | None = None
+
+
 def strip_text_tool_calls(raw: str) -> str:
-    """A tool call written as text never ran (live 2026-11-12: "<tool_call name=playtest>" reached the owner)."""
-    return _TEXT_TOOL_CALL.sub("", raw or "").strip()
+    """A tool call written as text never ran (live 2026-11-12: "<tool_call name=playtest>" and a bare line
+    "browser({...})" reached the owner). Only real native tool names followed by ``({`` are removed, never prose."""
+    global _NAMED_CALL
+    if _NAMED_CALL is None:
+        try:
+            from .native_tools import NATIVE_TOOL_SPECS
+            names = sorted({str(t.get("name")) for t in NATIVE_TOOL_SPECS if t.get("name")}, key=len, reverse=True)
+        except Exception:
+            names = []
+        alt = "|".join(re.escape(n) for n in names) or "(?!)"
+        _NAMED_CALL = re.compile(r"^[ \t]*(?:" + alt + r")\(\{[\s\S]*?\}\)[ \t]*$", re.MULTILINE)
+    text = _TEXT_TOOL_CALL.sub("", raw or "")
+    text = _NAMED_CALL.sub("", text)
+    text = re.sub(r"(?m)^[ \t]*<br\s*/?>[ \t]*$", "", text)
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 
 def _read_file_tool(raw_path: str, line_start: int | None = None, line_end: int | None = None) -> dict:

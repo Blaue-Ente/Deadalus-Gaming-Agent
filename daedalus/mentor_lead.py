@@ -324,7 +324,10 @@ def plan_block(plan: dict[str, Any] | None) -> str:
 
 # ── review ──────────────────────────────────────────────────────────────────
 
-PLAY_SCRIPT = (("Enter", 0), ("click", 0), ("Space", 0), ("ArrowRight", 900), ("Space", 0), ("ArrowRight", 700),
+# "shot" takes a frame mid-play. Up hops matter too: found live, a crossing game's frog never moved under a
+# platformer-only script, so the lead judged scoring and lives from the code alone.
+PLAY_SCRIPT = (("Enter", 0), ("click", 0), ("Space", 0), ("ArrowUp", 0), ("ArrowUp", 0), ("ArrowUp", 0),
+               ("shot", 0), ("ArrowRight", 900), ("Space", 0), ("ArrowUp", 0), ("ArrowUp", 0), ("ArrowRight", 700),
                ("ArrowLeft", 500))
 
 
@@ -373,6 +376,9 @@ async def play_frames(slug: str, kind: str = "static") -> tuple[list[dict[str, A
                 await page.wait_for_timeout(1200)
                 shots.append(await page.screenshot(type="png"))
                 for key, hold in PLAY_SCRIPT:
+                    if key == "shot":
+                        shots.append(await page.screenshot(type="png"))
+                        continue
                     if key == "click":
                         await page.mouse.click(480, 320)
                     elif hold:
