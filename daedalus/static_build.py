@@ -8,6 +8,7 @@ nuxt, remix, socket.io) have no static plan: they need a running server, not a s
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
@@ -109,12 +110,25 @@ def _newest_source(root: Path) -> float:
     return newest
 
 
+_ROOT_ABSOLUTE = re.compile(r"""(?:src|href)\s*=\s*["']/(?!/)""", re.I)
+
+
+def relative_assets(folder: Path) -> bool:
+    """The built page loads its own files relatively, so it works under /apps/<slug>/ (not from the site root)."""
+    try:
+        return not _ROOT_ABSOLUTE.search((folder / "index.html").read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        return False
+
+
 def fresh_output(root: Path) -> Path | None:
-    """A built folder newer than every source file: this exact code is already built (no second npm install)."""
+    """A built folder newer than every source file, with relative assets: this exact code is already built for
+    /apps/<slug>/ (no second install; review 2026-11-12: an older root-absolute build is not reused)."""
     p = plan(root)
     if not p:
         return None
-    return find_output(root, p["outputs"], since=_newest_source(root))
+    out = find_output(root, p["outputs"], since=_newest_source(root))
+    return out if out is not None and relative_assets(out) else None
 
 
 # Real stack frames only: "at fn (file:1:2)", "at file:1:2", "at async fn (…)", node internals. Indented prose
@@ -180,16 +194,43 @@ def legacy_openssl_env(env: dict[str, str], root: Path) -> dict[str, str]:
     return env
 
 
-def _relative_base_args(root: Path, p: dict[str, Any], manager: str) -> tuple[str, ...]:
-    """Vite with relative assets (the site is served under /apps/<slug>/). Only for a plain ``vite build`` script:
-    in a chained script the flag would reach the last command, not vite. npm needs ``--`` to pass it on; pnpm and
-    yarn pass extra arguments themselves and would hand a literal ``--`` to vite (review 2026-11-12)."""
-    if p.get("framework") != "vite":
-        return ()
+def build_command(root: Path, p: dict[str, Any], manager: str) -> tuple[tuple[str, ...], str | None]:
+    """The build command, and for a chained Vite script the script to run in its place.
+
+    Vite builds with relative assets (the site is served under /apps/<slug>/), and Vite itself must do it: it also
+    rewrites url(/…) in CSS relative to the CSS file, which no post-build string fix gets right (live 2026-11-12:
+    The-Labirinth lost its title background). A plain ``vite build`` script gets ``--base=./`` on the command line
+    (npm needs ``--`` to pass it on; pnpm and yarn pass it themselves). A chained script runs whole, every step and
+    hook included (review 2026-11-12), with ``--base=./`` put into its own ``vite build`` step for this build only.
+    """
+    run_script = ("npm", "run", "build") if manager == "npm" else ("npx", "--yes", manager, "run", "build")
     script = str(((_package(root) or {}).get("scripts") or {}).get("build") or "").strip()
-    if not script.startswith("vite build") or any(op in script for op in ("&&", "||", ";", "|")):
-        return ()
-    return ("--", "--base=./") if manager == "npm" else ("--base=./",)
+    if p.get("framework") != "vite" or "--base" in script or not re.search(r"\bvite build\b", script):
+        return run_script, None
+    chained = any(op in script for op in ("&&", "||", ";", "|"))
+    if script.startswith("vite build") and not chained:
+        return run_script + (("--", "--base=./") if manager == "npm" else ("--base=./",)), None
+    return run_script, re.sub(r"\bvite build\b", "vite build --base=./", script, count=1)
+
+
+@contextlib.contextmanager
+def _build_script(root: Path, script: str | None):
+    """package.json's build script replaced for one build, then restored byte for byte with its old timestamp (so
+    the fresh build still counts as newer than every source)."""
+    if script is None:
+        yield
+        return
+    path = root / "package.json"
+    original = path.read_bytes()
+    st = path.stat()
+    data = json.loads(original.decode("utf-8"))
+    data["scripts"]["build"] = script
+    path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    try:
+        yield
+    finally:
+        path.write_bytes(original)
+        os.utime(path, ns=(st.st_atime_ns, st.st_mtime_ns))
 
 
 async def build(root: Path, *, timeout_install: float = 600, timeout_build: float = 600) -> Path:
@@ -229,13 +270,14 @@ async def build(root: Path, *, timeout_install: float = 600, timeout_build: floa
     rc, out = await run(*install, timeout=timeout_install)
     if rc != 0:
         raise RuntimeError(f"{manager} install failed (rc={rc}):\n{digest(out)}")
-    build_cmd = ("npm", "run", "build") if manager == "npm" else ("npx", "--yes", manager, "run", "build")
-    build_cmd += _relative_base_args(root, p, manager)
-    rc, out = await run(*build_cmd, timeout=timeout_build)
+    build_cmd, patched = build_command(root, p, manager)
+    with _build_script(root, patched):
+        rc, out = await run(*build_cmd, timeout=timeout_build)
     if rc != 0 and any(m in out for m in _OSSL_MARKS):
         # webpack 4 (react-scripts <= 4, Vue CLI 4) on Node >= 17: a known runtime switch, not a code fix.
         legacy_openssl = True
-        rc, out = await run(*build_cmd, timeout=timeout_build)
+        with _build_script(root, patched):
+            rc, out = await run(*build_cmd, timeout=timeout_build)
     if rc != 0:
         raise RuntimeError(f"build failed (rc={rc}):\n{digest(out)}")
     found = find_output(root, p["outputs"], since=started)

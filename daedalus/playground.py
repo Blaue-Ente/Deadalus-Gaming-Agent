@@ -546,11 +546,14 @@ async def create_project(
         kind, run_cmd, entry = detect_kind(pdir)
         if requested_kind == "godot":
             kind = "godot"
-    try:
-        from .project_status import ensure_status_readme
-        ensure_status_readme(pdir, name=name or slug, kind=kind, description=description)
-    except Exception:
-        log.debug("status README skipped", exc_info=True)
+    if source == "built":
+        # Only Daedalus's own projects get the status block. A cloned or revived repo keeps its README as it is
+        # (live 2026-11-12: The-Labirinth's README gained "Built: scaffold · Proof: none yet", ready to be pushed).
+        try:
+            from .project_status import ensure_status_readme
+            ensure_status_readme(pdir, name=name or slug, kind=kind, description=description)
+        except Exception:
+            log.debug("status README skipped", exc_info=True)
     if source == "built":
         try:
             from .godot_first import allow_world_kit

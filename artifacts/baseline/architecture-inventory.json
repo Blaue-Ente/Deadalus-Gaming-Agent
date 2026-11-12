@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-12T09:33:35.419047+00:00",
+  "generated_at": "2026-11-12T10:36:56.785340+00:00",
   "package_version": "0.3.8",
-  "git_commit": "d94d9840cf06383393e3d5f9f0b91a8ff1adb211",
+  "git_commit": "4c8241397b5668223604657b63a9bf9ed35db97a",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -19,7 +19,7 @@
     },
     {
       "path": "daedalus/native_tools.py",
-      "lines": 2405,
+      "lines": 2409,
       "broad_excepts": 25
     },
     {
@@ -130,8 +130,8 @@
     ]
   },
   "tests": {
-    "modules": 134,
-    "functions": 1446
+    "modules": 135,
+    "functions": 1472
   },
   "modules": {
     "daedalus": [

@@ -273,7 +273,7 @@ async def playtest_personas() -> dict[str, Any]:
 
 @router.post("/api/v1/daedalus/playtest")
 async def playtest_run(body: PlaytestBody) -> dict[str, Any]:
-    from daedalus.playtest import run_playtest
+    from daedalus.playtest import gateway_see, run_playtest
     llm_fn = None
     if body.with_llm:
         from daedalus.llm_client import complete
@@ -288,6 +288,7 @@ async def playtest_run(body: PlaytestBody) -> dict[str, Any]:
         n=body.n,
         use_browser=body.use_browser,
         llm_fn=llm_fn,
+        see_fn=gateway_see if body.with_llm else None,
     )
 
 

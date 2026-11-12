@@ -128,10 +128,33 @@ async def _open_in_browser(slug: str, folder: Path, how: str) -> dict[str, Any]:
             stop()
     finally:
         await asyncio.to_thread(cleanup)
-    ok = bool(raw.get("ok")) and not raw.get("blank_screen")
-    errs = [str(e) for e in (raw.get("page_errors") or []) + (raw.get("console_errors") or [])][:5]
-    return {"ok": ok, "how": how, "error": "" if ok else ("; ".join(errs) or str(raw.get("summary") or "")
-                                                          or "the page did not render")}
+    return judge_render(raw, how)
+
+
+_FATAL_TYPES = (" document:", " script:", " stylesheet:")
+
+
+def judge_render(raw: dict[str, Any], how: str) -> dict[str, Any]:
+    """A revived app runs when it renders, throws nothing uncaught and loads its own page, scripts and styles.
+    Its backend calls (/api/…) and service worker cannot work on a static site: those are named warnings, not a
+    failure (live 2026-11-12: The-Labirinth rendered its full title screen and was failed for /api/config and
+    /sw.js 404s). Daedalus's own builds keep the strict browser_verify verdict."""
+    page_errors = [str(e) for e in raw.get("page_errors") or []]
+    if raw.get("error") and not raw.get("ok"):
+        page_errors.append(f"the browser check itself failed: {str(raw['error'])[:200]}")   # never "it runs" unseen
+    failed = [str(r) for r in raw.get("failed_requests") or []]
+    fatal_failed = [r for r in failed if any(t in r for t in _FATAL_TYPES)]
+    reachable = raw.get("reachable", True)
+    ok = bool(reachable) and not raw.get("blank_screen") and not page_errors and not fatal_failed
+    warnings = [r for r in failed if r not in fatal_failed][:4] + [
+        str(e)[:160] for e in (raw.get("console_errors") or [])][:4]
+    if ok:
+        return {"ok": True, "how": how, "error": "",
+                "note": (how + " · warnings (need a server, not a static site): " + "; ".join(warnings))
+                if warnings else how}
+    errs = (page_errors + fatal_failed + [str(e) for e in raw.get("console_errors") or []])[:5]
+    return {"ok": False, "how": how, "error": "; ".join(errs) or str(raw.get("summary") or "")
+            or "the page did not render"}
 
 
 async def _repair(slug: str, kind: str, error: str) -> list[str]:
@@ -191,12 +214,25 @@ async def run(job: ReviveJob, *, clone_fn: Any = None) -> ReviveJob:
             raise _Stop()
 
         # 5 publish
+        # A server app (kind node with express & co.) needs hosting that runs it. A static site that merely lists a
+        # dev server in package.json is published like any static site (review 2026-11-12).
+        if job.publish in ("local", "site") and job.analysis.get("server") and kind != "static":
+            servers = ", ".join(job.analysis["server"])
+            job.step("publish local", False, f"a server app ({servers}): it runs here, but it needs hosting that "
+                                             "runs a server")
+            job.error = f"runs, but a server app ({servers}) cannot be published as a static site"
+            raise _Stop()
         if job.publish in ("local", "site"):
             from .live_publish import ensure_local
-            local = await ensure_local(job.slug)
+            try:
+                local = await ensure_local(job.slug)
+            except Exception as exc:            # a failed publish is a step with its reason, not a crash
+                from .static_build import digest
+                local = {"ok": False, "error": digest(str(exc), 600)}
             if not local.get("ok"):
-                job.step("publish local", False, str(local.get("error") or "cannot publish this kind as a site"))
-                job.error = "runs, but this kind cannot be published as a static site"
+                why = str(local.get("error") or "this kind cannot be published as a static site")
+                job.step("publish local", False, why)
+                job.error = f"runs, but it was not published locally: {why}"[:600]
                 raise _Stop()
             job.local_url = str(local.get("local_url") or "")
             job.step("publish local", True, job.local_url)

@@ -373,3 +373,24 @@ def test_a_review_cut_at_the_output_limit_is_asked_again_with_more_room(monkeypa
     monkeypatch.setattr(gw, "call", bad)
     data, meta = _aio.run(ml._ask("sys", "user", max_tokens=100, client_id="t"))
     assert data is None and meta["error"] == "bad_json" and asked == [100]       # not cut: no second call
+
+
+def test_no_second_retry_when_the_gateway_already_retried(monkeypatch):
+    """Review 2026-11-12: summed usage after the gateway's own retry looked like a cut reply: up to four calls."""
+    import asyncio as _aio
+
+    from daedalus import mentor_lead as ml
+    from daedalus.harness import gateway as gw
+
+    asked = []
+
+    async def call(intent, messages, *, max_tokens, **kw):
+        asked.append(max_tokens)
+        return gw.GatewayResult(True, text="not json", usage={"completion_tokens": max_tokens * 5},
+                                retried_max_tokens=max_tokens * 4)
+
+    monkeypatch.setattr(gw, "call", call)
+    monkeypatch.setattr("daedalus.mentor_helm._resolve_endpoint", lambda: ("openrouter", "m"))
+    monkeypatch.setattr("daedalus.mentor_helm.record_spend", lambda n: None)
+    data, meta = _aio.run(ml._ask("sys", "user", max_tokens=700, client_id="t"))
+    assert data is None and meta["error"] == "bad_json" and asked == [700]

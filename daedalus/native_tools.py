@@ -1731,12 +1731,13 @@ async def execute_native_tool(
             )
 
         if name == "playtest":
-            from .playtest import format_for_prompt, run_playtest
-            r = await run_playtest(
+            from .playtest import format_for_prompt, gateway_see, run_playtest
+            r = await run_playtest(          # the players play it and judge what they see (ran with no model before)
                 str(args.get("slug") or ""),
                 kind=str(args.get("kind") or "static"),
                 n=int(args.get("n") or 4),
                 use_browser=bool(args.get("use_browser")),
+                see_fn=gateway_see,
             )
             return "── playtest ──\n" + format_for_prompt(r)
 
@@ -2312,6 +2313,9 @@ async def run_native_discovery_pass(
                     try:
                         from . import mentor_lead as _lead
                         nudge = await _lead.acceptance_nudge(loop, loop.user_message)  # the owner's words (agent.py)
+                        if nudge is None:
+                            # A game the lead accepted is played by simulated players before it is done.
+                            nudge = await _lead.audience_gate(loop, loop.user_message)
                     except Exception:
                         log.warning("mentor lead review failed", exc_info=True)
                         nudge = None
