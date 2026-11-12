@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-12T20:12:13.713233+00:00",
+  "generated_at": "2026-11-12T20:51:40.382070+00:00",
   "package_version": "0.3.8",
-  "git_commit": "4d87112fd2fa4827549fa5b718a00d491f65c748",
+  "git_commit": "0f9726abd8b095b34d3dfd4ace5b0239d39c4687",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -127,8 +127,8 @@
     ]
   },
   "tests": {
-    "modules": 141,
-    "functions": 1556
+    "modules": 142,
+    "functions": 1568
   },
   "modules": {
     "daedalus": [
@@ -171,6 +171,7 @@
       "daedalus/connectors_config.py",
       "daedalus/context_compaction.py",
       "daedalus/continuity.py",
+      "daedalus/credentials.py",
       "daedalus/daedalus_mesh.py",
       "daedalus/daedalusignore.py",
       "daedalus/dissection.py",

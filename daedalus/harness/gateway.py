@@ -410,6 +410,23 @@ def _api_key(cfg: dict[str, Any]) -> str:
     return ""
 
 
+def _member_key(cfg: dict[str, Any], provider: str) -> tuple[str, str, str] | None:
+    """For a team member's call: which key pays (credentials.for_call). None for the owner, a server task, or a
+    local model (no key, no credits)."""
+    from ..team import current
+    member = current()
+    if member is None or member.role == "owner":
+        return None
+    from ..llm_config import PROVIDER_ENV_KEYS, is_loopback_gateway
+    from ..local_llm import is_local_provider
+
+    p = (provider or str(cfg.get("provider") or "")).strip().lower()
+    if is_local_provider(p) or cfg.get("local") or is_loopback_gateway(p):
+        return None
+    from ..credentials import for_call
+    return for_call(PROVIDER_ENV_KEYS.get(p, ""), str(cfg.get("api_key") or ""))
+
+
 def has_credentials(cfg: dict[str, Any]) -> bool:
     """True when a call with this config would carry a key: a real one, or the dummy a local/loopback provider takes."""
     return bool(_api_key(cfg))
@@ -556,6 +573,12 @@ async def call(
     if run_budget.would_block(res.provider):
         return _finish(GatewayResult(False, budget_stopped=True,
                                      error=GatewayError("budget_blocked", run_budget.stop_text())))
+    choice = _member_key(cfg, res.provider)
+    if choice is not None:                   # a team member: their own key, a shared one within the cap, or none
+        key, whose, why = choice
+        if whose == "none":
+            return _finish(GatewayResult(False, error=GatewayError("no_key", why)))
+        cfg["api_key"] = key                 # spend on a shared key is counted in run_budget.note_usage
     if not _api_key(cfg):
         return _finish(GatewayResult(False, error=GatewayError(
             "auth", f"No API key for provider {res.provider!r}; set the key or use a local model.")))
@@ -567,7 +590,7 @@ async def call(
         return _finish(GatewayResult(False, error=classify_error(exc)))
     parsed = parse_usage(getattr(raw, "usage", None), raw)
     try:
-        run_budget.note_usage(parsed, model=res.model, role=intent_c)
+        run_budget.note_usage(parsed, model=res.model, role=intent_c, provider=res.provider)
     except Exception:  # metering trouble must not fail a successful, billed call
         log.debug("gateway metering skipped", exc_info=True)
     usage = {"prompt_tokens": int(parsed.get("prompt_tokens") or 0),
@@ -589,7 +612,7 @@ async def call(
             return _finish(GatewayResult(False, error=classify_error(exc)))
         again = parse_usage(getattr(raw, "usage", None), raw)
         try:
-            run_budget.note_usage(again, model=res.model, role=intent_c)
+            run_budget.note_usage(again, model=res.model, role=intent_c, provider=res.provider)
         except Exception:
             log.debug("gateway metering skipped", exc_info=True)
         usage = {k: usage[k] + int(again.get(k) or 0) for k in usage}
@@ -637,10 +660,13 @@ def call_sync(*args: Any, **kwargs: Any) -> GatewayResult:
     except RuntimeError:
         return asyncio.run(call(*args, **kwargs))
     box: dict[str, Any] = {}
+    import contextvars
+
+    ctx = contextvars.copy_context()         # the caller (a team member, the run) travels into the helper thread
 
     def _runner() -> None:
         try:
-            box["r"] = asyncio.run(call(*args, **kwargs))
+            box["r"] = ctx.run(asyncio.run, call(*args, **kwargs))
         except BaseException as exc:  # pragma: no cover - surfaced below
             box["e"] = exc
 

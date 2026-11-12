@@ -525,8 +525,11 @@ async def _call_haiku(system: str, user_content: str) -> str:
     except Exception as exc:
         log.debug("navigator mesh_router failed (%s) — fallback to direct SDK", exc)
 
+    import contextvars
+
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(None, _call_haiku_sync, system, user_content)
+    ctx = contextvars.copy_context()         # the caller (a team member) travels into the worker thread
+    return await loop.run_in_executor(None, ctx.run, _call_haiku_sync, system, user_content)
 
 
 def _call_haiku_sync(system: str, user_content: str) -> str:

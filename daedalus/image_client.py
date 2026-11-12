@@ -63,9 +63,9 @@ def resolve_image_model(preferred: str = "sdxl") -> str:
     pref = (preferred or "sdxl").strip()
     if pref in _OR_MODELS or pref in _NOVITA_MODELS:
         return pref
-    if os.environ.get("NOVITA_API_KEY", "").strip():
+    if _cred_env("NOVITA_API_KEY", "").strip():
         return "sdxl"
-    if os.environ.get("OPENROUTER_API_KEY", "").strip() or os.environ.get("ALLTOKEN_API_KEY", "").strip():
+    if _cred_env("OPENROUTER_API_KEY", "").strip() or _cred_env("ALLTOKEN_API_KEY", "").strip():
         return "gemini-flash-image"
     return pref or "sdxl"
 
@@ -95,7 +95,7 @@ async def generate_image(
     resolved = resolve_image_model(model)
     if resolved in _OR_MODELS:
         return await _openrouter_image(prompt=prompt, model=resolved, size=size, t0=t0)
-    if os.environ.get("NOVITA_API_KEY", "").strip():
+    if _cred_env("NOVITA_API_KEY", "").strip():
         try:
             return await _novita_txt2img(
                 prompt=prompt, model=resolved, size=size, n=n,
@@ -104,10 +104,10 @@ async def generate_image(
             )
         except Exception as exc:
             log.warning("Novita image failed (%s); trying OpenRouter", exc)
-            if os.environ.get("OPENROUTER_API_KEY", "").strip() or os.environ.get("ALLTOKEN_API_KEY", "").strip():
+            if _cred_env("OPENROUTER_API_KEY", "").strip() or _cred_env("ALLTOKEN_API_KEY", "").strip():
                 return await _openrouter_image(prompt=prompt, model="gemini-flash-image", size=size, t0=t0)
             raise
-    if os.environ.get("OPENROUTER_API_KEY", "").strip() or os.environ.get("ALLTOKEN_API_KEY", "").strip():
+    if _cred_env("OPENROUTER_API_KEY", "").strip() or _cred_env("ALLTOKEN_API_KEY", "").strip():
         return await _openrouter_image(prompt=prompt, model="gemini-flash-image", size=size, t0=t0)
     raise RuntimeError(
         "No key for image generation. Set NOVITA_API_KEY or OPENROUTER_API_KEY."
@@ -127,7 +127,7 @@ async def _novita_txt2img(
 ) -> dict[str, Any]:
     cfg = _NOVITA_MODELS.get(model) or _NOVITA_MODELS["sdxl"]
     w, h = _size(size)
-    key = os.environ["NOVITA_API_KEY"].strip()
+    key = _cred_env("NOVITA_API_KEY").strip()
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     img_type = image_type if image_type in ("jpeg", "png", "webp") else "png"
     payload = {
@@ -177,8 +177,8 @@ async def _novita_txt2img(
 
 async def _openrouter_image(*, prompt: str, model: str, size: str, t0: float) -> dict[str, Any]:
     or_model = _OR_MODELS.get(model, _OR_MODELS["gemini-flash-image"])
-    key = (os.environ.get("OPENROUTER_API_KEY") or os.environ.get("ALLTOKEN_API_KEY") or "").strip()
-    if os.environ.get("OPENROUTER_API_KEY", "").strip():
+    key = (_cred_env("OPENROUTER_API_KEY") or _cred_env("ALLTOKEN_API_KEY") or "").strip()
+    if _cred_env("OPENROUTER_API_KEY", "").strip():
         url = "https://openrouter.ai/api/v1/chat/completions"
         provider = "openrouter"
         headers = {
@@ -227,3 +227,6 @@ async def _openrouter_image(*, prompt: str, model: str, size: str, t0: float) ->
         "images": images,
         "latency_ms": int((time.perf_counter() - t0) * 1000),
     }
+
+
+from .credentials import env as _cred_env  # noqa: E402  (gap 3c: whose key; credentials imports nothing here)

@@ -48,7 +48,8 @@ def is_loopback_gateway(provider: str) -> bool:
 
 
 def resolve_provider_api_key(provider: str, fallback: str = "") -> str:
-    """Read provider API key from the process environment."""
+    """Read provider API key from the process environment: the owner's view. A team member's call gets its key
+    from ``credentials.member_config`` (get_brain_config) and the gateway, never from here (gap 3c)."""
     p = (provider or "").strip().lower()
     if not p:
         return fallback
@@ -442,7 +443,8 @@ def get_brain_config() -> dict:
     diagnostics. Chat/calls use ``get_config()`` which may apply whisper/epic and
     run-budget writer overlays for that turn only.
     """
-    return _resolve_llm_config()
+    from .credentials import member_config
+    return member_config(_resolve_llm_config())      # gap 3c: a team member's call carries a key of theirs
 
 
 def get_config() -> dict:
@@ -795,3 +797,4 @@ def list_preset_models(*, include_replit: bool | None = None) -> list[dict]:
     if include_replit:
         return list(PRESET_MODELS)
     return [m for m in PRESET_MODELS if not is_replit_preset(m)]
+

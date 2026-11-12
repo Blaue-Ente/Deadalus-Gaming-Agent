@@ -4460,8 +4460,14 @@
         id: "member-" + m.id,
         statusId: "team-status",
         title: m.name,
-        sub: roleLabel(m.role) + (m.disabled ? " · " + dx.t("studio.teamDisabled") : ""),
+        sub: roleLabel(m.role) + (m.disabled ? " · " + dx.t("studio.teamDisabled") : "") + " · " +
+          dx.t("studio.teamSpent", {
+            spent: ((teamSharing && teamSharing.spend && teamSharing.spend[m.id]) || 0).toFixed(2),
+            cap: Number((teamSharing && teamSharing.caps && teamSharing.caps[m.id] != null) ? teamSharing.caps[m.id]
+              : (teamSharing ? teamSharing.default_cap_usd : 2)).toFixed(2),
+          }),
         buttons: [
+          { label: dx.t("studio.teamSetCap"), run: () => setCap(m) },
           { label: dx.t("studio.teamMakeRole", { role: roleLabel(other) }),
             run: () => updateMember(m.id, { role: other }) },
           { label: dx.t(m.disabled ? "studio.teamEnable" : "studio.teamDisable"),
@@ -4499,13 +4505,91 @@
     });
   }
 
+  function paintShare(data) {
+    const box = $("team-share-list");
+    box.replaceChildren();
+    const shared = new Set((data && data.shared) || []);
+    ((data && data.available) || []).forEach((name) => {
+      const label = document.createElement("label");
+      const box2 = document.createElement("input");
+      box2.type = "checkbox";
+      box2.checked = shared.has(name);
+      box2.dataset.key = name;
+      box2.addEventListener("change", () => {
+        const picked = Array.from(document.querySelectorAll("#team-share-list input:checked")).map((el) => el.dataset.key);
+        runAction(box2, "team-status", async () => {
+          paintShare(Object.assign({}, data, await postJson("/api/v1/team/sharing", { shared: picked })));
+          showStatus("team-status", dx.t("studio.saved"), false);
+        });
+      });
+      const span = document.createElement("span");
+      span.textContent = name;
+      label.append(box2, span);
+      box.appendChild(label);
+    });
+    $("team-share").hidden = false;
+  }
+
+  async function setCap(member) {
+    const now = (teamSharing && teamSharing.caps && teamSharing.caps[member.id] != null)
+      ? teamSharing.caps[member.id] : (teamSharing ? teamSharing.default_cap_usd : 2);
+    const typed = window.prompt(dx.t("studio.teamCapPrompt", { name: member.name }), String(now));
+    if (typed === null) return null;
+    const usd = Number(typed);
+    if (!Number.isFinite(usd) || usd < 0) return { text: dx.t("studio.teamCapBad"), bad: true };
+    const caps = {};
+    caps[member.id] = usd;
+    await postJson("/api/v1/team/sharing", { caps });
+    refreshTeamLists();
+    return { text: dx.t("studio.saved"), bad: false };
+  }
+
+  let teamSharing = null;
+
   async function loadTeamLists() {
+    teamSharing = await dx.api("/api/v1/team/sharing");
+    paintShare(teamSharing);
     paintMembers(await dx.api("/api/v1/team/members"));
     try {
       paintAudit(await dx.api("/api/v1/team/audit?limit=40"));
     } catch (err) {
       showStatus("team-status", dx.t("studio.requestFailed") + ": " + failText(err), true);
     }
+  }
+
+  function paintMyKeys(data) {
+    const pick = $("team-key-name");
+    const keep = pick.value;
+    pick.replaceChildren();
+    ((data && data.available) || []).forEach((name) => {
+      const opt = document.createElement("option");
+      opt.value = name;
+      opt.textContent = name + ((data.own || []).includes(name) ? " ✓" : "");
+      pick.appendChild(opt);
+    });
+    if (keep) pick.value = keep;
+    $("team-mykeys-state").textContent = dx.t("studio.teamMyKeysState", {
+      own: (data.own || []).join(", ") || "—",
+      shared: (data.shared || []).join(", ") || "—",
+      spent: Number(data.spent_shared_usd || 0).toFixed(2),
+      cap: Number(data.cap_usd || 0).toFixed(2),
+    });
+  }
+
+  async function loadMyKeys() {
+    try {
+      paintMyKeys(await dx.api("/api/v1/team/keys"));
+    } catch (err) {
+      showStatus("team-status", dx.t("studio.requestFailed") + ": " + failText(err), true);
+    }
+  }
+
+  async function saveMyKey(button, value) {
+    await runAction(button, "team-status", async () => {
+      paintMyKeys(await postJson("/api/v1/team/keys", { name: $("team-key-name").value, value }));
+      $("team-key-value").value = "";
+      showStatus("team-status", dx.t(value ? "studio.saved" : "studio.teamKeyRemoved"), false);
+    });
   }
 
   async function loadTeam() {
@@ -4516,6 +4600,9 @@
     const owner = !!me && me.role === "owner";
     $("team-owner").hidden = !owner;
     $("team-not-owner").hidden = owner || !me;
+    $("team-share").hidden = !owner;
+    $("team-mykeys").hidden = !me || owner || me.role !== "designer";
+    if (me && me.role === "designer") loadMyKeys();
     $("team-signout").hidden = owner || !me;
     if (owner) {
       try {
@@ -5689,6 +5776,12 @@
       showStatus("team-status", dx.t("studio.teamCopyFailed"), true);
     }
   });
+  $("team-key-form").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const value = ($("team-key-value").value || "").trim();
+    if (value) saveMyKey(ev.submitter, value);
+  });
+  $("team-key-remove").addEventListener("click", (ev) => saveMyKey(ev.currentTarget, ""));
   $("team-signout").addEventListener("click", () => {
     if (window.DaedalusAuth && window.DaedalusAuth.signOut) window.DaedalusAuth.signOut();
     location.reload();

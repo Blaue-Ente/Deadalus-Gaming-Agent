@@ -342,7 +342,7 @@ async def call_with_fallback(primary_call_fn, system: str,
         try:
             # Support literal "https://..." URLs directly in the chain
             base_url = burl_env if burl_env.startswith("https://") else os.environ.get(burl_env, "")
-            api_key  = os.environ.get(akey_env, "")
+            api_key  = _cred_env(akey_env, "")      # a member's own key only: never the owner's by fallback
             if not (base_url and api_key):
                 log.debug("RateLimitFallback: skip %s (missing env)", label)
                 continue
@@ -785,8 +785,8 @@ async def review_gate_critique(user_message: str, draft_reply: str,
     Triggered only on complex sessions (caller decides). Failure → ok=True (skip)."""
     try:
         from openai import AsyncOpenAI
-        key = os.environ.get("OPENROUTER_API_KEY", "") or os.environ.get("NOVITA_API_KEY", "")
-        url = "https://openrouter.ai/api/v1" if os.environ.get("OPENROUTER_API_KEY") else "https://api.novita.ai/v3/openai"
+        key = _cred_env("OPENROUTER_API_KEY", "") or _cred_env("NOVITA_API_KEY", "")
+        url = "https://openrouter.ai/api/v1" if _cred_env("OPENROUTER_API_KEY") else "https://api.novita.ai/v3/openai"
         if not key:
             return {"ok": True, "issue": "", "suggested_fix": "", "skipped": "no_creds"}
         def _target(c: dict) -> str:
@@ -818,12 +818,12 @@ async def review_gate_critique(user_message: str, draft_reply: str,
         from .llm_config import OPENROUTER_FAST_MODEL
         review_model = (
             OPENROUTER_FAST_MODEL
-            if os.environ.get("OPENROUTER_API_KEY")
+            if _cred_env("OPENROUTER_API_KEY")
             else "meta-llama/llama-3.1-8b-instruct"
         )
         from .harness import gateway as _gw
         if _gw.path_enabled("reviewer"):
-            _prov = "openrouter" if os.environ.get("OPENROUTER_API_KEY") else "novita"
+            _prov = "openrouter" if _cred_env("OPENROUTER_API_KEY") else "novita"
             _res = await _gw.call(
                 "critic", [{"role": "user", "content": user_prompt}], system=sys_prompt, max_tokens=400,
                 route=_gw.route_for(_prov, review_model, key, url), client_id="daedalus/draft-reviewer",
@@ -1036,3 +1036,6 @@ def pre_execute_read_first_check(session_id: str, query: str) -> dict | None:
         "table": table,
         "missing_tables": missing,
     }
+
+
+from .credentials import env as _cred_env  # noqa: E402  (gap 3c: whose key; credentials imports nothing here)

@@ -84,7 +84,7 @@ def test_usage_is_metered_after_a_call(a0_tmp, monkeypatch):
     _use_cfg(monkeypatch, _cfg())
     metered = []
     monkeypatch.setattr("daedalus.llm_client._meter", lambda resp, *, model, role: metered.append((model, role)))
-    monkeypatch.setattr("daedalus.run_budget.note_usage", lambda parsed, *, model="", role="writer": metered.append((model, "writer")))
+    monkeypatch.setattr("daedalus.run_budget.note_usage", lambda parsed, *, model="", role="writer", provider="": metered.append((model, "writer")))
 
     class Resp:
         choices = [types.SimpleNamespace(message=types.SimpleNamespace(content="hello"))]

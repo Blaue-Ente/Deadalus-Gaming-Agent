@@ -601,6 +601,26 @@
               <ul id="team-audit" class="team-audit"></ul>
             </details>
           </div>
+          <div id="team-share" hidden>
+            <p class="kicker" data-i18n="studio.teamShareTitle">Keys you share with the team</p>
+            <p class="hint" data-i18n="studio.teamShareHint">A member uses their own key first. A key you tick here is used for them only when they have none, up to their cap.</p>
+            <div id="team-share-list" class="team-share-list"></div>
+          </div>
+          <div id="team-mykeys" hidden>
+            <p class="kicker" data-i18n="studio.teamMyKeys">Your keys</p>
+            <p class="hint" data-i18n="studio.teamMyKeysHint">Your model calls use your own key and your own credits. Write-only: the value is not shown again.</p>
+            <p id="team-mykeys-state" class="hint"></p>
+            <form id="team-key-form" class="team-invite">
+              <label><span data-i18n="studio.settingsSecret">Key</span>
+                <select id="team-key-name" data-i18n-aria="studio.settingsSecret" aria-label="Key"></select>
+              </label>
+              <label><span data-i18n="studio.teamKeyValue">Value</span>
+                <input id="team-key-value" type="password" autocomplete="off" data-i18n-aria="studio.teamKeyValue" aria-label="Value" />
+              </label>
+              <button class="primary" type="submit" data-i18n="studio.settingsSave">Save</button>
+              <button type="button" id="team-key-remove" data-i18n="studio.teamKeyRemove">Remove</button>
+            </form>
+          </div>
           <p id="team-not-owner" class="hint" hidden data-i18n="studio.teamSettingsOwner">The other settings belong to the owner.</p>
           <button type="button" id="team-signout" hidden data-i18n="studio.teamSignOut">Sign out</button>
         </div>

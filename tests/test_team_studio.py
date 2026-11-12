@@ -120,3 +120,34 @@ def test_the_sign_in_prompt_speaks_the_chosen_language(studio_server):
         finally:
             browser.close()
     assert asked and asked[0].startswith("Вход:") and "dt_" in asked[0]
+
+
+def test_a_designer_saves_their_own_key_and_the_owner_shares_one(studio_server):
+    """Gap 3c: keys in the Team section, write-only, with real clicks."""
+    from playwright.sync_api import sync_playwright
+
+    made = _api(studio_server, "POST", "/api/v1/team/members", {"name": "Kay", "role": "designer"})
+    with sync_playwright() as p:
+        browser, page = _page(p, studio_server, token=made["token"])
+        try:
+            page.wait_for_selector("#team-mykeys:not([hidden])")
+            page.wait_for_selector("#team-key-name option[value=OPENROUTER_API_KEY]", state="attached")
+            page.select_option("#team-key-name", "OPENROUTER_API_KEY")
+            page.fill("#team-key-value", "kay-secret-value")
+            page.locator("#team-key-form button[type=submit]").scroll_into_view_if_needed()
+            _hit(page, "#team-key-form button[type=submit]")
+            page.wait_for_function("() => document.querySelector('#team-mykeys-state').textContent"
+                                   ".includes('OPENROUTER_API_KEY')")
+            assert page.locator("#team-key-value").input_value() == ""
+            assert "kay-secret-value" not in page.content()
+        finally:
+            browser.close()
+        browser, page = _page(p, studio_server)
+        try:
+            page.wait_for_selector("#team-share-list input[data-key=OPENROUTER_API_KEY]")
+            page.locator("#team-share-list input[data-key=OPENROUTER_API_KEY]").scroll_into_view_if_needed()
+            _hit(page, "#team-share-list input[data-key=OPENROUTER_API_KEY]")
+            page.wait_for_function("() => document.querySelector('#team-status').textContent.length > 0")
+        finally:
+            browser.close()
+    assert "OPENROUTER_API_KEY" in _api(studio_server, "GET", "/api/v1/team/sharing")["shared"]

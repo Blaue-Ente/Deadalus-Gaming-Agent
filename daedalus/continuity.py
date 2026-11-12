@@ -199,8 +199,8 @@ def _llm_call(system: str, user: str) -> str:
     """Synchronous cheap LLM call for digest summaries — Novita Ling or OpenRouter Llama."""
     from .harness import gateway
     if gateway.path_enabled("continuity"):
-        nv_key = os.environ.get("NOVITA_API_KEY", "")
-        or_key = os.environ.get("OPENROUTER_API_KEY", "")
+        nv_key = _cred_env("NOVITA_API_KEY", "")
+        or_key = _cred_env("OPENROUTER_API_KEY", "")
         if nv_key:
             route = gateway.route_for("novita", "inclusionai/ling-2.6-flash", nv_key, "https://api.novita.ai/v3/openai")
         elif or_key:
@@ -216,8 +216,8 @@ def _llm_call(system: str, user: str) -> str:
         return res.text if res.ok else ""
     try:
         from openai import OpenAI
-        nv_key = os.environ.get("NOVITA_API_KEY", "")
-        or_key = os.environ.get("OPENROUTER_API_KEY", "")
+        nv_key = _cred_env("NOVITA_API_KEY", "")
+        or_key = _cred_env("OPENROUTER_API_KEY", "")
         if nv_key:
             api_key = nv_key
             base_url = "https://api.novita.ai/v3/openai"
@@ -512,3 +512,6 @@ def _build_context_inner(
     lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
     return "\n".join(lines)
+
+
+from .credentials import env as _cred_env  # noqa: E402  (gap 3c: whose key; credentials imports nothing here)

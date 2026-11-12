@@ -269,8 +269,17 @@ def note_usage(
     *,
     model: str = "",
     role: str = "writer",
+    provider: str = "",
 ) -> dict[str, Any]:
     """Add one billed call to the envelope. No-op when the envelope is Off."""
+    try:                                     # gap 3c: a team member's spend on the owner's shared key, always
+        from .credentials import note_member_usage
+        if not provider:
+            from .llm_config import get_brain_config
+            provider = str((get_brain_config() or {}).get("provider") or "")
+        note_member_usage(parsed, provider)
+    except Exception:
+        pass
     cap = usd()
     if cap <= 0:
         return ledger()

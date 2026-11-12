@@ -79,7 +79,8 @@ _PG = r"/admin/daedalus/playground/api"
 _P = r"/projects/[^/]+"
 RULES: tuple[tuple[str, str, str], ...] = (
     # who am I (every member)
-    (_R, r"/api/v1/team/me", "tester"),
+    (_R, r"/api/v1/team/(me|keys)", "tester"),
+    ("POST", r"/api/v1/team/keys", "designer"),         # a designer's own keys (a tester starts no model call)
     # reading projects, their files, previews, runs and live streams
     (_R, r"/api/v1/playground/projects", "tester"),
     (_R, rf"/api/v1/playground{_P}(/(file|world|dissection|unity|production|live|autopilot|autopilot/stream))?",
