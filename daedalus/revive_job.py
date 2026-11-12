@@ -60,7 +60,13 @@ def analyze(root: Path, kind: str) -> dict[str, Any]:
     """What the repo is and how it runs: kind, framework, package manager, scripts, static build, Python deps."""
     from . import static_build
 
-    out: dict[str, Any] = {"kind": kind, "files": sum(1 for p in root.rglob("*") if p.is_file() and ".git" not in p.parts)}
+    import os
+
+    count = 0
+    for _base, dirs, files in os.walk(root):        # prune: a repo with node_modules has tens of thousands of files
+        dirs[:] = [d for d in dirs if d not in ("node_modules", ".git", "dist", "build", ".next", ".expo")]
+        count += len(files)
+    out: dict[str, Any] = {"kind": kind, "files": count}
     pkg = static_build._package(root)
     if pkg:
         scripts = pkg.get("scripts") if isinstance(pkg.get("scripts"), dict) else {}
@@ -87,28 +93,38 @@ async def _verify(slug: str, kind: str, analysis: dict[str, Any]) -> dict[str, A
     from . import playground_runner as runner
 
     if kind == "static" or analysis.get("static_build"):
+        serve = pg.project_dir(slug)
+        how = "browser"
         if analysis.get("static_build"):
             from . import static_build
             try:
-                out_dir = await static_build.build(pg.project_dir(slug))
+                serve = await static_build.build(pg.project_dir(slug))
             except Exception as exc:
                 return {"ok": False, "error": str(exc)[:2500], "how": "build"}
-            how = f"build → {out_dir.name}/ + browser"
-        else:
-            how = "browser"
-        from .visual_proof import run_visual_proof
-        proof = await run_visual_proof(slug, "static" if kind == "static" else "vite")
-        if proof.honest_gap:
-            return {"ok": True, "how": how, "note": f"built; browser check unavailable ({proof.honest_gap})"}
-        errs = list((proof.details or {}).get("page_errors") or [])[:5]
-        ok = bool(proof.ok) and not proof.blank_screen
-        return {"ok": ok, "how": how, "error": "" if ok else (
-            "; ".join(str(e) for e in errs) or proof.summary or "the page did not render"), "frames": proof.frames}
+            how = f"build → {serve.relative_to(pg.project_dir(slug)).as_posix()}/ + browser"
+        # Open exactly what will be published (review 2026-11-11: the Vite proof ran `vite build` on CRA/webpack apps).
+        return await _open_in_browser(slug, serve, how)
     smoke = await runner.smoke_test(slug)
     if smoke.get("skipped"):
         return {"ok": False, "how": "smoke", "error": f"cannot verify a {kind} project here (check skipped)"}
     return {"ok": bool(smoke.get("ok")), "how": "smoke",
             "error": smoke.get("error") or "\n".join((smoke.get("logs") or [])[-20:])}
+
+
+async def _open_in_browser(slug: str, folder: Path, how: str) -> dict[str, Any]:
+    from .playground_browser import _serve_static, browser_verify, chromium_executable
+
+    if not chromium_executable():
+        return {"ok": True, "how": how, "note": "built; no browser on this machine to open it (not checked)"}
+    base, stop = _serve_static(folder)
+    try:
+        raw = await browser_verify(slug, base + "/", kind="static")
+    finally:
+        stop()
+    ok = bool(raw.get("ok")) and not raw.get("blank_screen")
+    errs = [str(e) for e in (raw.get("page_errors") or []) + (raw.get("console_errors") or [])][:5]
+    return {"ok": ok, "how": how, "error": "" if ok else ("; ".join(errs) or str(raw.get("summary") or "")
+                                                          or "the page did not render")}
 
 
 async def _repair(slug: str, kind: str, error: str) -> list[str]:
@@ -178,9 +194,16 @@ async def run(job: ReviveJob, *, clone_fn: Any = None) -> ReviveJob:
             job.step("publish local", True, job.local_url)
         if job.publish == "site":
             from .live_publish import publish_live
-            live = await publish_live(job.slug, confirm_public=job.confirm_public)
+
+            async def already_local(_slug: str) -> dict[str, Any]:
+                return local                                  # built and published above: no second build
+            live = await publish_live(job.slug, confirm_public=job.confirm_public, local_fn=already_local)
             job.site_url = str(live.get("url") or "")
             job.step("publish site", bool(job.site_url), job.site_url or str(live.get("note") or live.get("error")))
+            if not job.site_url:
+                job.error = ("runs and is published locally, but the site was not published: "
+                             + str(live.get("note") or live.get("error") or "no backend")[:300])
+                raise _Stop()
         job.status = "done"
     except _Stop:
         job.status = "failed"

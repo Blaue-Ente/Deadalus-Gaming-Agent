@@ -124,7 +124,7 @@ def pick_chain(requested: str = "auto") -> list[str]:
     if want not in ("", "auto"):
         return [want]
     chain: list[str] = []
-    if _npx() and netlify_token():
+    if netlify_token():                    # the token path is the HTTP API: no Node/npx needed (review 2026-11-11)
         chain.append("netlify")
     try:
         from .playground_gitlab import is_configured
@@ -341,20 +341,10 @@ async def deploy_netlify(static_dir: Path, slug: str, *, anonymous: bool = False
     npx = _npx()
     if not npx:
         raise RuntimeError("npx липсва — инсталирай Node.js, за да качваме на Netlify")
-    args = [npx, "-y", "netlify-cli", "deploy", "--dir", str(static_dir), "--json"]
+    # Anonymous preview only: the owner-token path returned above (the API; never a token in argv).
+    args = [npx, "-y", "netlify-cli", "deploy", "--dir", str(static_dir), "--json", "--allow-anonymous"]
     extra: dict[str, str] = {}
     prev = get_site(slug) or {}
-    if anonymous:
-        args.append("--allow-anonymous")
-    else:
-        token = netlify_token()
-        if not token:
-            raise RuntimeError("NETLIFY_AUTH_TOKEN липсва")
-        extra["NETLIFY_AUTH_TOKEN"] = token
-        args.extend(["--prod", "--auth", token])
-        site_id = prev.get("site_id") if prev.get("backend") in ("netlify",) else None
-        if site_id:
-            args.extend(["--site", str(site_id)])
     code, out = await _run(args, timeout=180, extra_env=extra)
     blob = parse_json_blob(out)
     url = (

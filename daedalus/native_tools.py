@@ -1384,7 +1384,7 @@ async def execute_native_tool(
             try:
                 from .js_deps import undeclared_note
                 from .playground import project_dir as _pdir2
-                missing = undeclared_note(_pdir2(slug))
+                missing = await asyncio.to_thread(undeclared_note, _pdir2(slug))
             except Exception:
                 log.debug("dependency check skipped", exc_info=True)
             return (

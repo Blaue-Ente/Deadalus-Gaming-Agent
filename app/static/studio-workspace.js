@@ -5371,7 +5371,9 @@
     const publish = $("git-revive-publish").value || "local";
     if (publish === "site" && !window.confirm(dx.t("studio.reviveSiteConfirm"))) return;
     runAction($("git-revive"), "git-status", async () => {
-      const started = await postJson("/api/v1/playground/revive", { url, publish });
+      // The owner just confirmed a public site: that answer travels with the request (review 2026-11-11).
+      const body = publish === "site" ? { url, publish, confirm_public: true } : { url, publish };
+      const started = await postJson("/api/v1/playground/revive", body);
       let job = started.job;
       showStatus("git-status", dx.t("studio.reviveRunning"), false);
       paintReviveSteps(job);

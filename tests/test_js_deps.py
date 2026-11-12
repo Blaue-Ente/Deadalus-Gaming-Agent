@@ -48,3 +48,14 @@ def test_the_expo_scaffold_bundles_with_sdk_50_plus(a0_tmp):  # noqa: F811
     assert "expo-router/babel'" not in babel.replace("// No 'expo-router/babel'", "")
     assert undeclared(pg.project_dir(slug)) == []           # the scaffold declares what it imports
 
+
+
+def test_builtins_and_path_aliases_are_not_missing_packages(tmp_path):
+    """Review 2026-11-11: perf_hooks / vm and tsconfig aliases were reported as npm packages to add."""
+    root = _proj(tmp_path, {"react": "18"}, {
+        "tsconfig.json": '{ // comment\n "compilerOptions": {"baseUrl": ".", "paths": {"@components/*": ["src/c/*"]}}}',
+        "src/c/Button.tsx": "export const B = 1;",
+        "src/app.tsx": "import { performance } from 'perf_hooks';\nconst vm = require('vm');\n"
+                       "import B from '@components/Button';\nimport u from 'src/utils';\nimport left from 'left-pad';\n",
+    })
+    assert undeclared(root) == ["left-pad"]

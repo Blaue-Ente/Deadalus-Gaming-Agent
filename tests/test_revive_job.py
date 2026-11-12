@@ -49,13 +49,15 @@ def _run(job, files, monkeypatch=None):
 
 @pytest.fixture
 def no_browser(monkeypatch):
-    """Browser checks pass without launching Chromium (one test below uses the real one)."""
-    from daedalus.visual_proof import ProofResult
+    """Browser checks pass without launching Chromium; records which folder was opened."""
+    opened = []
 
-    async def proof(slug, kind="static"):
-        return ProofResult(ok=True, skipped=False, kind=kind, slug=slug, tool="browser", summary="ok")
+    async def open_(slug, folder, how):
+        opened.append(folder)
+        return {"ok": True, "how": how, "error": ""}
 
-    monkeypatch.setattr("daedalus.visual_proof.run_visual_proof", proof)
+    monkeypatch.setattr(revive_job, "_open_in_browser", open_)
+    return opened
 
 
 def test_a_static_site_is_opened_and_published_locally(a0_tmp, no_browser):  # noqa: F811
@@ -73,6 +75,7 @@ def test_an_app_that_builds_to_static_files_is_built_and_its_output_published(a0
     assert job.status == "done", job.steps
     assert job.analysis["kind"] == "node" and job.analysis["static_build"]["framework"] == "unknown"
     assert job.steps[2]["how"].startswith("build → dist/")
+    assert no_browser[0].name == "dist"                                # the built output is what gets opened
     published = pub.app_dir(job.slug)
     assert (published / "index.html").read_text().startswith("<!doctype html>")
     assert not (published / "build.js").exists()                      # the output, never the raw source
@@ -129,7 +132,16 @@ def test_publishing_as_a_site_goes_through_live_publish(a0_tmp, no_browser, monk
     monkeypatch.setattr("daedalus.live_publish.publish_live", live)
     job = _run(revive_job.ReviveJob(url="https://github.com/me/tiny", publish="site"), {"index.html": GAME})
     assert job.status == "done" and job.site_url == "https://tiny.netlify.app"
-    assert seen == {"confirm_public": False}                          # the owner gate stays in live_publish
+    assert seen["confirm_public"] is False and callable(seen["local_fn"])  # owner gate in live_publish; no rebuild
+
+
+def test_a_site_that_was_not_published_is_not_a_success(a0_tmp, no_browser, monkeypatch):  # noqa: F811
+    async def live(slug, **kw):
+        return {"ok": True, "url": None, "backend": "local", "note": "no hosting token"}
+
+    monkeypatch.setattr("daedalus.live_publish.publish_live", live)
+    job = _run(revive_job.ReviveJob(url="https://github.com/me/tiny", publish="site"), {"index.html": GAME})
+    assert job.status == "failed" and job.local_url and "site was not published" in job.error
 
 
 def test_a_repo_with_nothing_to_run_says_so(a0_tmp, no_browser):  # noqa: F811
@@ -142,12 +154,17 @@ def test_a_repo_with_nothing_to_run_says_so(a0_tmp, no_browser):  # noqa: F811
     ({"scripts": {"build": "react-scripts build"}, "dependencies": {"react-scripts": "5"}}, {}, "react-scripts"),
     ({"scripts": {"build": "next build"}, "dependencies": {"next": "14"}}, {"next.config.js": "module.exports={output:'export'}"}, "next"),
     ({"scripts": {"build": "next build"}, "dependencies": {"next": "14"}}, {}, None),           # SSR app
+    ({"scripts": {"build": "next build"}, "dependencies": {"next": "14"}},                      # review: substring
+     {"next.config.js": "module.exports = { output: 'standalone' }"}, None),
+    ({"scripts": {"build": "tsc"}, "dependencies": {"commander": "11"}}, {}, None),            # a CLI, not a site
+    ({"scripts": {"build": "node build.js"}}, {"public/index.html": "<html>"}, "unknown"),     # a site with HTML
     ({"scripts": {"build": "tsc"}, "dependencies": {"express": "4"}}, {}, None),               # server
     ({"scripts": {"start": "node ."}}, {}, None),                                              # no build
 ])
 def test_static_build_plans(tmp_path, pkg, files, framework):
     (tmp_path / "package.json").write_text(json.dumps(pkg))
     for rel, text in files.items():
+        (tmp_path / rel).parent.mkdir(parents=True, exist_ok=True)
         (tmp_path / rel).write_text(text)
     plan = static_build.plan(tmp_path)
     assert (plan or {}).get("framework") == framework
@@ -159,6 +176,22 @@ def test_angular_nested_output_is_found(tmp_path):
     (tmp_path / "dist" / "app" / "browser").mkdir(parents=True)
     (tmp_path / "dist" / "app" / "browser" / "index.html").write_text("<html>")
     assert static_build.find_output(tmp_path, ["dist"]) == tmp_path / "dist" / "app" / "browser"
+    assert static_build.find_output(tmp_path, ["dist"], since=9e9) is None     # a stale committed build is not ours
+
+
+def test_a_fresh_build_is_reused_not_rebuilt(tmp_path):
+    import os
+    import time
+
+    (tmp_path / "package.json").write_text(json.dumps({"scripts": {"build": "x"}, "dependencies": {"vite": "5"}}))
+    (tmp_path / "dist").mkdir()
+    (tmp_path / "dist" / "index.html").write_text("<html>")
+    later = time.time() + 5
+    os.utime(tmp_path / "dist" / "index.html", (later, later))
+    assert static_build.fresh_output(tmp_path) == tmp_path / "dist"
+    (tmp_path / "main.js").write_text("changed")
+    os.utime(tmp_path / "main.js", (later + 5, later + 5))
+    assert static_build.fresh_output(tmp_path) is None
 
 
 def test_the_routes_start_and_report_a_job(a0_tmp, monkeypatch):  # noqa: F811
