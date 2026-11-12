@@ -121,3 +121,13 @@ def test_the_studio_chat_shows_each_step_and_a_summary(studio_server, lang, done
         assert "no restart" in items.nth(3).inner_text()
         assert page.locator(".msg.bot").last.inner_text().startswith("Built it.")
         browser.close()
+
+
+def test_a_text_tool_call_never_reaches_the_owner_and_self_review_is_an_activity_row():
+    from daedalus.agent import strip_text_tool_calls
+
+    reply = 'Built it.\n\n<tool_call name="playtest">\n{"slug": "frog-hop"}\n</tool_call>\n'
+    assert strip_text_tool_calls(reply) == "Built it."
+    assert strip_text_tool_calls('Done. <tool_call name="x">{"a": 1}') == "Done."
+    row = activity.compact({"seq": 9, "ts": 1.0, "type": "self_review", "payload": {"issue": "no playtest", "fix": "run it"}})
+    assert row == {"seq": 9, "ts": 1.0, "type": "self_review", "issue": "no playtest", "fix": "run it"}

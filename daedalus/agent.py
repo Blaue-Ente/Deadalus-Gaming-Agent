@@ -527,6 +527,14 @@ def _self_improve_audit_log() -> "Path":
     return p
 
 
+_TEXT_TOOL_CALL = re.compile(r"<tool_call\b[^>]*>.*?(?:</tool_call>|$)", re.DOTALL)
+
+
+def strip_text_tool_calls(raw: str) -> str:
+    """A tool call written as text never ran (live 2026-11-12: "<tool_call name=playtest>" reached the owner)."""
+    return _TEXT_TOOL_CALL.sub("", raw or "").strip()
+
+
 def _read_file_tool(raw_path: str, line_start: int | None = None, line_end: int | None = None) -> dict:
     """Execute NEED_READ_FILE: read a file safely and return its contents."""
     import time as _time
@@ -4337,7 +4345,8 @@ class Daedalus:
                 r"<NEED_(?:PROPOSE_START|SANDBOX)>.*?</NEED_(?:PROPOSE_START|SANDBOX)>",
                 "", raw, flags=re.DOTALL,
             )
-            raw = raw.strip()
+            # A tool call written as text never ran (live 2026-11-12: "<tool_call name=playtest>" reached the owner).
+            raw = strip_text_tool_calls(raw)
 
         # ── Phase 13: post-reply gates (review + question budget + outcome) ──
         try:
@@ -4373,10 +4382,17 @@ class Daedalus:
                 )
                 if not _crit.get("ok", True) and _crit.get("issue"):
                     log.warning("review-gate flagged: %s", _crit.get("issue", "")[:200])
-                    raw = (raw or "") + (
-                        f"\n\n— Self-review бележка: {_crit.get('issue','')[:300]} "
-                        f"{('Предложение: ' + _crit.get('suggested_fix','')[:200]) if _crit.get('suggested_fix') else ''}"
-                    )
+                    # Shown in the Studio's activity panel, not glued onto the owner's answer (it was internal jargon,
+                    # in Bulgarian whatever the owner's language, at the end of every flagged reply).
+                    try:
+                        from .harness import runs as _rg_runs
+                        _rg_rid = _rg_runs.current_run_id()
+                        if _rg_rid:
+                            _rg_runs.safe_event(_rg_rid, "self_review", {
+                                "issue": str(_crit.get("issue") or "")[:300],
+                                "fix": str(_crit.get("suggested_fix") or "")[:200]})
+                    except Exception:
+                        pass
         except Exception as _rg_exc:
             log.debug("review-gate skipped: %s", _rg_exc)
         # Question budget enforcement (max 1 clarifying question per session)

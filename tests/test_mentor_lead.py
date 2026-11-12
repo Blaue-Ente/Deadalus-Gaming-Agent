@@ -326,3 +326,34 @@ def test_an_unbuilt_vite_game_is_not_played(project):
 
     pg.write_file(project, "src/main.js", "console.log(1)")
     assert asyncio.run(_REAL_PLAY_FRAMES(project, "vite")) == ([], [])
+
+
+def test_a_review_cut_at_the_output_limit_is_asked_again_with_more_room(monkeypatch):
+    """Live 2026-11-12: a 10-item review was cut mid-JSON at 700 tokens and the acceptance silently failed (bad_json)."""
+    import asyncio as _aio
+
+    from daedalus import mentor_lead as ml
+    from daedalus.harness import gateway as gw
+
+    asked = []
+
+    async def call(intent, messages, *, max_tokens, **kw):
+        asked.append(max_tokens)
+        if len(asked) == 1:
+            return gw.GatewayResult(True, text='{"met": ["a", "b"', usage={"completion_tokens": max_tokens})
+        return gw.GatewayResult(True, text='{"met": ["a"], "missing": []}', usage={"completion_tokens": 20})
+
+    monkeypatch.setattr(gw, "call", call)
+    monkeypatch.setattr("daedalus.mentor_helm._resolve_endpoint", lambda: ("openrouter", "m"))
+    monkeypatch.setattr("daedalus.mentor_helm.record_spend", lambda n: None)
+    data, meta = _aio.run(ml._ask("sys", "user", max_tokens=ml.REVIEW_MAX_OUT, client_id="t"))
+    assert data == {"met": ["a"], "missing": []} and asked == [ml.REVIEW_MAX_OUT, ml.REVIEW_MAX_OUT * 2]
+    asked.clear()
+
+    async def bad(intent, messages, *, max_tokens, **kw):
+        asked.append(max_tokens)
+        return gw.GatewayResult(True, text="not json", usage={"completion_tokens": 5})
+
+    monkeypatch.setattr(gw, "call", bad)
+    data, meta = _aio.run(ml._ask("sys", "user", max_tokens=100, client_id="t"))
+    assert data is None and meta["error"] == "bad_json" and asked == [100]       # not cut: no second call

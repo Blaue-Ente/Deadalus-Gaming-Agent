@@ -63,6 +63,7 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
             "type": "object",
             "properties": {
                 "path": {"type": "string"},
+                "slug": {"type": "string", "description": "Playground project slug; path is then relative to it"},
                 "line_start": {"type": "integer"},
                 "line_end": {"type": "integer"},
             },
@@ -790,6 +791,48 @@ def _slug_from_text(*blobs: str) -> str:
     return ""
 
 
+def _project_read(path: str, slug_hint: str, session_id: str, line_start: Any = None, line_end: Any = None
+                  ) -> dict[str, Any] | None:
+    """read_file of a Playground project file, or None when the path is not one. Before, read_file resolved every path
+    against the harness, so the writer could not re-read the game it was editing (live 2026-11-12: four misses)."""
+    from . import playground as pg
+    from .secret_paths import is_secret_path
+
+    raw = (path or "").strip().replace("\\", "/").lstrip("/")
+    slug = (slug_hint or "").strip()
+    m = _PG_SLUG_PATH.search(raw)
+    if not slug and m:
+        slug = m.group(1)
+    head = raw.split("/", 1)[0]
+    if not slug and "/" in raw and (pg.project_dir(head)).is_dir():
+        slug = head
+    if not slug and (session_id or "").startswith("pg-"):
+        slug = session_id[3:]                                   # project chat: the bound project
+    if not slug:
+        return None
+    root = pg.project_dir(slug)
+    if not root.is_dir():
+        return None
+    rel = raw[m.end():].lstrip("/") if m and m.group(1) == slug else raw
+    if rel.split("/", 1)[0] == slug and not (root / rel).exists():
+        rel = rel.split("/", 1)[1] if "/" in rel else ""
+    target = (root / (rel or "index.html")).resolve()
+    try:
+        inside = target.relative_to(root.resolve())
+    except ValueError:
+        return {"ok": False, "error": "path escapes the project"}
+    if is_secret_path(inside):
+        return {"ok": False, "error": "secret file: not read"}
+    if not target.is_file():
+        return {"ok": False, "error": f"file not found in project {slug}: {inside.as_posix()}"}
+    text = target.read_text("utf-8", errors="replace")
+    if line_start and line_end:
+        text = "".join(text.splitlines(keepends=True)[int(line_start) - 1:int(line_end)])
+    truncated = len(text) > 8000
+    return {"ok": True, "content": text[:8000], "truncated": truncated,
+            "path": f"playground/projects/{slug}/{inside.as_posix()}", "slug": slug}
+
+
 def _nav_hint(*, slug: str = "", path: str = "", next_line: str = "") -> str:
     """S3: every Playground tool result names the slug path so the model stops hunting."""
     slug = (slug or "").strip() or _slug_from_text(path)
@@ -1236,11 +1279,15 @@ async def execute_native_tool(
         if name == "read_file":
             path = str(args.get("path", ""))
             slug_h = str(args.get("slug") or "").strip() or _slug_from_text(path)
-            if _playground_session(session_id) and _harness_target(path):
-                return f"── read_file BLOCKED ──\n{_HARNESS_JAIL}"
             ls = args.get("line_start")
             le = args.get("line_end")
-            r = read_file_fn(path, int(ls) if ls else None, int(le) if le else None)
+            r = _project_read(path, slug_h, session_id, ls, le)
+            if r is not None:
+                slug_h = r.get("slug") or slug_h
+            else:
+                if _playground_session(session_id) and _harness_target(path):
+                    return f"── read_file BLOCKED ──\n{_HARNESS_JAIL}"
+                r = read_file_fn(path, int(ls) if ls else None, int(le) if le else None)
             if r.get("ok"):
                 trunc = " [TRUNCATED]" if r.get("truncated") else ""
                 loc = str(r.get("path") or path)

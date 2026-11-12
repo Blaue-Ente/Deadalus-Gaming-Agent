@@ -222,6 +222,8 @@
         } else if (r.type === "mentor_perception") {
           line("👁", "", t("act.mentorSaw", { n: r.frames || 0 }) + (r.next_tool ? " → " + r.next_tool : ""), at,
             bullets(r.reason, r.observations));
+        } else if (r.type === "self_review") {
+          line("⚑", "bad", t("act.selfReview"), at, bullets(r.issue, r.fix ? [r.fix] : []));
         } else if (r.type === "truncated") {
           line("…", "dim", t("act.truncated"), at);
         }

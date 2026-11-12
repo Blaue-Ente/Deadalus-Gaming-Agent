@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from typing import Any
 
-_SHOWN = ("tool", "llm", "mentor_plan", "mentor_review", "mentor_perception", "state", "truncated")
+_SHOWN = ("tool", "llm", "mentor_plan", "mentor_review", "mentor_perception", "self_review", "state", "truncated")
 
 
 def _strs(val: Any, n: int, width: int = 160) -> list[str]:
@@ -49,6 +49,8 @@ def compact(ev: dict[str, Any]) -> dict[str, Any] | None:
         row.update({"observations": _strs(p.get("observations"), 3),
                     "frames": len(p.get("frame_sha256s") or []), "next_tool": advice.get("next_tool"),
                     "reason": str(advice.get("reason") or "")[:200]})
+    elif kind == "self_review":
+        row.update({"issue": str(p.get("issue") or "")[:300], "fix": str(p.get("fix") or "")[:200]})
     elif kind == "state":
         row["state"] = p.get("state") or p.get("to")
     return row
