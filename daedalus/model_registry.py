@@ -21,6 +21,8 @@ Named configs:        `adn:worker_named_configs` (dict id→config)
 """
 from __future__ import annotations
 
+from .model_defaults import OPENROUTER_DEFAULT_MODEL
+
 import logging
 import re
 import time
@@ -368,15 +370,15 @@ DEFAULT_REGISTRY: list[dict] = [
     },
     {
         "id":             "claude-sonnet-openrouter",
-        "display_name":   "Claude Sonnet 4.5",
+        "display_name":   "Claude Sonnet 5.5",
         "provider":       "openrouter",
-        "model_id":       "anthropic/claude-sonnet-4-5",
+        "model_id":       OPENROUTER_DEFAULT_MODEL,
         "capabilities":   ["review", "reasoning", "orchestration", "writing",
                            "analysis", "tools"],
         "strengths":      "Нюансирано разбиране, финален review, complex reasoning, tool calling",
-        "weaknesses":     "Скъп ($3/MTok вход, $15/MTok изход) — само при реална нужда",
-        "cost_input":     3.0,
-        "cost_output":    15.0,
+        "weaknesses":     "Скъп ($2/MTok вход, $10/MTok изход) — само при реална нужда",
+        "cost_input":     2.0,
+        "cost_output":    10.0,
         "context_window": 200_000,
         "tier":           "review",
         "supports_tools": True,

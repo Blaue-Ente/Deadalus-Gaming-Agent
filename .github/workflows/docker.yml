@@ -36,6 +36,12 @@ jobs:
           ./Godot_v4.3-stable_linux.x86_64 --version
           echo "GODOT_BIN=$RUNNER_TEMP/godot/Godot_v4.3-stable_linux.x86_64" >> "$GITHUB_ENV"
           echo "DAEDALUS_REQUIRE_PLAY=1" >> "$GITHUB_ENV"
+      # Syntax errors and undefined names: before 2026-11-12 agent.py was excluded and four NameErrors there were
+      # swallowed by broad excepts (phase resume, the repeated-error breaker, the daily digest never ran).
+      - name: Lint (syntax and undefined names)
+        run: |
+          pip install ruff
+          ruff check --select E9,F63,F7,F82 daedalus app tests
       - name: Install and test
         run: |
           pip install -e ".[dev]"

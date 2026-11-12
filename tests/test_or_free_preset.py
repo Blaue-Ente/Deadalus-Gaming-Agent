@@ -51,7 +51,8 @@ def test_apply_or_free_pins_pipeline_slots_off_paid_defaults(harness_tmp):
     cfg = get_config()
     assert cfg["provider"] == "openrouter"
     assert is_openrouter_free_id(cfg["model"])
-    assert cfg["model"] != "anthropic/claude-sonnet-4-5"
+    from daedalus.llm_config import OPENROUTER_DEFAULT_MODEL
+    assert cfg["model"] != OPENROUTER_DEFAULT_MODEL
 
     wc = get_worker_config()
     for slot in ("fast", "balanced", "deep", "planner", "coder", "reviewer", "analysis", "claude"):

@@ -60,7 +60,6 @@ ENGINE_PATHS = {
         "daedalus/playground_unity_scaffold.py",
         "daedalus/playground_unity_init.py",
         "daedalus/playground_unity_build.py",
-        "daedalus/playground_unity_bridge.py",
     ],
     "blender": [
         "daedalus/blender_jobs.py",

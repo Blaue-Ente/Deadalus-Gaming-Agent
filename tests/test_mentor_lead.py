@@ -394,3 +394,55 @@ def test_no_second_retry_when_the_gateway_already_retried(monkeypatch):
     monkeypatch.setattr("daedalus.mentor_helm.record_spend", lambda n: None)
     data, meta = _aio.run(ml._ask("sys", "user", max_tokens=700, client_id="t"))
     assert data is None and meta["error"] == "bad_json" and asked == [700]
+
+
+def test_a_click_game_is_seen_reacting_to_clicks(project):
+    """Live 2026-11-12: a click game (pop the bubbles) saw one centre click; its players said nothing reacted."""
+    pytest.importorskip("playwright")
+    from daedalus import playground as pg
+
+    pg.write_file(project, "index.html", (
+        "<canvas id=c width=960 height=640></canvas><script>let hits=[];"
+        "c.addEventListener('click',e=>hits.push([e.offsetX,e.offsetY]));"
+        "const g=c.getContext('2d');(function f(){g.fillStyle='#000';g.fillRect(0,0,960,640);g.fillStyle='#f0f';"
+        "for(const[x,y]of hits)g.fillRect(x-10,y-10,20,20);requestAnimationFrame(f)})()</script>"))
+    parts, shas = asyncio.run(_REAL_PLAY_FRAMES(project, "static"))
+    if not parts:
+        pytest.skip("chromium unavailable in this environment")
+    assert shas[1] != shas[0] and shas[3] != shas[1]          # clicks across the field show up mid-play and later
+
+
+def test_the_click_sweep_never_presses_a_link_or_a_button(project):
+    """Review 2026-11-12: a sweep click on a help link or a pause button would change what the frames show."""
+    pytest.importorskip("playwright")
+    from daedalus import playground as pg
+
+    pg.write_file(project, "index.html", (
+        "<style>body{margin:0}a,button{position:absolute;width:120px;height:60px}</style>"
+        "<a href='help.html' style='left:240px;top:230px'>help</a>"
+        "<button style='left:600px;top:230px'>pause</button>"
+        "<canvas id=c width=960 height=640></canvas><script>document.title='ok'</script>"))
+    interactive = []
+
+    async def run():
+        from playwright.async_api import async_playwright
+
+        from daedalus import mentor_lead
+        from daedalus.playground_browser import _serve_static
+        base, stop = _serve_static(pg.project_dir(project))
+        try:
+            async with async_playwright() as p:
+                b = await p.chromium.launch()
+                page = await b.new_page(viewport={"width": 960, "height": 640})
+                await page.goto(base + "/")
+                for xy in ([300, 260], [660, 260]):
+                    interactive.append(await page.evaluate(mentor_lead._INTERACTIVE_AT, xy))
+                interactive.append(await page.evaluate(mentor_lead._INTERACTIVE_AT, [480, 500]))   # the canvas
+                await b.close()
+        finally:
+            stop()
+    try:
+        asyncio.run(run())
+    except Exception as exc:  # pragma: no cover
+        pytest.skip(f"chromium unavailable: {exc}")
+    assert interactive == [True, True, False]     # link and button skipped; the canvas is clicked

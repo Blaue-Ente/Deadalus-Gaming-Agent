@@ -11,6 +11,8 @@ All helpers are stateless or use small in-memory caches. No external deps.
 """
 from __future__ import annotations
 
+from .model_defaults import OPENROUTER_DEFAULT_MODEL
+
 import hashlib
 import logging
 import os
@@ -257,14 +259,23 @@ class ErrorTracker:
         norm = re.sub(r"\d+", "N", (error or "")[:200])
         return hashlib.sha1(f"{tool}::{norm}".encode()).hexdigest()[:12]
 
+    MAX_KEYS = 500          # one key per turn (agent.py): the oldest drop out, so a long-running server stays small
+
+    def _trim(self) -> None:
+        for table in (self._hits, self._tool_counts):
+            while len(table) > self.MAX_KEYS:
+                table.pop(next(iter(table)))
+
     def record(self, session_id: str, tool: str, error: str) -> int:
         """Record a FAILED tool call. Returns repeat count of this fingerprint."""
+        self._trim()
         fp = self._fingerprint(tool, error)
         self._hits[session_id][fp] += 1
         return self._hits[session_id][fp]
 
     def track_call(self, session_id: str, tool: str) -> int:
         """Track ANY tool call (success or failure). Use for budget enforcement."""
+        self._trim()
         self._tool_counts[session_id][tool] += 1
         return self._tool_counts[session_id][tool]
 
@@ -298,7 +309,7 @@ FALLBACK_CHAIN: list[tuple[str, str, str, str, str]] = [
     # NOTE: Replit AI Integrations (replit_openai / replit_gemini) are intentionally
     # excluded — ADN runs only on external keys (OpenRouter + Novita).
     # OpenRouter — Claude Sonnet as first external fallback (proven protocol follower)
-    ("openrouter_claude", "anthropic/claude-sonnet-4-5", "openai",
+    ("openrouter_claude", OPENROUTER_DEFAULT_MODEL, "openai",
      "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"),
     # Novita — cheapest meaningful fallback: DeepSeek V3.2 ($0.30/$0.90)
     # Tested ✅: deepseek/deepseek-v3.2, qwen/qwen3-235b-a22b-instruct-2507,
@@ -796,8 +807,9 @@ async def review_gate_critique(user_message: str, draft_reply: str,
             f"DRAFT REPLY:\n{(draft_reply or '')[:2000]}\n\n"
             "Качествен ли е draft-ът? Отговори САМО с JSON."
         )
+        from .llm_config import OPENROUTER_FAST_MODEL
         review_model = (
-            "anthropic/claude-haiku-4-5"
+            OPENROUTER_FAST_MODEL
             if os.environ.get("OPENROUTER_API_KEY")
             else "meta-llama/llama-3.1-8b-instruct"
         )

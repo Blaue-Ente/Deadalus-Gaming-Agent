@@ -519,7 +519,7 @@ _LOGS_RE = re.compile(r"<NEED_LOGS:\s*(\d+)(?:\s*\|\s*([^>]{1,200}))?\s*>")
 _AUDIT_LOG = None  # lazy-initialised below
 
 
-def _self_improve_audit_log() -> "Path":
+def _self_improve_audit_log() -> "pathlib.Path":  # noqa: F821  (imported inside)
     from pathlib import Path
     from .self_improve import ADN_ROOT  # type: ignore[attr-defined]
     p = ADN_ROOT / "data" / "daedalus" / "self_improve_audit.log"
@@ -1922,7 +1922,12 @@ class Daedalus:
         MAX_TOOL_ITERATIONS = 30
         _tool_loop_broke_with_fallback = False
         _promise_guard_count = 0  # no-silent-stall guard: max 3 re-rolls per session
+        # The repeated-error breaker counts this turn only (review 2026-11-12: its tracker is per session and was
+        # never reset, so failures from earlier turns cut later turns short once the breaker ran again).
+        _breaker_key = f"{session_id or 'no-session'}:{uuid.uuid4().hex[:8]}"
+        _calls_at_iter = 0
         for _tool_iter in range(MAX_TOOL_ITERATIONS):
+            _calls_at_iter = len(tool_calls_used)       # the calls this iteration adds are tool_calls_used[this:]
             # Tool re-roll: if Claude emitted any NEED_* marker, execute tools and re-call.
             hit = scan_need_markers(raw)
             search_q = hit.search_q
@@ -2147,6 +2152,7 @@ class Daedalus:
                     from .tool_status import native_tool_result_ok
 
                     ok = native_tool_result_ok(result_text)
+                    blocked = "BLOCKED" in (result_text or "")      # was an undefined name: NameError
                     tool_calls_used.append({
                         "tool": dump.name,
                         "ok": ok,
@@ -2957,7 +2963,7 @@ class Daedalus:
                     _blk_reason   = blocked_m.group(1).strip()
                     _blk_tried    = blocked_m.group(2).strip()
                     _blk_next     = blocked_m.group(3).strip()
-                    _blk_file     = block.get("file_path", "") if "block" in dir() else ""
+                    _blk_file     = ""          # no proposal block exists in this scope (was a dir() guard on it)
                     _blk_id = push_blocker(
                         reason=_blk_reason,
                         tried=_blk_tried,
@@ -3946,10 +3952,10 @@ class Daedalus:
             try:
                 _err_tracker = get_error_tracker()
                 # Track ALL tool calls (success or fail) for budget enforcement
-                for _tc in tool_calls_used[-len(tool_results_text_parts):]:
-                    _err_tracker.track_call(session_id, _tc.get("tool", "unknown"))
+                for _tc in tool_calls_used[_calls_at_iter:]:
+                    _err_tracker.track_call(_breaker_key, _tc.get("tool", "unknown"))
                 _failed_now: list[tuple[str, str]] = []
-                for _tc in tool_calls_used[-len(tool_results_text_parts):]:
+                for _tc in tool_calls_used[_calls_at_iter:]:
                     if _tc.get("ok") is False:
                         _tool_name = _tc.get("tool", "unknown")
                         # Extract first FAILED line from tool_block as error sample
@@ -3970,12 +3976,12 @@ class Daedalus:
                 _should_break_repeat = False
                 _repeat_tool = ""
                 for _tn, _es in _failed_now:
-                    if _err_tracker.should_break(session_id, _tn, _es, threshold=2):
+                    if _err_tracker.should_break(_breaker_key, _tn, _es, threshold=2):
                         _should_break_repeat = True
                         _repeat_tool = _tn
                         break
                 # Per-tool budget: max 4 NEED_PG calls per session
-                if _err_tracker.tool_call_count(session_id, "postgres_query") > 4:
+                if _err_tracker.tool_call_count(_breaker_key, "postgres_query") > 4:
                     _should_break_repeat = True
                     _repeat_tool = "postgres_query (budget exceeded)"
                 if _should_break_repeat:
@@ -3987,9 +3993,8 @@ class Daedalus:
                         f"Спирам опитите. Премини към NEED_BLOCKED или различен подход — "
                         f"НЕ повтаряй същия маркер."
                     )
-                    # Force-exit the tool reroll loop — append synthesis directive
-                    # to messages and break out so we don't keep burning iterations.
-                    messages.append({"role": "user", "content": tool_block})
+                    # Force-exit the tool reroll loop so we don't keep burning iterations. (It appended to an
+                    # undefined `messages` first: the NameError was swallowed below and the breaker never broke.)
                     raw = (
                         f"Спирам да опитвам — същата грешка от [{_repeat_tool}] "
                         f"се повтори. Премини към друг подход или ми кажи конкретно "
@@ -4352,8 +4357,13 @@ class Daedalus:
         # quietly adopt opinions about himself without owner approval — exactly
         # the bypass channel the discovery approval flow exists to close.
         # So we skip reflection entirely on for_self turns.
+        # Opt-in (DAEDALUS_REFLECTION=1): it is one more paid model call per turn and writes lessons to memory. It
+        # never actually ran before 2026-11-12 (a local "import asyncio" broke it); turning it on is the owner's call.
+        _reflect = (os.environ.get("DAEDALUS_REFLECTION") or "").strip().lower() in ("1", "true", "yes", "on")
         if for_self:
             log.info("session=%s reflection skipped (for_self=True; owner approval required)", session_id)
+        elif not _reflect:
+            pass
         else:
             try:
                 t = asyncio.create_task(run_reflection_cycle(
@@ -4482,7 +4492,8 @@ class Daedalus:
             from .clarification_tracker import detect_clarifying_question, log_clarification
             _clr_qs = detect_clarifying_question(raw or "")
             if _clr_qs:
-                import asyncio
+                # (a local "import asyncio" here made asyncio local to this whole function, so the digest task near
+                # its top always raised UnboundLocalError, swallowed by its except: found 2026-11-12)
                 asyncio.create_task(log_clarification(
                     session_id=session_id,
                     user_message=user_message,
@@ -4580,7 +4591,11 @@ class Daedalus:
 
     @staticmethod
     def _phase_save(session_id: str, pct: float, task_name: str, msg: str) -> None:
-        """Save phase resume context to Replit DB for this session."""
+        """Save phase resume context for this session. A finished task (100%) clears it: a resume note on every later
+        message for 72 h would steer unrelated requests back to it (review 2026-11-12)."""
+        if pct >= 0.999:
+            Daedalus._phase_clear(session_id)
+            return
         try:
             from .kv import db  # type: ignore
             import time as _time
@@ -4590,9 +4605,9 @@ class Daedalus:
                 "pct":        pct,
                 "msg":        msg,
                 "saved_at":   datetime.now(timezone.utc).isoformat(),
-                "expires_at": _time.time() + DaedalusAgent._PHASE_TTL_SECONDS,
+                "expires_at": _time.time() + Daedalus._PHASE_TTL_SECONDS,
             })
-            db[f"{DaedalusAgent._PHASE_KEY_PREFIX}{session_id}"] = payload
+            db[f"{Daedalus._PHASE_KEY_PREFIX}{session_id}"] = payload
             log.debug("phase_resume saved: session=%s pct=%.0f%% %s", session_id, pct * 100, task_name)
         except Exception as exc:
             log.debug("phase_save failed (non-fatal): %s", exc)
@@ -4603,13 +4618,14 @@ class Daedalus:
         try:
             import time as _time
             from .kv import db  # type: ignore
-            raw = db.get(f"{DaedalusAgent._PHASE_KEY_PREFIX}{session_id}")
+            raw = db.get(f"{Daedalus._PHASE_KEY_PREFIX}{session_id}")
             if raw is None:
                 return None
             data = json.loads(str(raw)) if isinstance(raw, str) else raw
-            if isinstance(data, dict) and data.get("expires_at", 0) < _time.time():
+            if isinstance(data, dict) and (data.get("expires_at", 0) < _time.time()
+                                           or float(data.get("pct") or 0) >= 0.999):
                 try:
-                    del db[f"{DaedalusAgent._PHASE_KEY_PREFIX}{session_id}"]
+                    del db[f"{Daedalus._PHASE_KEY_PREFIX}{session_id}"]
                 except Exception:
                     pass
                 return None
@@ -4623,7 +4639,7 @@ class Daedalus:
         """Clear phase resume context (task completed or session closed)."""
         try:
             from .kv import db  # type: ignore
-            key = f"{DaedalusAgent._PHASE_KEY_PREFIX}{session_id}"
+            key = f"{Daedalus._PHASE_KEY_PREFIX}{session_id}"
             if db.get(key) is not None:
                 del db[key]
         except Exception:
@@ -4675,12 +4691,11 @@ class Daedalus:
         if phase_ctx:
             pct_pct = int((phase_ctx.get("pct", 0)) * 100)
             resume_note = (
-                f"[PHASE RESUME — ти вече работеше по тази задача в предишна сесия]\n"
-                f"Задача : {phase_ctx.get('task_name', '?')}\n"
-                f"Прогрес: {pct_pct}% — {phase_ctx.get('msg', '')}\n"
-                f"Запазено: {phase_ctx.get('saved_at', '?')}\n\n"
-                f"НЕ правй reconnaissance отново — продължи от {pct_pct}%. "
-                f"Емитирай NEED_DATA_PROPOSAL / NEED_PG директно.\n\n"
+                "[PHASE RESUME: you were already working on this task in an earlier session]\n"
+                f"Task: {phase_ctx.get('task_name', '?')}\n"
+                f"Progress: {pct_pct}% ({phase_ctx.get('msg', '')})\n"
+                f"Saved: {phase_ctx.get('saved_at', '?')}\n\n"
+                f"Do not redo the reconnaissance: continue from {pct_pct}%.\n\n"
             )
             msg = resume_note + msg
             log.info("phase_resume injected: session=%s pct=%d%% task=%s",

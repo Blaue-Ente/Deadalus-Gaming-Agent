@@ -26,6 +26,8 @@ Literal model-id slots (e.g. "deepseek/...") fall back to the balanced persona.
 """
 from __future__ import annotations
 
+from .model_defaults import OPENROUTER_DEFAULT_MODEL
+
 import asyncio
 import json
 import logging
@@ -293,11 +295,11 @@ WORKER_SLOTS: dict[str, dict] = {
     "balanced": {"label": "📊 Универсален анализатор (Llama 3.3 70B)",     "default_model": "meta-llama/llama-3.3-70b-instruct",    "default_provider": "openrouter"},
     "deep":     {"label": "🧠 Главен синтезатор / Мислител (DS V3.2)",     "default_model": "deepseek/deepseek-v3.2",               "default_provider": "openrouter"},
     "analysis": {"label": "🔬 Reasoning анализатор (DS R1-0528, бавен)",   "default_model": "deepseek/deepseek-r1-0528",            "default_provider": "openrouter"},
-    "claude":   {"label": "✨ Claude — хибриден оркестратор (при нужда)",  "default_model": "anthropic/claude-sonnet-4-5",          "default_provider": "openrouter"},
+    "claude":   {"label": "✨ Claude — хибриден оркестратор (при нужда)",  "default_model": OPENROUTER_DEFAULT_MODEL,          "default_provider": "openrouter"},
     # ── Pipeline слотове (роли, не конкретни модели) ─────────────────────────
     "planner":  {"label": "🗺 Плановик — план + декомпозиция (DS R1)",     "default_model": "deepseek/deepseek-r1-0528",            "default_provider": "openrouter"},
     "coder":    {"label": "💻 Coder — пише/поправя код (Qwen3 / DS V3)",   "default_model": "qwen/qwen3-coder-30b-a3b-instruct",    "default_provider": "novita"},
-    "reviewer": {"label": "🔍 Reviewer — одобрява/блокира (Claude Sonnet)","default_model": "anthropic/claude-sonnet-4-5",          "default_provider": "openrouter"},
+    "reviewer": {"label": "🔍 Reviewer — одобрява/блокира (Claude Sonnet)","default_model": OPENROUTER_DEFAULT_MODEL,          "default_provider": "openrouter"},
     # ── Auto слот — избира от Model Registry ─────────────────────────────────
     "auto":     {"label": "🤖 Auto — registry-driven избор",               "default_model": "_auto_",                              "default_provider": "_auto_"},
 }
