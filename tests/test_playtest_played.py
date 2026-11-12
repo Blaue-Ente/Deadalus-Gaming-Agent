@@ -102,3 +102,72 @@ def test_the_builders_tool_lets_the_players_play(game, monkeypatch):
     asyncio.run(execute_native_tool("playtest", {"slug": game}, memory=None, session_id="s",
                                     read_file_fn=lambda *a: {}))
     assert got["see_fn"] is playtest.gateway_see
+
+
+# ── the audience gate: a game is done only when players who played it would keep playing ────────────────────────
+class _Loop:
+    def __init__(self, slug, playbook="playground.arcade"):
+        import types
+        self.slug, self.kind, self.lead_accepted, self.lead_fix_used = slug, "static", True, 0
+        self.route = types.SimpleNamespace(playbook=types.SimpleNamespace(id=playbook))
+
+
+def _report(ship_ready, mode="played"):
+    async def fake(slug, **kw):
+        assert kw["see_fn"] is playtest.gateway_see
+        return {"mode": mode, "ship_ready": ship_ready, "summary": "playtest x (played, 4 frames): quit=3/4",
+                "quotes": ["I could not tell what hit me"], "fixes": ["flash the car that hits the frog"],
+                "saw_frames": 4}
+    return fake
+
+
+def test_players_who_would_quit_send_the_game_back_with_their_fixes(game, monkeypatch):
+    from daedalus import mentor_lead
+
+    monkeypatch.setattr(playtest, "run_playtest", _report(False))
+    loop = _Loop(game)
+    nudge = asyncio.run(mentor_lead.audience_gate(loop, "make a frog game"))
+    assert "AUDIENCE TEST: NOT YET" in nudge and "flash the car that hits the frog" in nudge
+    assert loop.lead_fix_used == 1 and loop.lead_accepted is False                   # reviewed again after the fix
+    assert "most players would still quit" in " ".join(mentor_lead.summary_lines(loop))
+
+
+def test_a_game_players_would_keep_is_done(game, monkeypatch):
+    from daedalus import mentor_lead
+
+    monkeypatch.setattr(playtest, "run_playtest", _report(True))
+    loop = _Loop(game)
+    assert asyncio.run(mentor_lead.audience_gate(loop, "make a frog game")) is None and loop.audience_passed
+    assert "taken WHILE PLAYING" in " ".join(mentor_lead.summary_lines(loop))   # live: the reply doubted it
+    assert asyncio.run(mentor_lead.audience_gate(loop, "make a frog game")) is None   # runs once once passed
+
+
+@pytest.mark.parametrize("change", [
+    {"lead_accepted": False},                     # the lead has not accepted: its own review comes first
+    {"lead_fix_used": 2},                         # no fix round left: report, do not loop
+    {"kind": "godot"},                            # no browser play for this kind
+])
+def test_the_gate_stays_out_of_the_way(game, monkeypatch, change):
+    from daedalus import mentor_lead
+
+    monkeypatch.setattr(playtest, "run_playtest", _report(False))
+    loop = _Loop(game)
+    for k, v in change.items():
+        setattr(loop, k, v)
+    assert asyncio.run(mentor_lead.audience_gate(loop, "make a frog game")) is None
+
+
+def test_an_app_is_not_played_by_an_audience(game, monkeypatch):
+    from daedalus import mentor_lead
+
+    monkeypatch.setattr(playtest, "run_playtest", _report(False))
+    assert asyncio.run(mentor_lead.audience_gate(_Loop(game, "playground.vite"), "a budget tracker app")) is None
+    assert mentor_lead.is_game(_Loop(game, "playground.vite"), "направи игра с жаба")
+
+
+def test_whisper_never_runs_an_audience(game, monkeypatch):
+    from daedalus import mentor_lead, task_effort
+
+    monkeypatch.setattr(playtest, "run_playtest", _report(False))
+    with task_effort.bind({"tier": "whisper"}):
+        assert asyncio.run(mentor_lead.audience_gate(_Loop(game), "make a frog game")) is None

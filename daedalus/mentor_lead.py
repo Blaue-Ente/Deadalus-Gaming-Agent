@@ -25,6 +25,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import re
 import logging
 import time
 from contextvars import ContextVar
@@ -512,6 +513,60 @@ async def acceptance_nudge(loop: Any, request: str) -> str | None:
     return review_block(rev, rounds_left=LEAD_FIX_ROUNDS - loop.lead_fix_used)
 
 
+GAME_PLAYBOOKS = {"playground.arcade", "playground.math3d", "playground.crowd", "playground.epic"}
+_GAME_WORDS = re.compile(r"\b(game|games|play(?:able|er)?|level|arcade)\b|игр|spiel|jeu|juego", re.I)
+
+
+def is_game(loop: Any, request: str) -> bool:
+    route = getattr(loop, "route", None)
+    pb = str(getattr(getattr(route, "playbook", None), "id", "") or "")
+    return pb in GAME_PLAYBOOKS or bool(_GAME_WORDS.search(request or ""))
+
+
+async def audience_gate(loop: Any, request: str) -> str | None:
+    """After the lead accepts a game: simulated players play it once. If half or more would quit and a fix round is
+    left, the writer gets their words and fixes (None = done). Owner, 2026-11-12: a game Daedalus makes must be really
+    playable and good, like The-Labirinth; the lead alone accepted games whose players could not tell why they died.
+    Shares the lead's fix rounds, so a build never loops."""
+    if loop is None or not getattr(loop, "lead_accepted", False) or getattr(loop, "audience_passed", False):
+        return None
+    slug = str(getattr(loop, "slug", "") or "")
+    kind = str(getattr(loop, "kind", "") or "static")
+    if not slug or kind not in {"static", "", "html", "vite", "vite-react", "phaser"} or not is_game(loop, request):
+        return None
+    try:
+        from .task_effort import current
+        if str((current() or {}).get("tier") or "") == "whisper":
+            return None
+    except Exception:
+        pass
+    from .playtest import gateway_see, run_playtest
+
+    try:
+        report = await run_playtest(slug, kind=kind, n=4, see_fn=gateway_see)
+    except Exception:
+        log.warning("audience test for %s failed", slug, exc_info=True)
+        return None
+    loop.audience = {k: report.get(k) for k in ("mode", "summary", "ship_ready", "quotes", "fixes", "saw_frames")}
+    if report.get("mode") != "played" or report.get("ship_ready"):
+        loop.audience_passed = report.get("mode") == "played"
+        return None
+    used = int(getattr(loop, "lead_fix_used", 0) or 0)
+    if used >= LEAD_FIX_ROUNDS:
+        return None
+    loop.lead_fix_used = used + 1
+    loop.lead_accepted = False                # accepted again only after the fix is reviewed
+    quotes = "\n".join(f"- {q}" for q in (report.get("quotes") or [])[:4])
+    fixes = "\n".join(f"- {f}" for f in (report.get("fixes") or [])[:4])
+    return ("━━━ AUDIENCE TEST: NOT YET ━━━\n"
+            f"{report.get('summary')}\n"
+            "Simulated players just played the game (the frames you saw are what they saw). Most would quit.\n"
+            f"What they said:\n{quotes or '- (no quotes)'}\n"
+            f"What would keep them:\n{fixes or '- (no fixes)'}\n"
+            "Fix the causes they name in the game's files (write_file), keep everything that already works, then "
+            f"stop. Fix rounds left after this one: {LEAD_FIX_ROUNDS - loop.lead_fix_used}.")
+
+
 def summary_lines(loop: Any) -> list[str]:
     """For the persona's final reply: what the lead decided, honestly."""
     if loop is None:
@@ -528,4 +583,12 @@ def summary_lines(loop: Any) -> list[str]:
         else:
             lines.append("Lead review: NOT accepted. Still missing: " + "; ".join(rev.get("missing") or []) +
                          ". Tell the owner plainly.")
+    aud = getattr(loop, "audience", None)
+    if isinstance(aud, dict) and aud.get("summary"):
+        verdict = "players would keep playing" if aud.get("ship_ready") else "most players would still quit"
+        seen = (f" The players' {aud.get('saw_frames')} frames were taken WHILE PLAYING, after pressing start (the "
+                "image attached to this reply is only the first paint, not what they saw)."
+                if aud.get("mode") == "played" else "")
+        lines.append(f"Audience test ({aud.get('mode')}): {aud.get('summary')} — {verdict}.{seen} "
+                     "Tell the owner plainly.")
     return lines
