@@ -224,7 +224,14 @@ async def publish(
     # Vite / Phaser (Vite+Phaser): build first, publish dist/ as static
     publish_root = root
     if kind in ("vite", "vite-react", "phaser"):
-        dist = await _build_vite(root)
+        from . import static_build as _sb
+        sb_plan = _static_plan(root)
+        if sb_plan and (_sb.fresh_output(root) is not None or sb_plan["manager"] != "npm"):
+            # A revived repo: reuse the build verify made, and install with the repo's own manager (live
+            # 2026-11-12: npm install crashed on The-Labirinth's pnpm node_modules).
+            dist = await _sb.build(root)
+        else:
+            dist = await _build_vite(root)
         publish_root = dist
         kind = "static"
         entry = "index.html"
