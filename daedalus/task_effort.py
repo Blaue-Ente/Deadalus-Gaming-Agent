@@ -168,6 +168,12 @@ def _explicit_epic() -> dict[str, Any] | None:
         return None
     out: dict[str, Any] = {"model": mid, "model_source": "owner-epic", "provider_path": "epic-cloud"}
     prov = (os.environ.get("DAEDALUS_EPIC_PROVIDER") or "").strip().lower()
+    if not prov:
+        try:                     # a model without a provider is refused by the overlay (review 2026-11-12)
+            from .llm_config import get_brain_config
+            prov = str((get_brain_config() or {}).get("provider") or "").strip().lower()
+        except Exception:
+            prov = ""
     if prov:
         out["provider"] = prov
     return out

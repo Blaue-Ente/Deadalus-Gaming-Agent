@@ -260,8 +260,9 @@ def test_vite_builds_with_relative_assets(tmp_path, monkeypatch):
     assert argvs[-1][-3:] == ("build", "--", "--base=./")
 
 
-def test_the_classic_route_starts_the_same_job(a0_tmp, monkeypatch):  # noqa: F811
-    """One revive path: the classic /admin route is an alias of the job (it used to clone + smoke test on its own)."""
+def test_the_classic_route_runs_the_same_job_and_keeps_its_answer(a0_tmp, monkeypatch):  # noqa: F811
+    """One revive path. The classic page waits and reads {project, onboard, compat}, and sends name, branch and
+    repair_on_fail (review 2026-11-12: the alias first returned only a job id and dropped those fields)."""
     from fastapi.testclient import TestClient
 
     from app.main import app
@@ -270,15 +271,47 @@ def test_the_classic_route_starts_the_same_job(a0_tmp, monkeypatch):  # noqa: F8
     started = []
 
     async def fake_run(job, clone_fn=None):
+        from daedalus import playground as pg
         started.append(job)
+        job.slug = (await pg.create_project(job.name or "tiny", kind="static"))["slug"]
+        job.steps = [{"step": "verify", "ok": True}]
         job.status = "done"
         return job
 
     monkeypatch.setattr(revive_job, "run", fake_run)
     monkeypatch.setenv("DAEDALUS_TOKEN", "t")
     c = TestClient(app, headers={"x-daedalus-token": "t"})
-    r = c.post("/admin/daedalus/playground/api/revive", json={"url": "https://github.com/me/tiny"})
-    assert r.status_code == 200 and r.json()["poll"].startswith("/api/v1/playground/revive/")
-    assert started and started[0].publish == "none"
+    r = c.post("/admin/daedalus/playground/api/revive",
+               json={"url": "https://github.com/me/tiny", "name": "Lamp", "branch": "dev", "repair_on_fail": False})
+    body = r.json()
+    assert r.status_code == 200 and body["project"]["slug"] == "lamp" and body["onboard"]["ok"] is True
+    assert "compat" in body and body["job"]["status"] == "done"
+    job = started[0]
+    assert (job.publish, job.name, job.branch, job.repair_rounds) == ("none", "Lamp", "dev", 0)
     assert c.post("/admin/daedalus/playground/api/revive", json={}).status_code == 400
     assert not hasattr(playground_revive, "revive_pipeline")
+
+
+def test_name_and_branch_reach_the_clone(a0_tmp, no_browser):  # noqa: F811
+    seen = {}
+    inner = _clone_from({"index.html": GAME})
+
+    async def clone(url, **kw):
+        seen.update(kw)
+        return await inner(url, **kw)
+
+    job = asyncio.run(revive_job.run(revive_job.ReviveJob(url="https://github.com/me/tiny", name="Lamp",
+                                                          branch="dev"), clone_fn=clone))
+    assert job.status == "done" and seen["name"] == "Lamp" and seen["branch"] == "dev"
+
+
+@pytest.mark.parametrize("script, manager, tail", [
+    ("vite build", "npm", ("--", "--base=./")),
+    ("vite build", "pnpm", ("--base=./",)),
+    ("vite build --mode prod", "yarn", ("--base=./",)),
+    ("tsc && vite build", "npm", ()),                 # chained: the flag would reach the wrong command
+    ("vite build && node post.js", "npm", ()),
+])
+def test_relative_base_only_where_it_reaches_vite(tmp_path, script, manager, tail):
+    (tmp_path / "package.json").write_text(json.dumps({"scripts": {"build": script}, "devDependencies": {"vite": "5"}}))
+    assert static_build._relative_base_args(tmp_path, {"framework": "vite"}, manager) == tail

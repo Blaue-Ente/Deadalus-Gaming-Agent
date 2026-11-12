@@ -280,7 +280,8 @@ async def _kickoff(request: str, *, slug: str = "", kind: str = "") -> dict[str,
             "FILES NOW: " + (", ".join(f"{p} ({n} B)" for p, n in files) or "(none)"))
     try:
         data, meta = await asyncio.wait_for(
-            _ask(PLAN_SYSTEM, user, max_tokens=PLAN_MAX_OUT, client_id="daedalus/mentor-plan"), _timeout() + 5)
+            _ask(PLAN_SYSTEM, user, max_tokens=PLAN_MAX_OUT, client_id="daedalus/mentor-plan"),
+            _timeout() * 2 + 10)                       # room for one retry when a reply was cut
     except Exception as exc:
         data, meta = None, {"error": type(exc).__name__}
     if not data:
@@ -440,7 +441,7 @@ async def review(loop: Any, request: str) -> dict[str, Any] | None:
     try:
         data, meta = await asyncio.wait_for(
             _ask(REVIEW_SYSTEM, user, max_tokens=REVIEW_MAX_OUT, images=images or None,
-                 client_id="daedalus/mentor-review"), _timeout() + 5)
+                 client_id="daedalus/mentor-review"), _timeout() * 2 + 10)   # room for one retry when a reply was cut
     except Exception as exc:
         data, meta = None, {"error": type(exc).__name__}
     if not data:

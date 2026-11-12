@@ -5,7 +5,19 @@ The Run Ledger already records each step of a turn: tool calls, model calls, the
 brief and checklist) is passed through as-is and capped; UI words are translated in the Studio (EN and BG)."""
 from __future__ import annotations
 
+import re
 from typing import Any
+
+# Common credential shapes: NAME_KEY=value, sk-…, ghp_…, github_pat_…, xox…, AKIA…, "Bearer …".
+_SECRETISH = re.compile(
+    r"(?i)\b[\w.-]*(?:key|token|secret|passw(?:or)?d|auth)[\w.-]*\s*[=:]\s*\S+"
+    r"|\b(?:sk|pk|rk)-[A-Za-z0-9_-]{8,}|\bgh[pousr]_[A-Za-z0-9]{10,}|\bgithub_pat_\w+"
+    r"|\bxox[abprs]-[\w-]+|\bAKIA[0-9A-Z]{12,}|\bBearer\s+\S+")
+
+
+def redact(text: str) -> str:
+    """Activity rows are stored and streamed: a command or an error line can carry a key (review 2026-11-12)."""
+    return _SECRETISH.sub("***", text or "")
 
 _SHOWN = ("tool", "llm", "mentor_plan", "mentor_review", "mentor_perception", "self_review", "state", "truncated")
 
@@ -23,8 +35,9 @@ def compact(ev: dict[str, Any]) -> dict[str, Any] | None:
     p = ev.get("payload") if isinstance(ev.get("payload"), dict) else {}
     row: dict[str, Any] = {"seq": ev.get("seq"), "ts": ev.get("ts"), "type": kind}
     if kind == "tool":
-        row.update({k: p.get(k) for k in ("tool", "target", "ok", "blocked", "ms")})
-        row["note"] = str(p.get("note") or "")[:140]
+        row.update({k: p.get(k) for k in ("tool", "ok", "blocked", "ms")})
+        row["target"] = redact(str(p.get("target") or ""))[:80]
+        row["note"] = redact(str(p.get("note") or ""))[:140]
     elif kind == "llm":
         row.update({"intent": p.get("intent"), "model": p.get("model"), "ok": p.get("ok"),
                     "ms": p.get("latency_ms"), "tokens": (p.get("prompt_tokens") or 0) + (p.get("completion_tokens") or 0),

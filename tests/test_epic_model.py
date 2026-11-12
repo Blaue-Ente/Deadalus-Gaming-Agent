@@ -57,6 +57,8 @@ def test_the_owner_can_name_the_epic_model(cloud, monkeypatch):
     monkeypatch.setenv("DAEDALUS_EPIC_PROVIDER", "openrouter")
     out = te.resolve_model({"apply_model": True, "tier": "epic"})
     assert (out["model"], out["provider"], out["model_source"]) == ("anthropic/claude-sonnet-5.5", "openrouter", "owner-epic")
+    monkeypatch.delenv("DAEDALUS_EPIC_PROVIDER")
+    assert te.resolve_model({"apply_model": True, "tier": "epic"})["provider"] == "openrouter"   # the owner's provider
     monkeypatch.setenv("DAEDALUS_OFFLINE", "1")
     assert te.resolve_model({"apply_model": True, "tier": "epic"}).get("model_source") != "owner-epic"
 

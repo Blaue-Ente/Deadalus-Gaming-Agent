@@ -806,8 +806,8 @@ def _project_read(path: str, slug_hint: str, session_id: str, line_start: Any = 
     head = raw.split("/", 1)[0]
     if not slug and "/" in raw and (pg.project_dir(head)).is_dir():
         slug = head
-    if not slug and (session_id or "").startswith("pg-"):
-        slug = session_id[3:]                                   # project chat: the bound project
+    if not slug:
+        slug = _bound_project(session_id)                       # project chat: the bound project (never pg-auto…)
     if not slug:
         return None
     root = pg.project_dir(slug)
@@ -825,12 +825,16 @@ def _project_read(path: str, slug_hint: str, session_id: str, line_start: Any = 
         return {"ok": False, "error": "secret file: not read"}
     if not target.is_file():
         return {"ok": False, "error": f"file not found in project {slug}: {inside.as_posix()}"}
-    text = target.read_text("utf-8", errors="replace")
-    if line_start and line_end:
-        text = "".join(text.splitlines(keepends=True)[int(line_start) - 1:int(line_end)])
-    truncated = len(text) > 8000
-    return {"ok": True, "content": text[:8000], "truncated": truncated,
-            "path": f"playground/projects/{slug}/{inside.as_posix()}", "slug": slug}
+    lines = target.read_text("utf-8", errors="replace").splitlines(keepends=True)
+    first = max(1, int(line_start)) if line_start else 1                 # either bound alone works too
+    last = int(line_end) if line_end else len(lines)
+    text = "".join(lines[first - 1:last])
+    out: dict[str, Any] = {"ok": True, "content": text[:8000], "truncated": len(text) > 8000,
+                           "path": f"playground/projects/{slug}/{inside.as_posix()}", "slug": slug,
+                           "total_lines": len(lines)}
+    if out["truncated"]:
+        out["truncated_at_line"] = first - 1 + out["content"].count("\n") + 1   # continue with line_start=this
+    return out
 
 
 def _nav_hint(*, slug: str = "", path: str = "", next_line: str = "") -> str:
@@ -1212,9 +1216,12 @@ def activity_target(tname: str, tinput: Any) -> str:
     of a command. Never file contents or full arguments (a command or body could carry a key)."""
     if not isinstance(tinput, dict):
         return ""
+    from .activity import redact
+
     if tname == "run_command":
-        words = str(tinput.get("command") or tinput.get("cmd") or "").split()
-        return " ".join(words[:2])[:60]
+        words = [w for w in str(tinput.get("command") or tinput.get("cmd") or "").split()
+                 if "=" not in w and w not in ("export", "env", "set", "&&", "||", ";", "|")]   # KEY=… npm …
+        return redact(" ".join(words[:2]))[:60]
     for key in _ACTIVITY_TARGET_KEYS:
         val = tinput.get(key)
         if isinstance(val, str) and val.strip():
@@ -1222,7 +1229,7 @@ def activity_target(tname: str, tinput: Any) -> str:
             if key == "url":
                 from urllib.parse import urlsplit
                 val = urlsplit(val).netloc or val[:40]
-            return val[:80]
+            return redact(val)[:80]
     return ""
 
 
@@ -1233,7 +1240,8 @@ def activity_tool(tname: str, tinput: Any, *, ok: bool, blocked: bool, ms: int, 
         rid = runs.current_run_id()
         if not rid:
             return
-        first = (result or "").strip().splitlines()[0][:140] if (result or "").strip() else ""
+        from .activity import redact
+        first = redact((result or "").strip().splitlines()[0])[:140] if (result or "").strip() else ""
         runs.safe_event(rid, "tool", {"tool": tname, "target": activity_target(tname, tinput), "ok": bool(ok),
                                       "blocked": bool(blocked), "ms": int(ms),
                                       "note": "" if ok else first})
@@ -1290,6 +1298,8 @@ async def execute_native_tool(
                 r = read_file_fn(path, int(ls) if ls else None, int(le) if le else None)
             if r.get("ok"):
                 trunc = " [TRUNCATED]" if r.get("truncated") else ""
+                if r.get("truncated") and r.get("truncated_at_line"):
+                    trunc += f" — continue with line_start={r['truncated_at_line']}"
                 loc = str(r.get("path") or path)
                 return (
                     f"── read_file {loc}{trunc} ──\n{r['content']}"

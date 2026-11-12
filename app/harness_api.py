@@ -828,7 +828,7 @@ async def chat_job_stream(job_id: str, request: Request) -> StreamingResponse:
             if not row:
                 yield _chat_sse("error", {"error": "gone"})
                 break
-            rows, act_seq = activity.since(str(row.get("run_id") or ""), act_seq)
+            rows, act_seq = await asyncio.to_thread(activity.since, str(row.get("run_id") or ""), act_seq)
             if rows:
                 yield _chat_sse("activity", {"rows": rows})
             live = get_live(row.get("session_id") or "") or {}

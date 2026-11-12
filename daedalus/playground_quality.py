@@ -17,6 +17,7 @@ is injected by the caller, so this stays decoupled from ``admin.py``.
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import os
@@ -237,7 +238,7 @@ async def evaluate(
         idx_lines = []
     code_index = "\n".join(idx_lines)
     screenshot_b64 = ""
-    in_play = _fresh_play_shot(slug, project_dir)
+    in_play = await asyncio.to_thread(_fresh_play_shot, slug, project_dir)     # walks the project
     try:
         shot_rel = bv.get("screenshot_path") if isinstance(bv, dict) else None
         shot_abs = in_play or (project_dir / shot_rel if shot_rel else None)

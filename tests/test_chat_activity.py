@@ -97,6 +97,7 @@ def test_the_studio_chat_shows_each_step_and_a_summary(studio_server, lang, done
 
     job = {"id": "j1", "status": "done", "session_id": "s", "result": {"reply": "Built it."}, "error": None}
     body = ("event: activity\ndata: " + json.dumps({"rows": ROWS}) + "\n\n"
+            + "event: activity\ndata: " + json.dumps({"rows": ROWS}) + "\n\n"   # a reconnect resends history
             + "event: done\ndata: " + json.dumps(job) + "\n\n")
     with sync_playwright() as pw:
         browser, page = _browser(pw)
@@ -141,3 +142,28 @@ def test_a_bare_named_tool_call_line_is_stripped_but_prose_is_kept():
     assert strip_text_tool_calls(reply) == "I will check it in a browser before I call it done."
     prose = "Use the browser (it opens the game) and write_file to save."
     assert strip_text_tool_calls(prose) == prose
+
+
+def test_credentials_never_reach_the_activity_feed(runs):
+    assert activity_target("run_command", {"command": "OPENAI_API_KEY=sk-live-abc123456 npm run build"}) == "npm run"
+    assert activity_target("run_command", {"command": "export GITHUB_TOKEN=ghp_abcdefghijkl && git push"}) == "git push"
+    assert "ghp_" not in activity_target("run_command", {"command": "git clone https://ghp_abcdefghijklmn@github.com/x"})
+    rid = runs.open_run("chat", slug="g", summary="t")
+    tok = runs.bind(rid)
+    activity_tool("run_command", {"command": "curl x"}, ok=False, blocked=False, ms=1,
+                  result="── run_command FAILED: Authorization: Bearer sk-abcdefghijkl rejected")
+    runs.unbind(tok)
+    row = [r for r in activity.since(rid, 0)[0] if r["type"] == "tool"][0]
+    assert "sk-abc" not in row["note"] and "***" in row["note"]
+
+
+def test_stripping_never_eats_the_owners_code_or_prose():
+    from daedalus.agent import NOT_RUN_NOTE, strip_text_tool_calls
+
+    code = "Here is the setup:\n```js\nworld({ seed: 1,\n  size: 3 })\n```\nThat is all."
+    assert strip_text_tool_calls(code) == code
+    prose = "Writing <tool_call> by hand does nothing.\n\nMore text after it."
+    assert strip_text_tool_calls(prose) == prose
+    spans = 'browser({"a": 1\n\nkeep this paragraph\n})'
+    assert "keep this paragraph" in strip_text_tool_calls(spans)
+    assert strip_text_tool_calls('<tool_call name="x">{"a": 1}</tool_call>') == NOT_RUN_NOTE

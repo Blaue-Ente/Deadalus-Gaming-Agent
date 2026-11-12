@@ -197,8 +197,14 @@
       return x;
     };
     const secs = (ms) => (ms == null ? "" : (ms >= 1000 ? (ms / 1000).toFixed(1) + "s" : ms + "ms"));
+    let lastSeq = 0;
     function addRows(rows) {
       (rows || []).forEach((r) => {
+        // A reconnecting stream sends the history again from the start: show each ledger row once.
+        if (r.seq != null) {
+          if (r.seq <= lastSeq) return;
+          lastSeq = r.seq;
+        }
         const at = r.ts ? clock(r.ts * 1000 - started) : "";
         if (r.type === "tool") {
           const bad = r.blocked ? t("act.refused") : (r.ok ? "" : t("act.failed"));

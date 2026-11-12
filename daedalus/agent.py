@@ -527,15 +527,16 @@ def _self_improve_audit_log() -> "Path":
     return p
 
 
-_TEXT_TOOL_CALL = re.compile(r"<tool_call\b[^>]*>.*?(?:</tool_call>|$)", re.DOTALL)
-
-
+_TEXT_TOOL_CALL = re.compile(
+    r"<tool_call\b[^>]*>(?:(?:(?!<tool_call\b)[\s\S]){0,4000}?</tool_call>|\s*\{[\s\S]{0,4000}\}\s*$)")
 _NAMED_CALL: re.Pattern[str] | None = None
+NOT_RUN_NOTE = "(The last step was a tool call written as text, so it did not run.)"
 
 
 def strip_text_tool_calls(raw: str) -> str:
     """A tool call written as text never ran (live 2026-11-12: "<tool_call name=playtest>" and a bare line
-    "browser({...})" reached the owner). Only real native tool names followed by ``({`` are removed, never prose."""
+    "browser({...})" reached the owner). Only real native tool names followed by ``({`` are removed, never inside a
+    fenced code block, never across a blank line (review 2026-11-12: the first version could eat the owner's code)."""
     global _NAMED_CALL
     if _NAMED_CALL is None:
         try:
@@ -544,11 +545,16 @@ def strip_text_tool_calls(raw: str) -> str:
         except Exception:
             names = []
         alt = "|".join(re.escape(n) for n in names) or "(?!)"
-        _NAMED_CALL = re.compile(r"^[ \t]*(?:" + alt + r")\(\{[\s\S]*?\}\)[ \t]*$", re.MULTILINE)
-    text = _TEXT_TOOL_CALL.sub("", raw or "")
-    text = _NAMED_CALL.sub("", text)
-    text = re.sub(r"(?m)^[ \t]*<br\s*/?>[ \t]*$", "", text)
-    return re.sub(r"\n{3,}", "\n\n", text).strip()
+        _NAMED_CALL = re.compile(r"^[ \t]*(?:" + alt + r")\(\{(?:(?!\n[ \t]*\n)[^`]){0,4000}?\}\)[ \t]*$",
+                                 re.MULTILINE)
+    source = raw or ""
+    parts = re.split(r"(```[\s\S]*?```)", source)          # odd parts are fenced code: left untouched
+    for i in range(0, len(parts), 2):
+        text = _TEXT_TOOL_CALL.sub("", parts[i])
+        text = _NAMED_CALL.sub("", text)
+        parts[i] = re.sub(r"(?m)^[ \t]*<br\s*/?>[ \t]*$", "", text)
+    out = re.sub(r"\n{3,}", "\n\n", "".join(parts)).strip()
+    return out or (NOT_RUN_NOTE if source.strip() else "")
 
 
 def _read_file_tool(raw_path: str, line_start: int | None = None, line_end: int | None = None) -> dict:
@@ -4400,6 +4406,7 @@ class Daedalus:
                     log.warning("review-gate flagged: %s", _crit.get("issue", "")[:200])
                     # Shown in the Studio's activity panel, not glued onto the owner's answer (it was internal jargon,
                     # in Bulgarian whatever the owner's language, at the end of every flagged reply).
+                    _rg_rid = ""
                     try:
                         from .harness import runs as _rg_runs
                         _rg_rid = _rg_runs.current_run_id()
@@ -4408,7 +4415,12 @@ class Daedalus:
                                 "issue": str(_crit.get("issue") or "")[:300],
                                 "fix": str(_crit.get("suggested_fix") or "")[:200]})
                     except Exception:
-                        pass
+                        _rg_rid = ""
+                    if not _rg_rid:      # no Studio run to show it in (blocking API): keep it with the answer
+                        raw = (raw or "") + (
+                            f"\n\n— Self-check: {_crit.get('issue', '')[:300]}"
+                            + (f" Suggested fix: {_crit.get('suggested_fix', '')[:200]}"
+                               if _crit.get("suggested_fix") else ""))
         except Exception as _rg_exc:
             log.debug("review-gate skipped: %s", _rg_exc)
         # Question budget enforcement (max 1 clarifying question per session)

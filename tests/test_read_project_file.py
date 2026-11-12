@@ -41,3 +41,14 @@ def test_the_tool_returns_the_file(game):
     out = asyncio.run(execute_native_tool("read_file", {"path": "game.js", "slug": game}, memory=None,
                                           session_id="studio-x", read_file_fn=lambda *a: {"ok": False, "error": "x"}))
     assert out.startswith(f"── read_file playground/projects/{game}/game.js") and "let lives = 3;" in out
+
+
+def test_line_ranges_truncation_and_autopilot_sessions(game):
+    from daedalus import playground as pg
+
+    pg.write_file(game, "big.js", "".join(f"line {i} {'x' * 60}\n" for i in range(1, 501)))
+    r = _project_read("big.js", game, "x", line_start=490)
+    assert r["content"].startswith("line 490 ") and r["total_lines"] == 500 and not r["truncated"]
+    r = _project_read("big.js", game, "x")
+    assert r["truncated"] and r["content"].count("\n") + 1 == r["truncated_at_line"]
+    assert _project_read("game.js", "", "pg-auto-" + game) is None          # an autopilot session is not project chat
