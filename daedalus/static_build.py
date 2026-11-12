@@ -117,6 +117,17 @@ def fresh_output(root: Path) -> Path | None:
     return find_output(root, p["outputs"], since=_newest_source(root))
 
 
+_STACK_LINE = re.compile(r"^\s+at .+$|^\s*\^\s*$", re.M)
+
+
+def digest(out: str, limit: int = 1500) -> str:
+    """The tool's own words without stack frames: a tail of "at …" lines hid the real error (live 2026-11-12, a CRA
+    build said only "at NormalModule.js:452" while the cause, ERR_OSSL_EVP_UNSUPPORTED, sat above)."""
+    text = _STACK_LINE.sub("", out or "")
+    text = re.sub(r"\n{2,}", "\n", text).strip()
+    return text[-limit:]
+
+
 def _relative_base_args(root: Path, p: dict[str, Any], manager: str) -> tuple[str, ...]:
     """Vite with relative assets (the site is served under /apps/<slug>/). Only for a plain ``vite build`` script:
     in a chained script the flag would reach the last command, not vite. npm needs ``--`` to pass it on; pnpm and
@@ -142,8 +153,12 @@ async def build(root: Path, *, timeout_install: float = 600, timeout_build: floa
     import time
     started = time.time() - 1.0
 
+    legacy_openssl = False
+
     async def run(*cmd: str, timeout: float) -> tuple[int, str]:
         env = PlaygroundRuntime.child_env(0)
+        if legacy_openssl:
+            env["NODE_OPTIONS"] = (env.get("NODE_OPTIONS", "") + " --openssl-legacy-provider").strip()
         env.setdefault("PUBLIC_URL", ".")             # CRA: relative asset paths so /apps/<slug>/ works
         env["CI"] = "false"                           # child_env sets CI=1; CRA would treat warnings as errors
         argv = argv_for_command(cmd[0], *cmd[1:], env=env)
@@ -161,12 +176,16 @@ async def build(root: Path, *, timeout_install: float = 600, timeout_build: floa
                "yarn": ("npx", "--yes", "yarn", "install"), "pnpm": ("npx", "--yes", "pnpm", "install")}[manager]
     rc, out = await run(*install, timeout=timeout_install)
     if rc != 0:
-        raise RuntimeError(f"{manager} install failed (rc={rc}):\n{out[-1500:]}")
+        raise RuntimeError(f"{manager} install failed (rc={rc}):\n{digest(out)}")
     build_cmd = ("npm", "run", "build") if manager == "npm" else ("npx", "--yes", manager, "run", "build")
     build_cmd += _relative_base_args(root, p, manager)
     rc, out = await run(*build_cmd, timeout=timeout_build)
+    if rc != 0 and "ERR_OSSL_EVP_UNSUPPORTED" in out:
+        # webpack 4 (react-scripts <= 4, Vue CLI 4) on Node >= 17: a known runtime switch, not a code fix.
+        legacy_openssl = True
+        rc, out = await run(*build_cmd, timeout=timeout_build)
     if rc != 0:
-        raise RuntimeError(f"build failed (rc={rc}):\n{out[-1500:]}")
+        raise RuntimeError(f"build failed (rc={rc}):\n{digest(out)}")
     found = find_output(root, p["outputs"], since=started)
     if not found:
         raise RuntimeError(f"build finished but no folder with index.html in {', '.join(p['outputs'])}:\n{out[-600:]}")
