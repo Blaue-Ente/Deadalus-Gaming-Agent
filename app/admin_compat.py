@@ -6,6 +6,7 @@ the ``/admin/daedalus/*`` URL contract the copied JS expects, delegating to
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import mimetypes
@@ -1882,23 +1883,31 @@ async def playground_clone(request: Request):
 
 @router.post("/daedalus/playground/api/revive")
 async def playground_revive(request: Request):
-    from daedalus.playground_git_push import clone_project_remote, forge_error_hint
-    from daedalus.playground_revive import onboard_project, compatibility_report
+    """Classic alias of POST /api/v1/playground/revive: the same job, one revive path. The classic page waits for the
+    answer and reads {project, onboard, compat}, so this route waits for the job and keeps that shape; it never
+    published, so ``publish`` defaults to "none". name, branch and repair_on_fail are honoured (review 2026-11-12)."""
+    from daedalus import playground as pg
+    from daedalus import revive_job
+    from daedalus.playground_revive import compatibility_report
     body = await _body(request)
-    url = (body.get("url") or "").strip()
-    if not url:
-        return JSONResponse({"ok": False, "error": "url required"}, status_code=400)
+    url = str(body.get("url") or "").strip()
     try:
-        proj = await clone_project_remote(
-            url, name=body.get("name", ""), slug=body.get("slug", ""),
-            branch=body.get("branch", ""), ref=body.get("ref", ""),
-            source="revived", keep_git=True,
-        )
-        onboard = await onboard_project(proj["slug"])
-        compat = compatibility_report(None, repo_meta={"html_url": url})
-        return JSONResponse({"ok": True, "project": _jsonable(proj), "onboard": onboard, "compat": compat})
-    except Exception as extra:
-        return JSONResponse({"ok": False, "error": forge_error_hint(extra)}, status_code=500)
+        rounds = 0 if body.get("repair_on_fail") is False else int(body.get("repair_rounds",
+                                                                          revive_job.DEFAULT_REPAIR_ROUNDS))
+        job = revive_job.start(url, publish=str(body.get("publish") or "none"), repair_rounds=rounds,
+                               confirm_public=body.get("confirm_public") is True,
+                               name=str(body.get("name") or ""), branch=str(body.get("branch") or ""))
+    except (ValueError, TypeError) as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    await asyncio.shield(job.task)
+    if not job.slug:
+        return JSONResponse({"ok": False, "error": job.error or "clone failed", "job": job.public()}, status_code=500)
+    proj = await pg.get_project(job.slug) or {"slug": job.slug}
+    onboard = {"ok": job.status == "done", "error": job.error,
+               "repaired": any(s["step"].startswith("repair") and s["ok"] for s in job.steps), "steps": job.steps}
+    compat = compatibility_report(None, repo_meta={"html_url": url})
+    return JSONResponse({"ok": True, "project": _jsonable(proj), "onboard": onboard, "compat": compat,
+                         "job": job.public()})
 
 
 @router.post("/daedalus/playground/api/projects/{slug}/push")

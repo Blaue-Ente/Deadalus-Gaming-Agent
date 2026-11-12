@@ -50,6 +50,7 @@ def get_job(job_id: str) -> dict[str, Any] | None:
         "project": row.get("project") or None,
         "changes": None if row.get("changes") is None else _tc.public(row["changes"]),
         "mode": row.get("mode") or None,
+        "run_id": row.get("run_id") or None,
     }
 
 

@@ -30,6 +30,8 @@ _MAX_JOBS = 50
 class ReviveJob:
     url: str
     publish: str = "local"
+    name: str = ""
+    branch: str = ""
     repair_rounds: int = DEFAULT_REPAIR_ROUNDS
     confirm_public: bool = False
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
@@ -112,15 +114,20 @@ async def _verify(slug: str, kind: str, analysis: dict[str, Any]) -> dict[str, A
 
 
 async def _open_in_browser(slug: str, folder: Path, how: str) -> dict[str, Any]:
-    from .playground_browser import _serve_static, browser_verify, chromium_executable
+    from .playground_browser import _serve_static, _stage_dist_as_published, browser_verify, chromium_executable
 
     if not chromium_executable():
         return {"ok": True, "how": how, "note": "built; no browser on this machine to open it (not checked)"}
-    base, stop = _serve_static(folder)
+    # Opened where it will live (/apps/<slug>/), so absolute /assets/... paths fail here, not after publishing.
+    stage, cleanup = await asyncio.to_thread(_stage_dist_as_published, folder, slug)   # a copy: not on the loop
     try:
-        raw = await browser_verify(slug, base + "/", kind="static")
+        base, stop = _serve_static(stage)
+        try:
+            raw = await browser_verify(slug, base + f"/apps/{slug}/", kind="static")
+        finally:
+            stop()
     finally:
-        stop()
+        await asyncio.to_thread(cleanup)
     ok = bool(raw.get("ok")) and not raw.get("blank_screen")
     errs = [str(e) for e in (raw.get("page_errors") or []) + (raw.get("console_errors") or [])][:5]
     return {"ok": ok, "how": how, "error": "" if ok else ("; ".join(errs) or str(raw.get("summary") or "")
@@ -150,7 +157,8 @@ async def run(job: ReviveJob, *, clone_fn: Any = None) -> ReviveJob:
         if clone_fn is None:
             from .playground_git_push import clone_project_remote as clone_fn
         try:
-            proj = await clone_fn(job.url, source="revived", keep_git=True)
+            extra = {k: v for k, v in (("name", job.name), ("branch", job.branch)) if v}
+            proj = await clone_fn(job.url, source="revived", keep_git=True, **extra)
         except Exception as exc:
             from .playground_git_push import forge_error_hint
             job.step("clone", False, forge_error_hint(exc))
@@ -224,7 +232,7 @@ class _Stop(Exception):
 
 
 def start(url: str, *, publish: str = "local", repair_rounds: int = DEFAULT_REPAIR_ROUNDS,
-          confirm_public: bool = False) -> ReviveJob:
+          confirm_public: bool = False, name: str = "", branch: str = "") -> ReviveJob:
     url = (url or "").strip()
     if not url:
         raise ValueError("url required")
@@ -235,7 +243,7 @@ def start(url: str, *, publish: str = "local", repair_rounds: int = DEFAULT_REPA
             if _JOBS[jid].status != "running":
                 _JOBS.pop(jid, None)
     job = ReviveJob(url=url, publish=publish, repair_rounds=max(0, min(4, int(repair_rounds))),
-                    confirm_public=bool(confirm_public))
+                    confirm_public=bool(confirm_public), name=(name or "").strip(), branch=(branch or "").strip())
     _JOBS[job.id] = job
     job.task = asyncio.get_running_loop().create_task(run(job))
     return job

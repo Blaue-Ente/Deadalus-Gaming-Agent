@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-12T00:28:24.067236+00:00",
+  "generated_at": "2026-11-12T05:00:06.008519+00:00",
   "package_version": "0.3.8",
-  "git_commit": "ebb65e3a16a72d078c6252ca0a73e1eca0997225",
+  "git_commit": "4401e0cc638905c83d01262321ed8dfacfa1ddeb",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -9,18 +9,18 @@
   "hotspots": [
     {
       "path": "daedalus/agent.py",
-      "lines": 4984,
-      "broad_excepts": 160
+      "lines": 5028,
+      "broad_excepts": 162
     },
     {
       "path": "app/admin_compat.py",
-      "lines": 3061,
-      "broad_excepts": 70
+      "lines": 3070,
+      "broad_excepts": 69
     },
     {
       "path": "daedalus/native_tools.py",
-      "lines": 2306,
-      "broad_excepts": 24
+      "lines": 2405,
+      "broad_excepts": 25
     },
     {
       "path": "daedalus/identity.py",
@@ -130,12 +130,13 @@
     ]
   },
   "tests": {
-    "modules": 129,
-    "functions": 1411
+    "modules": 134,
+    "functions": 1442
   },
   "modules": {
     "daedalus": [
       "daedalus/__init__.py",
+      "daedalus/activity.py",
       "daedalus/addons.py",
       "daedalus/agent.py",
       "daedalus/arcade_craft.py",

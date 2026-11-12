@@ -815,9 +815,12 @@ async def chat_job_stream(job_id: str, request: Request) -> StreamingResponse:
     if not job:
         raise HTTPException(status_code=404, detail="unknown job")
 
+    from daedalus import activity
+
     async def _gen():
         yield _chat_sse("job", job)
         last: tuple[Any, ...] | None = None
+        act_seq = 0
         while True:
             if await request.is_disconnected():
                 break
@@ -825,6 +828,9 @@ async def chat_job_stream(job_id: str, request: Request) -> StreamingResponse:
             if not row:
                 yield _chat_sse("error", {"error": "gone"})
                 break
+            rows, act_seq = await asyncio.to_thread(activity.since, str(row.get("run_id") or ""), act_seq)
+            if rows:
+                yield _chat_sse("activity", {"rows": rows})
             live = get_live(row.get("session_id") or "") or {}
             stamp = (live.get("ts"), live.get("label"), live.get("tool"), row.get("status"))
             if stamp != last:

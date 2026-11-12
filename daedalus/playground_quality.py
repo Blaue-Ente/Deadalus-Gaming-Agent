@@ -17,6 +17,7 @@ is injected by the caller, so this stays decoupled from ``admin.py``.
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import os
@@ -165,7 +166,9 @@ def build_critic_messages(
         "}\n"
         "issues и patch_targets ТРЯБВА да са конкретни и приложими — не ‘подобри "
         "дизайна’, а напр. ‘hero секцията няма contrast — затъмни фона и увеличи "
-        "заглавието’ или ‘играта няма hit-feedback — добави particle при сблъсък’."
+        "заглавието’ или ‘играта няма hit-feedback — добави particle при сблъсък’.\n"
+        "LANGUAGE: write summary, issues and patch_targets in the language of the user's task above "
+        "(English for an English task), whatever the language of these instructions."
     )
     try:
         from .arcade_craft import critic_notes
@@ -184,6 +187,23 @@ def build_critic_messages(
         {"role": "system", "content": _CRITIC_SYS},
         {"role": "user", "content": parts},
     ]
+
+
+PLAY_SHOT = "assets/_gameplay_screenshot.png"
+
+
+def _fresh_play_shot(slug: str, project_dir: Any) -> Any:
+    """The gameplay check's frame, taken after pressing start, when it shows the current code. The critic judged the
+    first paint before: live 2026-11-12, a working lantern maze was rejected as "a bare black start menu"."""
+    try:
+        shot = project_dir / PLAY_SHOT
+        if not shot.is_file():
+            return None
+        from .harness.perception import _project_edit_mtime
+        return shot if shot.stat().st_mtime >= _project_edit_mtime(slug) else None
+    except Exception:
+        return None
+
 
 
 async def evaluate(
@@ -218,14 +238,17 @@ async def evaluate(
         idx_lines = []
     code_index = "\n".join(idx_lines)
     screenshot_b64 = ""
+    in_play = await asyncio.to_thread(_fresh_play_shot, slug, project_dir)     # walks the project
     try:
         shot_rel = bv.get("screenshot_path") if isinstance(bv, dict) else None
-        if shot_rel:
-            shot_abs = project_dir / shot_rel
-            if shot_abs.exists():
-                screenshot_b64 = base64.b64encode(shot_abs.read_bytes()).decode()
+        shot_abs = in_play or (project_dir / shot_rel if shot_rel else None)
+        if shot_abs is not None and shot_abs.exists():
+            screenshot_b64 = base64.b64encode(shot_abs.read_bytes()).decode()
     except Exception:
         screenshot_b64 = ""
+    if in_play is not None:
+        description = ((description or "") + "\n\n[The screenshot shows the game DURING PLAY, after pressing start "
+                       "and playing the input scenario; it is not the start screen.]")
     try:
         res = await route_fn(
             messages=build_critic_messages(

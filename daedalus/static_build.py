@@ -117,6 +117,18 @@ def fresh_output(root: Path) -> Path | None:
     return find_output(root, p["outputs"], since=_newest_source(root))
 
 
+def _relative_base_args(root: Path, p: dict[str, Any], manager: str) -> tuple[str, ...]:
+    """Vite with relative assets (the site is served under /apps/<slug>/). Only for a plain ``vite build`` script:
+    in a chained script the flag would reach the last command, not vite. npm needs ``--`` to pass it on; pnpm and
+    yarn pass extra arguments themselves and would hand a literal ``--`` to vite (review 2026-11-12)."""
+    if p.get("framework") != "vite":
+        return ()
+    script = str(((_package(root) or {}).get("scripts") or {}).get("build") or "").strip()
+    if not script.startswith("vite build") or any(op in script for op in ("&&", "||", ";", "|")):
+        return ()
+    return ("--", "--base=./") if manager == "npm" else ("--base=./",)
+
+
 async def build(root: Path, *, timeout_install: float = 600, timeout_build: float = 600) -> Path:
     """Install and build; returns the static output folder. Raises RuntimeError with the tool's own words."""
     from .playground_runtime import PlaygroundRuntime
@@ -151,6 +163,7 @@ async def build(root: Path, *, timeout_install: float = 600, timeout_build: floa
     if rc != 0:
         raise RuntimeError(f"{manager} install failed (rc={rc}):\n{out[-1500:]}")
     build_cmd = ("npm", "run", "build") if manager == "npm" else ("npx", "--yes", manager, "run", "build")
+    build_cmd += _relative_base_args(root, p, manager)
     rc, out = await run(*build_cmd, timeout=timeout_build)
     if rc != 0:
         raise RuntimeError(f"build failed (rc={rc}):\n{out[-1500:]}")

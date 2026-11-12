@@ -271,49 +271,6 @@ async def onboard_project(
     return result
 
 
-async def revive_pipeline(
-    slug: str,
-    *,
-    publish: bool = True,
-    push_github: bool = False,
-    route_fn: Any = None,
-    build_model: str = "",
-) -> dict[str, Any]:
-    """One-click: Verify → (optional Publish) → (optional Push)."""
-    from . import playground_publish as pub
-    from . import playground_github as gh
-
-    proj = await pg.get_project(slug)
-    if not proj:
-        return {"ok": False, "error": "project not found", "steps": []}
-
-    steps: list[dict[str, Any]] = []
-
-    onboard = await onboard_project(
-        slug, repair_on_fail=True, route_fn=route_fn, build_model=build_model,
-    )
-    steps.append({"step": "verify", **onboard})
-    if not onboard.get("ok"):
-        return {"ok": False, "error": onboard.get("error", "verify failed"), "steps": steps}
-
-    if publish:
-        try:
-            pub_res = await pub.publish(slug)
-            steps.append({"step": "publish", "ok": True, **pub_res})
-        except Exception as exc:
-            steps.append({"step": "publish", "ok": False, "error": str(exc)})
-            return {"ok": False, "error": str(exc), "steps": steps}
-
-    if push_github:
-        try:
-            push_res = await gh.push_project(slug)
-            steps.append({"step": "push", "ok": True, **push_res})
-        except Exception as exc:
-            steps.append({"step": "push", "ok": False, "error": str(exc)})
-
-    return {"ok": True, "steps": steps, "slug": slug}
-
-
 async def upstream_diff(slug: str) -> dict[str, Any]:
     """Diff local workspace vs upstream SHA captured at clone."""
     proj = await pg.get_project(slug)

@@ -36,7 +36,7 @@ log = logging.getLogger("daedalus.mentor_lead")
 LEAD_FIX_ROUNDS = 2          # extra writer rounds the lead may ask for after the kernel said "complete"
 MAX_REVIEWS = LEAD_FIX_ROUNDS + 1   # lead reviews per turn: one per fix round, plus the final look
 PLAN_MAX_OUT = 900
-REVIEW_MAX_OUT = 700
+REVIEW_MAX_OUT = 1400   # 700 cut a 10-item review mid-JSON (live 2026-11-12)
 LEAD_TIMEOUT_MIN_S = 45.0
 SOURCE_MAX_CHARS = 40_000    # ~10k tokens: the lead must see every file it judges (found live: 14k cut half a game)
 REQUEST_MAX_CHARS = 1_500
@@ -126,7 +126,7 @@ def _timeout() -> float:
 
 
 async def _ask(system: str, user: str, *, max_tokens: int, images: list[dict[str, Any]] | None = None,
-               client_id: str) -> tuple[dict[str, Any] | None, dict[str, Any]]:
+               client_id: str, _retry: bool = False) -> tuple[dict[str, Any] | None, dict[str, Any]]:
     """One JSON call to the Mentor model. Returns (parsed, meta)."""
     from . import mentor_helm
     from .harness import gateway as gw
@@ -149,8 +149,18 @@ async def _ask(system: str, user: str, *, max_tokens: int, images: list[dict[str
         return None, meta
     tokens = estimate_tokens(system) + estimate_tokens(user) + estimate_tokens(res.text or "") + 800 * len(images or [])
     mentor_helm.record_spend(tokens)
-    meta["tokens"] = tokens
-    return _parse_json(res.text or ""), meta
+    meta["tokens"] = meta.get("tokens", 0) + tokens
+    data = _parse_json(res.text or "")
+    if data is None:
+        out_tokens = int((res.usage or {}).get("completion_tokens") or (res.usage or {}).get("output_tokens") or 0)
+        cut = out_tokens >= int(max_tokens * 0.95)
+        meta["error"] = "cut_at_limit" if cut else "bad_json"
+        log.info("mentor lead %s: %s (out=%s of %s) %r", client_id, meta["error"], out_tokens, max_tokens,
+                 (res.text or "")[:200])
+        if cut and not _retry:
+            return await _ask(system, user, max_tokens=max_tokens * 2, images=images, client_id=client_id,
+                              _retry=True)
+    return data, meta
 
 
 def _parse_json(text: str) -> dict[str, Any] | None:
@@ -270,7 +280,8 @@ async def _kickoff(request: str, *, slug: str = "", kind: str = "") -> dict[str,
             "FILES NOW: " + (", ".join(f"{p} ({n} B)" for p, n in files) or "(none)"))
     try:
         data, meta = await asyncio.wait_for(
-            _ask(PLAN_SYSTEM, user, max_tokens=PLAN_MAX_OUT, client_id="daedalus/mentor-plan"), _timeout() + 5)
+            _ask(PLAN_SYSTEM, user, max_tokens=PLAN_MAX_OUT, client_id="daedalus/mentor-plan"),
+            _timeout() * 2 + 10)                       # room for one retry when a reply was cut
     except Exception as exc:
         data, meta = None, {"error": type(exc).__name__}
     if not data:
@@ -314,7 +325,10 @@ def plan_block(plan: dict[str, Any] | None) -> str:
 
 # ── review ──────────────────────────────────────────────────────────────────
 
-PLAY_SCRIPT = (("Enter", 0), ("click", 0), ("Space", 0), ("ArrowRight", 900), ("Space", 0), ("ArrowRight", 700),
+# "shot" takes a frame mid-play. Up hops matter too: found live, a crossing game's frog never moved under a
+# platformer-only script, so the lead judged scoring and lives from the code alone.
+PLAY_SCRIPT = (("Enter", 0), ("click", 0), ("Space", 0), ("ArrowUp", 0), ("ArrowUp", 0), ("ArrowUp", 0),
+               ("shot", 0), ("ArrowRight", 900), ("Space", 0), ("ArrowUp", 0), ("ArrowUp", 0), ("ArrowRight", 700),
                ("ArrowLeft", 500))
 
 
@@ -363,6 +377,9 @@ async def play_frames(slug: str, kind: str = "static") -> tuple[list[dict[str, A
                 await page.wait_for_timeout(1200)
                 shots.append(await page.screenshot(type="png"))
                 for key, hold in PLAY_SCRIPT:
+                    if key == "shot":
+                        shots.append(await page.screenshot(type="png"))
+                        continue
                     if key == "click":
                         await page.mouse.click(480, 320)
                     elif hold:
@@ -424,7 +441,7 @@ async def review(loop: Any, request: str) -> dict[str, Any] | None:
     try:
         data, meta = await asyncio.wait_for(
             _ask(REVIEW_SYSTEM, user, max_tokens=REVIEW_MAX_OUT, images=images or None,
-                 client_id="daedalus/mentor-review"), _timeout() + 5)
+                 client_id="daedalus/mentor-review"), _timeout() * 2 + 10)   # room for one retry when a reply was cut
     except Exception as exc:
         data, meta = None, {"error": type(exc).__name__}
     if not data:

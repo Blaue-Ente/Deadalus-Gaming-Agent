@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import re
+import time
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
@@ -62,6 +63,7 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
             "type": "object",
             "properties": {
                 "path": {"type": "string"},
+                "slug": {"type": "string", "description": "Playground project slug; path is then relative to it"},
                 "line_start": {"type": "integer"},
                 "line_end": {"type": "integer"},
             },
@@ -789,6 +791,52 @@ def _slug_from_text(*blobs: str) -> str:
     return ""
 
 
+def _project_read(path: str, slug_hint: str, session_id: str, line_start: Any = None, line_end: Any = None
+                  ) -> dict[str, Any] | None:
+    """read_file of a Playground project file, or None when the path is not one. Before, read_file resolved every path
+    against the harness, so the writer could not re-read the game it was editing (live 2026-11-12: four misses)."""
+    from . import playground as pg
+    from .secret_paths import is_secret_path
+
+    raw = (path or "").strip().replace("\\", "/").lstrip("/")
+    slug = (slug_hint or "").strip()
+    m = _PG_SLUG_PATH.search(raw)
+    if not slug and m:
+        slug = m.group(1)
+    head = raw.split("/", 1)[0]
+    if not slug and "/" in raw and (pg.project_dir(head)).is_dir():
+        slug = head
+    if not slug:
+        slug = _bound_project(session_id)                       # project chat: the bound project (never pg-auto…)
+    if not slug:
+        return None
+    root = pg.project_dir(slug)
+    if not root.is_dir():
+        return None
+    rel = raw[m.end():].lstrip("/") if m and m.group(1) == slug else raw
+    if rel.split("/", 1)[0] == slug and not (root / rel).exists():
+        rel = rel.split("/", 1)[1] if "/" in rel else ""
+    target = (root / (rel or "index.html")).resolve()
+    try:
+        inside = target.relative_to(root.resolve())
+    except ValueError:
+        return {"ok": False, "error": "path escapes the project"}
+    if is_secret_path(inside):
+        return {"ok": False, "error": "secret file: not read"}
+    if not target.is_file():
+        return {"ok": False, "error": f"file not found in project {slug}: {inside.as_posix()}"}
+    lines = target.read_text("utf-8", errors="replace").splitlines(keepends=True)
+    first = max(1, int(line_start)) if line_start else 1                 # either bound alone works too
+    last = int(line_end) if line_end else len(lines)
+    text = "".join(lines[first - 1:last])
+    out: dict[str, Any] = {"ok": True, "content": text[:8000], "truncated": len(text) > 8000,
+                           "path": f"playground/projects/{slug}/{inside.as_posix()}", "slug": slug,
+                           "total_lines": len(lines)}
+    if out["truncated"]:
+        out["truncated_at_line"] = first - 1 + out["content"].count("\n") + 1   # continue with line_start=this
+    return out
+
+
 def _nav_hint(*, slug: str = "", path: str = "", next_line: str = "") -> str:
     """S3: every Playground tool result names the slug path so the model stops hunting."""
     slug = (slug or "").strip() or _slug_from_text(path)
@@ -1159,6 +1207,48 @@ def _play_lab_sync(action: str, args: dict[str, Any]) -> dict[str, Any]:
     return r
 
 
+# ── activity (what the owner sees while Daedalus works) ──────────────────────
+_ACTIVITY_TARGET_KEYS = ("path", "slug", "url", "query", "q", "name", "action", "engine", "target")
+
+
+def activity_target(tname: str, tinput: Any) -> str:
+    """A short, secret-free description of what a tool call touched: a path, slug, URL host, or the first two words
+    of a command. Never file contents or full arguments (a command or body could carry a key)."""
+    if not isinstance(tinput, dict):
+        return ""
+    from .activity import redact
+
+    if tname == "run_command":
+        words = [w for w in str(tinput.get("command") or tinput.get("cmd") or "").split()
+                 if "=" not in w and w not in ("export", "env", "set", "&&", "||", ";", "|")]   # KEY=… npm …
+        return redact(" ".join(words[:2]))[:60]
+    for key in _ACTIVITY_TARGET_KEYS:
+        val = tinput.get(key)
+        if isinstance(val, str) and val.strip():
+            val = val.strip()
+            if key == "url":
+                from urllib.parse import urlsplit
+                val = urlsplit(val).netloc or val[:40]
+            return redact(val)[:80]
+    return ""
+
+
+def activity_tool(tname: str, tinput: Any, *, ok: bool, blocked: bool, ms: int, result: str = "") -> None:
+    """One ledger event per tool call, streamed to the Studio chat as it happens."""
+    try:
+        from .harness import runs
+        rid = runs.current_run_id()
+        if not rid:
+            return
+        from .activity import redact
+        first = redact((result or "").strip().splitlines()[0])[:140] if (result or "").strip() else ""
+        runs.safe_event(rid, "tool", {"tool": tname, "target": activity_target(tname, tinput), "ok": bool(ok),
+                                      "blocked": bool(blocked), "ms": int(ms),
+                                      "note": "" if ok else first})
+    except Exception:
+        log.debug("activity event skipped", exc_info=True)
+
+
 async def execute_native_tool(
     name: str,
     args: dict[str, Any],
@@ -1197,13 +1287,19 @@ async def execute_native_tool(
         if name == "read_file":
             path = str(args.get("path", ""))
             slug_h = str(args.get("slug") or "").strip() or _slug_from_text(path)
-            if _playground_session(session_id) and _harness_target(path):
-                return f"── read_file BLOCKED ──\n{_HARNESS_JAIL}"
             ls = args.get("line_start")
             le = args.get("line_end")
-            r = read_file_fn(path, int(ls) if ls else None, int(le) if le else None)
+            r = _project_read(path, slug_h, session_id, ls, le)
+            if r is not None:
+                slug_h = r.get("slug") or slug_h
+            else:
+                if _playground_session(session_id) and _harness_target(path):
+                    return f"── read_file BLOCKED ──\n{_HARNESS_JAIL}"
+                r = read_file_fn(path, int(ls) if ls else None, int(le) if le else None)
             if r.get("ok"):
                 trunc = " [TRUNCATED]" if r.get("truncated") else ""
+                if r.get("truncated") and r.get("truncated_at_line"):
+                    trunc += f" — continue with line_start={r['truncated_at_line']}"
                 loc = str(r.get("path") or path)
                 return (
                     f"── read_file {loc}{trunc} ──\n{r['content']}"
@@ -2255,6 +2351,7 @@ async def run_native_discovery_pass(
                 except json.JSONDecodeError:
                     tinput = {"raw": tinput}
 
+            _t0 = time.monotonic()
             result_text = await execute_native_tool(
                 tname, tinput,
                 memory=memory, session_id=session_id,
@@ -2269,6 +2366,8 @@ async def run_native_discovery_pass(
                 # Refused or not run (cut by the output limit, a question turn, another project): nothing happened.
                 # Not a write, and not a defect of the work either.
                 ok, blocked = False, True
+            activity_tool(tname, tinput, ok=ok, blocked=blocked, ms=int((time.monotonic() - _t0) * 1000),
+                          result=result_text)
             tool_log.append({
                 "tool": tname,
                 "input": {k: v for k, v in tinput.items() if k != "content"} if isinstance(tinput, dict) else {},

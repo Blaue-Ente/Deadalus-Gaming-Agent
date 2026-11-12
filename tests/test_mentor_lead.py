@@ -292,8 +292,24 @@ def test_the_lead_plays_a_web_game_before_judging_it(project):
         pytest.skip(f"chromium unavailable: {exc}")
     if not parts:
         pytest.skip("chromium unavailable in this environment")
-    assert len(parts) == 3 and len(set(shas)) >= 2          # play changed the picture
+    assert len(parts) == 4 and len(set(shas)) >= 2          # play changed the picture
     assert all(p["type"] == "image" for p in parts)
+
+
+def test_a_crossing_game_that_moves_only_up_is_seen_moving(project):
+    """Live 2026-11-12: the frog of a crossing game never moved under a platformer-only script."""
+    pytest.importorskip("playwright")
+    from daedalus import playground as pg
+
+    pg.write_file(project, "index.html", (
+        "<canvas id=c width=320 height=200></canvas><script>let y=180;"
+        "addEventListener('keydown',e=>{if(e.key==='ArrowUp')y-=30});"
+        "const g=c.getContext('2d');(function f(){g.fillStyle='#000';g.fillRect(0,0,320,200);"
+        "g.fillStyle='#0f0';g.fillRect(150,y,20,20);requestAnimationFrame(f)})()</script>"))
+    parts, shas = asyncio.run(_REAL_PLAY_FRAMES(project, "static"))
+    if not parts:
+        pytest.skip("chromium unavailable in this environment")
+    assert shas[1] != shas[0]                                # the mid-play frame shows the hops
 
 
 def test_the_owners_words_are_taken_once():
@@ -326,3 +342,34 @@ def test_an_unbuilt_vite_game_is_not_played(project):
 
     pg.write_file(project, "src/main.js", "console.log(1)")
     assert asyncio.run(_REAL_PLAY_FRAMES(project, "vite")) == ([], [])
+
+
+def test_a_review_cut_at_the_output_limit_is_asked_again_with_more_room(monkeypatch):
+    """Live 2026-11-12: a 10-item review was cut mid-JSON at 700 tokens and the acceptance silently failed (bad_json)."""
+    import asyncio as _aio
+
+    from daedalus import mentor_lead as ml
+    from daedalus.harness import gateway as gw
+
+    asked = []
+
+    async def call(intent, messages, *, max_tokens, **kw):
+        asked.append(max_tokens)
+        if len(asked) == 1:
+            return gw.GatewayResult(True, text='{"met": ["a", "b"', usage={"completion_tokens": max_tokens})
+        return gw.GatewayResult(True, text='{"met": ["a"], "missing": []}', usage={"completion_tokens": 20})
+
+    monkeypatch.setattr(gw, "call", call)
+    monkeypatch.setattr("daedalus.mentor_helm._resolve_endpoint", lambda: ("openrouter", "m"))
+    monkeypatch.setattr("daedalus.mentor_helm.record_spend", lambda n: None)
+    data, meta = _aio.run(ml._ask("sys", "user", max_tokens=ml.REVIEW_MAX_OUT, client_id="t"))
+    assert data == {"met": ["a"], "missing": []} and asked == [ml.REVIEW_MAX_OUT, ml.REVIEW_MAX_OUT * 2]
+    asked.clear()
+
+    async def bad(intent, messages, *, max_tokens, **kw):
+        asked.append(max_tokens)
+        return gw.GatewayResult(True, text="not json", usage={"completion_tokens": 5})
+
+    monkeypatch.setattr(gw, "call", bad)
+    data, meta = _aio.run(ml._ask("sys", "user", max_tokens=100, client_id="t"))
+    assert data is None and meta["error"] == "bad_json" and asked == [100]       # not cut: no second call
