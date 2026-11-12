@@ -71,3 +71,12 @@ def test_model_facing_briefings_do_not_pull_the_reply_into_bulgarian():
         assert not re.search(r"[А-Яа-я]", te.briefing({"tier": tier}))
     sys = format_system(route("Build a small web game with a frog", kind="static"), user_message="Build a frog game")
     assert "language of the owner's request" in sys
+
+
+def test_the_quality_critic_answers_in_the_language_of_the_task():
+    """Live 2026-11-12: an English Autopilot task stopped with a Bulgarian critic finding in its error."""
+    from daedalus import playground_quality as pq
+
+    msgs = pq.build_critic_messages(description="A maze game", kind="static", plan_goals=[], dom_excerpt="",
+                                    code_index="", screenshot_b64="")
+    assert "in the language of the user's task" in msgs[-1]["content"][0]["text"]

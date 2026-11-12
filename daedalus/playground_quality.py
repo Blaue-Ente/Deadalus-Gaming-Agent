@@ -165,7 +165,9 @@ def build_critic_messages(
         "}\n"
         "issues и patch_targets ТРЯБВА да са конкретни и приложими — не ‘подобри "
         "дизайна’, а напр. ‘hero секцията няма contrast — затъмни фона и увеличи "
-        "заглавието’ или ‘играта няма hit-feedback — добави particle при сблъсък’."
+        "заглавието’ или ‘играта няма hit-feedback — добави particle при сблъсък’.\n"
+        "LANGUAGE: write summary, issues and patch_targets in the language of the user's task above "
+        "(English for an English task), whatever the language of these instructions."
     )
     try:
         from .arcade_craft import critic_notes
