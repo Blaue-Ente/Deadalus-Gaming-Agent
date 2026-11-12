@@ -160,6 +160,12 @@ def assert_bind_allowed(host: str) -> None:
     )
 
 
+def _apps_analytics_path(path: str) -> bool:
+    """True for exactly ``/apps/{slug}/analytics``: a published game's visit record."""
+    parts = [seg for seg in (path or "").split("/") if seg]
+    return len(parts) == 3 and parts[0] == "apps" and parts[1] != "api" and parts[2] == "analytics"
+
+
 def _apps_db_item_path(path: str) -> bool:
     """True for ``/apps/{slug}/db/{key}`` with a non-empty key (not clear-all)."""
     parts = [seg for seg in (path or "").split("/") if seg]
@@ -174,11 +180,15 @@ def is_public_request(method: str, path: str) -> bool:
         return True
     p = path.split("?", 1)[0]
     if p.startswith("/apps/"):
+        if p.startswith("/apps/api/"):
+            return False                 # the owner's routes (delete, analytics summary) need the owner token
         if m in ("GET", "HEAD"):
             return True
-        # Single-key PlaygroundDB writes from a published game stay public.
-        # Clear-all DELETE /apps/{slug}/db/ and /apps/api/* need the owner token.
+        # Single-key PlaygroundDB writes from a published game stay public, and so does a player's visit record
+        # (play_analytics). Clear-all DELETE /apps/{slug}/db/ and /apps/api/* need the owner token.
         if m in ("POST", "DELETE") and _apps_db_item_path(p):
+            return True
+        if m == "POST" and _apps_analytics_path(p):
             return True
         return False
     if m not in ("GET", "HEAD"):

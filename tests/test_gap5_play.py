@@ -113,7 +113,7 @@ def test_a_published_game_reports_its_visits_and_only_the_owner_reads_them(game,
     assert client.post(f"/apps/{game}/analytics", content=b"{").status_code == 400
     assert client.post(f"/apps/{game}/analytics", content=b"x" * 5000).status_code == 413
     assert play_analytics.summary(game)["sessions"] == 1
-    assert client.get(f"/apps/api/{game}/analytics").status_code == 401
+    assert client.get(f"/apps/api/{game}/analytics").json()["sessions"] == 1   # conftest sends the owner token
 
 
 @browser_needed
@@ -376,3 +376,40 @@ def test_players_do_not_judge_a_session_that_never_ran(game):
     never = {"ran": False, "turns": 0, "frames": [{"sha256": "x"}], "missed": list(goal_play.GOALS)}
     r = asyncio.run(playtest.run_playtest(game, n=1, see_fn=see, session=never, frames=([], []), play=False))
     assert r["goals"] is None and not any("never managed" in b for b in r["blockers"])
+
+
+# ── who may send and read (live check 2026-11-12: conftest injects the owner token, so the first tests could not see it)
+def test_a_player_without_the_owner_token_can_send_a_visit(game, raw_http, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    from daedalus import playground_publish as pub
+
+    monkeypatch.setattr(play_analytics, "_recent", {})
+    assert asyncio.run(pub.publish(game))["ok"]
+    res = TestClient(app).post(f"/apps/{game}/analytics", content=b'{"ms": 3000, "keys": 2}')
+    assert res.status_code == 200 and play_analytics.summary(game)["sessions"] == 1
+
+
+def test_only_the_owner_token_reads_the_summary(game, raw_http, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    from daedalus.owner_auth import get_or_create_token
+
+    monkeypatch.setattr(play_analytics, "_recent", {})
+    play_analytics.record(game, b'{"ms": 3000}')
+    client = TestClient(app)
+    assert client.get(f"/apps/api/{game}/analytics").status_code == 401
+    ok = client.get(f"/apps/api/{game}/analytics", headers={"Authorization": f"Bearer {get_or_create_token()}"})
+    assert ok.status_code == 200 and ok.json()["sessions"] == 1
+
+
+def test_the_public_paths_stay_narrow():
+    from daedalus.owner_auth import is_public_request
+
+    assert is_public_request("POST", "/apps/dot/analytics")
+    assert not is_public_request("POST", "/apps/dot/analytics/x")
+    assert not is_public_request("POST", "/apps/api/dot/analytics")
+    assert not is_public_request("GET", "/apps/api/dot/analytics")
+    assert is_public_request("GET", "/apps/dot/")
