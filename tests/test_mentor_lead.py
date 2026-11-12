@@ -150,6 +150,7 @@ def test_the_build_loop_asks_the_lead_before_it_ends(lead_on, monkeypatch, proje
         return None
 
     monkeypatch.setattr(mentor_lead, "tests_gate", _no_tests_gate)
+    monkeypatch.setattr(mentor_lead, "juice_gate", _no_tests_gate)   # the sound gate too (tests/test_game_juice.py)
 
     def use(tool, **args):
         return {"type": "tool_use", "id": f"c{len(seen)}{tool}", "name": tool, "input": args}

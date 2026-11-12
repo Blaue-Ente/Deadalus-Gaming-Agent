@@ -714,6 +714,74 @@ async def tests_gate(loop: Any, request: str) -> str | None:
     return "\n".join(lines)
 
 
+def _juice_target(loop: Any, request: str) -> tuple[Path, str] | None:
+    """(project root, real kind) of a web game this turn builds that should have sound; None for an app, whisper,
+    a cloned repo, or an Expo/Godot/Unity game (sfx.js is browser code: review 2026-11-12)."""
+    slug = str(getattr(loop, "slug", "") or "")
+    if not slug or not is_game(loop, request):
+        return None
+    try:
+        from .task_effort import current
+        if str((current() or {}).get("tier") or "") == "whisper":
+            return None
+    except Exception:
+        pass
+    from .game_juice import WEB_KINDS, project_kind
+    from .project_tests import upstream_repo
+
+    root = _project_root(slug)
+    if root is None or upstream_repo(slug):
+        return None
+    kind = project_kind(root, str(getattr(loop, "kind", "") or "static"))
+    return (root, kind) if kind in WEB_KINDS else None
+
+
+def place_sound(loop: Any) -> bool:
+    """Gap 4a: put sfx.js into a silent web game (never over the game's copy, never into a game with its own
+    sound). True if it wrote. Never raises; blocking: call off the event loop."""
+    try:
+        target = _juice_target(loop, str(getattr(loop, "user_message", "") or ""))
+        if target is None:
+            return False
+        from .game_juice import ensure_sfx, has_sound
+        root, kind = target
+        return False if has_sound(root) else ensure_sfx(root, kind)
+    except Exception:
+        log.debug("sfx.js not placed", exc_info=True)
+        return False
+
+
+async def juice_gate(loop: Any, request: str) -> str | None:
+    """Right after the lead accepts: a web game that plays no sound at all is asked once to add it (sfx.js is in the
+    project). It runs before the audience and the tests, so they judge and test the game with its sound. Shares the
+    lead's fix rounds; with none left, or after asking once, it only reports. None = done. Gap 4a."""
+    if loop is None or getattr(loop, "juice_done", False):
+        return None
+    target = await asyncio.to_thread(_juice_target, loop, request)
+    if target is None:
+        return None
+    from .game_juice import has_sound, sfx_path
+
+    root, kind = target
+    sound = await asyncio.to_thread(has_sound, root)
+    loop.juice = {"sound": sound}                # kept current even when the lead has not accepted (yet)
+    if not getattr(loop, "lead_accepted", False):
+        return None
+    used = int(getattr(loop, "lead_fix_used", 0) or 0)
+    if sound or getattr(loop, "juice_asked", False) or used >= fix_rounds():
+        loop.juice_done = True
+        return None
+    await asyncio.to_thread(place_sound, loop)
+    loop.juice_asked = True
+    loop.lead_fix_used = used + 1
+    loop.lead_accepted = False                  # reviewed again after the change, like every gate
+    return ("━━━ SOUND: NONE YET ━━━\n"
+            f"The game plays no sound. {sfx_path(kind)} is in the project: "
+            "import { sfx } from it and call sfx.jump(), sfx.score(), sfx.hit(), sfx.lose(), sfx.win() and "
+            "sfx.click() on the game's events, and say in the help text that M mutes. Keep everything else exactly "
+            "as it is. Then stop.")
+
+
 def _players_kept(loop: Any) -> bool:
     """A baseline is what an accepted game passes: not one the audience played and rejected (review 2026-11-12)."""
     aud = getattr(loop, "audience", None)

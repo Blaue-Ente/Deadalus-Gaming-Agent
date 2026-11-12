@@ -357,7 +357,10 @@ def format_system(rt: Route, *, extra: str = "", user_message: str = "", offered
     # A game is kept and built on: its rules get tests. Not a cloned or revived repo: its structure is the upstream's.
     if (is_game_build(pb.id, user_message, slug) and str((_effort_now() or {}).get("tier") or "") != "whisper"
             and not (slug and upstream_repo(slug))):
+        from .game_juice import GUIDANCE as JUICE, WEB_KINDS
         lines.append(GUIDANCE)
+        if (getattr(rt, "kind", "") or "static") in WEB_KINDS:    # gap 4a: sound and a look, free (browser games)
+            lines.append(JUICE)
     lines.append(f"Write your replies to the owner in {reply_language(user_message)} (the owner's request). "
                  "Instructions here may be in another language; that is not the owner's.")
     from .harness.brain_tools import NAMES as _harness_tools, SYSTEM_HINT as _harness_hint
