@@ -8,13 +8,20 @@ left:
 - the first JavaScript errors (message only);
 - events the game names itself with ``PlaygroundAnalytics.track("score")`` (counts only).
 
-No IP address, user agent, cookie or identifier is stored; a browser that sends Do Not Track sends nothing. Records
-stay in this Daedalus's KV store (the last ``MAX_SESSIONS`` per game). Games published elsewhere (Netlify, GitLab
-Pages) are not measured: that needs a public collector, an owner decision.
+A visit sends its record again, cumulatively, each time the page is hidden; a random per-visit id (new on every page
+load, never stored in the browser) lets the server replace the earlier copy. No IP address, user agent, cookie or
+lasting identifier is stored; a browser that sends Do Not Track sends nothing. Records stay in this Daedalus's KV
+store (the last ``MAX_SESSIONS`` per game). Games published elsewhere (Netlify, GitLab Pages) are not measured: that
+needs a public collector, an owner decision.
+
+The records are written by anyone who can load the page, so their text is untrusted: the builder's prompt gets the
+numbers and event names restricted to ``[A-Za-z0-9_.:-]``, never error messages (review 2026-11-12: a forged beacon
+would otherwise put words in the agent's prompt). The owner sees the messages in the summary.
 """
 from __future__ import annotations
 
 import json
+import re
 import statistics
 import time
 from collections import Counter, deque
@@ -24,17 +31,21 @@ MAX_SESSIONS = 500
 MAX_BODY_BYTES = 4096
 MAX_EVENTS = 20
 RATE_PER_MINUTE = 120            # records per game per minute; more is dropped (a loop or a flood, not players)
+CLIENT_PER_MINUTE = 12           # per client address (held in memory for a minute, never stored)
 MIN_FOR_PROMPT = 3
 _MAX_MS = 6 * 3600 * 1000
 _recent: dict[str, deque[float]] = {}
+_EVENT_NAME = re.compile(r"^[A-Za-z0-9_.:-]{1,40}$")
+_VISIT_ID = re.compile(r"^[a-z0-9]{8,16}$")
 
 SNIPPET = """<script>
-/* Daedalus play analytics: anonymous, one record per visit (no cookies, no ids) */
+/* Daedalus play analytics: anonymous, one record per visit (no cookies, no lasting ids) */
 (function(){
   if (navigator.doNotTrack === '1' || window.doNotTrack === '1') {
     window.PlaygroundAnalytics = {track: function(){}}; return;
   }
-  var slug = %(slug)s, t0 = Date.now(), first = null, keys = 0, clicks = 0, errs = [], ev = {}, n = 0, sent = false;
+  var slug = %(slug)s, t0 = Date.now(), first = null, keys = 0, clicks = 0, errs = [], ev = {}, n = 0;
+  var v = Math.random().toString(36).slice(2, 14), last = '';
   function mark(){ if (first === null) first = Date.now() - t0; }
   addEventListener('keydown', function(){ keys++; mark(); }, true);
   addEventListener('pointerdown', function(){ clicks++; mark(); }, true);
@@ -43,10 +54,11 @@ SNIPPET = """<script>
     name = String(name).slice(0, 40);
     if (ev[name] !== undefined || n < %(max_events)d) { if (ev[name] === undefined) n++; ev[name] = (ev[name] || 0) + 1; }
   }};
-  function send(){
-    if (sent) return; sent = true;
-    var body = JSON.stringify({ms: Date.now() - t0, first_input_ms: first, keys: keys, clicks: clicks,
+  function send(){            /* cumulative: the server keeps the latest copy of this visit */
+    var body = JSON.stringify({v: v, ms: Date.now() - t0, first_input_ms: first, keys: keys, clicks: clicks,
                                errors: errs, events: ev});
+    var same = body.replace(/"ms":\\d+,/, '');
+    if (same === last) return; last = same;
     try { navigator.sendBeacon('/apps/' + encodeURIComponent(slug) + '/analytics',
                                new Blob([body], {type: 'application/json'})); } catch (e) {}
   }
@@ -73,7 +85,7 @@ def _store():
 def _int(val: Any, hi: int) -> int | None:
     try:
         num = int(val)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):        # JSON allows Infinity and 1e400
         return None
     return max(0, min(num, hi))
 
@@ -91,39 +103,56 @@ def clean(body: Any) -> dict[str, Any] | None:
     if isinstance(body.get("events"), dict):
         for name, count in list(body["events"].items())[:MAX_EVENTS]:
             num = _int(count, 1_000_000)
-            if num is not None and str(name).strip():
-                events[str(name)[:40]] = num
-    return {"at": int(time.time()), "ms": ms, "first_input_ms": first,
+            if num is not None and _EVENT_NAME.match(str(name)):
+                events[str(name)] = num
+    visit = str(body.get("v") or "")
+    return {"at": int(time.time()), "v": visit if _VISIT_ID.match(visit) else "", "ms": ms, "first_input_ms": first,
             "keys": _int(body.get("keys"), 1_000_000) or 0, "clicks": _int(body.get("clicks"), 1_000_000) or 0,
             "errors": errors, "events": events}
 
 
-def _allowed(slug: str, now: float) -> bool:
-    window = _recent.setdefault(slug, deque())
+def _within(bucket: str, limit: int, now: float) -> bool:
+    window = _recent.setdefault(bucket, deque())
     while window and now - window[0] > 60:
         window.popleft()
-    if len(window) >= RATE_PER_MINUTE:
+    return len(window) < limit
+
+
+def _allowed(key: str, client: str, now: float) -> bool:
+    """One budget per game and a smaller one per client, so one sender cannot fill a game's buffer alone."""
+    if len(_recent) > 5000:                                  # forget idle buckets (addresses are never stored)
+        for bucket in [b for b, w in _recent.items() if not w or now - w[-1] > 60]:
+            _recent.pop(bucket, None)
+    buckets = [(key, RATE_PER_MINUTE)] + ([(f"{key}|{client}", CLIENT_PER_MINUTE)] if client else [])
+    if not all(_within(b, limit, now) for b, limit in buckets):
         return False
-    window.append(now)
+    for b, _ in buckets:
+        _recent[b].append(now)
     return True
 
 
-def record(slug: str, raw: bytes) -> tuple[bool, str]:
-    """Store one visit. (stored, reason)."""
+def record(slug: str, raw: bytes, *, client: str = "") -> tuple[bool, str]:
+    """Store one visit, or replace the earlier copy of the same visit. (stored, reason). Blocking: call off the loop."""
     if len(raw or b"") > MAX_BODY_BYTES:
         return False, "too_large"
     try:
         row = clean(json.loads(raw or b"null"))
-    except ValueError:
+    except (ValueError, RecursionError):
         row = None
     if row is None:
         return False, "bad_record"
-    if not _allowed(slug, time.monotonic()):
+    key = _key(slug)
+    if not _allowed(key, client, time.monotonic()):
         return False, "rate_limited"
     db = _store()
-    rows = db.get(_key(slug)) or []
-    rows = (list(rows) if isinstance(rows, list) else []) + [row]
-    db[_key(slug)] = rows[-MAX_SESSIONS:]
+    rows = db.get(key) or []
+    rows = list(rows) if isinstance(rows, list) else []
+    if row["v"]:
+        for i in range(len(rows) - 1, max(-1, len(rows) - 51), -1):      # the same visit, sent again: replace it
+            if isinstance(rows[i], dict) and rows[i].get("v") == row["v"]:
+                del rows[i]
+                break
+    db[key] = (rows + [row])[-MAX_SESSIONS:]
     return True, ""
 
 
@@ -171,9 +200,9 @@ def format_for_prompt(slug: str) -> str:
              f"- median visit {s['median_s']}s; {s['left_within_10s_pct']}% left within 10s; "
              f"{s['no_input_pct']}% never pressed a key or clicked"
              + (f"; first input after {s['median_first_input_s']}s (median)" if s.get("median_first_input_s") else "")]
-    if s["error_sessions_pct"]:
-        lines.append(f"- {s['error_sessions_pct']}% of visits hit a JavaScript error:")
-        lines += [f"  - {e['message']} ({e['sessions']}x)" for e in s["top_errors"]]
+    if s["error_sessions_pct"]:          # counts only: the messages come from anyone and stay with the owner
+        lines.append(f"- {s['error_sessions_pct']}% of visits hit a JavaScript error (the owner can see the messages "
+                     "in the analytics summary; check the game's error handling)")
     if s["events_per_session"]:
         lines.append("- game events per visit: " + ", ".join(f"{k} {v}" for k, v in s["events_per_session"].items()))
     lines.append("Use these numbers when they bear on the request (a game players leave in 10s needs a clearer "

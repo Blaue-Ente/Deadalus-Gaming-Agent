@@ -1748,8 +1748,13 @@ async def execute_native_tool(
                 see_fn=gateway_see,
                 session=session,
             )
-            from .play_analytics import format_for_prompt as real_players
-            real = await asyncio.to_thread(real_players, slug_pt) if slug_pt else ""
+            real = ""
+            if slug_pt:
+                try:
+                    from .play_analytics import format_for_prompt as real_players
+                    real = await asyncio.to_thread(real_players, slug_pt)
+                except Exception:
+                    log.warning("real-player numbers for %s unavailable", slug_pt, exc_info=True)
             return "── playtest ──\n" + format_for_prompt(r) + (f"\n{real}" if real else "")
 
         if name == "play_lab":

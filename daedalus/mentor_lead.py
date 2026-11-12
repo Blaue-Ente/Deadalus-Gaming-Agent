@@ -383,6 +383,29 @@ def playable_dir(slug: str, kind: str = "static") -> Path | None:
     return serve_dir if (serve_dir / "index.html").is_file() else None
 
 
+@contextlib.asynccontextmanager
+async def game_page(serve_dir: Path, *, width: int = 960, height: int = 640) -> Any:
+    """A headless Chromium page on the game, served from a throwaway local server, closed on exit. Raises when no
+    browser can start (callers catch). Shared by the lead's play (play_frames) and the goal session (goal_play)."""
+    from playwright.async_api import async_playwright
+
+    from .playground_browser import CHROME_ARGS, _serve_static, chromium_executable
+
+    base, stop = _serve_static(serve_dir)
+    try:
+        async with async_playwright() as p:
+            exe = chromium_executable()
+            browser = await p.chromium.launch(args=list(CHROME_ARGS), **({"executable_path": exe} if exe else {}))
+            try:
+                page = await browser.new_page(viewport={"width": width, "height": height})
+                await page.goto(base + "/", wait_until="load", timeout=20_000)
+                yield page
+            finally:
+                await browser.close()
+    finally:
+        stop()
+
+
 async def play_frames(slug: str, kind: str = "static") -> tuple[list[dict[str, Any]], list[str]]:
     """Frames the lead can judge a game by: the start screen, then a few seconds of play after pressing start keys.
 
@@ -392,53 +415,38 @@ async def play_frames(slug: str, kind: str = "static") -> tuple[list[dict[str, A
     serve_dir = playable_dir(slug, kind)
     if serve_dir is None:
         return [], []
-    try:
-        from playwright.async_api import async_playwright
+    from .harness import gateway as gw
 
-        from .harness import gateway as gw
-        from .playground_browser import CHROME_ARGS, _serve_static, chromium_executable
-    except Exception:
-        return [], []
-    base, stop = _serve_static(serve_dir)
     shots: list[bytes] = []
     try:
-        async with async_playwright() as p:
-            exe = chromium_executable()
-            browser = await p.chromium.launch(args=list(CHROME_ARGS), **({"executable_path": exe} if exe else {}))
-            try:
-                page = await browser.new_page(viewport={"width": 960, "height": 640})
-                await page.goto(base + "/", wait_until="load", timeout=20_000)
-                await page.wait_for_timeout(1200)
-                shots.append(await page.screenshot(type="png"))
-                for key, hold in PLAY_SCRIPT:
-                    if key == "shot":
-                        shots.append(await page.screenshot(type="png"))
+        async with game_page(serve_dir) as page:
+            await page.wait_for_timeout(1200)
+            shots.append(await page.screenshot(type="png"))
+            for key, hold in PLAY_SCRIPT:
+                if key == "shot":
+                    shots.append(await page.screenshot(type="png"))
+                    continue
+                if key == "click" or key.startswith("click@"):
+                    x, y = (480, 320) if key == "click" else map(int, key[6:].split(","))
+                    # The sweep never presses a link, button or field (a help link or a pause button would
+                    # change what the frames show: review 2026-11-12). The centre click may press Start.
+                    if key != "click" and await page.evaluate(_INTERACTIVE_AT, [x, y]):
                         continue
-                    if key == "click" or key.startswith("click@"):
-                        x, y = (480, 320) if key == "click" else map(int, key[6:].split(","))
-                        # The sweep never presses a link, button or field (a help link or a pause button would
-                        # change what the frames show: review 2026-11-12). The centre click may press Start.
-                        if key != "click" and await page.evaluate(_INTERACTIVE_AT, [x, y]):
-                            continue
-                        await page.mouse.click(x, y)
-                    elif hold:
-                        await page.keyboard.down(key)
-                        await page.wait_for_timeout(hold)
-                        await page.keyboard.up(key)
-                    else:
-                        await page.keyboard.press(key)
-                    await page.wait_for_timeout(150)
-                await page.wait_for_timeout(600)
-                shots.append(await page.screenshot(type="png"))
-                await page.wait_for_timeout(1800)
-                shots.append(await page.screenshot(type="png"))
-            finally:
-                await browser.close()
+                    await page.mouse.click(x, y)
+                elif hold:
+                    await page.keyboard.down(key)
+                    await page.wait_for_timeout(hold)
+                    await page.keyboard.up(key)
+                else:
+                    await page.keyboard.press(key)
+                await page.wait_for_timeout(150)
+            await page.wait_for_timeout(600)
+            shots.append(await page.screenshot(type="png"))
+            await page.wait_for_timeout(1800)
+            shots.append(await page.screenshot(type="png"))
     except Exception:
         log.info("lead play frames failed for %s", slug, exc_info=True)
         return [], []
-    finally:
-        stop()
     parts = [gw.image_part(media_type="image/png", data=b) for b in shots if b and len(b) > 64]
     return parts, [str(part.get("sha256") or "") for part in parts]
 
@@ -626,13 +634,20 @@ async def audience_gate(loop: Any, request: str) -> str | None:
     quotes = "\n".join(f"- {q}" for q in (report.get("quotes") or [])[:4])
     fixes = "\n".join(f"- {f}" for f in (report.get("fixes") or [])[:4])
     goals = report.get("goals") or {}
-    goal_line = (f"In a {goals.get('turns')}-turn goal session the player never managed: "
-                 + "; ".join(goals["missed"]) + "\n") if goals.get("missed") else ""
-    if goals.get("errors"):
-        goal_line += "JavaScript errors while playing: " + "; ".join(goals["errors"]) + "\n"
+    if goals:            # a goal session: its frames are not the ones the writer saw, so say what was seen
+        played = (f"A player just played the game for {goals.get('turns')} turns toward goals (start, score, lose, "
+                  "restart); you did not see its frames. Simulated players judged them. Most would quit.\n")
+        if goals.get("missed"):
+            played += "Goals never reached: " + "; ".join(goals["missed"]) + "\n"
+        if goals.get("notes"):
+            played += "What the player saw last:\n" + "\n".join(f"- {n}" for n in goals["notes"]) + "\n"
+        if goals.get("errors"):
+            played += "JavaScript errors while playing: " + "; ".join(goals["errors"]) + "\n"
+    else:
+        played = "Simulated players just played the game (the frames you saw are what they saw). Most would quit.\n"
     return ("━━━ AUDIENCE TEST: NOT YET ━━━\n"
-            f"{report.get('summary')}\n{goal_line}"
-            "Simulated players just played the game (the frames you saw are what they saw). Most would quit.\n"
+            f"{report.get('summary')}\n"
+            f"{played}"
             f"What they said:\n{quotes or '- (no quotes)'}\n"
             f"What would keep them:\n{fixes or '- (no fixes)'}\n"
             "Fix the causes they name in the game's files (write_file), keep everything that already works, then "

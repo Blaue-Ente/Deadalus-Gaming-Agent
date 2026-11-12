@@ -1819,8 +1819,12 @@ class Daedalus:
                         _bible_block = "━━━ PROJECT BIBLE (earlier sessions) ━━━\n" + _bible + "\n\n"
                         _native_in = _bible_block + _native_in
                         _native_cut += len(_bible_block)       # the bible never pushes the request's context out
-                    from .play_analytics import format_for_prompt as _real_players
-                    _real = await asyncio.to_thread(_real_players, _loop.slug)
+                    try:
+                        from .play_analytics import format_for_prompt as _real_players
+                        _real = await asyncio.to_thread(_real_players, _loop.slug)
+                    except Exception:   # numbers to inform the build, never a reason to fail the turn
+                        log.warning("real-player numbers for %s unavailable", _loop.slug, exc_info=True)
+                        _real = ""
                     if _real:           # gap 5: what real players did with the published game
                         _native_in = _real + "\n\n" + _native_in
                         _native_cut += len(_real) + 2

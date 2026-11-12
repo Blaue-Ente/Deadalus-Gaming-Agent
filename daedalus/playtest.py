@@ -352,7 +352,7 @@ async def run_playtest(
 
     images: list[dict[str, Any]] = []
     shas: list[str] = []
-    if not (session and session.get("frames")):
+    if not (session and session.get("ran") and session.get("frames")):
         session = None
     if session:                                  # a goal-directed session (goal_play): its frames and inputs
         images, shas = list(session["frames"]), list(session.get("shas") or [])
@@ -404,7 +404,8 @@ async def run_playtest(
         + (f"; quit={would_quit}/{len(spoke)}" if spoke else "; heuristic-only")
     )
     goals = ({"turns": session.get("turns"), "reached": list(session.get("reached") or []),
-              "missed": list(session.get("missed") or []), "errors": list(session.get("errors") or [])[:3]}
+              "missed": list(session.get("missed") or []), "errors": list(session.get("errors") or [])[:3],
+              "notes": list(session.get("notes") or [])[-3:]}
              if session else None)
     _ledger_event(slug, mode, len(images), len(spoke), would_quit, avg, quotes, fixes, goals)
     return {

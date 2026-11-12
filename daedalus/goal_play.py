@@ -10,7 +10,6 @@ keeps the fixed script, which costs no extra calls.
 """
 from __future__ import annotations
 
-import json
 import logging
 from typing import Any, Awaitable, Callable
 
@@ -39,14 +38,9 @@ SYSTEM = (
 
 
 def _parse(text: str) -> dict[str, Any]:
-    raw = (text or "").strip()
-    if raw.startswith("```"):
-        raw = raw.strip("`").split("\n", 1)[-1]
-    start, end = raw.find("{"), raw.rfind("}")
-    try:
-        data = json.loads(raw[start:end + 1]) if start >= 0 < end else {}
-    except ValueError:
-        data = {}
+    from .playtest import _parse_json
+
+    data = _parse_json(text)
     return data if isinstance(data, dict) else {}
 
 
@@ -104,8 +98,10 @@ def _user(goals: tuple[str, ...], reached: list[str], history: list[str], turn: 
 async def goal_play(slug: str, kind: str = "static", *, see: SeeFn, goals: tuple[str, ...] = GOALS,
                     steps: int = STEPS) -> dict[str, Any]:
     """Play the game in turns toward ``goals``. Never raises: {ran, reached, missed, frames, shas, inputs, notes,
-    errors, turns, stopped}."""
-    from .mentor_lead import playable_dir
+    errors, turns, stopped}. With no turn played (no build, no browser, the first model call refused) there are no
+    frames: a session that never ran is not a session where every goal was missed (review 2026-11-12)."""
+    from .harness import gateway as gw
+    from .mentor_lead import game_page, playable_dir
 
     result: dict[str, Any] = {"ran": False, "goals": list(goals), "reached": [], "missed": list(goals),
                               "frames": [], "shas": [], "inputs": "", "notes": [], "errors": [], "turns": 0,
@@ -114,75 +110,58 @@ async def goal_play(slug: str, kind: str = "static", *, see: SeeFn, goals: tuple
     if serve_dir is None:
         result["stopped"] = "no playable build"
         return result
-    try:
-        from playwright.async_api import async_playwright
-
-        from .harness import gateway as gw
-        from .playground_browser import CHROME_ARGS, _serve_static, chromium_executable
-    except Exception:
-        result["stopped"] = "no browser"
-        return result
-    base, stop = _serve_static(serve_dir)
     shots: list[bytes] = []
     steps_said: list[str] = []
     reached: list[str] = []
     try:
-        async with async_playwright() as p:
-            exe = chromium_executable()
-            browser = await p.chromium.launch(args=list(CHROME_ARGS), **({"executable_path": exe} if exe else {}))
-            try:
-                page = await browser.new_page(viewport={"width": VIEW_W, "height": VIEW_H})
-                page.on("pageerror", lambda e: result["errors"].append(str(e)[:200])
-                        if len(result["errors"]) < 5 else None)
-                await page.goto(base + "/", wait_until="load", timeout=20_000)
-                await page.wait_for_timeout(1000)
-                for turn in range(1, max(1, steps) + 1):
-                    shot = await page.screenshot(type="png")
-                    shots.append(shot)
-                    part = gw.image_part(media_type="image/png", data=shot)
-                    try:
-                        data = _parse(await see(SYSTEM, _user(goals, reached, steps_said, turn, steps), [part]))
-                    except Exception as exc:          # budget stop or provider error: keep what was played
-                        result["stopped"] = str(exc)[:160] or "model call failed"
-                        break
-                    result["turns"] = turn
-                    for g in data.get("reached") or []:
-                        if g in goals and g not in reached:
-                            reached.append(g)
-                    if data.get("note"):
-                        result["notes"].append(str(data["note"])[:200])
-                    if len(reached) == len(goals):
-                        steps_said.append(f"turn {turn}: all goals reached")
-                        break
-                    acts = actions_from(data)
-                    steps_said.append(f"turn {turn}: {_said(acts)}")
-                    for kind_, val in acts:
-                        if kind_ == "click":
-                            await page.mouse.click(*val)
-                        elif val[1]:
-                            await page.keyboard.down(val[0])
-                            await page.wait_for_timeout(val[1])
-                            await page.keyboard.up(val[0])
-                        else:
-                            await page.keyboard.press(val[0])
-                        await page.wait_for_timeout(120)
-                    await page.wait_for_timeout(500)
-                shots.append(await page.screenshot(type="png"))
-            finally:
-                await browser.close()
-    except Exception as exc:
+        async with game_page(serve_dir, width=VIEW_W, height=VIEW_H) as page:
+            page.on("pageerror", lambda e: result["errors"].append(str(e)[:200])
+                    if len(result["errors"]) < 5 else None)
+            await page.wait_for_timeout(1000)
+            for turn in range(1, max(1, steps) + 1):
+                shot = await page.screenshot(type="png")
+                shots.append(shot)
+                part = gw.image_part(media_type="image/png", data=shot)
+                try:
+                    data = _parse(await see(SYSTEM, _user(goals, reached, steps_said, turn, steps), [part]))
+                except Exception as exc:          # budget stop or provider error: keep what was played
+                    result["stopped"] = str(exc)[:160] or "model call failed"
+                    break
+                result["turns"] = turn
+                said_reached = data.get("reached")
+                for g in said_reached if isinstance(said_reached, list) else []:
+                    if isinstance(g, str) and g in goals and g not in reached:
+                        reached.append(g)
+                if data.get("note"):
+                    result["notes"].append(str(data["note"])[:200])
+                if len(reached) == len(goals):
+                    steps_said.append(f"turn {turn}: all goals reached")
+                    break
+                acts = actions_from(data)
+                steps_said.append(f"turn {turn}: {_said(acts)}")
+                for kind_, val in acts:
+                    if kind_ == "click":
+                        await page.mouse.click(*val)
+                    elif val[1]:
+                        await page.keyboard.down(val[0])
+                        await page.wait_for_timeout(val[1])
+                        await page.keyboard.up(val[0])
+                    else:
+                        await page.keyboard.press(val[0])
+                    await page.wait_for_timeout(120)
+                await page.wait_for_timeout(500)
+            shots.append(await page.screenshot(type="png"))
+    except Exception as exc:                      # no browser, a server that would not start, a page that died
         log.info("goal play failed for %s", slug, exc_info=True)
         result["stopped"] = result["stopped"] or f"browser: {str(exc)[:120]}"
-    finally:
-        stop()
+    result.update(reached=reached, missed=[g for g in goals if g not in reached])
+    if not result["turns"]:
+        return result
     keep = _kept(len(shots))
     parts = [gw.image_part(media_type="image/png", data=shots[i]) for i in keep if len(shots[i]) > 64]
     marks = {i: n + 1 for n, i in enumerate(keep)}
-    said = []
-    for i, line in enumerate(steps_said):
-        said.append((f"[frame {marks[i]}] " if i in marks else "") + line)
-    if len(shots) - 1 in marks:
+    said = [(f"[frame {marks[i]}] " if i in marks else "") + line for i, line in enumerate(steps_said)]
+    if len(shots) - 1 in marks and len(shots) > len(steps_said):
         said.append(f"[frame {marks[len(shots) - 1]}] the end")
-    result.update(ran=bool(result["turns"]), reached=reached, missed=[g for g in goals if g not in reached],
-                  frames=parts, shas=[str(x.get("sha256") or "") for x in parts], inputs="; ".join(said))
+    result.update(ran=True, frames=parts, shas=[str(x.get("sha256") or "") for x in parts], inputs="; ".join(said))
     return result

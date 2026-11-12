@@ -19,6 +19,8 @@ Serving routes:
 """
 from __future__ import annotations
 
+import asyncio
+
 import json as _json
 import logging
 import mimetypes
@@ -211,12 +213,13 @@ async def apps_menu():
 @router.post("/{slug}/analytics")
 async def app_analytics_record(slug: str, request: Request):
     """One anonymous visit record from a published game (play_analytics). Public: players are not signed in."""
-    if not await _published_app(slug):
+    if not await pub.get_published(slug):        # the same check as serving it: published and enabled
         return JSONResponse({"ok": False, "error": "not a published app"}, status_code=404)
     from . import play_analytics
 
     raw = await request.body()
-    stored, reason = play_analytics.record(slug, raw)
+    client = request.client.host if request.client else ""          # rate limit only; never stored
+    stored, reason = await asyncio.to_thread(play_analytics.record, slug, raw, client=client)
     if not stored:
         code = {"too_large": 413, "rate_limited": 429}.get(reason, 400)
         return JSONResponse({"ok": False, "error": reason}, status_code=code)
@@ -231,7 +234,7 @@ async def app_analytics_summary(slug: str, request: Request):
         return JSONResponse({"ok": False, "error": "Sign in to /admin to see analytics."}, status_code=401)
     from . import play_analytics
 
-    return JSONResponse({"ok": True, "slug": slug, **play_analytics.summary(slug)})
+    return JSONResponse({"ok": True, "slug": slug, **(await asyncio.to_thread(play_analytics.summary, slug))})
 
 
 @router.post("/api/{slug}/delete")
