@@ -44,6 +44,14 @@
     }
   }
 
+  function forget() {
+    try {
+      localStorage.removeItem(TOKEN_KEY);
+    } catch {
+      /* private mode */
+    }
+  }
+
   function save(token) {
     try {
       localStorage.setItem(TOKEN_KEY, token);
@@ -70,9 +78,10 @@
         /* remote / offline */
       }
       if (typeof window.prompt === "function") {
-        const typed = window.prompt(
-          "Собственически токен (DAEDALUS_TOKEN). На 127.0.0.1 Studio го взима сам."
-        );
+        const ask = (window.DaedalusI18n && window.DaedalusI18n.t) ? window.DaedalusI18n.t("studio.signInPrompt")
+          : "Sign in: paste the owner token (DAEDALUS_TOKEN) or your team sign-in (dt_…). " +
+            "On 127.0.0.1 Studio signs the owner in by itself.";
+        const typed = window.prompt(ask);
         if (typed && typed.trim()) {
           save(typed.trim());
           return typed.trim();
@@ -107,20 +116,27 @@
     if (!token) {
       return origFetch(input, init);
     }
+    let res;
     if (typeof Request !== "undefined" && input instanceof Request) {
       const headers = new Headers(input.headers);
       if (!headers.has("Authorization") && !headers.has("X-Daedalus-Token")) {
         headers.set("Authorization", "Bearer " + token);
       }
-      return origFetch(new Request(input, { headers }), init);
+      res = await origFetch(new Request(input, { headers }), init);
+    } else {
+      const next = init ? Object.assign({}, init) : {};
+      const headers = new Headers(next.headers || {});
+      if (!headers.has("Authorization") && !headers.has("X-Daedalus-Token")) {
+        headers.set("Authorization", "Bearer " + token);
+      }
+      next.headers = headers;
+      res = await origFetch(input, next);
     }
-    const next = init ? Object.assign({}, init) : {};
-    const headers = new Headers(next.headers || {});
-    if (!headers.has("Authorization") && !headers.has("X-Daedalus-Token")) {
-      headers.set("Authorization", "Bearer " + token);
-    }
-    next.headers = headers;
-    return origFetch(input, next);
+    // Only a sign-in the server does not know (401: a changed owner token, a mistyped one) is forgotten, so Studio
+    // asks again. A paused member (403 member_disabled) or an unreadable members file (503) keeps it: a team
+    // sign-in is shown once, and it works again when the owner enables the person.
+    if (res.status === 401 && stored() === token) forget();
+    return res;
   };
 
   if (OrigES) {
@@ -138,6 +154,7 @@
   window.DaedalusAuth = {
     ensureToken,
     stored,
+    signOut: forget,
     url: (href) => withToken(href, stored()),
     eventSource: async (url, esInit) => {
       const token = await ensureToken();

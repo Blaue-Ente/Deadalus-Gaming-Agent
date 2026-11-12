@@ -81,6 +81,9 @@
         catch { data = { detail: raw.slice(0, 400) }; }
       }
       if (!res.ok) {
+        if (res.status === 403 && data.error === "role_forbidden") {     // gap 3: say it in words, not a code
+          throw new Error(t("studio.roleForbidden", { role: t("studio.role." + data.role), needs: t("studio.role." + data.needs) }));
+        }
         const msg = data.detail || data.error || ("HTTP " + res.status);
         throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
       }

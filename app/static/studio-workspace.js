@@ -4126,7 +4126,7 @@
       btn.addEventListener("click", async () => {
         item.dataset.state = "";
         note.hidden = true;
-        await runAction(btn, "harness-status", async () => {
+        await runAction(btn, o.statusId || "harness-status", async () => {
           const res = await def.run();
           if (!res) return;
           lastNotes[o.id] = res;
@@ -4410,7 +4410,126 @@
     showStatus("harness-status", unique.length ? dx.t("studio.requestFailed") + ": " + unique.join(" · ") : "", unique.length > 0);
   }
 
+  // ── Team (gap 3b): who is signed in; the owner invites, re-roles and disables people ──────────────────────────
+  let teamMe = null;
+  let mePending = null;
+
+  function roleLabel(role) {
+    return tOr("studio.role." + role, role);
+  }
+
+  function paintChip() {
+    const chip = $("team-chip");
+    document.body.dataset.role = teamMe ? (teamMe.role || "") : "";
+    if (!chip) return;
+    chip.hidden = !teamMe || teamMe.role === "owner";
+    chip.textContent = teamMe ? teamMe.name + " · " + roleLabel(teamMe.role) : "";
+  }
+
+  // Asked fresh each time Settings opens (a role the owner changed, a sign-in that changed in this page), and once
+  // at a time: the boot call and the Settings call share the request in flight.
+  function loadMe() {
+    if (mePending) return mePending;
+    mePending = (async () => {
+      try {
+        teamMe = await dx.api("/api/v1/team/me");
+      } catch (err) {
+        teamMe = null;
+      }
+      paintChip();
+      return teamMe;
+    })();
+    mePending.finally(() => { mePending = null; });
+    return mePending;
+  }
+
+  function paintMembers(data) {
+    const box = $("team-members");
+    box.replaceChildren();
+    const rows = (data && data.members) || [];
+    if (!rows.length) {
+      const p = document.createElement("p");
+      p.className = "hint";
+      p.textContent = dx.t("studio.teamNobody");
+      box.appendChild(p);
+      return;
+    }
+    rows.forEach((m) => {
+      const other = m.role === "designer" ? "tester" : "designer";
+      box.appendChild(actionRow({
+        id: "member-" + m.id,
+        statusId: "team-status",
+        title: m.name,
+        sub: roleLabel(m.role) + (m.disabled ? " · " + dx.t("studio.teamDisabled") : ""),
+        buttons: [
+          { label: dx.t("studio.teamMakeRole", { role: roleLabel(other) }),
+            run: () => updateMember(m.id, { role: other }) },
+          { label: dx.t(m.disabled ? "studio.teamEnable" : "studio.teamDisable"),
+            run: () => updateMember(m.id, { disabled: !m.disabled }) },
+        ],
+      }));
+    });
+  }
+
+  async function refreshTeamLists() {
+    // After a change that succeeded: a failed refresh is its own message, never the change's (review 2026-11-12:
+    // an invite that worked looked failed, and a second invite made a second live sign-in).
+    try {
+      await loadTeamLists();
+    } catch (err) {
+      showStatus("team-status", dx.t("studio.teamRefreshFailed") + ": " + failText(err), true);
+    }
+  }
+
+  async function updateMember(id, body) {
+    await postJson("/api/v1/team/members/" + encodeURIComponent(id), body);
+    refreshTeamLists();
+    return { text: dx.t("studio.saved"), bad: false };
+  }
+
+  function paintAudit(data) {
+    const list = $("team-audit");
+    list.replaceChildren();
+    ((data && data.entries) || []).slice(0, 40).forEach((e) => {
+      const li = document.createElement("li");
+      const when = new Date((e.ts || 0) * 1000).toLocaleString();
+      li.textContent = when + " · " + e.name + " (" + roleLabel(e.role) + ") · " + e.method + " " + e.path +
+        (e.status ? " → " + e.status : "");
+      list.appendChild(li);
+    });
+  }
+
+  async function loadTeamLists() {
+    paintMembers(await dx.api("/api/v1/team/members"));
+    try {
+      paintAudit(await dx.api("/api/v1/team/audit?limit=40"));
+    } catch (err) {
+      showStatus("team-status", dx.t("studio.requestFailed") + ": " + failText(err), true);
+    }
+  }
+
+  async function loadTeam() {
+    $("team-token").hidden = true;               // an invite's sign-in is shown once: never again on a later visit
+    $("team-token-value").textContent = "";
+    const me = await loadMe();
+    $("team-me").textContent = me ? dx.t("studio.teamYou", { name: me.name, role: roleLabel(me.role) }) : "";
+    const owner = !!me && me.role === "owner";
+    $("team-owner").hidden = !owner;
+    $("team-not-owner").hidden = owner || !me;
+    $("team-signout").hidden = owner || !me;
+    if (owner) {
+      try {
+        await loadTeamLists();
+      } catch (err) {
+        showStatus("team-status", dx.t("studio.requestFailed") + ": " + failText(err), true);
+      }
+    }
+    return me;
+  }
+
   async function loadSettings() {
+    const me = await loadTeam();
+    if (me && me.role !== "owner") return;           // the rest of Settings is the owner's (the server says so too)
     showStatus("settings-status", dx.t("studio.loading"), false);
     $("settings-brain").replaceChildren();
     $("settings-fields").replaceChildren();
@@ -5443,6 +5562,7 @@
     });
   });
 
+  document.addEventListener("daedalus:langchange", paintChip);
   document.addEventListener("daedalus:langchange", () => {
     renderAssetJobs(null);
     if (currentPanel === "review") {
@@ -5547,7 +5667,35 @@
   syncSkillButtons();
   syncRefButtons();
 
+  $("team-invite").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const name = ($("team-name").value || "").trim();
+    if (!name) return;
+    runAction(ev.submitter, "team-status", async () => {
+      const res = await postJson("/api/v1/team/members", { name, role: $("team-role").value });
+      $("team-name").value = "";
+      $("team-token-value").textContent = res.token || "";
+      $("team-trust").textContent = res.trust || "";
+      $("team-token").hidden = !res.token;            // shown once: loadTeam hides it on any later visit
+      showStatus("team-status", dx.t("studio.teamInvited", { name: res.member ? res.member.name : name }), false);
+      refreshTeamLists();
+    });
+  });
+  $("team-token-copy").addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText($("team-token-value").textContent || "");
+      showStatus("team-status", dx.t("studio.teamCopied"), false);
+    } catch (err) {
+      showStatus("team-status", dx.t("studio.teamCopyFailed"), true);
+    }
+  });
+  $("team-signout").addEventListener("click", () => {
+    if (window.DaedalusAuth && window.DaedalusAuth.signOut) window.DaedalusAuth.signOut();
+    location.reload();
+  });
+
   const opening = readQuery();
+  loadMe();
   showPanel(opening.panel, opening.tab);
   dx.watchSlug(onSlug);
   loadCatalog();

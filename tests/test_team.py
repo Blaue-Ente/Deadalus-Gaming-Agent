@@ -109,8 +109,10 @@ def test_a_disabled_member_or_an_unknown_token_is_refused(people):
     tid, th = made["tester"]
     assert client.post(f"/api/v1/team/members/{tid}", json={"disabled": True}, headers=owner).json()["member"][
         "disabled"]
-    assert client.get("/api/v1/team/me", headers=th).status_code == 401
-    assert client.get("/api/v1/team/me", headers={"Authorization": "Bearer dt_not-a-real-token"}).status_code == 401
+    paused = client.get("/api/v1/team/me", headers=th)
+    assert paused.status_code == 403 and paused.json()["error"] == "member_disabled"     # the sign-in stays valid
+    unknown = client.get("/api/v1/team/me", headers={"Authorization": "Bearer dt_not-a-real-token"})
+    assert unknown.status_code == 401 and unknown.json()["reason"] == "unknown"
     assert client.post("/api/v1/team/members", json={"name": "X", "role": "owner"}, headers=owner).status_code == 422
 
 
@@ -210,7 +212,7 @@ def test_a_broken_members_file_is_never_overwritten(a0_tmp):  # noqa: F811
     with pytest.raises(team.TeamFileError):
         team.invite("Tee", "tester")
     assert path.read_text() == "{ half written"
-    assert team.resolve("dt_anything") is None
+    assert team.identify("dt_anything") == (None, "unavailable")
 
 
 def test_the_owner_token_is_never_handed_to_a_forwarded_request(a0_tmp, raw_http):  # noqa: F811
@@ -237,3 +239,13 @@ def test_me_fails_closed_without_the_middleware():
     bare = FastAPI()
     bare.include_router(router)
     assert TestClient(bare).get("/api/v1/team/me").status_code == 401
+
+
+def test_an_unreadable_members_file_is_a_503_not_a_lost_sign_in(people):
+    client, owner, made = people
+    from daedalus.paths import data_root
+
+    (data_root() / "team.json").write_text("{ broken")
+    res = client.get("/api/v1/team/me", headers=made["designer"][1])
+    assert res.status_code == 503 and res.json()["error"] == "team_unavailable"
+    assert client.get("/api/v1/team/me", headers=owner).status_code == 200                # the owner is not locked out

@@ -256,27 +256,36 @@ def update(member_id: str, *, role: str | None = None, disabled: bool | None = N
     raise KeyError(member_id)
 
 
-def resolve(token: str) -> Member | None:
-    """Who holds ``token``: the owner, an active member, or None. Constant-time comparisons."""
+def identify(token: str) -> tuple[Member | None, str]:
+    """Who holds ``token``, or why no one: (member, "") or (None, "missing" | "unknown" | "disabled" |
+    "unavailable"). The reason lets Studio keep a sign-in that is only paused or briefly unreadable (a member's
+    sign-in is shown once: forgetting it on any refusal meant a new invite; review 2026-11-12)."""
     got = (token or "").strip()
     if not got:
-        return None
+        return None, "missing"
     from .owner_auth import token_ok
     if token_ok(got):
-        return OWNER
+        return OWNER, ""
     if not got.startswith(TOKEN_PREFIX):
-        return None
+        return None, "unknown"
     digest = _hash(got)
     found = None
     try:
         rows = _load()["members"]
     except TeamFileError:
         log.error("team members file unreadable: member tokens refused until it is fixed", exc_info=True)
-        return None
+        return None, "unavailable"
     for row in rows:
         if hmac.compare_digest(str(row.get("token_sha256") or ""), digest):
             found = _member(row)
-    return found if found and not found.disabled else None
+    if found is None:
+        return None, "unknown"
+    return (None, "disabled") if found.disabled else (found, "")
+
+
+def resolve(token: str) -> Member | None:
+    """Who holds ``token``: the owner, an active member, or None. Constant-time comparisons."""
+    return identify(token)[0]
 
 
 # ── who did what ──────────────────────────────────────────────────────────────────────────────────────────────────
