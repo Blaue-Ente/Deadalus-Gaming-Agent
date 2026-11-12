@@ -65,6 +65,9 @@ async def start_chat(
     project: str | None = None,
 ) -> dict[str, Any]:
     _gc()
+    from .team import current as _member
+
+    started_by = (_member().id if _member() is not None else "")
     job_id = uuid.uuid4().hex[:12]
     sid = (session_id or "").strip() or f"studio-{job_id}"
     before: dict[str, Any] | None = None
@@ -94,6 +97,7 @@ async def start_chat(
         "project": project or None,
         "changes": None,
         "mode": mode or None,
+        "started_by": started_by,             # gap 3: only this person or the owner may cancel or revert it
     }
     _jobs[job_id] = row
     row["run_id"] = _runs.safe_open("chat", ref=f"chat:{job_id}", summary=message[:200], effort=effort,
@@ -180,6 +184,9 @@ def revert_change(job_id: str, path: str) -> dict[str, Any]:
     row = _jobs.get((job_id or "").strip())
     if not row:
         return {"ok": False, "error": "not_found"}
+    from .team import may_touch
+    if not may_touch(row.get("started_by")):
+        return {"ok": False, "error": "not_yours"}
     if row["status"] == "running":
         return {"ok": False, "error": "still_running"}
     change = next((c for c in (row.get("changes") or []) if c["path"] == path), None)
@@ -197,13 +204,16 @@ def cancel(job_id: str) -> bool:
     row = _jobs.get((job_id or "").strip())
     if not row:
         return False
+    from .team import may_touch
+    if not may_touch(row.get("started_by")):
+        raise PermissionError("not_yours")
     row["cancelled"] = True
     task = row.get("task")
     if task is not None and not task.done():
         task.cancel()
     if row["status"] == "running":
         row["status"] = "cancelled"
-        row["error"] = row.get("error") or "спряно"
+        row["error"] = row.get("error") or "stopped"
         _runs.sync_job(row, "chat")
     return True
 

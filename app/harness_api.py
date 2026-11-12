@@ -760,7 +760,7 @@ class RevertBody(BaseModel):
     confirm: bool = False
 
 
-_REVERT_STATUS = {"not_found": 404, "still_running": 409, "changed_since": 409, "not_revertible": 409, "already_reverted": 409,
+_REVERT_STATUS = {"not_found": 404, "not_yours": 403, "still_running": 409, "changed_since": 409, "not_revertible": 409, "already_reverted": 409,
                   "unreadable": 500}
 
 
@@ -790,7 +790,11 @@ async def chat_job_get(job_id: str) -> dict[str, Any]:
 @router.post("/api/v1/daedalus/chat/jobs/{job_id}/cancel")
 async def chat_job_cancel(job_id: str) -> dict[str, Any]:
     from daedalus.chat_jobs import cancel, get_job
-    if not cancel(job_id):
+    try:
+        found = cancel(job_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail="not_yours") from exc
+    if not found:
         raise HTTPException(status_code=404, detail="unknown job")
     row = get_job(job_id) or {"id": job_id, "status": "cancelled"}
     return {"ok": True, **row}

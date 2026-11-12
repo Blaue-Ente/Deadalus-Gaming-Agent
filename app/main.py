@@ -143,6 +143,8 @@ app.include_router(admin_compat_router)
 app.include_router(harness_router)
 app.include_router(harness_core_router)
 app.include_router(catalog_router)
+from app.team_api import router as team_router  # noqa: E402  (gap 3)
+app.include_router(team_router)
 if _UI_STATIC.is_dir():
     app.mount("/admin/static", StaticFiles(directory=_UI_STATIC), name="admin-static")
 if _STATIC.is_dir():
@@ -228,7 +230,11 @@ async def llm_status() -> dict:
 @app.get("/api/v1/auth/bootstrap")
 async def auth_bootstrap(request: Request) -> dict:
     from daedalus.owner_auth import get_or_create_token
-    if not client_is_loopback_scope(request.scope):
+    from daedalus.owner_auth import came_through_proxy
+    if not client_is_loopback_scope(request.scope) or came_through_proxy(
+            {k.lower(): v for k, v in request.headers.items()}):
+        # A tunnel or reverse proxy on this machine makes every caller look local: the owner token is never handed
+        # to a forwarded request (review 2026-11-12, team members reach Studio through such proxies).
         raise HTTPException(status_code=403, detail="bootstrap only from loopback")
     return {
         "ok": True,
