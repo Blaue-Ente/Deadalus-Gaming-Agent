@@ -104,6 +104,8 @@ def _inputs_said() -> str:
             steps.append("[frame 2]")
         elif key == "click":
             steps.append("click centre")
+        elif key.startswith("click@"):
+            steps.append(f"click at {key[6:]}")
         else:
             steps.append(f"{key} held {hold / 1000:.1f}s" if hold else key)
     return ", ".join(steps) + ", [frames 3-4]"
