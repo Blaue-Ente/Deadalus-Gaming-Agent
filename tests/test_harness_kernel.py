@@ -186,8 +186,6 @@ def test_wiring_in_source():
     assert "resume_from_stage" in kernel
     assert "gameplay_for_kind" in kernel
     assert "maybe_critic" in kernel
-    js = (ROOT / "daedalus" / "playground_game_scaffold.py").read_text(encoding="utf-8")
-    assert "/api/v1/playground/projects/${slug}/assets/generate" in js
     ci = (ROOT / ".gitlab-ci.yml").read_text(encoding="utf-8")
     assert "ruff check" in ci
     assert "playwright install chromium" in ci

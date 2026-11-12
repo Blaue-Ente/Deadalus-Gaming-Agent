@@ -159,8 +159,8 @@ def scan_project(slug: str) -> dict[str, Any]:
     try:
         from . import playground as pg
         root = pg.project_dir(slug)
-    except Exception:
-        return {"ok": True, "scanned": 0, "warnings": []}
+    except Exception as exc:                 # not a clean scan: say so (it reported ok with 0 files scanned)
+        return {"ok": False, "scanned": 0, "warnings": [], "error": f"project not readable: {str(exc)[:160]}"}
     warnings: list[str] = []
     n = 0
     for rel, text in _iter_source(root):

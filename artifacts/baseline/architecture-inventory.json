@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-12T10:36:56.785340+00:00",
+  "generated_at": "2026-11-12T14:41:54.862513+00:00",
   "package_version": "0.3.8",
-  "git_commit": "4c8241397b5668223604657b63a9bf9ed35db97a",
+  "git_commit": "e2d2d8ca5f48971b2d5e1d389be10b5fe6b51682",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -50,10 +50,8 @@
   ],
   "kernel": [
     "changeset.py",
-    "command_runner.py",
     "full_autopilot.py",
-    "orchestrator.py",
-    "standalone_runtime.py"
+    "orchestrator.py"
   ],
   "loops": {
     "agent": "daedalus/agent.py",
@@ -116,8 +114,7 @@
       "daedalus/unity_platform_guide.py",
       "daedalus/playground_unity_scaffold.py",
       "daedalus/playground_unity_init.py",
-      "daedalus/playground_unity_build.py",
-      "daedalus/playground_unity_bridge.py"
+      "daedalus/playground_unity_build.py"
     ],
     "blender": [
       "daedalus/blender_jobs.py",
@@ -130,8 +127,8 @@
     ]
   },
   "tests": {
-    "modules": 135,
-    "functions": 1472
+    "modules": 136,
+    "functions": 1475
   },
   "modules": {
     "daedalus": [
@@ -242,7 +239,6 @@
       "daedalus/harness/review_actions.py",
       "daedalus/harness/runs.py",
       "daedalus/harness/turn_changes.py",
-      "daedalus/hello_test.py",
       "daedalus/host.py",
       "daedalus/identity.py",
       "daedalus/identity_standalone.py",
@@ -253,10 +249,8 @@
       "daedalus/js_deps.py",
       "daedalus/kernel/__init__.py",
       "daedalus/kernel/changeset.py",
-      "daedalus/kernel/command_runner.py",
       "daedalus/kernel/full_autopilot.py",
       "daedalus/kernel/orchestrator.py",
-      "daedalus/kernel/standalone_runtime.py",
       "daedalus/knowledge.py",
       "daedalus/kv.py",
       "daedalus/learned_skills.py",
@@ -310,14 +304,12 @@
       "daedalus/playground_agent_routing.py",
       "daedalus/playground_asset_verify.py",
       "daedalus/playground_assets.py",
-      "daedalus/playground_autopilot_ultra.py",
       "daedalus/playground_browser.py",
       "daedalus/playground_build_utils.py",
       "daedalus/playground_capacitor.py",
       "daedalus/playground_chat_context.py",
       "daedalus/playground_content_registry.py",
       "daedalus/playground_context_pack.py",
-      "daedalus/playground_deliverable.py",
       "daedalus/playground_dependency_graph.py",
       "daedalus/playground_expo_guard.py",
       "daedalus/playground_expo_scaffold.py",
@@ -325,7 +317,6 @@
       "daedalus/playground_file_trunk.py",
       "daedalus/playground_firebase_config.py",
       "daedalus/playground_game_guard.py",
-      "daedalus/playground_game_scaffold.py",
       "daedalus/playground_gameplay_verify.py",
       "daedalus/playground_git_push.py",
       "daedalus/playground_github.py",
@@ -350,9 +341,7 @@
       "daedalus/playground_skill_creator.py",
       "daedalus/playground_stage_builder.py",
       "daedalus/playground_studio_mode.py",
-      "daedalus/playground_trunk_session.py",
       "daedalus/playground_ultra_plan.py",
-      "daedalus/playground_unity_bridge.py",
       "daedalus/playground_unity_build.py",
       "daedalus/playground_unity_init.py",
       "daedalus/playground_unity_scaffold.py",
