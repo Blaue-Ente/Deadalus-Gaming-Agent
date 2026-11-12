@@ -121,6 +121,15 @@
     return d;
   }
 
+  // The live line, in the owner's language: a known phase by its key, a tool by its name, plus how long it has run.
+  // (The server's own label is a fallback for old clients; its previews are not shown.)
+  function liveLabel(d) {
+    const key = "live." + (d.tool || "");
+    const known = t(key);
+    const base = d.tool ? (known !== key ? known : "⚙️ " + d.tool) : t("studio.thinking");
+    return d.elapsed > 3 ? base + " · " + d.elapsed + "s" : base;
+  }
+
   function setLiveLabel(node, label) {
     let meta = node.querySelector(".meta");
     if (!meta) {
@@ -129,6 +138,107 @@
       node.appendChild(meta);
     }
     text(meta, label);
+  }
+
+  // What Daedalus is doing while a turn runs: a timer and one line per step (tools, model calls, the Mentor's plan,
+  // review and what it saw), streamed from the Run ledger. Never a silent wait.
+  function activityPanel(after) {
+    const wrap = document.createElement("div");
+    wrap.className = "activity";
+    const det = document.createElement("details");
+    det.open = true;
+    const sum = document.createElement("summary");
+    const list = document.createElement("ol");
+    det.append(sum, list);
+    wrap.appendChild(det);
+    after.after(wrap);
+    const started = Date.now();
+    let steps = 0;
+    let lastRow = Date.now();
+    let ended = null;
+    const clock = (ms) => {
+      const s = Math.max(0, Math.round(ms / 1000));
+      return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+    };
+    const paint = () => {
+      const bits = [t("act.working"), clock(Date.now() - started)];
+      if (steps) bits.push(t("act.steps", { n: steps }));
+      if (Date.now() - lastRow > 25000) bits.push(t("act.quiet"));
+      text(sum, bits.join(" · "));
+    };
+    const timer = setInterval(paint, 1000);
+    paint();
+    const line = (icon, cls, label, at, extra) => {
+      const li = document.createElement("li");
+      if (cls) li.className = cls;
+      const i = document.createElement("span");
+      i.className = "i";
+      text(i, icon);
+      const l = document.createElement("span");
+      text(l, label);
+      const tt = document.createElement("span");
+      tt.className = "t";
+      text(tt, at);
+      li.append(i, l, tt);
+      if (extra) li.appendChild(extra);
+      list.appendChild(li);
+      steps += 1;
+      lastRow = Date.now();
+    };
+    const bullets = (head, items) => {
+      const x = document.createElement("div");
+      x.className = "x";
+      if (head) x.appendChild(document.createTextNode(head));
+      if (items && items.length) {
+        const ul = document.createElement("ul");
+        items.forEach((it) => { const li = document.createElement("li"); text(li, it); ul.appendChild(li); });
+        x.appendChild(ul);
+      }
+      return x;
+    };
+    const secs = (ms) => (ms == null ? "" : (ms >= 1000 ? (ms / 1000).toFixed(1) + "s" : ms + "ms"));
+    function addRows(rows) {
+      (rows || []).forEach((r) => {
+        const at = r.ts ? clock(r.ts * 1000 - started) : "";
+        if (r.type === "tool") {
+          const bad = r.blocked ? t("act.refused") : (r.ok ? "" : t("act.failed"));
+          const label = [r.tool, r.target].filter(Boolean).join(" · ") + (bad ? " — " + bad : "");
+          line(r.ok ? "✓" : (r.blocked ? "⊘" : "✗"), r.ok ? "good" : "bad", label, secs(r.ms) || at,
+            !r.ok && r.note ? bullets(r.note) : null);
+        } else if (r.type === "llm") {
+          line("·", "dim", [t("act.llm"), r.intent, r.model].filter(Boolean).join(" · ")
+            + (r.error ? " — " + r.error : ""), secs(r.ms) || at);
+        } else if (r.type === "mentor_plan") {
+          if (r.skipped) line("🧭", "dim", t("act.mentorPlanSkipped", { why: r.skipped }), at);
+          else line("🧭", "good", t("act.mentorPlan") + (r.model ? " · " + r.model : ""), at,
+            bullets(r.brief, r.checklist));
+        } else if (r.type === "mentor_review") {
+          if (r.skipped) { line("🧭", "dim", t("act.mentorReviewSkipped", { why: r.skipped }), at); return; }
+          const verdict = r.accept ? t("act.mentorAccepted") : t("act.mentorMissing", { n: (r.missing || []).length });
+          const extra = (r.missing || []).concat((r.unverified || []).map((u) => t("act.unverified") + ": " + u));
+          line("🧭", r.accept ? "good" : "bad", t("act.mentorReview") + ": " + verdict
+            + (r.saw_frames ? " · " + t("act.mentorSaw", { n: r.saw_frames }) : ""), at,
+            extra.length ? bullets("", extra) : null);
+        } else if (r.type === "mentor_perception") {
+          line("👁", "", t("act.mentorSaw", { n: r.frames || 0 }) + (r.next_tool ? " → " + r.next_tool : ""), at,
+            bullets(r.reason, r.observations));
+        } else if (r.type === "truncated") {
+          line("…", "dim", t("act.truncated"), at);
+        }
+      });
+    }
+    function finish(status) {
+      if (ended) return;
+      ended = Date.now();
+      clearInterval(timer);
+      wrap.classList.add("idle");
+      const bits = [status === "done" ? t("act.done") : t("act.stopped"), clock(ended - started)];
+      if (steps) bits.push(t("act.steps", { n: steps }));
+      text(sum, bits.join(" · "));
+      if (!steps) wrap.remove();
+      else det.open = false;
+    }
+    return { addRows, finish };
   }
 
   function setEffort(next) {
@@ -1381,6 +1491,7 @@
     [...new Set([...state.pinSkills, ...state.turnSkills])].forEach((id) => metaBits.push("skill:" + id));
     add("user", message || t("studio.context"), metaBits.join(" · ") || undefined);
     const last = add("bot", t("studio.thinking"));
+    const act = activityPanel(last);
     chatBusy(true);
     const skillIds = [...new Set([...state.pinSkills, ...state.turnSkills])];
     const mcpIds = [...new Set([...state.pinMcp, ...state.turnMcp])];
@@ -1417,6 +1528,7 @@
         if (finished) return;
         finished = true;
         try { src.close(); } catch { /* ignore */ }
+        act.finish(!err && payload && payload.status === "done" ? "done" : "stopped");
         if (err) text(last, t("studio.errorPrefix") + ": " + errText(err));
         else if (payload && payload.status === "cancelled") text(last, t("studio.stopped"));
         else if (payload && payload.status === "error") text(last, t("studio.errorPrefix") + ": " + (payload.error || t("studio.chatStopped")));
@@ -1431,8 +1543,11 @@
       src.addEventListener("live", (ev) => {
         try {
           const d = JSON.parse(ev.data);
-          setLiveLabel(last, d.label || d.tool || t("studio.thinking"));
+          setLiveLabel(last, liveLabel(d));
         } catch { /* ignore */ }
+      });
+      src.addEventListener("activity", (ev) => {
+        try { act.addRows(JSON.parse(ev.data).rows); } catch { /* ignore */ }
       });
       src.addEventListener("done", (ev) => {
         try { finish(JSON.parse(ev.data)); }
@@ -1462,6 +1577,7 @@
           .catch((e) => finish(null, e));
       };
     } catch (e) {
+      act.finish("stopped");
       text(last, t("studio.errorPrefix") + ": " + errText(e));
       chatBusy(false);
     }

@@ -14,7 +14,7 @@ _live: dict[str, dict] = {}
 _TOOL_LABELS: dict[str, str] = {
     "thinking":           "🧠 Анализирам задачата",
     "navigator":          "🧭 Navigator избира маршрут",
-    "reasoning":          "💭 Дедал мисли (Sonnet)",
+    "reasoning":          "💭 Дедал мисли",
     "finalize":           "📦 Финализирам отговора",
     "NEED_PG":            "🔍 SQL заявка към базата",
     "NEED_WEB":           "🌐 Търся в мрежата",

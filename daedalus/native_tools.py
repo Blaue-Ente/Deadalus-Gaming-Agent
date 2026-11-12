@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import re
+import time
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
@@ -1159,6 +1160,44 @@ def _play_lab_sync(action: str, args: dict[str, Any]) -> dict[str, Any]:
     return r
 
 
+# ── activity (what the owner sees while Daedalus works) ──────────────────────
+_ACTIVITY_TARGET_KEYS = ("path", "slug", "url", "query", "q", "name", "action", "engine", "target")
+
+
+def activity_target(tname: str, tinput: Any) -> str:
+    """A short, secret-free description of what a tool call touched: a path, slug, URL host, or the first two words
+    of a command. Never file contents or full arguments (a command or body could carry a key)."""
+    if not isinstance(tinput, dict):
+        return ""
+    if tname == "run_command":
+        words = str(tinput.get("command") or tinput.get("cmd") or "").split()
+        return " ".join(words[:2])[:60]
+    for key in _ACTIVITY_TARGET_KEYS:
+        val = tinput.get(key)
+        if isinstance(val, str) and val.strip():
+            val = val.strip()
+            if key == "url":
+                from urllib.parse import urlsplit
+                val = urlsplit(val).netloc or val[:40]
+            return val[:80]
+    return ""
+
+
+def activity_tool(tname: str, tinput: Any, *, ok: bool, blocked: bool, ms: int, result: str = "") -> None:
+    """One ledger event per tool call, streamed to the Studio chat as it happens."""
+    try:
+        from .harness import runs
+        rid = runs.current_run_id()
+        if not rid:
+            return
+        first = (result or "").strip().splitlines()[0][:140] if (result or "").strip() else ""
+        runs.safe_event(rid, "tool", {"tool": tname, "target": activity_target(tname, tinput), "ok": bool(ok),
+                                      "blocked": bool(blocked), "ms": int(ms),
+                                      "note": "" if ok else first})
+    except Exception:
+        log.debug("activity event skipped", exc_info=True)
+
+
 async def execute_native_tool(
     name: str,
     args: dict[str, Any],
@@ -2255,6 +2294,7 @@ async def run_native_discovery_pass(
                 except json.JSONDecodeError:
                     tinput = {"raw": tinput}
 
+            _t0 = time.monotonic()
             result_text = await execute_native_tool(
                 tname, tinput,
                 memory=memory, session_id=session_id,
@@ -2269,6 +2309,8 @@ async def run_native_discovery_pass(
                 # Refused or not run (cut by the output limit, a question turn, another project): nothing happened.
                 # Not a write, and not a defect of the work either.
                 ok, blocked = False, True
+            activity_tool(tname, tinput, ok=ok, blocked=blocked, ms=int((time.monotonic() - _t0) * 1000),
+                          result=result_text)
             tool_log.append({
                 "tool": tname,
                 "input": {k: v for k, v in tinput.items() if k != "content"} if isinstance(tinput, dict) else {},

@@ -489,6 +489,24 @@ main {
   margin-top: 0.4rem;
   font-family: var(--mono);
 }
+.activity {
+  max-width: 72ch;
+  margin-top: -0.35rem;
+  font-size: 0.76rem;
+  color: var(--muted);
+  border-left: 2px solid rgba(201, 162, 39, 0.35);
+  padding: 0.1rem 0 0.1rem 0.7rem;
+}
+.activity summary { cursor: pointer; font-family: var(--mono); color: var(--gold-2); }
+.activity.idle summary { color: var(--muted); }
+.activity ol { list-style: none; margin: 0.35rem 0 0; padding: 0; display: grid; gap: 0.2rem; }
+.activity li { display: grid; grid-template-columns: 1.2rem 1fr auto; gap: 0.35rem; align-items: baseline; }
+.activity li .t { font-family: var(--mono); font-size: 0.68rem; opacity: 0.75; }
+.activity li.dim { opacity: 0.6; }
+.activity li.bad .i { color: #e07a5f; }
+.activity li.good .i { color: var(--gold); }
+.activity li .x { grid-column: 2 / 4; white-space: pre-wrap; color: var(--ink); opacity: 0.85; }
+.activity li ul { margin: 0.15rem 0 0; padding-left: 1rem; }
 .composer {
   position: sticky;
   bottom: 0;
