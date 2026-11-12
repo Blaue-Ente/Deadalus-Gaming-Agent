@@ -173,6 +173,13 @@ class BuildLoop:
         )
         self._capture_slug(args, result_text)
         self._capture_kind(tool, args, result_text)
+        if self.slug and not getattr(self, "sound_placed", False):
+            self.sound_placed = True             # once per turn: a game gets sfx.js as soon as its project is known
+            try:
+                from .mentor_lead import place_sound
+                place_sound(self)
+            except Exception:
+                pass
 
     def _capture_slug(self, args: dict[str, Any], result_text: str) -> None:
         if self.slug:

@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-12T20:51:40.382070+00:00",
+  "generated_at": "2026-11-12T21:24:02.192052+00:00",
   "package_version": "0.3.8",
-  "git_commit": "0f9726abd8b095b34d3dfd4ace5b0239d39c4687",
+  "git_commit": "07c375b2452bcdcad2e47bc20fc82f969a4c0d5e",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -9,7 +9,7 @@
   "hotspots": [
     {
       "path": "daedalus/agent.py",
-      "lines": 5067,
+      "lines": 5069,
       "broad_excepts": 163
     },
     {
@@ -19,7 +19,7 @@
     },
     {
       "path": "daedalus/native_tools.py",
-      "lines": 2435,
+      "lines": 2438,
       "broad_excepts": 26
     },
     {
@@ -34,8 +34,8 @@
     },
     {
       "path": "daedalus/build_loop.py",
-      "lines": 657,
-      "broad_excepts": 4
+      "lines": 664,
+      "broad_excepts": 5
     },
     {
       "path": "daedalus/tdd_loop.py",
@@ -127,8 +127,8 @@
     ]
   },
   "tests": {
-    "modules": 142,
-    "functions": 1568
+    "modules": 143,
+    "functions": 1576
   },
   "modules": {
     "daedalus": [
@@ -190,6 +190,7 @@
       "daedalus/game_canon.py",
       "daedalus/game_engineer.py",
       "daedalus/game_factory.py",
+      "daedalus/game_juice.py",
       "daedalus/game_lint.py",
       "daedalus/game_platform_guide.py",
       "daedalus/game_studio.py",

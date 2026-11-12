@@ -98,6 +98,9 @@ def log_turn(slug: str, request: str, loop: Any) -> bool:
         result.append("audience: players would keep playing" if aud.get("ship_ready") else "audience: most would quit")
     if isinstance(tests, dict) and tests.get("summary"):
         result.append(f"tests: {tests['summary']}")
+    juice = getattr(loop, "juice", None) if loop is not None else None
+    if isinstance(juice, dict):
+        result.append("sound: yes" if juice.get("sound") else "sound: none")
     open_items = [str(x) for x in ((rev or {}).get("missing") or [])][:5] if isinstance(rev, dict) else []
     if isinstance(aud, dict) and not aud.get("ship_ready"):
         open_items += [f"players: {f}" for f in (aud.get("fixes") or [])[:2]]
