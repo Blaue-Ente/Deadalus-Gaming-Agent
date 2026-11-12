@@ -544,7 +544,8 @@ def test_review_gate_uses_the_gateway_and_skips_on_budget(gw, monkeypatch):
     record = _install_openai(monkeypatch, text='{"ok": false, "issue": "promised, not done", "suggested_fix": "do it"}')
     out = run(improvements.review_gate_critique("do x", "done", [{"tool": "t", "ok": True}], 1.0))
     assert out["ok"] is False and out["issue"] == "promised, not done"
-    assert record["body"]["model"] == "anthropic/claude-haiku-4-5"
+    from daedalus.llm_config import OPENROUTER_FAST_MODEL
+    assert record["body"]["model"] == OPENROUTER_FAST_MODEL
 
     monkeypatch.setenv("DAEDALUS_RUN_BUDGET", "5")
     run_budget.note_usage({"cost_usd": 6, "cost_known": True}, model="m", role="writer")

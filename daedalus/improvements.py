@@ -298,7 +298,7 @@ FALLBACK_CHAIN: list[tuple[str, str, str, str, str]] = [
     # NOTE: Replit AI Integrations (replit_openai / replit_gemini) are intentionally
     # excluded — ADN runs only on external keys (OpenRouter + Novita).
     # OpenRouter — Claude Sonnet as first external fallback (proven protocol follower)
-    ("openrouter_claude", "anthropic/claude-sonnet-4-5", "openai",
+    ("openrouter_claude", "anthropic/claude-sonnet-5.5", "openai",
      "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY"),
     # Novita — cheapest meaningful fallback: DeepSeek V3.2 ($0.30/$0.90)
     # Tested ✅: deepseek/deepseek-v3.2, qwen/qwen3-235b-a22b-instruct-2507,
@@ -796,8 +796,9 @@ async def review_gate_critique(user_message: str, draft_reply: str,
             f"DRAFT REPLY:\n{(draft_reply or '')[:2000]}\n\n"
             "Качествен ли е draft-ът? Отговори САМО с JSON."
         )
+        from .llm_config import OPENROUTER_FAST_MODEL
         review_model = (
-            "anthropic/claude-haiku-4-5"
+            OPENROUTER_FAST_MODEL
             if os.environ.get("OPENROUTER_API_KEY")
             else "meta-llama/llama-3.1-8b-instruct"
         )

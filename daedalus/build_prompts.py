@@ -277,15 +277,17 @@ def fallback_build_model_tag() -> tuple[str, str]:
     try:
         cfg = get_brain_config()
     except Exception as exc:
+        from .llm_config import OPENROUTER_DEFAULT_MODEL
         return (
-            "openrouter:anthropic/claude-sonnet-4-5",
+            f"openrouter:{OPENROUTER_DEFAULT_MODEL}",
             f"fallback (no brain): {str(exc)[:120]}",
         )
     prov = str(cfg.get("provider") or "").strip().lower()
     mdl = str(cfg.get("model") or "").strip()
     if not mdl:
+        from .llm_config import OPENROUTER_DEFAULT_MODEL
         return (
-            "openrouter:anthropic/claude-sonnet-4-5",
+            f"openrouter:{OPENROUTER_DEFAULT_MODEL}",
             "fallback: empty model in brain config",
         )
     if prov in _DIRECT_PROVIDERS:

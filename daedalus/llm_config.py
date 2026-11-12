@@ -253,7 +253,8 @@ PRESET_MODELS = [
     {"id": "deepseek/deepseek-r1-0528",              "label": "DeepSeek R1 0528 (OpenRouter) 🧠",   "provider": "openrouter", "tier": "power"},
     {"id": "google/gemini-2.5-flash",                "label": "Gemini 2.5 Flash (OpenRouter) ⚡",   "provider": "openrouter", "tier": "fast"},
     {"id": "google/gemini-2.5-pro",                  "label": "Gemini 2.5 Pro (OpenRouter)",        "provider": "openrouter", "tier": "power"},
-    {"id": "anthropic/claude-sonnet-4-5",            "label": "Claude Sonnet 4.5 (OpenRouter)",     "provider": "openrouter", "tier": "fast"},
+    {"id": "anthropic/claude-sonnet-5.5",            "label": "Claude Sonnet 5.5 (OpenRouter)",     "provider": "openrouter", "tier": "fast"},
+    {"id": "anthropic/claude-haiku-5.5",             "label": "Claude Haiku 5.5 (OpenRouter) ⚡",   "provider": "openrouter", "tier": "fast"},
     {"id": "anthropic/claude-sonnet-4.6",            "label": "Claude Sonnet 4.6 (OpenRouter)",     "provider": "openrouter", "tier": "fast"},
     {"id": "anthropic/claude-fable-5.1",             "label": "Claude Fable 5.1 (OpenRouter)",      "provider": "openrouter", "tier": "power"},
     {"id": "anthropic/claude-opus-4",                "label": "Claude Opus 4 (OpenRouter)",         "provider": "openrouter", "tier": "power"},
@@ -429,6 +430,12 @@ def _apply_nvidia_free_policy(cfg: dict) -> dict:
     return out
 
 
+# Current OpenRouter defaults, in one place (2026-11-12: the default brain was still Claude Sonnet 4.5, two
+# generations old and dearer than Sonnet 5.5; the review gate used Haiku 4.5 at 8x Haiku 5.5's price).
+OPENROUTER_DEFAULT_MODEL = "anthropic/claude-sonnet-5.5"
+OPENROUTER_FAST_MODEL = "anthropic/claude-haiku-5.5"
+
+
 def get_brain_config() -> dict:
     """Effective Connectors / wardrobe brain — no task_effort or run_budget overlay.
 
@@ -599,7 +606,7 @@ def _resolve_llm_config() -> dict:
         return _apply_nvidia_free_policy({
             "provider":  "openrouter",
             # The owner's DAEDALUS_MODEL wins for every keyed provider (it was ignored here: Sonnet 4.5 was billed).
-            "model":     (env_model or "").strip() or "anthropic/claude-sonnet-4-5",
+            "model":     (env_model or "").strip() or OPENROUTER_DEFAULT_MODEL,
             "api_key":   or_key,
             "base_url":  "https://openrouter.ai/api/v1",
             "sdk":       "openai",

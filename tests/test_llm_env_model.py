@@ -32,7 +32,8 @@ def test_without_a_pick_each_provider_keeps_its_default(clean_env):
     from daedalus.llm_config import get_config
 
     clean_env.setenv("OPENROUTER_API_KEY", "k-test")
-    assert get_config()["model"] == "anthropic/claude-sonnet-4-5"
+    from daedalus.llm_config import OPENROUTER_DEFAULT_MODEL
+    assert get_config()["model"] == OPENROUTER_DEFAULT_MODEL
 
 
 def test_an_answer_with_no_text_is_not_a_success_and_says_when_tokens_ran_out():
