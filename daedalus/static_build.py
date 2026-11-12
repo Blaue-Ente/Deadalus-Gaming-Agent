@@ -151,6 +151,8 @@ async def build(root: Path, *, timeout_install: float = 600, timeout_build: floa
     if rc != 0:
         raise RuntimeError(f"{manager} install failed (rc={rc}):\n{out[-1500:]}")
     build_cmd = ("npm", "run", "build") if manager == "npm" else ("npx", "--yes", manager, "run", "build")
+    if p["framework"] == "vite":
+        build_cmd += ("--", "--base=./")              # relative assets: the site is served under /apps/<slug>/
     rc, out = await run(*build_cmd, timeout=timeout_build)
     if rc != 0:
         raise RuntimeError(f"build failed (rc={rc}):\n{out[-1500:]}")

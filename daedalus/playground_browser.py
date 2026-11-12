@@ -460,7 +460,11 @@ def _serve_static(directory: Path):
     import threading
     from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
-    handler = functools.partial(SimpleHTTPRequestHandler, directory=str(directory))
+    class _Quiet(SimpleHTTPRequestHandler):
+        def log_message(self, format: str, *args: Any) -> None:   # one line per asset flooded the server log
+            pass
+
+    handler = functools.partial(_Quiet, directory=str(directory))
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     port = httpd.server_address[1]
     t = threading.Thread(target=httpd.serve_forever, daemon=True)

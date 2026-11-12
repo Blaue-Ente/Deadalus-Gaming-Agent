@@ -112,15 +112,18 @@ async def _verify(slug: str, kind: str, analysis: dict[str, Any]) -> dict[str, A
 
 
 async def _open_in_browser(slug: str, folder: Path, how: str) -> dict[str, Any]:
-    from .playground_browser import _serve_static, browser_verify, chromium_executable
+    from .playground_browser import _serve_static, _stage_dist_as_published, browser_verify, chromium_executable
 
     if not chromium_executable():
         return {"ok": True, "how": how, "note": "built; no browser on this machine to open it (not checked)"}
-    base, stop = _serve_static(folder)
+    # Opened where it will live (/apps/<slug>/), so absolute /assets/... paths fail here, not after publishing.
+    stage, cleanup = _stage_dist_as_published(folder, slug)
+    base, stop = _serve_static(stage)
     try:
-        raw = await browser_verify(slug, base + "/", kind="static")
+        raw = await browser_verify(slug, base + f"/apps/{slug}/", kind="static")
     finally:
         stop()
+        cleanup()
     ok = bool(raw.get("ok")) and not raw.get("blank_screen")
     errs = [str(e) for e in (raw.get("page_errors") or []) + (raw.get("console_errors") or [])][:5]
     return {"ok": ok, "how": how, "error": "" if ok else ("; ".join(errs) or str(raw.get("summary") or "")

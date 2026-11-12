@@ -53,6 +53,17 @@ def auth_env(host: str, username: str, token: str, base: Mapping[str, str] | Non
     return env
 
 
+_AUTH_FAILED = ("could not read username", "authentication failed", "invalid username or password",
+                "the requested url returned error: 401", "the requested url returned error: 403",
+                "http basic: access denied")
+
+
+def auth_failed(output: str) -> bool:
+    """git said the credential was refused (expired, wrong or placeholder token)."""
+    low = (output or "").lower()
+    return any(m in low for m in _AUTH_FAILED)
+
+
 def scrub(text: str, token: str, username: str = "") -> str:
     """Remove the token and its base64 basic-auth form from log/error text."""
     tok = (token or "").strip()

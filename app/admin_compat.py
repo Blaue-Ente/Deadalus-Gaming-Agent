@@ -1882,23 +1882,17 @@ async def playground_clone(request: Request):
 
 @router.post("/daedalus/playground/api/revive")
 async def playground_revive(request: Request):
-    from daedalus.playground_git_push import clone_project_remote, forge_error_hint
-    from daedalus.playground_revive import onboard_project, compatibility_report
+    """Classic alias of POST /api/v1/playground/revive: the same job (one revive path, not two). Old callers got
+    clone + smoke test and no publishing, so ``publish`` defaults to "none" here."""
+    from daedalus import revive_job
     body = await _body(request)
-    url = (body.get("url") or "").strip()
-    if not url:
-        return JSONResponse({"ok": False, "error": "url required"}, status_code=400)
     try:
-        proj = await clone_project_remote(
-            url, name=body.get("name", ""), slug=body.get("slug", ""),
-            branch=body.get("branch", ""), ref=body.get("ref", ""),
-            source="revived", keep_git=True,
-        )
-        onboard = await onboard_project(proj["slug"])
-        compat = compatibility_report(None, repo_meta={"html_url": url})
-        return JSONResponse({"ok": True, "project": _jsonable(proj), "onboard": onboard, "compat": compat})
-    except Exception as extra:
-        return JSONResponse({"ok": False, "error": forge_error_hint(extra)}, status_code=500)
+        job = revive_job.start(str(body.get("url") or ""), publish=str(body.get("publish") or "none"),
+                               repair_rounds=int(body.get("repair_rounds", revive_job.DEFAULT_REPAIR_ROUNDS)),
+                               confirm_public=body.get("confirm_public") is True)
+    except (ValueError, TypeError) as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+    return JSONResponse({"ok": True, "job": job.public(), "poll": f"/api/v1/playground/revive/{job.id}"})
 
 
 @router.post("/daedalus/playground/api/projects/{slug}/push")

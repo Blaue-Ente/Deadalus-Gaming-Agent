@@ -402,13 +402,14 @@ def _repo_slug_from_url(url: str) -> str:
     return pg.slugify(url.rsplit("/", 1)[-1])
 
 
-async def _run(args: list[str], *, cwd: Path | None = None, timeout: int = _TIMEOUT) -> tuple[int, str]:
+async def _run(args: list[str], *, cwd: Path | None = None, timeout: int = _TIMEOUT,
+               anonymous: bool = False) -> tuple[int, str]:
     """Run a git command, scrubbing the token from any output."""
     from .git_auth import GIT_TOO_OLD, auth_env, git_supports_env_config
 
-    if _token() and not git_supports_env_config():
+    if _token() and not anonymous and not git_supports_env_config():
         return 1, GIT_TOO_OLD
-    env = auth_env("github.com", "x-access-token", _token())
+    env = auth_env("github.com", "x-access-token", "" if anonymous else _token())
     proc = await asyncio.create_subprocess_exec(
         *args, cwd=str(cwd) if cwd else None,
         stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
@@ -466,6 +467,13 @@ async def clone_repo(
     clone_args += [_auth_url(repo_url), str(dest)]
 
     code, out = await _run(clone_args)
+    if code != 0 and _token():
+        from .git_auth import auth_failed
+        if auth_failed(out):
+            # A refused token (expired, wrong scope, placeholder) must not block a public repo: retry once without it.
+            import shutil
+            shutil.rmtree(dest, ignore_errors=True)
+            code, out = await _run(clone_args, anonymous=True)
     if code != 0:
         raise RuntimeError(f"git clone failed: {out[-500:]}")
 

@@ -212,3 +212,73 @@ def test_the_routes_start_and_report_a_job(a0_tmp, monkeypatch):  # noqa: F811
     jid = r.json()["job"]["id"]
     assert c.get(f"/api/v1/playground/revive/{jid}").json()["job"]["url"] == "https://github.com/me/tiny"
     assert c.get("/api/v1/playground/revive/nope").status_code == 404
+
+
+def test_the_browser_opens_the_build_where_it_will_be_published(tmp_path, monkeypatch):
+    """Live 2026-11-12: verify served the build at "/", so absolute /assets/... paths passed and broke under /apps/."""
+    from daedalus import playground_browser as pb
+
+    (tmp_path / "index.html").write_text("<html>")
+    seen = {}
+
+    async def bv(slug, url, kind="static", **kw):
+        import urllib.request
+        seen["url"] = url
+        seen["body"] = urllib.request.urlopen(url, timeout=5).read().decode()
+        return {"ok": True}
+
+    monkeypatch.setattr(pb, "browser_verify", bv)
+    monkeypatch.setattr(pb, "chromium_executable", lambda: "/bin/true")
+    res = asyncio.run(revive_job._open_in_browser("tiny", tmp_path, "browser"))
+    assert res["ok"] and seen["url"].endswith("/apps/tiny/") and seen["body"] == "<html>"
+
+
+def test_vite_builds_with_relative_assets(tmp_path, monkeypatch):
+    import asyncio as aio
+
+    (tmp_path / "package.json").write_text(json.dumps({"scripts": {"build": "vite build"},
+                                                       "devDependencies": {"vite": "5"}}))
+    (tmp_path / "index.html").write_text("<html>")
+    argvs = []
+
+    class Proc:
+        returncode = 0
+
+        async def communicate(self):
+            if "build" in argvs[-1]:
+                (tmp_path / "dist").mkdir(exist_ok=True)
+                (tmp_path / "dist" / "index.html").write_text("<html>")
+            return b"", b""
+
+    async def fake_exec(*argv, **kw):
+        argvs.append(tuple(argv))
+        return Proc()
+
+    monkeypatch.setattr(aio, "create_subprocess_exec", fake_exec)
+    out = asyncio.run(static_build.build(tmp_path))
+    assert out == tmp_path / "dist"
+    assert argvs[-1][-3:] == ("build", "--", "--base=./")
+
+
+def test_the_classic_route_starts_the_same_job(a0_tmp, monkeypatch):  # noqa: F811
+    """One revive path: the classic /admin route is an alias of the job (it used to clone + smoke test on its own)."""
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+    from daedalus import playground_revive
+
+    started = []
+
+    async def fake_run(job, clone_fn=None):
+        started.append(job)
+        job.status = "done"
+        return job
+
+    monkeypatch.setattr(revive_job, "run", fake_run)
+    monkeypatch.setenv("DAEDALUS_TOKEN", "t")
+    c = TestClient(app, headers={"x-daedalus-token": "t"})
+    r = c.post("/admin/daedalus/playground/api/revive", json={"url": "https://github.com/me/tiny"})
+    assert r.status_code == 200 and r.json()["poll"].startswith("/api/v1/playground/revive/")
+    assert started and started[0].publish == "none"
+    assert c.post("/admin/daedalus/playground/api/revive", json={}).status_code == 400
+    assert not hasattr(playground_revive, "revive_pipeline")
