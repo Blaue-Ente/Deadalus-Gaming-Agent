@@ -12,6 +12,9 @@ verdict was appended as text nobody could act on.
 """
 from __future__ import annotations
 
+import asyncio
+import contextvars
+
 import logging
 import os
 import re
@@ -123,6 +126,7 @@ class BuildLoop:
         self.observations: list[ToolObservation] = []
         self.nudges = 0
         self.slug = ""
+        self.sound_placed = False                # gap 4a: sfx.js placed (or not needed) for this turn
         self.last_verdict: BuildVerdict | None = None
         self.stop_reason = ""
         self.proof_frames: list[str] = []
@@ -173,13 +177,19 @@ class BuildLoop:
         )
         self._capture_slug(args, result_text)
         self._capture_kind(tool, args, result_text)
-        if self.slug and not getattr(self, "sound_placed", False):
+        if self.slug and not self.sound_placed:
             self.sound_placed = True             # once per turn: a game gets sfx.js as soon as its project is known
-            try:
-                from .mentor_lead import place_sound
-                place_sound(self)
-            except Exception:
-                pass
+            self._place_sound()
+
+    def _place_sound(self) -> None:
+        """Off the event loop when there is one (it reads the project); place_sound never raises."""
+        from .mentor_lead import place_sound
+        try:
+            running = asyncio.get_running_loop()
+        except RuntimeError:
+            place_sound(self)
+            return
+        running.run_in_executor(None, contextvars.copy_context().run, place_sound, self)
 
     def _capture_slug(self, args: dict[str, Any], result_text: str) -> None:
         if self.slug:

@@ -39,8 +39,12 @@ function unlock() {
   if (a && a.state === 'suspended') a.resume();
 }
 ['keydown', 'pointerdown', 'touchstart'].forEach((t) => addEventListener(t, unlock, { passive: true }));
+let muteKey = 'm';                     // a game that uses M itself: sfx.setMuteKey('n'), or null for none
 addEventListener('keydown', (e) => {
-  if (e.key === 'm' || e.key === 'M') {
+  const t = e.target;
+  const typing = t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName || ''));
+  if (muteKey && !typing && !e.repeat && !e.ctrlKey && !e.metaKey && !e.altKey &&
+      (e.key || '').toLowerCase() === muteKey) {
     muted = !muted;
     try { localStorage.setItem('sfx.muted', muted ? '1' : '0'); } catch (err) { /* private mode */ }
     if (master) master.gain.value = muted ? 0 : 0.35;
@@ -90,6 +94,7 @@ export const sfx = {
   lose: () => [0, 1, 2].forEach((i) => tone('triangle', 440 / (1 + i * 0.35), 300 / (1 + i * 0.35), 0.22, 0.5, i * 0.18)),
   win: () => [523, 659, 784, 1047].forEach((f, i) => tone('square', f, f, 0.14, 0.4, i * 0.11)),
   get muted() { return muted; },
+  setMuteKey: (key) => { muteKey = key ? String(key).toLowerCase() : null; },
 };
 export default sfx;
 """
@@ -98,20 +103,37 @@ GUIDANCE = (
     "SOUND AND LOOK (every game has both, free): sfx.js is in the project (Daedalus placed it; keep it, do not "
     "rewrite it). Import it (import { sfx } from './sfx.js') and call it on the game's events: sfx.jump(), "
     "sfx.score(), sfx.hit(), sfx.lose(), sfx.win(), sfx.click() on menus, sfx.powerup(), sfx.explode(). Mention in "
-    "the help text that M mutes. Draw the art in code (canvas paths or inline SVG) in the look the plan or bible "
+    "the help text that M mutes (if the game uses M itself, call sfx.setMuteKey('n') and say N). Draw the art in code (canvas paths or inline SVG) in the look the plan or bible "
     "names: a palette of 3-5 colours, shapes with an outline or a shadow, a background with depth (a gradient, "
     "parallax layers or a pattern), and a short effect when something happens (a flash, particles, a shake). No "
     "image files from the web."
 )
 
-_SOUND_CALL = re.compile(r"\bsfx\s*\.\s*\w+\s*\(|\bAudioContext\b|\bnew\s+Audio\s*\(|\bHowl\s*\(")
-_CODE_FILES = ("*.js", "*.mjs", "*.ts", "*.tsx", "*.jsx", "*.html")
-_SKIP_DIRS = {"node_modules", "dist", "build", ".git", ".daedalus", "tests", "test"}
+# Any way a web game plays sound: sfx.js, Web Audio, an Audio element or <audio>, Howler, Phaser's sound manager,
+# Tone.js, ZzFX (review 2026-11-12: a Phaser game playing this.sound.play() was called silent).
+_SOUND_CALL = re.compile(
+    r"\bsfx\s*\.\s*\w+\s*\(|\b(?:webkit)?AudioContext\b|\bnew\s+Audio\s*\(|<audio\b|\bnew\s+Howl\b|\bHowl\s*\("
+    r"|\.sound\s*\.\s*(?:play|add)\s*\(|\bTone\s*\.|\bzzfx\s*\(")
+_CODE_EXT = (".js", ".mjs", ".ts", ".tsx", ".jsx", ".html")
+_SKIP_DIRS = {"node_modules", "dist", "build", "studio", "playtest", "assets", "tests", "test"}
+WEB_KINDS = {"static", "html", "vite", "vite-react"}       # sfx.js is browser code: never for Expo, Godot or Unity
 
 
 def sfx_path(kind: str) -> str:
     """Where sfx.js goes: next to index.html for a static game, in src/ for a bundled one."""
-    return "src/sfx.js" if kind in {"vite", "vite-react", "phaser"} else "sfx.js"
+    return "src/sfx.js" if kind in {"vite", "vite-react"} else "sfx.js"
+
+
+def project_kind(root: Path, fallback: str = "static") -> str:
+    """The project's real kind from its files (a turn's route can guess wrong: review 2026-11-12)."""
+    try:
+        from .playground import detect_kind
+        kind = (detect_kind(Path(root))[0] or "").strip().lower()
+    except Exception:
+        kind = ""
+    if kind == "phaser":
+        kind = "vite"
+    return kind or (fallback or "static")
 
 
 def ensure_sfx(root: Path, kind: str = "static") -> bool:
@@ -125,16 +147,17 @@ def ensure_sfx(root: Path, kind: str = "static") -> bool:
 
 
 def has_sound(root: Path) -> bool:
-    """Does the game's own code play any sound (sfx.js calls, Web Audio, an Audio element, Howler)? sfx.js itself
-    does not count: placing the module is not using it."""
-    root = Path(root)
-    for pattern in _CODE_FILES:
-        for path in root.rglob(pattern):
-            rel = path.relative_to(root)
-            if path.name == "sfx.js" or any(part in _SKIP_DIRS for part in rel.parts[:-1]):
+    """Does the game's own code play any sound? sfx.js itself does not count: placing the module is not using it.
+    One walk that never descends into node_modules, builds or tooling folders."""
+    import os
+
+    for base, dirs, files in os.walk(Path(root)):
+        dirs[:] = [d for d in dirs if d not in _SKIP_DIRS and not d.startswith(".")]
+        for name in files:
+            if name == "sfx.js" or not name.lower().endswith(_CODE_EXT):
                 continue
             try:
-                if _SOUND_CALL.search(path.read_text(encoding="utf-8", errors="replace")):
+                if _SOUND_CALL.search(Path(base, name).read_text(encoding="utf-8", errors="replace")):
                     return True
             except OSError:
                 continue

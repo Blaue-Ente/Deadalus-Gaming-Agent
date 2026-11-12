@@ -1769,8 +1769,8 @@ class Daedalus:
                     _loop = BuildLoop(_route, _owner_words, seed_log=_consult_log)
                     if _bound and not _loop.slug:
                         _loop.slug = _bound          # project chat: the project exists; never steer to a new one
-                        _loop.sound_placed = True
-                        await asyncio.to_thread(_lead.place_sound, _loop)   # gap 4a: before the writer starts
+                        _loop.sound_placed = True    # gap 4a: sfx.js before the writer starts
+                        await asyncio.to_thread(_lead.place_sound, _loop)
                     _loop.lead_plan = await _lead.kickoff(   # never raises: no plan just means no plan
                         _owner_words, slug=_loop.slug, kind=getattr(_route, "kind", "") or "",
                     )

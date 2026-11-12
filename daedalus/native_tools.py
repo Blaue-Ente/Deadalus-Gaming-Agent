@@ -2334,14 +2334,15 @@ async def run_native_discovery_pass(
                         from . import mentor_lead as _lead
                         nudge = await _lead.acceptance_nudge(loop, loop.user_message)  # the owner's words (agent.py)
                         if nudge is None:
-                            # A game the lead accepted is played by simulated players before it is done.
+                            # A game the lead accepted plays sound (gap 4a: sfx.js is in the project, free), first,
+                            # so the players hear it and the tests run on the code as it ships.
+                            nudge = await _lead.juice_gate(loop, loop.user_message)
+                        if nudge is None:
+                            # It is played by simulated players before it is done.
                             nudge = await _lead.audience_gate(loop, loop.user_message)
                         if nudge is None:
                             # ...and its own tests pass, with nothing that worked at acceptance broken since.
                             nudge = await _lead.tests_gate(loop, loop.user_message)
-                        if nudge is None:
-                            # ...and it plays sound (gap 4a: sfx.js is in the project, free).
-                            nudge = await _lead.juice_gate(loop, loop.user_message)
                     except Exception:
                         log.warning("mentor lead review failed", exc_info=True)
                         nudge = None

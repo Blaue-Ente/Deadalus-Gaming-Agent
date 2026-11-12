@@ -146,3 +146,77 @@ def test_the_sounds_play_in_a_real_browser_and_m_mutes(game):
     finally:
         stop()
     assert errors == []
+
+
+# ── review fixes, 2026-11-12 ─────────────────────────────────────────────────────────────────────────────────────
+def test_expo_and_godot_games_get_no_browser_sound_module(game):
+    root = _root(game)
+    (root / "project.godot").write_text("[application]\n")
+    assert not mentor_lead.place_sound(_loop(game)) and not (root / "sfx.js").exists()
+    assert asyncio.run(mentor_lead.juice_gate(_loop(game), "make a hopping game")) is None
+    (root / "project.godot").unlink()
+    (root / "package.json").write_text('{"dependencies": {"expo": "52.0.0"}}')
+    assert not mentor_lead.place_sound(_loop(game)) and not (root / "sfx.js").exists()
+
+
+def test_the_projects_real_kind_decides_where_the_module_goes(game):
+    root = _root(game)
+    (root / "package.json").write_text('{"dependencies": {"vite": "6.0.0", "react": "19.0.0"}}')
+    assert mentor_lead.place_sound(_loop(game, kind="static"))          # the turn guessed static
+    assert (root / "src" / "sfx.js").is_file() and not (root / "sfx.js").exists()
+
+
+@pytest.mark.parametrize("code", ["this.sound.play('jump')", "this.sound.add('coin')", "<audio src=a.ogg>",
+                                  "new Howl({src:['a.ogg']})", "zzfx(...[1,0,9])", "Tone.Synth", "webkitAudioContext"])
+def test_any_way_a_web_game_plays_sound_counts(game, code):
+    (_root(game) / "game.js").write_text(code)
+    assert game_juice.has_sound(_root(game))
+
+
+def test_a_game_with_its_own_sound_gets_no_module_and_the_record_stays_current(game):
+    root = _root(game)
+    (root / "game.js").write_text("const a = new Audio('hit.wav'); a.play();")
+    assert not mentor_lead.place_sound(_loop(game)) and not (root / "sfx.js").exists()
+    waiting = _loop(game, lead_accepted=False)
+    assert asyncio.run(mentor_lead.juice_gate(waiting, "make a hopping game")) is None
+    assert waiting.juice == {"sound": True}                             # known before the lead accepts
+
+
+def test_the_gates_run_sound_before_the_players_and_the_tests():
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parents[1] / "daedalus" / "native_tools.py").read_text()
+    order = [src.index(f"_lead.{g}(loop, loop.user_message)") for g in ("acceptance_nudge", "juice_gate",
+                                                                         "audience_gate", "tests_gate")]
+    assert order == sorted(order)
+
+
+@pytest.mark.skipif(not _browser_ok(), reason="Chromium/Playwright not available")
+def test_m_mutes_only_outside_text_fields_and_a_game_can_move_it(game):
+    from playwright.sync_api import sync_playwright
+
+    from daedalus.playground_browser import _serve_static
+
+    root = _root(game)
+    game_juice.ensure_sfx(root)
+    (root / "index.html").write_text(
+        "<input id=name><script type=module>import { sfx } from './sfx.js'; window.sfx = sfx;</script>")
+    base, stop = _serve_static(root)
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page()
+            page.goto(base + "/")
+            page.wait_for_function("() => !!window.sfx")
+            page.click("#name")
+            page.keyboard.type("Tom")                                    # typing a name never mutes
+            assert page.evaluate("() => window.sfx.muted") is False
+            page.evaluate("() => document.activeElement.blur()")
+            page.evaluate("() => window.sfx.setMuteKey('n')")
+            page.keyboard.press("m")
+            assert page.evaluate("() => window.sfx.muted") is False          # M belongs to the game now
+            page.keyboard.press("n")
+            assert page.evaluate("() => window.sfx.muted") is True
+            browser.close()
+    finally:
+        stop()
