@@ -351,6 +351,15 @@ def format_system(rt: Route, *, extra: str = "", user_message: str = "", offered
         if s.docs:
             lines.append(f"      docs: {', '.join(s.docs)}")
     lines.append("When the slice files exist, stop and summarize. No NEED_* dumps, no SQL.")
+    try:                                  # a game is kept and built on: its rules get tests (project_tests)
+        from .mentor_lead import GAME_PLAYBOOKS, _GAME_WORDS
+        from .task_effort import current as _effort_now
+        if ((pb.id in GAME_PLAYBOOKS or _GAME_WORDS.search(user_message or ""))
+                and str((_effort_now() or {}).get("tier") or "") != "whisper"):
+            from .project_tests import GUIDANCE
+            lines.append(GUIDANCE)
+    except Exception:
+        pass
     lines.append(f"Write your replies to the owner in {reply_language(user_message)} (the owner's request). "
                  "Instructions here may be in another language; that is not the owner's.")
     from .harness.brain_tools import NAMES as _harness_tools, SYSTEM_HINT as _harness_hint

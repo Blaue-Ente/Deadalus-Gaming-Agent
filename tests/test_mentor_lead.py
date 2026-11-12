@@ -146,6 +146,11 @@ def test_the_build_loop_asks_the_lead_before_it_ends(lead_on, monkeypatch, proje
                   {"accept": True, "missing": []})
     monkeypatch.setattr(mentor_lead, "_ask", calls)
 
+    async def _no_tests_gate(loop, request):       # the project-tests gate has its own tests (test_project_tests)
+        return None
+
+    monkeypatch.setattr(mentor_lead, "tests_gate", _no_tests_gate)
+
     def use(tool, **args):
         return {"type": "tool_use", "id": f"c{len(seen)}{tool}", "name": tool, "input": args}
 

@@ -327,6 +327,7 @@ class BuildLoop:
 
     def note_play_bot(self, result: dict[str, Any] | None) -> None:
         row = result or {}
+        self.play_bot_raw = row                     # its checks are the project's play baseline (project_tests)
         self.play_bot_ran = True
         skipped = bool(row.get("skipped"))
         self.play_bot_ok = bool(row.get("ok")) and not skipped

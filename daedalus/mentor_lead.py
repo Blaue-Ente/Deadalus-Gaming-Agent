@@ -35,7 +35,19 @@ from typing import Any, Iterator
 log = logging.getLogger("daedalus.mentor_lead")
 
 LEAD_FIX_ROUNDS = 2          # extra writer rounds the lead may ask for after the kernel said "complete"
-MAX_REVIEWS = LEAD_FIX_ROUNDS + 1   # lead reviews per turn: one per fix round, plus the final look
+EPIC_FIX_ROUNDS = 4          # epic promises depth: the lead, the audience and the tests share more rounds
+MAX_REVIEWS = LEAD_FIX_ROUNDS + 1   # lead reviews per turn: one per fix round, plus the final look (craft)
+
+
+def fix_rounds() -> int:
+    """Fix rounds for this turn (live 2026-11-12: lead and audience used both craft rounds, the tests never ran)."""
+    try:
+        from .task_effort import current
+        if str((current() or {}).get("tier") or "") == "epic":
+            return EPIC_FIX_ROUNDS
+    except Exception:
+        pass
+    return LEAD_FIX_ROUNDS
 PLAN_MAX_OUT = 900
 REVIEW_MAX_OUT = 1400   # 700 cut a 10-item review mid-JSON (live 2026-11-12)
 LEAD_TIMEOUT_MIN_S = 45.0
@@ -511,7 +523,7 @@ async def acceptance_nudge(loop: Any, request: str) -> str | None:
         return None
     done = int(getattr(loop, "lead_reviews", 0) or 0)
     used = int(getattr(loop, "lead_fix_used", 0) or 0)
-    if done >= MAX_REVIEWS:
+    if done >= fix_rounds() + 1:
         return None
     loop.lead_reviews = done + 1
     rev = await review(loop, request)
@@ -520,13 +532,13 @@ async def acceptance_nudge(loop: Any, request: str) -> str | None:
         if rev is not None:
             loop.lead_accepted = True
         return None
-    if used >= LEAD_FIX_ROUNDS:
+    if used >= fix_rounds():
         loop.lead_accepted = False
         return None
     loop.lead_fix_used = used + 1
     # stop_reason stays "complete": that is the kernel's verdict and it stands; the lead's own verdict is reported
     # separately, so a writer still fixing when the rounds run out is not turned into "round budget exhausted".
-    return review_block(rev, rounds_left=LEAD_FIX_ROUNDS - loop.lead_fix_used)
+    return review_block(rev, rounds_left=fix_rounds() - loop.lead_fix_used)
 
 
 GAME_PLAYBOOKS = {"playground.arcade", "playground.math3d", "playground.crowd", "playground.epic"}
@@ -584,7 +596,7 @@ async def audience_gate(loop: Any, request: str) -> str | None:
         loop.audience_passed = report.get("mode") == "played"
         return None
     used = int(getattr(loop, "lead_fix_used", 0) or 0)
-    if used >= LEAD_FIX_ROUNDS:
+    if used >= fix_rounds():
         return None
     loop.lead_fix_used = used + 1
     loop.lead_accepted = False                # accepted again only after the fix is reviewed
@@ -596,7 +608,71 @@ async def audience_gate(loop: Any, request: str) -> str | None:
             f"What they said:\n{quotes or '- (no quotes)'}\n"
             f"What would keep them:\n{fixes or '- (no fixes)'}\n"
             "Fix the causes they name in the game's files (write_file), keep everything that already works, then "
-            f"stop. Fix rounds left after this one: {LEAD_FIX_ROUNDS - loop.lead_fix_used}.")
+            f"stop. Fix rounds left after this one: {fix_rounds() - loop.lead_fix_used}.")
+
+
+async def tests_gate(loop: Any, request: str) -> str | None:
+    """After the lead (and the audience) accepted a game: its own tests. Logic tests that fail or a regression against
+    the recorded baseline return the turn (one shared fix round); a first accepted game with passing tests records
+    its baseline; a game with no tests is asked for them once. None = done. Owner, 2026-11-12: games a team keeps
+    building on, like The-Labirinth with its `pnpm verify` before every push."""
+    if loop is None or getattr(loop, "tests_done", False):
+        return None
+    slug = str(getattr(loop, "slug", "") or "")
+    if not slug or not is_game(loop, request):
+        return None
+    spent = int(getattr(loop, "lead_fix_used", 0) or 0) >= fix_rounds()
+    if not getattr(loop, "lead_accepted", False):
+        if not spent:
+            return None
+        # No round left and not accepted: still run the tests, to report them (live 2026-11-12: 16 tests passed
+        # and the owner never saw it), never to send the turn back or record a baseline.
+        from . import project_tests
+        report = await project_tests.run(slug, play=getattr(loop, "play_bot_raw", None))
+        loop.project_tests = {k: report.get(k) for k in ("ok", "summary", "regressions", "baseline")}
+        loop.tests_done = True
+        return None
+    try:
+        from .task_effort import current
+        if str((current() or {}).get("tier") or "") == "whisper":
+            return None
+    except Exception:
+        pass
+    from . import project_tests
+
+    play = getattr(loop, "play_bot_raw", None)
+    report = await project_tests.run(slug, play=play)
+    loop.project_tests = {k: report.get(k) for k in ("ok", "summary", "regressions", "baseline")}
+    logic = report.get("logic") or {}
+    used = int(getattr(loop, "lead_fix_used", 0) or 0)
+    rounds_left = used < fix_rounds()
+    if report["ok"] and logic.get("ran"):
+        loop.tests_done = True
+        if not report["baseline"]:
+            project_tests.record_baseline(slug, logic, play)
+        return None
+    if not logic.get("ran") and not report["regressions"]:
+        loop.tests_done = True
+        if logic.get("ok") is False or not rounds_left or getattr(loop, "tests_asked", False):
+            return None          # no Node here, or already asked: report, do not loop
+        loop.tests_asked = True
+        loop.lead_fix_used = used + 1
+        loop.lead_accepted = False
+        return ("━━━ PROJECT TESTS: NONE YET ━━━\n" + project_tests.GUIDANCE +
+                "\nKeep the game working exactly as it is; only move the rules into logic.mjs and test them. Then stop.")
+    if not rounds_left:
+        loop.tests_done = True
+        return None
+    loop.lead_fix_used = used + 1
+    loop.lead_accepted = False                  # reviewed again after the fix
+    lines = ["━━━ PROJECT TESTS: FAILING ━━━", report["summary"]]
+    lines += [f"- failing: {f}" for f in (logic.get("failures") or [])[:6]]
+    lines += [f"- regression: {r}" for r in report["regressions"][:6]]
+    if logic.get("note"):
+        lines.append(f"- {logic['note']}")
+    lines.append("Fix the game so the tests pass (change a test only if the test itself is wrong, and say why). "
+                 "Keep everything that already works. Then stop.")
+    return "\n".join(lines)
 
 
 def summary_lines(loop: Any) -> list[str]:
@@ -615,6 +691,10 @@ def summary_lines(loop: Any) -> list[str]:
         else:
             lines.append("Lead review: NOT accepted. Still missing: " + "; ".join(rev.get("missing") or []) +
                          ". Tell the owner plainly.")
+    pt = getattr(loop, "project_tests", None)
+    if isinstance(pt, dict) and pt.get("summary"):
+        lines.append(f"Project tests: {pt['summary']}" + (" (failing)" if not pt.get("ok") else "") +
+                     ". Tell the owner plainly.")
     aud = getattr(loop, "audience", None)
     if isinstance(aud, dict) and aud.get("summary"):
         verdict = "players would keep playing" if aud.get("ship_ready") else "most players would still quit"
