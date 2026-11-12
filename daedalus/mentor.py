@@ -1068,12 +1068,14 @@ def persona_wrapup(loop: Any) -> str:
     elif decision.action == "stop":
         lines.append(f"Steer: stop — {decision.reason}")
     else:
+        # This block feeds the final reply, where tools cannot run (review 2026-11-12: "Call the NEXT tool now"
+        # here made the reply announce a tool call that never ran).
         lines.append(
-            "Steer: not done. A check failed — RETURN TO WRITER. "
-            "Do not dump leftover JS into chat. Do not emit NEED_* / JSON tool dumps. "
-            "Mentor does not write files. Call the NEXT tool now."
+            "Steer: not done — a check failed. Tools cannot run in this reply: tell the owner plainly what failed "
+            "and what the next build turn would do. Do not dump leftover JS, NEED_* or JSON tool calls."
         )
-        lines.append(decision.next_line(slug=str(getattr(loop, "slug", "") or "")))
+        lines.append("Next build turn: " + decision.next_line(
+            slug=str(getattr(loop, "slug", "") or "")).removeprefix("NEXT: "))
         if decision.forbid_tools:
             lines.append("Do not retry: " + ", ".join(decision.forbid_tools) + ".")
         if decision.blockers:

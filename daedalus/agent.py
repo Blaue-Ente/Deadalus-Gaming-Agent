@@ -557,7 +557,6 @@ def strip_text_tool_calls(raw: str) -> str:
     return out or (NOT_RUN_NOTE if source.strip() else "")
 
 
-from .tool_router import reply_language  # noqa: E402,F401  (the request's own language)
 
 def _read_file_tool(raw_path: str, line_start: int | None = None, line_end: int | None = None) -> dict:
     """Execute NEED_READ_FILE: read a file safely and return its contents."""
@@ -1841,6 +1840,7 @@ class Daedalus:
                         (t.get("tool") in {"write_file", "playground_new"} and t.get("ok"))
                         for t in _native_log
                     ):
+                        from .tool_router import reply_language
                         user_content += (
                             "\n\n━━━ NATIVE BUILD ALREADY ACTED ━━━\n"
                             "You already created/wrote Playground files. "
@@ -1850,12 +1850,8 @@ class Daedalus:
                             # after the work was done and accepted.
                             "Tools cannot run in this reply: do not announce next steps or write tool calls. "
                             "Say what was built, what was verified and what is still open.\n"
-                            f"Write this reply in {reply_language(_owner_words)}: the language of this request.\n"
+                            f"Write this reply in {reply_language(_owner_words)} (the owner's request).\n"
                         )
-                        _lead_rev = getattr(_loop, "lead_review", None)
-                        if isinstance(_lead_rev, dict) and _lead_rev.get("accept"):
-                            user_content += ("The Mentor (lead) ACCEPTED the result after playing it. "
-                                             "Say so plainly.\n")
                         try:
                             from . import mentor as _mentor
                             wrap = _mentor.persona_wrapup(_loop)

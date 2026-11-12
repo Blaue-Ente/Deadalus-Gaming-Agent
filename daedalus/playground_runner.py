@@ -107,6 +107,11 @@ async def start(slug: str, *, install_deps: bool = False, tunnel: bool = False) 
         install_result = await _install_deps(proj, root)
 
     env = _child_env(port)
+    try:
+        from .static_build import legacy_openssl_env
+        legacy_openssl_env(env, root)        # an old webpack app's `npm start` on new Node (review 2026-11-12)
+    except Exception:
+        pass
     argv = argv_from_resolved_shlex(cmd, env=env)
     if not argv:
         raise ValueError("empty run command after resolution")
