@@ -218,7 +218,7 @@ async def app_analytics_record(slug: str, request: Request):
     from . import play_analytics
 
     raw = await request.body()
-    client = request.client.host if request.client else ""          # rate limit only; never stored
+    client = play_analytics.client_key(request.headers, request.client.host if request.client else "")
     stored, reason = await asyncio.to_thread(play_analytics.record, slug, raw, client=client)
     if not stored:
         code = {"too_large": 413, "rate_limited": 429}.get(reason, 400)
@@ -228,10 +228,8 @@ async def app_analytics_record(slug: str, request: Request):
 
 @router.get("/api/{slug}/analytics")
 async def app_analytics_summary(slug: str, request: Request):
-    """The owner's view of what real players did with a published game."""
-    from .host import current_user
-    if current_user(request) is None:
-        return JSONResponse({"ok": False, "error": "Sign in to /admin to see analytics."}, status_code=401)
+    """The owner's view of what real players did with a published game. OwnerAuthMiddleware requires the owner
+    token for /apps/api/* (host.current_user is always None in standalone mode, so it cannot be the gate)."""
     from . import play_analytics
 
     return JSONResponse({"ok": True, "slug": slug, **(await asyncio.to_thread(play_analytics.summary, slug))})
@@ -239,10 +237,8 @@ async def app_analytics_summary(slug: str, request: Request):
 
 @router.post("/api/{slug}/delete")
 async def apps_delete_published(slug: str, request: Request):
-    """Admin-only: fully remove a published app from /apps/ (works without playground project)."""
-    from .host import current_user
-    if current_user(request) is None:
-        return JSONResponse({"ok": False, "error": "Sign in to /admin to delete apps."}, status_code=401)
+    """Owner-only (OwnerAuthMiddleware requires the owner token for /apps/api/*): fully remove a published app from
+    /apps/ (works without playground project)."""
     from . import playground as pg_mod
     try:
         ok = await pub.delete_published(slug)

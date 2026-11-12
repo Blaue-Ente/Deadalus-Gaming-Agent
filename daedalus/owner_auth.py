@@ -160,9 +160,26 @@ def assert_bind_allowed(host: str) -> None:
     )
 
 
+def _apps_parts(path: str) -> list[str]:
+    return [seg for seg in (path or "").split("/") if seg]
+
+
+def _apps_owner_route(path: str) -> bool:
+    """Exactly ``/apps/api/{slug}/analytics`` or ``/apps/api/{slug}/delete``. Only these, so a game whose slug is
+    ``api`` stays public (review 2026-11-12)."""
+    parts = _apps_parts(path)
+    return len(parts) == 4 and parts[:2] == ["apps", "api"] and parts[3] in ("analytics", "delete")
+
+
+def _apps_analytics_path(path: str) -> bool:
+    """True for exactly ``/apps/{slug}/analytics``: a published game's visit record."""
+    parts = _apps_parts(path)
+    return len(parts) == 3 and parts[0] == "apps" and parts[2] == "analytics"
+
+
 def _apps_db_item_path(path: str) -> bool:
     """True for ``/apps/{slug}/db/{key}`` with a non-empty key (not clear-all)."""
-    parts = [seg for seg in (path or "").split("/") if seg]
+    parts = _apps_parts(path)
     if len(parts) < 4 or parts[0] != "apps" or parts[2] != "db":
         return False
     return bool("/".join(parts[3:]).strip())
@@ -174,11 +191,15 @@ def is_public_request(method: str, path: str) -> bool:
         return True
     p = path.split("?", 1)[0]
     if p.startswith("/apps/"):
+        if _apps_owner_route(p):
+            return False                 # the owner's routes (delete, analytics summary) need the owner token
         if m in ("GET", "HEAD"):
             return True
-        # Single-key PlaygroundDB writes from a published game stay public.
-        # Clear-all DELETE /apps/{slug}/db/ and /apps/api/* need the owner token.
+        # Single-key PlaygroundDB writes from a published game stay public, and so does a player's visit record
+        # (play_analytics). Clear-all DELETE /apps/{slug}/db/ and /apps/api/* need the owner token.
         if m in ("POST", "DELETE") and _apps_db_item_path(p):
+            return True
+        if m == "POST" and _apps_analytics_path(p):
             return True
         return False
     if m not in ("GET", "HEAD"):

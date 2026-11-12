@@ -14,7 +14,9 @@ lasting identifier is stored; a browser that sends Do Not Track sends nothing. R
 store (the last ``MAX_SESSIONS`` per game). Games published elsewhere (Netlify, GitLab Pages) are not measured: that
 needs a public collector, an owner decision.
 
-The records are written by anyone who can load the page, so their text is untrusted: the builder's prompt gets the
+Anyone who can load the page can send records, so the numbers are signals, not proof: a sender who spreads across
+many addresses can, within the per-game limit (``RATE_PER_MINUTE``), replace the stored visits with invented ones.
+The owner's summary and the builder's prompt say so. Their text is untrusted too: the builder's prompt gets the
 numbers and event names restricted to ``[A-Za-z0-9_.:-]``, never error messages (review 2026-11-12: a forged beacon
 would otherwise put words in the agent's prompt). The owner sees the messages in the summary.
 """
@@ -111,6 +113,14 @@ def clean(body: Any) -> dict[str, Any] | None:
             "errors": errors, "events": events}
 
 
+def client_key(headers: Any, peer: str) -> str:
+    """Whom the per-client limit counts. Behind a hosting proxy every player arrives from the proxy's address, so the
+    first forwarded address is used when there is one (review 2026-11-12). It can be forged, which only spreads one
+    sender over more client buckets: the per-game limit still holds. Held in memory for a minute, never stored."""
+    forwarded = str(headers.get("fly-client-ip") or headers.get("x-forwarded-for") or "").split(",")[0].strip()
+    return forwarded[:64] or peer
+
+
 def _within(bucket: str, limit: int, now: float) -> bool:
     window = _recent.setdefault(bucket, deque())
     while window and now - window[0] > 60:
@@ -180,6 +190,7 @@ def summary(slug: str) -> dict[str, Any]:
         events.update(r.get("events") or {})
     return {
         "sessions": n,
+        "note": "anonymous records: anyone who can load the game can send one, so treat these as signals",
         "since": min(int(r.get("at") or 0) for r in rows),
         "median_s": round(statistics.median(durations) / 1000, 1),
         "left_within_10s_pct": _pct(sum(1 for d in durations if d < 10_000), n),
@@ -205,6 +216,6 @@ def format_for_prompt(slug: str) -> str:
                      "in the analytics summary; check the game's error handling)")
     if s["events_per_session"]:
         lines.append("- game events per visit: " + ", ".join(f"{k} {v}" for k, v in s["events_per_session"].items()))
-    lines.append("Use these numbers when they bear on the request (a game players leave in 10s needs a clearer "
-                 "start); do not invent reasons for them.")
+    lines.append("These are anonymous signals (anyone can send a record), not proof. Use them when they bear on the "
+                 "request (a game players leave in 10s needs a clearer start); do not invent reasons for them.")
     return "\n".join(lines)
