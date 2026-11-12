@@ -572,6 +572,27 @@ async def call(
     usage = {"prompt_tokens": int(parsed.get("prompt_tokens") or 0),
              "completion_tokens": int(parsed.get("completion_tokens") or 0)}
     known = bool(parsed.get("cost_known")) and parsed.get("cost_usd") is not None
+    if not (text or "").strip() and max_tokens < 6000 and usage["completion_tokens"] >= int(max_tokens * 0.95):
+        # Hidden reasoning spent the whole budget and nothing was said (live 2026-11-12: two of four playtest
+        # players came back empty on Haiku 5.5). Same rule as llm_client.complete: once, with room to answer.
+        bigger = min(max(max_tokens * 4, 1600), 6000)
+        log.info("gateway %s: empty reply at max_tokens=%d (hidden reasoning); retrying once at %d",
+                 intent_c, max_tokens, bigger)
+        try:
+            text, raw = await _execute(cfg, system, norm, max_tokens=bigger, temperature=temperature,
+                                       json_mode=json_mode, use_cache=use_cache, timeout=timeout,
+                                       reasoning=reasoning)
+        except Exception as exc:
+            return _finish(GatewayResult(False, error=classify_error(exc)))
+        again = parse_usage(getattr(raw, "usage", None), raw)
+        try:
+            run_budget.note_usage(again, model=res.model, role=intent_c)
+        except Exception:
+            log.debug("gateway metering skipped", exc_info=True)
+        usage = {k: usage[k] + int(again.get(k) or 0) for k in usage}
+        known = known and bool(again.get("cost_known")) and again.get("cost_usd") is not None
+        if known:
+            parsed = {**parsed, "cost_usd": float(parsed["cost_usd"]) + float(again["cost_usd"])}
     return _finish(GatewayResult(True, text=text, usage=usage, cost_known=known,
                                  cost_usd=float(parsed["cost_usd"]) if known else None))
 

@@ -494,13 +494,13 @@ async def run_full_autopilot(
         if visual:
             await backend.emit("phase", {"n": 4, "label": "Playtest personas"})
             try:
-                from daedalus.playtest import format_for_prompt, run_playtest
+                from daedalus.playtest import format_for_prompt, gateway_see, run_playtest
 
                 async def _play_llm(system: str, user: str) -> str:
                     return await backend.llm(AgentRole.REVIEWER, user, system=system)
 
-                report = await run_playtest(
-                    state.slug, kind=kind, n=3, llm_fn=_play_llm,
+                report = await run_playtest(       # players see the game played; source-only if no frames
+                    state.slug, kind=kind, n=3, llm_fn=_play_llm, see_fn=gateway_see,
                 )
                 playtest_block = format_for_prompt(report)
                 await backend.emit("log", {"line": report.get("summary") or "playtest", "level": "info"})

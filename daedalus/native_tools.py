@@ -1731,12 +1731,13 @@ async def execute_native_tool(
             )
 
         if name == "playtest":
-            from .playtest import format_for_prompt, run_playtest
-            r = await run_playtest(
+            from .playtest import format_for_prompt, gateway_see, run_playtest
+            r = await run_playtest(          # the players play it and judge what they see (ran with no model before)
                 str(args.get("slug") or ""),
                 kind=str(args.get("kind") or "static"),
                 n=int(args.get("n") or 4),
                 use_browser=bool(args.get("use_browser")),
+                see_fn=gateway_see,
             )
             return "── playtest ──\n" + format_for_prompt(r)
 

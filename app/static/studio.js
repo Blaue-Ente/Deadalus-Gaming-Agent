@@ -230,6 +230,12 @@
             bullets(r.reason, r.observations));
         } else if (r.type === "self_review") {
           line("⚑", "bad", t("act.selfReview"), at, bullets(r.issue, r.fix ? [r.fix] : []));
+        } else if (r.type === "playtest") {
+          const how = r.mode === "played" ? t("act.playtestPlayed", { n: r.frames || 0 })
+            : r.mode === "source" ? t("act.playtestSource") : t("act.playtestHeuristic");
+          line("🎮", r.players && r.would_quit * 2 >= r.players ? "bad" : "good",
+            t("act.playtest", { n: r.players || 0, q: r.would_quit || 0 }) + " · " + how, at,
+            bullets("", (r.quotes || []).concat((r.fixes || []).map((f) => "→ " + f))));
         } else if (r.type === "truncated") {
           line("…", "dim", t("act.truncated"), at);
         }

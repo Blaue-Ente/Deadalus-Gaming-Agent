@@ -89,6 +89,44 @@ PERSONAS: list[dict[str, Any]] = [
 DIMENSIONS = ("loop_clarity", "controls", "first_30s", "win_lose", "frustration")
 
 LlmFn = Callable[[str, str], Awaitable[str]]
+SeeFn = Callable[[str, str, list[dict[str, Any]]], Awaitable[str]]     # system, user, image parts -> reply
+
+def _inputs_said() -> str:
+    """The keys the play script pressed, in words: without them the players blamed the game for their own moves
+    (live 2026-11-12: "I never pressed an arrow key, yet two hearts vanished")."""
+    try:
+        from .mentor_lead import PLAY_SCRIPT
+    except Exception:
+        return ""
+    steps: list[str] = []
+    for key, hold in PLAY_SCRIPT:
+        if key == "shot":
+            steps.append("[frame 2]")
+        elif key == "click":
+            steps.append("click centre")
+        else:
+            steps.append(f"{key} held {hold / 1000:.1f}s" if hold else key)
+    return ", ".join(steps) + ", [frames 3-4]"
+
+
+PLAYED_NOTE = (
+    "You just PLAYED this browser game, without reading its instructions first. The images are what you saw: "
+    "1) the start screen, 2) after pressing start and your first moves, 3-4) a few seconds later. Your inputs, in "
+    "order: {inputs}. Judge what you SAW. If you lost, it may be your own moves; say whether the game made the cause "
+    "clear. The source excerpt only shows intent: when the frames contradict it, believe the frames."
+)
+
+
+async def gateway_see(system: str, user: str, images: list[dict[str, Any]]) -> str:
+    """A persona's call through the gateway (intent critic), with the play frames as real image parts."""
+    from .harness import gateway as gw
+
+    content: Any = [gw.text_part(user), *images] if images else user
+    res = await gw.call("critic", [{"role": "user", "content": content}], system=system, max_tokens=900,
+                        temperature=0.4, json_mode=True, use_cache=False, client_id="daedalus/playtest")
+    if not res.ok:
+        raise RuntimeError(getattr(res.error, "message", "") or getattr(res.error, "type", "") or "call failed")
+    return res.text or ""
 
 
 def list_personas() -> list[dict[str, Any]]:
@@ -213,22 +251,29 @@ async def _persona_turn(
     snapshot: str,
     extra: str,
     llm_fn: LlmFn | None,
+    see_fn: SeeFn | None = None,
+    images: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     row: dict[str, Any] = {
         "id": persona["id"],
         "label": persona["label"],
         "ask": persona["ask"],
     }
-    if llm_fn is None:
+    if llm_fn is None and see_fn is None:
         row["mode"] = "catalog"
         row["note"] = "LLM skipped — persona queued, heuristic only"
         return row
+    played = bool(images) and see_fn is not None
+    row["mode"] = "played" if played else "source"
     system = (
         "You are a simulated playtester in the MatrAIx style: stay in character, "
         "judge a small browser game. Reply JSON only: "
         '{"loop_clarity":1-5,"controls":1-5,"first_30s":1-5,"win_lose":1-5,'
         '"frustration":1-5,"would_quit":true|false,"quote":"one sentence","fix":"one concrete fix"}.'
     )
+    if played:
+        system += " " + PLAYED_NOTE.format(inputs=_inputs_said() or "start keys and arrows")
+        snapshot = snapshot[:4000]
     user = (
         f"Persona {persona['label']} ({persona['id']})\n"
         f"background={persona['background']}\n"
@@ -241,7 +286,10 @@ async def _persona_turn(
     if extra:
         user += f"\nBROWSER EXTRACT:\n{extra[:1500]}\n"
     try:
-        raw = await llm_fn(system, user)
+        if see_fn is not None and (played or llm_fn is None):
+            raw = await see_fn(system, user, list(images or []) if played else [])
+        else:
+            raw = await llm_fn(system, user)               # type: ignore[misc]
     except Exception as exc:
         row["error"] = str(exc)[:200]
         return row
@@ -258,8 +306,12 @@ async def run_playtest(
     use_browser: bool = False,
     llm_fn: LlmFn | None = None,
     persona_ids: list[str] | None = None,
+    see_fn: SeeFn | None = None,
+    play: bool = True,
 ) -> dict[str, Any]:
-    """Run N simulated players against a Playground project."""
+    """Run N simulated players against a Playground project. With ``see_fn`` they judge frames from actually playing
+    it (the lead's browser play: start, first moves, a few seconds later); otherwise they read the source. Before,
+    every persona only read code, and the builder's ``playtest`` tool ran with no model at all (live 2026-11-12)."""
     chosen = PERSONAS
     if persona_ids:
         want = set(persona_ids)
@@ -277,9 +329,18 @@ async def run_playtest(
         except Exception as exc:
             extra = f"(browser skipped: {exc})"[:200]
 
+    images: list[dict[str, Any]] = []
+    shas: list[str] = []
+    if play and see_fn is not None:
+        try:
+            from .mentor_lead import play_frames
+            images, shas = await play_frames(slug, kind)
+        except Exception as exc:
+            log.info("playtest frames for %s skipped: %s", slug, exc)
+
     turns: list[dict[str, Any]] = []
     for persona in chosen:
-        turns.append(await _persona_turn(persona, snapshot, extra, llm_fn))
+        turns.append(await _persona_turn(persona, snapshot, extra, llm_fn, see_fn, images))
 
     scores: dict[str, list[float]] = {d: [] for d in DIMENSIONS}
     would_quit = 0
@@ -299,16 +360,20 @@ async def run_playtest(
             fixes.append(str(t["fix"]))
 
     avg = {d: (round(sum(v) / len(v), 2) if v else None) for d, v in scores.items()}
+    spoke = [t for t in turns if t.get("mode") in ("played", "source") and not t.get("error")]
+    mode = ("played" if any(t.get("mode") == "played" for t in spoke) else "source" if spoke else "heuristic")
     blockers = list(heuristic["blockers"])
-    if would_quit >= max(1, len(turns) // 2) and llm_fn:
-        blockers.append("Повече от половината playtester-и биха напуснали.")
-    ship_ready = heuristic["ship_hint"] and not (would_quit >= max(1, len(turns) // 2) and llm_fn)
+    many_quit = bool(spoke) and would_quit >= max(1, len(spoke) // 2)
+    if many_quit:
+        blockers.append("More than half of the playtesters would quit.")
+    ship_ready = heuristic["ship_hint"] and not many_quit
 
     summary = (
-        f"playtest {slug}: {len(turns)} personas; "
+        f"playtest {slug} ({mode}{f', {len(images)} frames' if mode == 'played' else ''}): {len(turns)} personas; "
         + ", ".join(f"{k}={v}" for k, v in avg.items() if v is not None)
-        + (f"; quit={would_quit}/{len(turns)}" if llm_fn else "; heuristic-only")
+        + (f"; quit={would_quit}/{len(spoke)}" if spoke else "; heuristic-only")
     )
+    _ledger_event(slug, mode, len(images), len(spoke), would_quit, avg, quotes, fixes)
     return {
         "ok": True,
         "source": "https://github.com/MatrAIx-ai/MatrAIx-Persona-8B",
@@ -323,7 +388,24 @@ async def run_playtest(
         "fixes": fixes[:8],
         "ship_ready": ship_ready,
         "summary": summary,
+        "mode": mode,
+        "saw_frames": len(images),
+        "frame_sha256s": shas,
     }
+
+
+def _ledger_event(slug: str, mode: str, frames: int, players: int, quit_n: int, avg: dict[str, Any],
+                  quotes: list[str], fixes: list[str]) -> None:
+    """The audience test as one activity row in the Studio chat."""
+    try:
+        from .harness import runs
+        rid = runs.current_run_id()
+        if rid:
+            runs.safe_event(rid, "playtest", {"slug": slug, "mode": mode, "frames": frames, "players": players,
+                                              "would_quit": quit_n, "scores": avg, "quotes": quotes[:3],
+                                              "fixes": fixes[:3]})
+    except Exception:
+        log.debug("playtest event skipped", exc_info=True)
 
 
 def format_for_prompt(report: dict[str, Any]) -> str:
