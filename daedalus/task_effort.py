@@ -151,12 +151,49 @@ def _registry_epic_cloud_entry():
         mid = str((entry or {}).get("model_id") or "").strip()
         if not prov or not mid:
             continue
+        if (entry or {}).get("supports_tools") is False:
+            continue          # the epic writer builds through tools; a model without tool calling cannot (live 2026-11-12)
         if is_local_provider(prov):
             continue
         if not resolve_provider_api_key(prov):
             continue
         return entry
     return None
+
+
+def _explicit_epic() -> dict[str, Any] | None:
+    """The owner's own epic model (``DAEDALUS_EPIC_MODEL``, optional ``DAEDALUS_EPIC_PROVIDER``)."""
+    mid = (os.environ.get("DAEDALUS_EPIC_MODEL") or "").strip()
+    if not mid:
+        return None
+    out: dict[str, Any] = {"model": mid, "model_source": "owner-epic", "provider_path": "epic-cloud"}
+    prov = (os.environ.get("DAEDALUS_EPIC_PROVIDER") or "").strip().lower()
+    if prov:
+        out["provider"] = prov
+    return out
+
+
+def _not_a_downgrade(candidate: str) -> bool:
+    """Epic promises a stronger model. A registry pick replaces the owner's model only when the benchmark knows both
+    and ranks the pick higher; an owner model newer than the catalog is kept (live 2026-11-12: epic swapped Haiku 5.5
+    for DeepSeek V3.2, an older model without tool calling)."""
+    try:
+        from .llm_benchmark import _METRICS, _composite_capability, model_metric, resolve_metric_id
+        from .llm_config import get_brain_config
+
+        owner = str((get_brain_config() or {}).get("model") or "").strip()
+    except Exception:
+        return False
+    if not owner:
+        return True                      # nothing chosen by the owner to protect
+    if owner == candidate:
+        return False
+    if resolve_metric_id(owner) not in _METRICS or resolve_metric_id(candidate) not in _METRICS:
+        return False
+    return _composite_capability(model_metric(candidate)) > _composite_capability(model_metric(owner))
+
+
+KEPT_OWNER_NOTE = "Epic kept your model: no stronger tool-capable model is known (set DAEDALUS_EPIC_MODEL to choose one)."
 
 
 def _epic_cloud_pick() -> dict[str, Any] | None:
@@ -201,6 +238,10 @@ def resolve_model(decision: dict[str, Any]) -> dict[str, Any]:
         return {"model": None, "model_source": "owner-default", "provider_path": "owner"}
     tier = decision.get("tier")
     role = str(decision.get("role") or "code")
+    if tier == "epic" and not _offline_pinned():
+        explicit = _explicit_epic()
+        if explicit:
+            return explicit
     try:
         from .llm_wardrobe import CATALOG, installed_ollama_models, load, wants_local
 
@@ -247,6 +288,9 @@ def resolve_model(decision: dict[str, Any]) -> dict[str, Any]:
         try:
             entry = _registry_epic_cloud_entry()
             mid = (entry or {}).get("model_id")
+            if mid and not _not_a_downgrade(str(mid)):
+                return {"model": None, "model_source": "owner-default", "provider_path": "owner",
+                        "note": KEPT_OWNER_NOTE}
             if mid:
                 out: dict[str, Any] = {
                     "model": mid,

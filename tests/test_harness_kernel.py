@@ -121,6 +121,7 @@ def test_resolve_model_registry_includes_provider(monkeypatch):
         "daedalus.llm_config.resolve_provider_api_key",
         lambda p: "k" if (p or "").strip().lower() == "openrouter" else "",
     )
+    monkeypatch.setattr("daedalus.task_effort._not_a_downgrade", lambda mid: True)   # the pick is stronger
     out = resolve_model({"apply_model": True, "tier": "epic", "role": "reason"})
     assert out["model"] == "quality-coder"
     assert out["provider"] == "openrouter"
