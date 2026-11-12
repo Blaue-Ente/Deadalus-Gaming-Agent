@@ -410,6 +410,23 @@ def _api_key(cfg: dict[str, Any]) -> str:
     return ""
 
 
+def _member_key(cfg: dict[str, Any], provider: str) -> tuple[str, str, str] | None:
+    """For a team member's call: which key pays (credentials.for_call). None for the owner, a server task, or a
+    local model (no key, no credits)."""
+    from ..team import current
+    member = current()
+    if member is None or member.role == "owner":
+        return None
+    from ..llm_config import PROVIDER_ENV_KEYS, is_loopback_gateway
+    from ..local_llm import is_local_provider
+
+    p = (provider or str(cfg.get("provider") or "")).strip().lower()
+    if is_local_provider(p) or cfg.get("local") or is_loopback_gateway(p):
+        return None
+    from ..credentials import for_call
+    return for_call(PROVIDER_ENV_KEYS.get(p, ""), str(cfg.get("api_key") or ""))
+
+
 def has_credentials(cfg: dict[str, Any]) -> bool:
     """True when a call with this config would carry a key: a real one, or the dummy a local/loopback provider takes."""
     return bool(_api_key(cfg))
@@ -537,7 +554,12 @@ async def call(
         res = Resolution(res.intent, str(cfg.get("provider") or res.provider), str(cfg.get("model") or res.model),
                          res.source, res.locked, res.routing_error, cfg)
 
+    paid_by: dict[str, str] = {}             # gap 3c: whose key this call used, for a member's shared-key spend
+
     def _finish(result: GatewayResult) -> GatewayResult:
+        if paid_by.get("whose") == "shared" and result.cost_usd:
+            from ..credentials import note_shared_spend
+            note_shared_spend(paid_by["member"], float(result.cost_usd))
         result.resolution = res
         result.image_sha256 = hashes
         result.latency_ms = int((time.perf_counter() - t0) * 1000)
@@ -556,6 +578,14 @@ async def call(
     if run_budget.would_block(res.provider):
         return _finish(GatewayResult(False, budget_stopped=True,
                                      error=GatewayError("budget_blocked", run_budget.stop_text())))
+    choice = _member_key(cfg, res.provider)
+    if choice is not None:                   # a team member: their own key, a shared one within the cap, or none
+        key, whose, why = choice
+        if whose == "none":
+            return _finish(GatewayResult(False, error=GatewayError("no_key", why)))
+        cfg["api_key"] = key
+        from ..team import current as _who
+        paid_by.update(whose=whose, member=getattr(_who(), "id", ""))
     if not _api_key(cfg):
         return _finish(GatewayResult(False, error=GatewayError(
             "auth", f"No API key for provider {res.provider!r}; set the key or use a local model.")))

@@ -785,8 +785,8 @@ async def review_gate_critique(user_message: str, draft_reply: str,
     Triggered only on complex sessions (caller decides). Failure → ok=True (skip)."""
     try:
         from openai import AsyncOpenAI
-        key = os.environ.get("OPENROUTER_API_KEY", "") or os.environ.get("NOVITA_API_KEY", "")
-        url = "https://openrouter.ai/api/v1" if os.environ.get("OPENROUTER_API_KEY") else "https://api.novita.ai/v3/openai"
+        key = _cred_env("OPENROUTER_API_KEY", "") or _cred_env("NOVITA_API_KEY", "")
+        url = "https://openrouter.ai/api/v1" if _cred_env("OPENROUTER_API_KEY") else "https://api.novita.ai/v3/openai"
         if not key:
             return {"ok": True, "issue": "", "suggested_fix": "", "skipped": "no_creds"}
         def _target(c: dict) -> str:
@@ -818,12 +818,12 @@ async def review_gate_critique(user_message: str, draft_reply: str,
         from .llm_config import OPENROUTER_FAST_MODEL
         review_model = (
             OPENROUTER_FAST_MODEL
-            if os.environ.get("OPENROUTER_API_KEY")
+            if _cred_env("OPENROUTER_API_KEY")
             else "meta-llama/llama-3.1-8b-instruct"
         )
         from .harness import gateway as _gw
         if _gw.path_enabled("reviewer"):
-            _prov = "openrouter" if os.environ.get("OPENROUTER_API_KEY") else "novita"
+            _prov = "openrouter" if _cred_env("OPENROUTER_API_KEY") else "novita"
             _res = await _gw.call(
                 "critic", [{"role": "user", "content": user_prompt}], system=sys_prompt, max_tokens=400,
                 route=_gw.route_for(_prov, review_model, key, url), client_id="daedalus/draft-reviewer",
@@ -1036,3 +1036,9 @@ def pre_execute_read_first_check(session_id: str, query: str) -> dict | None:
         "table": table,
         "missing_tables": missing,
     }
+
+
+def _cred_env(name: str, default: str = "") -> str:
+    """A provider key for whoever this call runs for (gap 3c: a team member never gets the owner's key unshared)."""
+    from .credentials import env
+    return env(name, default)

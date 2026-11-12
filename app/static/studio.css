@@ -869,3 +869,5 @@ label.grow { flex: 1; min-width: 7rem; }
 body[data-role]:not([data-role="owner"]):not([data-role=""]) #panel-settings > :not(.team-section):not(#settings-status) {
   display: none;
 }
+.team-share-list { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+.team-share-list label { display: inline-flex; gap: 6px; align-items: center; font-size: 0.9em; }

@@ -54,7 +54,7 @@ def resolve_provider_api_key(provider: str, fallback: str = "") -> str:
         return fallback
     env_name = PROVIDER_ENV_KEYS.get(p, "")
     if env_name:
-        val = (os.environ.get(env_name) or "").strip()
+        val = (_cred_env(env_name) or "").strip()
         if val:
             return val
     if p == "omniroute":
@@ -600,7 +600,7 @@ def _resolve_llm_config() -> dict:
             }
 
     # 3. External providers fallback (OpenRouter → Novita) — no Replit AI integrations
-    or_key = os.environ.get("OPENROUTER_API_KEY", "")
+    or_key = _cred_env("OPENROUTER_API_KEY", "")
     if or_key:
         return _apply_nvidia_free_policy({
             "provider":  "openrouter",
@@ -612,7 +612,7 @@ def _resolve_llm_config() -> dict:
             "use_cache": False,
             "source":    "openrouter_default",
         })
-    alltoken_key = os.environ.get("ALLTOKEN_API_KEY", "")
+    alltoken_key = _cred_env("ALLTOKEN_API_KEY", "")
     if alltoken_key:
         pd = PROVIDER_DEFAULTS["alltoken"]
         return _apply_nvidia_free_policy({
@@ -624,7 +624,7 @@ def _resolve_llm_config() -> dict:
             "use_cache": False,
             "source":    "alltoken_default",
         })
-    novita_key = os.environ.get("NOVITA_API_KEY", "")
+    novita_key = _cred_env("NOVITA_API_KEY", "")
     if novita_key:
         return _apply_nvidia_free_policy({
             "provider":  "novita",
@@ -635,7 +635,7 @@ def _resolve_llm_config() -> dict:
             "use_cache": False,
             "source":    "novita_default",
         })
-    nvidia_key = os.environ.get("NVIDIA_API_KEY", "")
+    nvidia_key = _cred_env("NVIDIA_API_KEY", "")
     if nvidia_key:
         pd = PROVIDER_DEFAULTS["nvidia"]
         return _apply_nvidia_free_policy({
@@ -795,3 +795,9 @@ def list_preset_models(*, include_replit: bool | None = None) -> list[dict]:
     if include_replit:
         return list(PRESET_MODELS)
     return [m for m in PRESET_MODELS if not is_replit_preset(m)]
+
+
+def _cred_env(name: str, default: str = "") -> str:
+    """A provider key for whoever this call runs for (gap 3c: a team member never gets the owner's key unshared)."""
+    from .credentials import env
+    return env(name, default)
