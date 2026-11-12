@@ -1761,12 +1761,12 @@ class Daedalus:
                     _nt_specs = native_specs(_route) or playground_build_specs(
                         _owner_words, session_id=session_id or "",
                     )
-                    _nt_sys = format_system(
-                        _route, extra=_consult_extra, user_message=_owner_words, offered=_nt_specs,
-                    )
-                    _loop = BuildLoop(_route, _owner_words, seed_log=_consult_log)
                     from .native_tools import _bound_project
                     _bound = _bound_project(session_id or "")
+                    _nt_sys = format_system(
+                        _route, extra=_consult_extra, user_message=_owner_words, offered=_nt_specs, slug=_bound,
+                    )
+                    _loop = BuildLoop(_route, _owner_words, seed_log=_consult_log)
                     if _bound and not _loop.slug:
                         _loop.slug = _bound          # project chat: the project exists; never steer to a new one
                     _loop.lead_plan = await _lead.kickoff(   # never raises: no plan just means no plan
@@ -1811,14 +1811,17 @@ class Daedalus:
                     _native_in = f"OWNER REQUEST (this turn):\n{_owner_words}\n\n{user_content}"
                 if _loop is not None and getattr(_loop, "lead_plan", None):
                     _native_in = _lead.plan_block(_loop.lead_plan) + "\n\n" + _native_in
+                _native_cut = 12000
                 if _loop is not None and getattr(_loop, "slug", ""):
                     from .project_bible import text as _bible_text
-                    _bible = _bible_text(_loop.slug, max_chars=2000)
+                    _bible = await asyncio.to_thread(_bible_text, _loop.slug, max_chars=2000)
                     if _bible:          # the game's bible: what earlier sessions decided and left open
-                        _native_in = ("━━━ PROJECT BIBLE (earlier sessions) ━━━\n" + _bible + "\n\n" + _native_in)
+                        _bible_block = "━━━ PROJECT BIBLE (earlier sessions) ━━━\n" + _bible + "\n\n"
+                        _native_in = _bible_block + _native_in
+                        _native_cut += len(_bible_block)       # the bible never pushes the request's context out
                 _native_text, _native_log = await run_native_discovery_pass(
                     _nt_sys,
-                    _native_in[:12000],
+                    _native_in[:_native_cut],
                     _call_claude_with_tools,
                     memory=self.memory,
                     session_id=session_id or "",

@@ -36,7 +36,7 @@ log = logging.getLogger("daedalus.mentor_lead")
 
 LEAD_FIX_ROUNDS = 2          # extra writer rounds the lead may ask for after the kernel said "complete"
 EPIC_FIX_ROUNDS = 4          # epic promises depth: the lead, the audience and the tests share more rounds
-MAX_REVIEWS = LEAD_FIX_ROUNDS + 1   # lead reviews per turn: one per fix round, plus the final look (craft)
+MAX_REVIEWS = LEAD_FIX_ROUNDS + 1   # craft's lead reviews per turn; in general fix_rounds() + 1 (epic: 5)
 
 
 def fix_rounds() -> int:
@@ -555,11 +555,18 @@ def is_game(loop: Any, request: str) -> bool:
     """A game: a game playbook, the owner asked for one, or the project draws on a canvas in a loop and takes input."""
     route = getattr(loop, "route", None)
     pb = str(getattr(getattr(route, "playbook", None), "id", "") or "")
-    if pb in GAME_PLAYBOOKS or _GAME_WORDS.search(request or ""):
+    return is_game_build(pb, request, str(getattr(loop, "slug", "") or ""))
+
+
+def is_game_build(playbook_id: str, request: str, slug: str = "") -> bool:
+    """The one game test, for the build prompt and the gates alike (review 2026-11-12: two copies disagreed)."""
+    if playbook_id in GAME_PLAYBOOKS or _GAME_WORDS.search(request or ""):
         return True
+    if not slug:
+        return False
     try:
         from .playtest import _heuristic, _project_snapshot
-        sig = _heuristic(_project_snapshot(str(getattr(loop, "slug", "") or "")))["signals"]
+        sig = _heuristic(_project_snapshot(slug))["signals"]
         return bool(sig.get("canvas") and sig.get("input") and sig.get("loop"))
     except Exception:
         return False
@@ -618,24 +625,14 @@ async def audience_gate(loop: Any, request: str) -> str | None:
 
 async def tests_gate(loop: Any, request: str) -> str | None:
     """After the lead (and the audience) accepted a game: its own tests. Logic tests that fail or a regression against
-    the recorded baseline return the turn (one shared fix round); a first accepted game with passing tests records
-    its baseline; a game with no tests is asked for them once. None = done. Owner, 2026-11-12: games a team keeps
+    the recorded baseline return the turn (one shared fix round); an accepted game the players did not reject, with
+    passing tests, records its baseline; a game with no tests is asked for them once, and the tests it then writes
+    run. With no round left the tests still run, for the report. None = done. Owner, 2026-11-12: games a team keeps
     building on, like The-Labirinth with its `pnpm verify` before every push."""
     if loop is None or getattr(loop, "tests_done", False):
         return None
     slug = str(getattr(loop, "slug", "") or "")
     if not slug or not is_game(loop, request):
-        return None
-    spent = int(getattr(loop, "lead_fix_used", 0) or 0) >= fix_rounds()
-    if not getattr(loop, "lead_accepted", False):
-        if not spent:
-            return None
-        # No round left and not accepted: still run the tests, to report them (live 2026-11-12: 16 tests passed
-        # and the owner never saw it), never to send the turn back or record a baseline.
-        from . import project_tests
-        report = await project_tests.run(slug, play=getattr(loop, "play_bot_raw", None))
-        loop.project_tests = {k: report.get(k) for k in ("ok", "summary", "regressions", "baseline")}
-        loop.tests_done = True
         return None
     try:
         from .task_effort import current
@@ -645,29 +642,35 @@ async def tests_gate(loop: Any, request: str) -> str | None:
         pass
     from . import project_tests
 
+    if await asyncio.to_thread(project_tests.upstream_repo, slug):
+        return None            # a cloned or revived repo keeps its own tests and structure (review 2026-11-12)
     play = getattr(loop, "play_bot_raw", None)
+    used = int(getattr(loop, "lead_fix_used", 0) or 0)
+    rounds_left = used < fix_rounds()
+    accepted = bool(getattr(loop, "lead_accepted", False))
+    if not accepted and rounds_left:
+        return None                              # the lead's own review comes first
     report = await project_tests.run(slug, play=play)
     loop.project_tests = {k: report.get(k) for k in ("ok", "summary", "regressions", "baseline")}
     logic = report.get("logic") or {}
-    used = int(getattr(loop, "lead_fix_used", 0) or 0)
-    rounds_left = used < fix_rounds()
-    if report["ok"] and logic.get("ran"):
+    passed = bool(report["ok"] and logic.get("ran"))
+    if not accepted or (not rounds_left and not passed):
+        loop.tests_done = True                   # report only: not accepted with no round left, or failing with none
+        return None
+    if passed:
         loop.tests_done = True
-        if not report["baseline"]:
+        if not report["baseline"] and _players_kept(loop):
             project_tests.record_baseline(slug, logic, play)
         return None
     if not logic.get("ran") and not report["regressions"]:
-        loop.tests_done = True
-        if logic.get("ok") is False or not rounds_left or getattr(loop, "tests_asked", False):
-            return None          # no Node here, or already asked: report, do not loop
-        loop.tests_asked = True
+        if logic.get("ok") is False or getattr(loop, "tests_asked", False):
+            loop.tests_done = True               # no Node here, or already asked once: report, do not loop
+            return None
+        loop.tests_asked = True                  # asked once; the tests it then writes still run (not tests_done)
         loop.lead_fix_used = used + 1
         loop.lead_accepted = False
         return ("━━━ PROJECT TESTS: NONE YET ━━━\n" + project_tests.GUIDANCE +
                 "\nKeep the game working exactly as it is; only move the rules into logic.mjs and test them. Then stop.")
-    if not rounds_left:
-        loop.tests_done = True
-        return None
     loop.lead_fix_used = used + 1
     loop.lead_accepted = False                  # reviewed again after the fix
     lines = ["━━━ PROJECT TESTS: FAILING ━━━", report["summary"]]
@@ -678,6 +681,12 @@ async def tests_gate(loop: Any, request: str) -> str | None:
     lines.append("Fix the game so the tests pass (change a test only if the test itself is wrong, and say why). "
                  "Keep everything that already works. Then stop.")
     return "\n".join(lines)
+
+
+def _players_kept(loop: Any) -> bool:
+    """A baseline is what an accepted game passes: not one the audience played and rejected (review 2026-11-12)."""
+    aud = getattr(loop, "audience", None)
+    return not (isinstance(aud, dict) and aud.get("mode") == "played" and not aud.get("ship_ready"))
 
 
 def summary_lines(loop: Any) -> list[str]:

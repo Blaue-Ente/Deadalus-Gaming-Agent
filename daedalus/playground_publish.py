@@ -78,7 +78,12 @@ def excluded_secret_files(root: Path) -> list[str]:
     return sorted(out)
 
 
-def _zip_dir(root: Path) -> bytes:
+# Daedalus's working notes about a project: kept in the project and its capsule, never shipped with the game
+# (review 2026-11-12: the bible copies the owner's requests word for word; the baseline is internal state).
+_NOT_PUBLISHED = {"GAME_BIBLE.md", "PROJECT_BIBLE.md", "studio/baseline.json"}
+
+
+def _zip_dir(root: Path, *, for_publish: bool = False) -> bytes:
     from .secret_paths import is_secret_path
 
     buf = io.BytesIO()
@@ -90,6 +95,8 @@ def _zip_dir(root: Path) -> bytes:
             if any(part in _SKIP for part in rel.parts):
                 continue
             if is_secret_path(rel):
+                continue
+            if for_publish and rel.as_posix() in _NOT_PUBLISHED:
                 continue
             zf.write(p, str(rel))
     return buf.getvalue()
@@ -261,7 +268,7 @@ async def publish(
         publish_root = artifact.parent
         entry = artifact.name
 
-    data = _zip_dir(publish_root)
+    data = _zip_dir(publish_root, for_publish=True)
     object_path = f"{_OBJ_PREFIX}/{slug}.zip"
 
     stored = False

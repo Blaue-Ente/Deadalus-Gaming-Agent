@@ -121,11 +121,15 @@ def regressions(baseline: dict[str, Any] | None, logic: dict[str, Any], play: di
     if not baseline:
         return []
     out: list[str] = []
-    now = set(_passing_play(play)) if play is not None else None
+    # A play result counts only when the play really ran (a skipped check or {} is not a failure of the game).
+    real_play = bool(play) and not play.get("skipped") and bool(play.get("checks"))
+    now = set(_passing_play(play)) if real_play else None
     if now is not None:
         out += [f"play check {cid} passed at acceptance and fails now" for cid in baseline.get("play_passing") or []
                 if cid not in now]
     was = int(baseline.get("logic_passed") or 0)
+    if not logic.get("ran"):
+        return out                               # no Node here: not something the writer can fix
     if was and not logic.get("ok"):
         out.append(f"the logic tests passed at acceptance ({was}) and fail now")
     elif was and int(logic.get("passed") or 0) < was:
@@ -167,3 +171,8 @@ def _ledger(slug: str, report: dict[str, Any]) -> None:
                 "note": str(lg.get("note") or "")[:200]})
     except Exception:
         log.debug("project_tests event skipped", exc_info=True)
+
+
+def upstream_repo(slug: str) -> bool:
+    """A cloned or revived repository: its own tests and structure are the upstream's, not Daedalus's to impose."""
+    return (_root(slug) / ".daedalus" / "upstream_manifest.json").is_file()

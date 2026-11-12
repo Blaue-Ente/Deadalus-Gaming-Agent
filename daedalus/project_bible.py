@@ -4,14 +4,15 @@ Owner, 2026-11-12: a team builds a game over many sessions. The-Labirinth keeps 
 plan, the rules) and every session starts from it. A Daedalus build planned each turn from scratch: the Mentor's
 plan lived for one turn, so the next session lost the vision, the rules and what was still open.
 
-- The first accepted plan becomes ``GAME_BIBLE.md`` (``PROJECT_BIBLE.md`` for an app): vision, rules and features,
+- The first plan becomes ``GAME_BIBLE.md`` (``PROJECT_BIBLE.md`` for an app): vision, rules and features,
   look, then a session log.
 - Every build turn appends one log entry: what was asked, what the lead, the audience and the tests said, and what is
   still open.
 - The next turn's Mentor plan and the builder read it first.
 
 The owner may edit it freely; Daedalus only creates it and appends to its log. A cloned or revived repo
-(``.daedalus/upstream_manifest.json``) gets none: its documents are the upstream's.
+(``.daedalus/upstream_manifest.json``) gets none: its documents are the upstream's. It travels with the project and
+its capsule, never with the published game (playground_publish).
 """
 from __future__ import annotations
 
