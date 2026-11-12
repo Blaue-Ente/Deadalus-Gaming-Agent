@@ -167,3 +167,13 @@ def test_stripping_never_eats_the_owners_code_or_prose():
     spans = 'browser({"a": 1\n\nkeep this paragraph\n})'
     assert "keep this paragraph" in strip_text_tool_calls(spans)
     assert strip_text_tool_calls('<tool_call name="x">{"a": 1}</tool_call>') == NOT_RUN_NOTE
+
+
+def test_the_reply_language_follows_the_request():
+    from daedalus.agent import reply_language
+
+    assert reply_language("Build a small web game, Balloon Pop") == "English"
+    assert reply_language("Направи игра с балони, които се пукат") == "Bulgarian"
+    assert reply_language("Направи Balloon Pop игра с canvas и score") == "Bulgarian"
+    assert reply_language("Build `index.html` с canvas") == "English"
+    assert reply_language("") == "English"

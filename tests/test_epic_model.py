@@ -72,7 +72,7 @@ def test_model_facing_briefings_do_not_pull_the_reply_into_bulgarian():
     for tier in te.TIERS:
         assert not re.search(r"[А-Яа-я]", te.briefing({"tier": tier}))
     sys = format_system(route("Build a small web game with a frog", kind="static"), user_message="Build a frog game")
-    assert "language of the owner's request" in sys
+    assert "in English, the language of this request" in sys
 
 
 def test_the_quality_critic_answers_in_the_language_of_the_task():

@@ -320,6 +320,14 @@ def _docs_block(steps: list[Step]) -> str:
     return "\n\n".join(parts)
 
 
+def reply_language(text: str) -> str:
+    """The language a reply should be in: that of the request itself. Live 2026-11-12: English requests got Bulgarian
+    replies, because the persona knows its owner is Bulgarian and every instruction around it was Bulgarian."""
+    letters = re.findall(r"[^\W\d_]", text or "")
+    cyr = sum(1 for ch in letters if "\u0400" <= ch <= "\u04ff")
+    return "Bulgarian" if letters and cyr / len(letters) > 0.3 else "English"
+
+
 def format_system(rt: Route, *, extra: str = "", user_message: str = "", offered: Any = None) -> str:
     from .game_engineer import attach_to_sys
 
@@ -340,8 +348,8 @@ def format_system(rt: Route, *, extra: str = "", user_message: str = "", offered
         if s.docs:
             lines.append(f"      docs: {', '.join(s.docs)}")
     lines.append("When the slice files exist, stop and summarize. No NEED_* dumps, no SQL.")
-    lines.append("Write your replies to the owner in the language of the owner's request (English unless the owner "
-                 "wrote in another language). Instructions here may be in another language; that is not the owner's.")
+    lines.append(f"Write your replies to the owner in {reply_language(user_message)}, the language of this request. "
+                 "Instructions here may be in another language; that is not the owner's.")
     from .harness.brain_tools import NAMES as _harness_tools, SYSTEM_HINT as _harness_hint
     names = {str(s.get("name") if isinstance(s, dict) else s) for s in offered} if offered is not None else set(pb.tools)
     if _harness_tools & names:                # A7: say what the harness tools are for whenever they are offered
