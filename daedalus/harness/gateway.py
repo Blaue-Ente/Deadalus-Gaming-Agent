@@ -554,12 +554,7 @@ async def call(
         res = Resolution(res.intent, str(cfg.get("provider") or res.provider), str(cfg.get("model") or res.model),
                          res.source, res.locked, res.routing_error, cfg)
 
-    paid_by: dict[str, str] = {}             # gap 3c: whose key this call used, for a member's shared-key spend
-
     def _finish(result: GatewayResult) -> GatewayResult:
-        if paid_by.get("whose") == "shared" and result.cost_usd:
-            from ..credentials import note_shared_spend
-            note_shared_spend(paid_by["member"], float(result.cost_usd))
         result.resolution = res
         result.image_sha256 = hashes
         result.latency_ms = int((time.perf_counter() - t0) * 1000)
@@ -583,9 +578,7 @@ async def call(
         key, whose, why = choice
         if whose == "none":
             return _finish(GatewayResult(False, error=GatewayError("no_key", why)))
-        cfg["api_key"] = key
-        from ..team import current as _who
-        paid_by.update(whose=whose, member=getattr(_who(), "id", ""))
+        cfg["api_key"] = key                 # spend on a shared key is counted in run_budget.note_usage
     if not _api_key(cfg):
         return _finish(GatewayResult(False, error=GatewayError(
             "auth", f"No API key for provider {res.provider!r}; set the key or use a local model.")))
@@ -597,7 +590,7 @@ async def call(
         return _finish(GatewayResult(False, error=classify_error(exc)))
     parsed = parse_usage(getattr(raw, "usage", None), raw)
     try:
-        run_budget.note_usage(parsed, model=res.model, role=intent_c)
+        run_budget.note_usage(parsed, model=res.model, role=intent_c, provider=res.provider)
     except Exception:  # metering trouble must not fail a successful, billed call
         log.debug("gateway metering skipped", exc_info=True)
     usage = {"prompt_tokens": int(parsed.get("prompt_tokens") or 0),
@@ -619,7 +612,7 @@ async def call(
             return _finish(GatewayResult(False, error=classify_error(exc)))
         again = parse_usage(getattr(raw, "usage", None), raw)
         try:
-            run_budget.note_usage(again, model=res.model, role=intent_c)
+            run_budget.note_usage(again, model=res.model, role=intent_c, provider=res.provider)
         except Exception:
             log.debug("gateway metering skipped", exc_info=True)
         usage = {k: usage[k] + int(again.get(k) or 0) for k in usage}
@@ -667,10 +660,13 @@ def call_sync(*args: Any, **kwargs: Any) -> GatewayResult:
     except RuntimeError:
         return asyncio.run(call(*args, **kwargs))
     box: dict[str, Any] = {}
+    import contextvars
+
+    ctx = contextvars.copy_context()         # the caller (a team member, the run) travels into the helper thread
 
     def _runner() -> None:
         try:
-            box["r"] = asyncio.run(call(*args, **kwargs))
+            box["r"] = ctx.run(asyncio.run, call(*args, **kwargs))
         except BaseException as exc:  # pragma: no cover - surfaced below
             box["e"] = exc
 

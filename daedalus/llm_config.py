@@ -48,13 +48,14 @@ def is_loopback_gateway(provider: str) -> bool:
 
 
 def resolve_provider_api_key(provider: str, fallback: str = "") -> str:
-    """Read provider API key from the process environment."""
+    """Read provider API key from the process environment: the owner's view. A team member's call gets its key
+    from ``credentials.member_config`` (get_brain_config) and the gateway, never from here (gap 3c)."""
     p = (provider or "").strip().lower()
     if not p:
         return fallback
     env_name = PROVIDER_ENV_KEYS.get(p, "")
     if env_name:
-        val = (_cred_env(env_name) or "").strip()
+        val = (os.environ.get(env_name) or "").strip()
         if val:
             return val
     if p == "omniroute":
@@ -442,7 +443,8 @@ def get_brain_config() -> dict:
     diagnostics. Chat/calls use ``get_config()`` which may apply whisper/epic and
     run-budget writer overlays for that turn only.
     """
-    return _resolve_llm_config()
+    from .credentials import member_config
+    return member_config(_resolve_llm_config())      # gap 3c: a team member's call carries a key of theirs
 
 
 def get_config() -> dict:
@@ -600,7 +602,7 @@ def _resolve_llm_config() -> dict:
             }
 
     # 3. External providers fallback (OpenRouter → Novita) — no Replit AI integrations
-    or_key = _cred_env("OPENROUTER_API_KEY", "")
+    or_key = os.environ.get("OPENROUTER_API_KEY", "")
     if or_key:
         return _apply_nvidia_free_policy({
             "provider":  "openrouter",
@@ -612,7 +614,7 @@ def _resolve_llm_config() -> dict:
             "use_cache": False,
             "source":    "openrouter_default",
         })
-    alltoken_key = _cred_env("ALLTOKEN_API_KEY", "")
+    alltoken_key = os.environ.get("ALLTOKEN_API_KEY", "")
     if alltoken_key:
         pd = PROVIDER_DEFAULTS["alltoken"]
         return _apply_nvidia_free_policy({
@@ -624,7 +626,7 @@ def _resolve_llm_config() -> dict:
             "use_cache": False,
             "source":    "alltoken_default",
         })
-    novita_key = _cred_env("NOVITA_API_KEY", "")
+    novita_key = os.environ.get("NOVITA_API_KEY", "")
     if novita_key:
         return _apply_nvidia_free_policy({
             "provider":  "novita",
@@ -635,7 +637,7 @@ def _resolve_llm_config() -> dict:
             "use_cache": False,
             "source":    "novita_default",
         })
-    nvidia_key = _cred_env("NVIDIA_API_KEY", "")
+    nvidia_key = os.environ.get("NVIDIA_API_KEY", "")
     if nvidia_key:
         pd = PROVIDER_DEFAULTS["nvidia"]
         return _apply_nvidia_free_policy({
@@ -796,8 +798,3 @@ def list_preset_models(*, include_replit: bool | None = None) -> list[dict]:
         return list(PRESET_MODELS)
     return [m for m in PRESET_MODELS if not is_replit_preset(m)]
 
-
-def _cred_env(name: str, default: str = "") -> str:
-    """A provider key for whoever this call runs for (gap 3c: a team member never gets the owner's key unshared)."""
-    from .credentials import env
-    return env(name, default)

@@ -34,7 +34,4 @@ def resolve_cheap_openai() -> dict[str, Any] | None:
     return None
 
 
-def _cred_env(name: str, default: str = "") -> str:
-    """A provider key for whoever this call runs for (gap 3c: a team member never gets the owner's key unshared)."""
-    from .credentials import env
-    return env(name, default)
+from .credentials import env as _cred_env  # noqa: E402  (gap 3c: whose key; credentials imports nothing here)

@@ -24,14 +24,17 @@ from typing import Any
 log = logging.getLogger(__name__)
 
 DEFAULT_CAP_USD = 2.0                     # per member, on the owner's shared keys, until the owner sets another
-SERVICE_KEYS = ("ELEVENLABS_API_KEY",)    # keys a member may hold besides the model providers'
+UNKNOWN_PRICE_PER_TOKEN = 10.0 / 1_000_000  # a call whose price is unknown still counts (review 2026-11-12)
+# The keys Daedalus's model calls actually read for a member (review 2026-11-12: only offer what takes effect).
+MEMBER_KEYS = ("OPENROUTER_API_KEY", "ALLTOKEN_API_KEY", "NOVITA_API_KEY", "NVIDIA_API_KEY", "ANTHROPIC_API_KEY",
+               "OPENAI_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY")
 _NAME = re.compile(r"^[A-Z][A-Z0-9_]{2,63}$")
 _lock = threading.Lock()
+_cache: dict[str, tuple[tuple[int, int], dict[str, Any]]] = {}
 
 
 def member_key_names() -> tuple[str, ...]:
-    from .llm_config import PROVIDER_ENV_KEYS
-    return tuple(sorted(set(PROVIDER_ENV_KEYS.values()) | set(SERVICE_KEYS)))
+    return MEMBER_KEYS
 
 
 def _dir() -> Path:
@@ -46,12 +49,21 @@ def _write_private(path: Path, data: dict[str, Any]) -> None:
     with os.fdopen(fd, "w", encoding="utf-8") as fh:
         fh.write(json.dumps(data, indent=2))
     os.replace(tmp, path)
+    _cache.pop(str(path), None)
 
 
 def _read(path: Path) -> dict[str, Any]:
+    """A JSON file, re-read only when it changed (model calls ask on every call)."""
     try:
+        st = path.stat()
+        stamp = (st.st_mtime_ns, st.st_size)
+        hit = _cache.get(str(path))
+        if hit and hit[0] == stamp:
+            return json.loads(json.dumps(hit[1]))
         data = json.loads(path.read_text(encoding="utf-8"))
-        return data if isinstance(data, dict) else {}
+        data = data if isinstance(data, dict) else {}
+        _cache[str(path)] = (stamp, data)
+        return json.loads(json.dumps(data))
     except FileNotFoundError:
         return {}
     except (OSError, ValueError):
@@ -161,16 +173,80 @@ def _member():
 
 
 def env(name: str, default: str = "") -> str:
-    """The value of key ``name`` for whoever this call runs for. The owner and server tasks: the environment."""
+    """The value of key ``name`` for whoever this call runs for. The owner and server tasks: the environment.
+
+    A member gets only their own key here. These readers call a provider directly, outside the metering that
+    counts a member's spend, so a shared owner key never reaches them (review 2026-11-12); shared keys apply to
+    the metered model calls (``member_config`` and the gateway)."""
     m = _member()
     if m is None:
         return os.environ.get(name, default)
-    own = own_key(m.id, name)
+    return own_key(m.id, name) or default
+
+
+def _under_cap(member_id: str, share: dict[str, Any]) -> bool:
+    return float(share["spend"].get(member_id, 0.0)) < float(share["caps"].get(member_id, DEFAULT_CAP_USD))
+
+
+# The provider a member's own key can serve the owner's model through when the owner's provider has no key of
+# theirs (review 2026-11-12: a designer with an OpenRouter key got 'add your ANTHROPIC_API_KEY').
+_SWITCH = (("openrouter", "OPENROUTER_API_KEY"), ("alltoken", "ALLTOKEN_API_KEY"))
+
+
+def member_config(cfg: dict[str, Any]) -> dict[str, Any]:
+    """The model configuration a member's call runs with: their own key for the owner's provider; else the owner's
+    model through a provider they hold a key for; else the owner's key if shared and under their cap; else no key
+    (the call then fails and says which key to add). The owner and server tasks: ``cfg`` unchanged."""
+    m = _member()
+    if m is None or not isinstance(cfg, dict):
+        return cfg
+    from .llm_config import PROVIDER_ENV_KEYS, is_loopback_gateway, provider_default_base_url
+    from .local_llm import is_local_provider
+
+    provider = str(cfg.get("provider") or "").strip().lower()
+    if is_local_provider(provider) or cfg.get("local") or is_loopback_gateway(provider):
+        return cfg                                           # a model on this machine: no key, no credits
+    out = dict(cfg)
+    env_name = PROVIDER_ENV_KEYS.get(provider, "")
+    own = own_key(m.id, env_name) if env_name else ""
     if own:
-        return own
-    if name in sharing()["shared"] and spent_on_shared(m.id) < cap_for(m.id):
-        return os.environ.get(name, default)
-    return default
+        out.update(api_key=own, key_owner="own")
+        return out
+    for other, other_env in _SWITCH:
+        mine = own_key(m.id, other_env)
+        if mine and other != provider:
+            from .model_defaults import OPENROUTER_DEFAULT_MODEL
+            model = str(cfg.get("model") or "")
+            out.update(provider=other, api_key=mine, base_url=provider_default_base_url(other), sdk="openai",
+                       model=model if "/" in model else OPENROUTER_DEFAULT_MODEL, key_owner="own")
+            return out
+    share = sharing()
+    if env_name and env_name in share["shared"] and _under_cap(m.id, share):
+        out.update(api_key=str(cfg.get("api_key") or "") or os.environ.get(env_name, ""), key_owner="shared")
+        return out
+    out.update(api_key="", key_owner="none")
+    return out
+
+
+def note_member_usage(parsed: dict[str, Any] | None, provider: str) -> None:
+    """Count a member's metered call on the owner's shared key (called by run_budget.note_usage for every billed
+    call). A call whose price is unknown counts at ``UNKNOWN_PRICE_PER_TOKEN``. Never raises."""
+    m = _member()
+    if m is None:
+        return
+    try:
+        from .llm_config import PROVIDER_ENV_KEYS
+        env_name = PROVIDER_ENV_KEYS.get((provider or "").strip().lower(), "")
+        if not env_name or own_key(m.id, env_name) or env_name not in sharing()["shared"]:
+            return                                          # their own key, or not a shared one: not the owner's money
+        parsed = parsed or {}
+        cost = parsed.get("cost_usd") if parsed.get("cost_known") else None
+        if cost is None:
+            tokens = int(parsed.get("prompt_tokens") or 0) + int(parsed.get("completion_tokens") or 0)
+            cost = tokens * UNKNOWN_PRICE_PER_TOKEN
+        note_shared_spend(m.id, float(cost))
+    except Exception:
+        log.warning("member usage not counted", exc_info=True)
 
 
 def for_call(env_name: str, resolved_key: str) -> tuple[str, str, str]:
@@ -183,11 +259,12 @@ def for_call(env_name: str, resolved_key: str) -> tuple[str, str, str]:
     own = own_key(m.id, env_name) if env_name else ""
     if own:
         return own, "own", ""
-    if env_name and env_name in sharing()["shared"]:
-        if spent_on_shared(m.id) >= cap_for(m.id):
+    share = sharing()
+    if env_name and env_name in share["shared"]:
+        if not _under_cap(m.id, share):
             return "", "none", (f"{m.name} has used the ${cap_for(m.id):.2f} the owner allows on the shared "
                                 f"{env_name}. Add your own key in Settings → Team, or ask the owner to raise the cap.")
-        return resolved_key, "shared", ""
+        return resolved_key or os.environ.get(env_name, ""), "shared", ""
     return "", "none", (f"No key for this model: add your own {env_name or 'API key'} in Settings → Team "
                         "(the owner's keys are used only when the owner shares them).")
 

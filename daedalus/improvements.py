@@ -342,7 +342,7 @@ async def call_with_fallback(primary_call_fn, system: str,
         try:
             # Support literal "https://..." URLs directly in the chain
             base_url = burl_env if burl_env.startswith("https://") else os.environ.get(burl_env, "")
-            api_key  = os.environ.get(akey_env, "")
+            api_key  = _cred_env(akey_env, "")      # a member's own key only: never the owner's by fallback
             if not (base_url and api_key):
                 log.debug("RateLimitFallback: skip %s (missing env)", label)
                 continue
@@ -1038,7 +1038,4 @@ def pre_execute_read_first_check(session_id: str, query: str) -> dict | None:
     }
 
 
-def _cred_env(name: str, default: str = "") -> str:
-    """A provider key for whoever this call runs for (gap 3c: a team member never gets the owner's key unshared)."""
-    from .credentials import env
-    return env(name, default)
+from .credentials import env as _cred_env  # noqa: E402  (gap 3c: whose key; credentials imports nothing here)
