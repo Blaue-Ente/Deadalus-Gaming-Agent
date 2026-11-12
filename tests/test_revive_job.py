@@ -315,3 +315,58 @@ def test_name_and_branch_reach_the_clone(a0_tmp, no_browser):  # noqa: F811
 def test_relative_base_only_where_it_reaches_vite(tmp_path, script, manager, tail):
     (tmp_path / "package.json").write_text(json.dumps({"scripts": {"build": script}, "devDependencies": {"vite": "5"}}))
     assert static_build._relative_base_args(tmp_path, {"framework": "vite"}, manager) == tail
+
+
+def test_an_old_webpack_build_gets_the_legacy_openssl_switch(tmp_path, monkeypatch):
+    """Live 2026-11-12 (ahfarmer/calculator, react-scripts 3 on Node 22): ERR_OSSL_EVP_UNSUPPORTED. A known runtime
+    switch fixes it; no model needed."""
+    import asyncio as aio
+
+    # An undetectable webpack 4 setup: only the error tells (a react-scripts 3 project gets the switch up front).
+    (tmp_path / "package.json").write_text(json.dumps({"scripts": {"build": "node scripts/build.js"},
+                                                       "dependencies": {"react": "16"}}))
+    (tmp_path / "public").mkdir()
+    (tmp_path / "public" / "index.html").write_text("<html>")
+    envs = []
+
+    class Proc:
+        def __init__(self, argv, env):
+            self.argv, self.env, self.returncode = argv, env, 0
+
+        async def communicate(self):
+            if "build" in self.argv:
+                envs.append(self.env.get("NODE_OPTIONS", ""))
+                if "--openssl-legacy-provider" not in self.env.get("NODE_OPTIONS", ""):
+                    self.returncode = 1
+                    return (b"Creating an optimized production build...\nError: error:0308010C:digital envelope "
+                            b"routines::unsupported\n    at new Hash (node:internal/crypto/hash:79:19)\n"), b""
+                (tmp_path / "build").mkdir(exist_ok=True)
+                (tmp_path / "build" / "index.html").write_text("<html>")
+            return b"", b""
+
+    async def fake_exec(*argv, env=None, **kw):
+        return Proc(argv, env or {})
+
+    monkeypatch.setattr(aio, "create_subprocess_exec", fake_exec)
+    assert asyncio.run(static_build.build(tmp_path)) == tmp_path / "build"
+    assert len(envs) == 2 and "--openssl-legacy-provider" not in envs[0] and "--openssl-legacy-provider" in envs[1]
+
+
+def test_error_excerpts_keep_the_cause_not_the_stack():
+    out = ("Error: the real cause\n" + "".join(f"    at frame{i} (x.js:{i}:1)\n" for i in range(200))
+           + "    at /app/node_modules/webpack/lib/NormalModule.js:452:10\n    at async run (node:internal/x:1:2)\n")
+    assert static_build.digest(out) == "Error: the real cause"
+    frame = "SyntaxError: src/App.js: Unexpected token (3:4)\n  2 | let x =\n> 3 |     }\n    |     ^\n  at least one fix"
+    assert static_build.digest(frame) == frame                 # code-frame carets and prose starting with "at" stay
+
+
+@pytest.mark.parametrize("deps, node, legacy", [
+    ({"react-scripts": "^3.0.1"}, 22, True), ({"react-scripts": "5.0.1"}, 22, False),
+    ({"webpack": "4.46.0"}, 22, True), ({"@vue/cli-service": "~4.5.0"}, 20, True),
+    ({"react-scripts": "^3.0.1"}, 16, False),                  # Node 16 rejects the flag
+])
+def test_old_webpack_apps_get_the_switch_for_npm_start_too(tmp_path, monkeypatch, deps, node, legacy):
+    (tmp_path / "package.json").write_text(json.dumps({"dependencies": deps}))
+    monkeypatch.setattr(static_build, "node_major", lambda: node)
+    env = static_build.legacy_openssl_env({"NODE_OPTIONS": "--use-openssl-ca"}, tmp_path)
+    assert ("--openssl-legacy-provider" in env["NODE_OPTIONS"]) is legacy and "--use-openssl-ca" in env["NODE_OPTIONS"]

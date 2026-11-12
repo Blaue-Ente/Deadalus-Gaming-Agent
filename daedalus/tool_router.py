@@ -320,6 +320,17 @@ def _docs_block(steps: list[Step]) -> str:
     return "\n\n".join(parts)
 
 
+def reply_language(text: str) -> str:
+    """How to name the reply language: that of the request itself. Live 2026-11-12: English requests got Bulgarian
+    replies ("the owner's language" read as Bulgarian, because the owner is). Only a request in plain ASCII letters is
+    named English; any other script or accented text says "the same language the request is written in", so Bulgarian,
+    Russian, Spanish or Chinese are each answered in kind, and code around the request cannot outvote it (review)."""
+    letters = re.findall(r"[^\W\d_]", text or "")
+    if not letters or all(ch.isascii() for ch in letters):
+        return "English"
+    return "the same language the request is written in"
+
+
 def format_system(rt: Route, *, extra: str = "", user_message: str = "", offered: Any = None) -> str:
     from .game_engineer import attach_to_sys
 
@@ -340,8 +351,8 @@ def format_system(rt: Route, *, extra: str = "", user_message: str = "", offered
         if s.docs:
             lines.append(f"      docs: {', '.join(s.docs)}")
     lines.append("When the slice files exist, stop and summarize. No NEED_* dumps, no SQL.")
-    lines.append("Write your replies to the owner in the language of the owner's request (English unless the owner "
-                 "wrote in another language). Instructions here may be in another language; that is not the owner's.")
+    lines.append(f"Write your replies to the owner in {reply_language(user_message)} (the owner's request). "
+                 "Instructions here may be in another language; that is not the owner's.")
     from .harness.brain_tools import NAMES as _harness_tools, SYSTEM_HINT as _harness_hint
     names = {str(s.get("name") if isinstance(s, dict) else s) for s in offered} if offered is not None else set(pb.tools)
     if _harness_tools & names:                # A7: say what the harness tools are for whenever they are offered

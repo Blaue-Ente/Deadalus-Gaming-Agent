@@ -167,3 +167,17 @@ def test_stripping_never_eats_the_owners_code_or_prose():
     spans = 'browser({"a": 1\n\nkeep this paragraph\n})'
     assert "keep this paragraph" in strip_text_tool_calls(spans)
     assert strip_text_tool_calls('<tool_call name="x">{"a": 1}</tool_call>') == NOT_RUN_NOTE
+
+
+def test_the_reply_language_follows_the_request():
+    from daedalus.tool_router import reply_language
+
+    same = "the same language the request is written in"
+    assert reply_language("Build a small web game, Balloon Pop") == "English"
+    assert reply_language("Направи игра с балони, които се пукат") == same
+    assert reply_language("Сделай игру с шариками") == same                       # Russian is not told Bulgarian
+    assert reply_language("Haz un juego de globos, por favor, ¡rápido!") == same     # accented Latin
+    assert reply_language("做一个气球游戏") == same
+    code = "function update(){ score += 1; draw(); } " * 200
+    assert reply_language(code + "Направи го червено") == same                      # code cannot outvote the request
+    assert reply_language("") == "English"

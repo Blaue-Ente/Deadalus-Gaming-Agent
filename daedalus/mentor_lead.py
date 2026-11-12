@@ -523,7 +523,8 @@ def summary_lines(loop: Any) -> list[str]:
         lines.append(f"Lead plan ({plan.get('model')}): {len(plan.get('checklist') or [])} checklist items.")
     if isinstance(rev, dict):
         if rev.get("accept"):
-            lines.append(f"Lead review: ACCEPTED after looking at {rev.get('saw_frames', 0)} frame(s).")
+            lines.append(f"Lead review: ACCEPTED after looking at {rev.get('saw_frames', 0)} frame(s). "
+                         "Say so plainly in the reply.")
         else:
             lines.append("Lead review: NOT accepted. Still missing: " + "; ".join(rev.get("missing") or []) +
                          ". Tell the owner plainly.")

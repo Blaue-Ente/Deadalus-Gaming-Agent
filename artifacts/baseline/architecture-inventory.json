@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-12T05:00:06.008519+00:00",
+  "generated_at": "2026-11-12T09:33:35.419047+00:00",
   "package_version": "0.3.8",
-  "git_commit": "4401e0cc638905c83d01262321ed8dfacfa1ddeb",
+  "git_commit": "d94d9840cf06383393e3d5f9f0b91a8ff1adb211",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -9,7 +9,7 @@
   "hotspots": [
     {
       "path": "daedalus/agent.py",
-      "lines": 5028,
+      "lines": 5035,
       "broad_excepts": 162
     },
     {
@@ -131,7 +131,7 @@
   },
   "tests": {
     "modules": 134,
-    "functions": 1442
+    "functions": 1446
   },
   "modules": {
     "daedalus": [
