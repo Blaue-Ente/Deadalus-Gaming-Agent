@@ -2316,6 +2316,9 @@ async def run_native_discovery_pass(
                         if nudge is None:
                             # A game the lead accepted is played by simulated players before it is done.
                             nudge = await _lead.audience_gate(loop, loop.user_message)
+                        if nudge is None:
+                            # ...and its own tests pass, with nothing that worked at acceptance broken since.
+                            nudge = await _lead.tests_gate(loop, loop.user_message)
                     except Exception:
                         log.warning("mentor lead review failed", exc_info=True)
                         nudge = None
@@ -2333,6 +2336,9 @@ async def run_native_discovery_pass(
                 if block:
                     all_results.append(block)
             _mentor_record_outcome(loop)
+            if loop is not None:
+                from .project_bible import record_turn          # the next session starts from this one
+                await asyncio.to_thread(record_turn, loop, str(getattr(loop, "user_message", "") or ""))
             if all_results:
                 combined = (
                     "━━━ NATIVE TOOL RESULTS ━━━\n"

@@ -171,7 +171,7 @@ async def subscribe(job: "BuildJob", from_offset: int = 0):
                 terminal = True
             elif job.status in ("error", "interrupted"):
                 out = {"event": "error",
-                       "data": {"error": job.error or "прекъснат", "offset": cursor,
+                       "data": {"error": job.error or "interrupted", "offset": cursor,
                                 "interrupted": job.status == "interrupted"}}
                 terminal = True
             else:

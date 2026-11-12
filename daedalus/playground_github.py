@@ -621,7 +621,7 @@ async def push_project(
             # Allow push of prior commits; if none exist, fail clearly
             code2, out2 = await _run([_GIT, "rev-parse", "--verify", "HEAD"], cwd=root)
             if code2 != 0:
-                raise RuntimeError(github_error_hint("nothing to commit — проектът е празен"))
+                raise RuntimeError(github_error_hint("nothing to commit: the project is empty"))
         else:
             raise RuntimeError(github_error_hint(f"git commit failed: {out[-400:]}"))
     elif out.strip():

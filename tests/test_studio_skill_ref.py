@@ -87,7 +87,7 @@ FILES_NEXT = {
     "skills/maze-review/SKILL.md": SKILL_MD + "\nSecond pass.\n",
     "skills/maze-review/references/notes.md": NOTES,
 }
-NOT_READY = "Skill не е готов за генериране — отговори на уточняващите въпроси или използвай force=true"
+NOT_READY = "The skill is not ready to generate: answer the clarifying questions or use force=true"
 REF = "Flappy"
 STUB = {
     "ok": True,
@@ -397,7 +397,7 @@ def test_temp_skill_and_reference_handlers_are_stubbed(tmp_path, monkeypatch):
             before = len(calls)
             blocked = client.post(generate_url, json={"session_id": sid})
             assert blocked.status_code == 409
-            assert "не е готов" in blocked.json()["error"]
+            assert "not ready to generate" in blocked.json()["error"]
             assert len(calls) == before
             skill_md = (
                 "---\nname: maze-review\ndescription: Review a maze.\n---\n"
@@ -454,7 +454,7 @@ def test_temp_skill_and_reference_handlers_are_stubbed(tmp_path, monkeypatch):
             assert stubbed.json()["ok"] is False
             assert stubbed.json()["degraded"] is True and stubbed.json()["error"] == "synthesis_failed"
             assert stubbed.json()["brief_block"] == "" and stubbed.json()["summary"] == ""
-            assert stubbed.json()["fallback"]["summary"] == "Референция: Pong. Вдъхнови се от механиките и визията."
+            assert stubbed.json()["fallback"]["summary"] == "Reference: Pong. Take inspiration from its mechanics and look."
             assert stubbed.json()["fallback"]["visual_style"] == "match reference game art style"
             fetch_before = len(fetch_calls)
             page = client.post(scout_url, json={"reference": "https://example.test/game"})

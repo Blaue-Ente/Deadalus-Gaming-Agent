@@ -1837,7 +1837,9 @@
   function refIsStub(data) {
     const mechanics = data && data.mechanics;
     return !!(data
-      && String(data.summary || "") === ("Референция: " + String(data.reference || "") + ". Вдъхнови се от механиките и визията.")
+      && [("Reference: " + String(data.reference || "") + ". Take inspiration from its mechanics and look."),
+          ("Референция: " + String(data.reference || "") + ". Вдъхнови се от механиките и визията.")]
+        .includes(String(data.summary || ""))
       && String(data.visual_style || "") === "match reference game art style"
       && String(data.scope_hints || "") === "Core loop first, polish later"
       && Array.isArray(mechanics) && mechanics.length === 0);

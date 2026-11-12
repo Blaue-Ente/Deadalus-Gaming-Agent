@@ -163,9 +163,9 @@ def scan_game_visuals(
                     "path": "(project)",
                     "match": f"{len(paths)} assets",
                     "message": (
-                        "Има генерирани assets/, но кодът не ги реферира — "
-                        "ползвай load.image/add.image (Phaser), <img src=\"assets/...\">, "
-                        "или canvas drawImage / assetLoader.js"
+                        "There are generated assets/ but the code does not use them: "
+                        "use load.image/add.image (Phaser), <img src=\"assets/...\">, "
+                        "or canvas drawImage / assetLoader.js"
                     ),
                 })
 
@@ -183,8 +183,8 @@ def scan_game_visuals(
             "path": fpath,
             "match": "linear-gradient",
             "message": (
-                "CSS gradient placeholder за герой/враг — използвай assets/*.png "
-                "или canvas спрайт, не цветни квадрати"
+                "CSS gradient placeholder for hero/enemy: use assets/*.png "
+                "or a canvas sprite, not coloured squares"
             ),
         })
 

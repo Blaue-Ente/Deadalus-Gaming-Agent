@@ -31,8 +31,8 @@ def capsule_meta(slug: str) -> dict[str, Any]:
         "has_index": index,
         "excluded_secrets": len(excluded),
         "hint": (
-            "Unzip and open index.html — работи без сървър."
+            "Unzip and open index.html: it works without a server."
             if index else
-            "Няма index.html — капсулата е source tree (vite/fastapi), не double-click игра."
+            "No index.html: the capsule is a source tree (vite/fastapi), not a double-click game."
         ),
     }

@@ -291,7 +291,7 @@ async def upstream_diff(slug: str) -> dict[str, Any]:
         return {
             "ok": True,
             "has_upstream": False,
-            "message": "Няма upstream baseline — clone-ът е без git history",
+            "message": "No upstream baseline: the clone has no git history",
             "changed_files": [],
             "diff_stat": "",
         }

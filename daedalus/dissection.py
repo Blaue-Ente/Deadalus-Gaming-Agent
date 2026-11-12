@@ -65,7 +65,7 @@ def classify_source(raw: str) -> tuple[str, str]:
     """Return (kind, value) where kind is url | git | name | path | lab."""
     ref = (raw or "").strip()
     if not ref:
-        raise ValueError("празен източник за дисекция")
+        raise ValueError("empty source for dissection")
     if ref.startswith("lab-") and " " not in ref and "/" not in ref:
         return "lab", ref
     if _URL_RE.match(ref) or ref.startswith("www."):
@@ -380,14 +380,14 @@ async def live_probe(url: str, *, lab_id: str | None = None, slug: str | None = 
     if not chrome:
         return {
             "ok": False, "skipped": True, "error": "chromium_not_found",
-            "summary": "Chromium липсва — live probe пропуснат",
+            "summary": "Chromium is missing: live probe skipped",
         }
     try:
         from playwright.async_api import async_playwright
     except Exception as exc:
         return {
             "ok": False, "skipped": True, "error": "playwright_unavailable",
-            "summary": f"Playwright недостъпен — {exc}",
+            "summary": f"Playwright unavailable: {exc}",
         }
 
     console_errors: list[str] = []
@@ -534,7 +534,7 @@ async def dissect(
         return {
             "ok": False,
             "error": "offline",
-            "summary": "Офлайн кит: дисекция по име/URL е изключена. Инсталирай файлове в лабораторията.",
+            "summary": "Offline kit: dissection by name or URL is off. Install the files in the lab.",
         }
 
     research: dict[str, Any] | None = None

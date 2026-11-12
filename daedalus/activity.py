@@ -19,7 +19,7 @@ def redact(text: str) -> str:
     """Activity rows are stored and streamed: a command or an error line can carry a key (review 2026-11-12)."""
     return _SECRETISH.sub("***", text or "")
 
-_SHOWN = ("tool", "llm", "mentor_plan", "mentor_review", "mentor_perception", "self_review", "playtest", "state", "truncated")
+_SHOWN = ("tool", "llm", "mentor_plan", "mentor_review", "mentor_perception", "self_review", "playtest", "project_tests", "state", "truncated")
 
 
 def _strs(val: Any, n: int, width: int = 160) -> list[str]:
@@ -68,6 +68,11 @@ def compact(ev: dict[str, Any]) -> dict[str, Any] | None:
         row.update({"mode": p.get("mode"), "frames": int(p.get("frames") or 0), "players": int(p.get("players") or 0),
                     "would_quit": int(p.get("would_quit") or 0), "quotes": _strs(p.get("quotes"), 3, 200),
                     "fixes": _strs(p.get("fixes"), 3, 200)})
+    elif kind == "project_tests":
+        row.update({"ok": bool(p.get("ok")), "ran": bool(p.get("ran")), "passed": int(p.get("passed") or 0),
+                    "failed": int(p.get("failed") or 0), "failures": _strs(p.get("failures"), 4, 160),
+                    "regressions": _strs(p.get("regressions"), 4, 160), "baseline": bool(p.get("baseline")),
+                    "note": redact(str(p.get("note") or ""))[:200]})
     elif kind == "state":
         row["state"] = p.get("state") or p.get("to")
     return row

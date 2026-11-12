@@ -86,13 +86,13 @@ def default_checkpoint_options(
     opts.append({
         "id": "edit_plan",
         "label": "📝 Редактирай етапа",
-        "hint": "Промени instructions/goal в полето за бележки (JSON или текст)",
+        "hint": "Change instructions/goal in the notes field (JSON or text)",
     })
     if not ultra and len(stage.get("files") or []) > 1:
         opts.append({
             "id": "ultra_split",
             "label": "🔬 Ултра фрагментирай този етап",
-            "hint": "Разделя на micro-tasks (1 файл = 1 задача)",
+            "hint": "Splits into micro-tasks (1 file = 1 task)",
         })
     return opts
 

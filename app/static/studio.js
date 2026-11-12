@@ -236,6 +236,12 @@
           line("🎮", r.players && r.would_quit * 2 >= r.players ? "bad" : "good",
             t("act.playtest", { n: r.players || 0, q: r.would_quit || 0 }) + " · " + how, at,
             bullets("", (r.quotes || []).concat((r.fixes || []).map((f) => "→ " + f))));
+        } else if (r.type === "project_tests") {
+          const what = r.ran ? t("act.testsRan", { p: r.passed || 0, f: r.failed || 0 }) : (r.note || t("act.testsNone"));
+          const regs = (r.regressions || []).length;
+          line("🧪", r.ok ? "good" : "bad", t("act.tests") + ": " + what
+            + (r.baseline ? " · " + t("act.testsRegressions", { n: regs }) : ""), at,
+            bullets("", (r.failures || []).concat(r.regressions || [])));
         } else if (r.type === "truncated") {
           line("…", "dim", t("act.truncated"), at);
         }

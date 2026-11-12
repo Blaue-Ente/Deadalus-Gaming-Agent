@@ -789,23 +789,31 @@ async def review_gate_critique(user_message: str, draft_reply: str,
         url = "https://openrouter.ai/api/v1" if os.environ.get("OPENROUTER_API_KEY") else "https://api.novita.ai/v3/openai"
         if not key:
             return {"ok": True, "issue": "", "suggested_fix": "", "skipped": "no_creds"}
+        def _target(c: dict) -> str:
+            args = c.get("input") if isinstance(c.get("input"), dict) else {}
+            path = str(args.get("path") or args.get("slug") or "")
+            return f" {path}" if path else ""
+
         tools_summary = "\n".join(
-            f"  - {c.get('tool')} → {'OK' if c.get('ok', True) else 'FAIL'}"
-            for c in (tool_calls or [])[-8:]
+            f"  - {c.get('tool')}{_target(c)} → {'OK' if c.get('ok', True) else 'FAIL'}"
+            for c in (tool_calls or [])[-12:]
         ) or "  (no tools)"
+        from .tool_router import reply_language
+        # English instructions and the written paths (live 2026-11-12: it accused the reply of naming files "not in
+        # the file tree": that tree was taken before the turn, and the critic never saw what the turn wrote).
         sys_prompt = (
-            "Ти си строг рецензент. Анализирай дали draft отговорът на агент "
-            "Дедал ИСТИНСКИ изпълнява заявката на owner-а. "
-            "Отговори с JSON: {\"ok\": bool, \"issue\": \"...\", \"suggested_fix\": \"...\"}. "
-            "ok=false САМО ако: (a) draft обещава нещо което не е направено, "
-            "(b) draft съдържа фактическа грешка, или (c) draft не отговаря "
-            "на същинския въпрос. Иначе ok=true. Кратко, на български."
+            "You are a strict reviewer. Decide whether the draft reply of the agent Daedalus really does what the "
+            "owner asked. Reply with JSON only: {\"ok\": bool, \"issue\": \"...\", \"suggested_fix\": \"...\"}. "
+            "ok=false ONLY if (a) the draft promises something that was not done, (b) the draft states a fact that "
+            "is wrong, or (c) it does not answer the actual request. Otherwise ok=true. Any file tree inside the "
+            "request was taken BEFORE this turn: files written by the tools listed below exist. "
+            f"Write issue and suggested_fix briefly, in {reply_language(user_message)}."
         )
         user_prompt = (
             f"OWNER REQUEST:\n{user_message[:500]}\n\n"
-            f"TOOLS USED ({elapsed:.1f}s):\n{tools_summary}\n\n"
+            f"TOOLS USED THIS TURN ({elapsed:.1f}s):\n{tools_summary}\n\n"
             f"DRAFT REPLY:\n{(draft_reply or '')[:2000]}\n\n"
-            "Качествен ли е draft-ът? Отговори САМО с JSON."
+            "Is the draft accurate and complete? Reply with JSON only."
         )
         from .llm_config import OPENROUTER_FAST_MODEL
         review_model = (
@@ -1017,13 +1025,13 @@ def pre_execute_read_first_check(session_id: str, query: str) -> dict | None:
         "ok": False,
         "blocked_by": "PreExecuteReadFirst",
         "error": (
-            f"READ-FIRST блокаж: питаш за таблица(и) '{', '.join(missing)}' "
-            f"без преди това да си прочел схемата им в тази сесия.\n"
-            f"Добави в СЪЩИЯ отговор (или следващия) схема-маркер:\n  {schema_marker}\n"
-            f"Можеш да комбинираш в един reply:\n"
+            f"READ-FIRST block: you asked about table(s) '{', '.join(missing)}' "
+            f"without reading their schema in this session first.\n"
+            f"Add a schema marker in the SAME reply (or the next):\n  {schema_marker}\n"
+            f"You can combine them in one reply:\n"
             f"  {schema_marker}\n"
             f"  <NEED_PG: SELECT ... FROM {table} ...>\n"
-            f"Системата обработва NEED_DB_SCHEMA ПРЕДИ NEED_PG — няма нужда от отделна итерация."
+            f"NEED_DB_SCHEMA runs BEFORE NEED_PG, so no extra iteration is needed."
         ),
         "table": table,
         "missing_tables": missing,

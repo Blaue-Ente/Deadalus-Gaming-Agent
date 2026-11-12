@@ -211,7 +211,7 @@ async def apps_delete_published(slug: str, request: Request):
     """Admin-only: fully remove a published app from /apps/ (works without playground project)."""
     from .host import current_user
     if current_user(request) is None:
-        return JSONResponse({"ok": False, "error": "Влез в /admin за да изтриеш приложения."}, status_code=401)
+        return JSONResponse({"ok": False, "error": "Sign in to /admin to delete apps."}, status_code=401)
     from . import playground as pg_mod
     try:
         ok = await pub.delete_published(slug)

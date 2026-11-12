@@ -469,8 +469,8 @@ def apply_preset(preset_id: str, master_api_key: str = "") -> dict:
 
     if not master_key:
         raise ValueError(
-            f"Preset '{preset_id}' изисква API ключ за master provider "
-            f"'{master_provider}' — нито подаден, нито в env."
+            f"Preset '{preset_id}' needs an API key for the master provider "
+            f"'{master_provider}': neither given nor in env."
         )
 
     # Apply master (include base_url so AI-integrations proxy URL is stored in DB)
@@ -591,8 +591,8 @@ def apply_mix_config(
         master_base_url = provider_default_base_url(master_provider)
         if not master_key:
             raise ValueError(
-                f"Няма API ключ за master provider '{master_provider}' — "
-                f"задай {provider_env_hint(master_provider)} в Studio → Connectors или `.env`."
+                f"No API key for the master provider '{master_provider}': "
+                f"set {provider_env_hint(master_provider)} in Studio → Connectors or `.env`."
             )
         set_config(
             model=master_model,
@@ -639,7 +639,7 @@ def apply_mix_config(
         applied.append(slot)
 
     if not applied:
-        raise ValueError("Няма валидни слотове за прилагане (master/fast/balanced/deep)")
+        raise ValueError("No valid slots to apply (master/fast/balanced/deep)")
 
     label = source_label or source_id or "custom mix"
     mr.set_active_mix(source_id or label, label, kind=source_kind)

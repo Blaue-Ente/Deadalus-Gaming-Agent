@@ -250,7 +250,7 @@ async def push_project(
         if "nothing to commit" in out.lower():
             code2, _out2 = await _run([_GIT, "rev-parse", "--verify", "HEAD"], cwd=root)
             if code2 != 0:
-                raise RuntimeError(gitlab_error_hint("nothing to commit — проектът е празен"))
+                raise RuntimeError(gitlab_error_hint("nothing to commit: the project is empty"))
         else:
             raise RuntimeError(gitlab_error_hint(f"git commit failed: {out[-400:]}"))
     elif out.strip():

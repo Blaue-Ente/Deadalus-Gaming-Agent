@@ -291,7 +291,7 @@ def generate_daily_digest(date_str: str, force: bool = False) -> dict:
             "date": date_str,
             "generated_ts": now,
             "session_count": 0,
-            "summary": "Нямаше активност на тази дата.",
+            "summary": "There was no activity on this date.",
             "key_topics": [],
             "decisions": [],
             "artifacts": [],

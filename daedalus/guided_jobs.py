@@ -196,7 +196,7 @@ async def subscribe(job: GuidedJob, from_offset: int = 0) -> AsyncIterator[dict]
                     out = {"event": "done", "data": {"files": job.files, "assets": job.assets_built}}
                     stop = True
                 else:
-                    out = {"event": "error", "data": {"message": job.error or "прекъснат"}}
+                    out = {"event": "error", "data": {"message": job.error or "interrupted"}}
                     stop = True
             elif job.status == "checkpoint":
                 out = {"event": "checkpoint", "data": job.checkpoint_data}
@@ -381,7 +381,7 @@ async def _run_guided_parallel_batch(
     options.insert(0, {
         "id": "approve",
         "label": f"✅ Одобри batch ({len(batch_items)} задачи)",
-        "hint": "Merge е направен — потвърди и продължи",
+        "hint": "Merge done: confirm and continue",
     })
 
     cp_data = {
@@ -852,7 +852,7 @@ async def continue_job(
     elif action == "ultra_split":
         n = _insert_ultra_micros(job, job.stage_index)
         if n <= 1:
-            return {"ok": False, "error": "Етапът вече е атомарен"}
+            return {"ok": False, "error": "The stage is already atomic"}
         try:
             await pg.save_autopilot_plan(job.slug, job.plan)
         except Exception:

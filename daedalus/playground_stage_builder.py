@@ -350,24 +350,24 @@ async def build_stage(
 def default_checkpoint_options(stage: dict[str, Any], result: StageBuildResult) -> list[dict[str, str]]:
     """UI actions after each guided stage."""
     opts = [
-        {"id": "approve", "label": "✅ Одобри и продължи", "hint": "Записва файловете и минава на следващ етап"},
-        {"id": "retry", "label": "✏️ Преработи", "hint": "Повтори етапа с твоите бележки"},
+        {"id": "approve", "label": "✅ Одобри и продължи", "hint": "Saves the files and moves to the next stage"},
+        {"id": "retry", "label": "✏️ Преработи", "hint": "Repeat the stage with your notes"},
     ]
     if stage.get("uses_visuals"):
         opts.append({
             "id": "assets",
             "label": "🎨 Генерирай assets",
-            "hint": "PNG за този етап, после преработка",
+            "hint": "PNGs for this stage, then a rework",
         })
     if not result.ok:
         opts.insert(0, {
             "id": "retry",
             "label": "🔧 Поправи проблемите",
-            "hint": "Препоръчително — етапът не мина review",
+            "hint": "Recommended: the stage did not pass review",
         })
     opts.append({
         "id": "skip",
         "label": "⏭️ Пропусни етапа",
-        "hint": "Продължи без запис (не препоръчително)",
+        "hint": "Continue without saving (not recommended)",
     })
     return opts

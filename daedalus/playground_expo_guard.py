@@ -63,15 +63,15 @@ def scan_expo_file(path: str, content: str) -> list[dict[str, Any]]:
             "path": path,
             "match": f"{n_chars} chars",
             "message": (
-                f"Файлът е твърде голям ({n_chars} chars) — раздели на по-малки компоненти "
-                f"(max ~{MAX_EXPO_FILE_LINES} реда)"
+                f"The file is too large ({n_chars} chars): split it into smaller components "
+                f"(max ~{MAX_EXPO_FILE_LINES} lines)"
             ),
         })
     if n_lines > MAX_EXPO_FILE_LINES:
         violations.append({
             "path": path,
             "match": f"{n_lines} lines",
-            "message": f"Твърде много редове ({n_lines}) — опрости или раздели файла",
+            "message": f"Too many lines ({n_lines}): simplify or split the file",
         })
 
     tail = content.rstrip()[-400:]
@@ -79,13 +79,13 @@ def scan_expo_file(path: str, content: str) -> list[dict[str, Any]]:
         violations.append({
             "path": path,
             "match": "truncated tail",
-            "message": "Кодът изглежда отрязан в края — завърши функцията/блока",
+            "message": "The code looks cut off at the end: finish the function or block",
         })
     elif _brace_balance(content) != 0:
         violations.append({
             "path": path,
             "match": "unclosed {",
-            "message": "Незатворени {{ — вероятно truncated файл",
+            "message": "Unclosed {{: probably a truncated file",
         })
 
     for item in _EXPO_WEB_IN_RN:

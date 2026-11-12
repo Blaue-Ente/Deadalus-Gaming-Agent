@@ -195,7 +195,7 @@ def install_plan(item_id: str) -> dict[str, Any]:
             n.startswith(row["ollama"]) for n in installed_ollama_models()
         ),
         "command": " ".join(cmd),
-        "hint": None if exe else "Инсталирай Ollama от https://ollama.com/download и после потвърди дърпането.",
+        "hint": None if exe else "Install Ollama from https://ollama.com/download, then confirm the download.",
     }
 
 
@@ -207,7 +207,7 @@ def pull(item_id: str, *, timeout: int = 600) -> dict[str, Any]:
     if not plan.get("have_ollama"):
         return {**plan, "ok": False, "error": "ollama not on PATH"}
     if plan.get("already"):
-        return {**plan, "pulled": False, "message": "вече е локално"}
+        return {**plan, "pulled": False, "message": "already local"}
     exe = ollama_bin()
     assert exe
     model = plan["item"]["ollama"]
