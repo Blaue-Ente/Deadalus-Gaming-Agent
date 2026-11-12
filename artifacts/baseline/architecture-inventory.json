@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-12T21:36:40.780354+00:00",
+  "generated_at": "2026-11-12T22:09:51.718087+00:00",
   "package_version": "0.3.8",
-  "git_commit": "c3ee15794e26cee25aabb5250d9274e82021da7e",
+  "git_commit": "4954e1f82246d918e79e8bb5e965f79b34d0fcfc",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -9,7 +9,7 @@
   "hotspots": [
     {
       "path": "daedalus/agent.py",
-      "lines": 5069,
+      "lines": 5071,
       "broad_excepts": 163
     },
     {
@@ -19,8 +19,8 @@
     },
     {
       "path": "daedalus/native_tools.py",
-      "lines": 2439,
-      "broad_excepts": 26
+      "lines": 2484,
+      "broad_excepts": 28
     },
     {
       "path": "daedalus/identity.py",
@@ -70,6 +70,7 @@
     "run_command",
     "web_search",
     "web_fetch",
+    "paid_sound",
     "generate_image",
     "remember",
     "code_search",
@@ -127,8 +128,8 @@
     ]
   },
   "tests": {
-    "modules": 143,
-    "functions": 1582
+    "modules": 144,
+    "functions": 1597
   },
   "modules": {
     "daedalus": [
@@ -295,6 +296,7 @@
       "daedalus/offline.py",
       "daedalus/outbox.py",
       "daedalus/owner_auth.py",
+      "daedalus/paid_assets.py",
       "daedalus/paths.py",
       "daedalus/plan_lock.py",
       "daedalus/planner.py",

@@ -122,7 +122,7 @@ _COMPILED = tuple((frozenset(m.split("|")), re.compile(rf"^{p}/?$"), role) for m
 MEMBER_TOOLS = frozenset({
     "read_file", "list_dir", "code_search", "write_file", "edit_file", "game_canon", "game_lint", "math3d",
     "spatial", "world", "milestones", "playtest", "mirofish", "web_search", "browser", "runs", "reach_status",
-    "list_endpoints", "list_modules", "remember", "generate_image", "assets", "playground_new",
+    "list_endpoints", "list_modules", "remember", "generate_image", "assets", "playground_new", "paid_sound",
 })
 
 

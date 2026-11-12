@@ -220,3 +220,38 @@ def test_m_mutes_only_outside_text_fields_and_a_game_can_move_it(game):
             browser.close()
     finally:
         stop()
+
+
+@pytest.mark.skipif(not _browser_ok(), reason="Chromium/Playwright not available")
+def test_a_generated_sound_file_plays_through_sfx_file(game):
+    """Gap 4b: paid_sound saves assets/sfx/<name>.mp3; the game plays it with sfx.file(path)."""
+    from playwright.sync_api import sync_playwright
+
+    from daedalus.playground_browser import _serve_static
+    from daedalus.sfx_kit import render_sfx
+
+    root = _root(game)
+    game_juice.ensure_sfx(root)
+    (root / "assets" / "sfx").mkdir(parents=True)
+    (root / "assets" / "sfx" / "roar.wav").write_bytes(render_sfx("hit"))
+    (root / "index.html").write_text("<script type=module>import { sfx } from './sfx.js'; window.sfx = sfx;"
+                                     "addEventListener('keydown', () => sfx.file('assets/sfx/roar.wav'));</script>")
+    base, stop = _serve_static(root)
+    fetched: list[str] = []
+    errors: list[str] = []
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(args=["--autoplay-policy=no-user-gesture-required"])
+            page = browser.new_page()
+            page.on("request", lambda r: fetched.append(r.url))
+            page.on("pageerror", lambda e: errors.append(str(e)))
+            page.goto(base + "/")
+            page.wait_for_function("() => !!window.sfx")
+            page.keyboard.press("Space")
+            page.wait_for_timeout(500)
+            page.keyboard.press("Space")                       # second play: decoded once, cached
+            page.wait_for_timeout(300)
+            browser.close()
+    finally:
+        stop()
+    assert errors == [] and sum(u.endswith("/assets/sfx/roar.wav") for u in fetched) == 1

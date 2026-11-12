@@ -36,7 +36,7 @@ ROUTE_STATUS: dict[str, str] = {}
 # Tool cost class. Anything not listed is "none" (local, no model or network call).
 TOOL_COST: dict[str, str] = {
     "web_search": "external", "web_fetch": "external", "web_read": "external",
-    "generate_image": "llm", "spawn_subagent": "llm", "dissect_game": "llm",
+    "generate_image": "llm", "paid_sound": "external", "spawn_subagent": "llm", "dissect_game": "llm",
     "playtest": "llm", "mirofish": "external", "mcp_call": "external",
     "git_forge": "external", "postgres_query": "external", "browser": "external",
     "play_lab": "external", "assets": "unknown",

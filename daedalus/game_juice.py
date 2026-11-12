@@ -84,6 +84,30 @@ function noise(dur, vol = 1, delay = 0) {
   src.start(t);
 }
 
+const files = {};
+function fetchFile(url) {         // the file's bytes, fetched once; a failed fetch is forgotten so a later call retries
+  if (!files[url]) {
+    files[url] = fetch(url).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(r.status))))
+      .catch(() => { delete files[url]; return null; });
+  }
+  return files[url];
+}
+const decoded = {};
+function playFile(url) {          // a generated sound file (paid, only when the owner asked)
+  const a = audio();
+  if (!a || muted || a.state !== 'running') { fetchFile(url); return; }   // not yet audible: preload only
+  const ready = decoded[url] || (decoded[url] = fetchFile(url)
+    .then((bytes) => (bytes ? a.decodeAudioData(bytes.slice(0)) : null))
+    .then((buf) => { if (!buf) delete decoded[url]; return buf; }, () => { delete decoded[url]; return null; }));
+  ready.then((buf) => {
+    if (!buf || muted) return;
+    const src = a.createBufferSource();
+    src.buffer = buf;
+    src.connect(master);
+    src.start();
+  });
+}
+
 export const sfx = {
   jump: () => tone('square', 260, 620, 0.14, 0.5),
   score: () => { tone('square', 880, 880, 0.06, 0.4); tone('square', 1320, 1320, 0.09, 0.4, 0.06); },
@@ -95,6 +119,7 @@ export const sfx = {
   win: () => [523, 659, 784, 1047].forEach((f, i) => tone('square', f, f, 0.14, 0.4, i * 0.11)),
   get muted() { return muted; },
   setMuteKey: (key) => { muteKey = key ? String(key).toLowerCase() : null; },
+  file: (url) => playFile(url),
 };
 export default sfx;
 """

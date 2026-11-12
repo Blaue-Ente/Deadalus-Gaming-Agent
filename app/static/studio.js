@@ -245,6 +245,9 @@
           line("🧪", r.ok ? "good" : "bad", t("act.tests") + ": " + what
             + (r.baseline ? " · " + t("act.testsRegressions", { n: regs }) : ""), at,
             bullets("", (r.failures || []).concat(r.regressions || [])));
+        } else if (r.type === "paid_asset") {
+          line("💳", r.ok ? "" : "dim", t(r.ok ? "act.paidMade" : "act.paidSkipped", { service: r.service, whose: r.whose })
+            + (r.path ? " · " + r.path : ""), at, bullets(r.ok ? r.cost : r.error, r.what ? [r.what] : []));
         } else if (r.type === "truncated") {
           line("…", "dim", t("act.truncated"), at);
         }

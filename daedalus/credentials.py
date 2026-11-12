@@ -27,7 +27,8 @@ DEFAULT_CAP_USD = 2.0                     # per member, on the owner's shared ke
 UNKNOWN_PRICE_PER_TOKEN = 10.0 / 1_000_000  # a call whose price is unknown still counts (review 2026-11-12)
 # The keys Daedalus's model calls actually read for a member (review 2026-11-12: only offer what takes effect).
 MEMBER_KEYS = ("OPENROUTER_API_KEY", "ALLTOKEN_API_KEY", "NOVITA_API_KEY", "NVIDIA_API_KEY", "ANTHROPIC_API_KEY",
-               "OPENAI_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY")
+               "OPENAI_API_KEY", "GEMINI_API_KEY", "GROQ_API_KEY",
+               "ELEVENLABS_API_KEY")               # paid_assets.generate_sound (gap 4b): own key only
 _NAME = re.compile(r"^[A-Z][A-Z0-9_]{2,63}$")
 _lock = threading.Lock()
 _cache: dict[str, tuple[tuple[int, int], dict[str, Any]]] = {}
