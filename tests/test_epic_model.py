@@ -31,7 +31,7 @@ def test_a_model_without_tool_calling_is_never_the_epic_writer(cloud, monkeypatc
 
 
 def test_an_owner_model_newer_than_the_catalog_is_kept(cloud, monkeypatch):
-    cloud("anthropic/claude-haiku-5.5")
+    cloud("anthropic/claude-haiku-9")                                   # newer than anything the benchmark knows
     _cands(monkeypatch, [{"model_id": "anthropic/claude-sonnet-4-5", "provider": "openrouter", "supports_tools": True}])
     d = te.classify("build an epic rpg world", requested="epic")
     assert d["model"] is None and d["model_source"] == "owner-default" and d["note"] == te.KEPT_OWNER_NOTE
@@ -82,3 +82,12 @@ def test_the_quality_critic_answers_in_the_language_of_the_task():
     msgs = pq.build_critic_messages(description="A maze game", kind="static", plan_goals=[], dom_excerpt="",
                                     code_index="", screenshot_b64="")
     assert "in the language of the user's task" in msgs[-1]["content"][0]["text"]
+
+
+def test_a_known_weaker_owner_model_gets_the_current_stronger_one(cloud, monkeypatch):
+    """With Haiku 5.5 known to the benchmark (2026-11-12), epic lifts the writer to Sonnet 5.5, as it promises."""
+    from daedalus.model_defaults import OPENROUTER_DEFAULT_MODEL, OPENROUTER_FAST_MODEL
+
+    cloud(OPENROUTER_FAST_MODEL)
+    _cands(monkeypatch, [{"model_id": OPENROUTER_DEFAULT_MODEL, "provider": "openrouter", "supports_tools": True}])
+    assert te.resolve_model({"apply_model": True, "tier": "epic"})["model"] == OPENROUTER_DEFAULT_MODEL
