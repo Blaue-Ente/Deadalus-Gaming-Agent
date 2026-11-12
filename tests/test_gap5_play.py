@@ -412,4 +412,19 @@ def test_the_public_paths_stay_narrow():
     assert not is_public_request("POST", "/apps/dot/analytics/x")
     assert not is_public_request("POST", "/apps/api/dot/analytics")
     assert not is_public_request("GET", "/apps/api/dot/analytics")
+    assert not is_public_request("POST", "/apps/api/dot/delete")
     assert is_public_request("GET", "/apps/dot/")
+    # A game whose slug is "api" stays a public game (review 2026-11-12).
+    assert is_public_request("GET", "/apps/api/") and is_public_request("GET", "/apps/api/main.js")
+    assert is_public_request("POST", "/apps/api/db/score") and is_public_request("POST", "/apps/api/analytics")
+
+
+def test_players_behind_a_hosting_proxy_are_counted_apart(game, monkeypatch):
+    monkeypatch.setattr(play_analytics, "_recent", {})
+    proxy = "10.0.0.1"
+    keys = [play_analytics.client_key({"x-forwarded-for": f"203.0.113.{i}, {proxy}"}, proxy) for i in range(20)]
+    assert len(set(keys)) == 20 and play_analytics.client_key({}, proxy) == proxy
+    assert play_analytics.client_key({"fly-client-ip": "198.51.100.7"}, proxy) == "198.51.100.7"
+    sent = [play_analytics.record(game, b'{"ms": 1}', client=k)[1] for k in keys]
+    assert sent == [""] * 20                                  # 20 players behind one proxy all counted
+    assert "anyone" in play_analytics.summary(game)["note"]

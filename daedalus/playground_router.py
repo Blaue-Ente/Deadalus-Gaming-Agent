@@ -218,7 +218,7 @@ async def app_analytics_record(slug: str, request: Request):
     from . import play_analytics
 
     raw = await request.body()
-    client = request.client.host if request.client else ""          # rate limit only; never stored
+    client = play_analytics.client_key(request.headers, request.client.host if request.client else "")
     stored, reason = await asyncio.to_thread(play_analytics.record, slug, raw, client=client)
     if not stored:
         code = {"too_large": 413, "rate_limited": 429}.get(reason, 400)
