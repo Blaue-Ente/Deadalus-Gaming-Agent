@@ -119,6 +119,21 @@ PLAYED_NOTE = (
 )
 
 
+SESSION_NOTE = (
+    "You just PLAYED this browser game for {turns} turns, trying to: {goals}. The images are frames from that "
+    "session, in order. What you did: {inputs}. You managed: {reached}. You never managed: {missed}. Judge what you "
+    "SAW: a goal you missed may be your own play, so say whether the game made the way to it clear. The source "
+    "excerpt only shows intent: when the frames contradict it, believe the frames."
+)
+
+
+def _session_note(session: dict[str, Any]) -> str:
+    return SESSION_NOTE.format(turns=session.get("turns") or 0, goals="; ".join(session.get("goals") or []),
+                               inputs=session.get("inputs") or "(none)",
+                               reached="; ".join(session.get("reached") or []) or "none of them",
+                               missed="; ".join(session.get("missed") or []) or "nothing")
+
+
 async def gateway_see(system: str, user: str, images: list[dict[str, Any]]) -> str:
     """A persona's call through the gateway (intent critic), with the play frames as real image parts."""
     from .harness import gateway as gw
@@ -255,6 +270,7 @@ async def _persona_turn(
     llm_fn: LlmFn | None,
     see_fn: SeeFn | None = None,
     images: list[dict[str, Any]] | None = None,
+    session: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     row: dict[str, Any] = {
         "id": persona["id"],
@@ -274,7 +290,8 @@ async def _persona_turn(
         '"frustration":1-5,"would_quit":true|false,"quote":"one sentence","fix":"one concrete fix"}.'
     )
     if played:
-        system += " " + PLAYED_NOTE.format(inputs=_inputs_said() or "start keys and arrows")
+        system += " " + (_session_note(session) if session else
+                         PLAYED_NOTE.format(inputs=_inputs_said() or "start keys and arrows"))
         snapshot = snapshot[:4000]
     user = (
         f"Persona {persona['label']} ({persona['id']})\n"
@@ -311,6 +328,7 @@ async def run_playtest(
     see_fn: SeeFn | None = None,
     play: bool = True,
     frames: tuple[list[dict[str, Any]], list[str]] | None = None,
+    session: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Run N simulated players against a Playground project. With ``see_fn`` they judge frames from actually playing
     it (the lead's browser play: start, first moves, a few seconds later); otherwise they read the source. Before,
@@ -334,7 +352,11 @@ async def run_playtest(
 
     images: list[dict[str, Any]] = []
     shas: list[str] = []
-    if frames is not None:                       # the lead just played this exact build: no second browser run
+    if not (session and session.get("ran") and session.get("frames")):
+        session = None
+    if session:                                  # a goal-directed session (goal_play): its frames and inputs
+        images, shas = list(session["frames"]), list(session.get("shas") or [])
+    elif frames is not None:                     # the lead just played this exact build: no second browser run
         images, shas = list(frames[0]), list(frames[1])
     elif play and see_fn is not None:
         try:
@@ -345,7 +367,7 @@ async def run_playtest(
 
     import asyncio
     turns: list[dict[str, Any]] = list(await asyncio.gather(        # the players are independent: play at once
-        *(_persona_turn(persona, snapshot, extra, llm_fn, see_fn, images) for persona in chosen)))
+        *(_persona_turn(persona, snapshot, extra, llm_fn, see_fn, images, session) for persona in chosen)))
 
     scores: dict[str, list[float]] = {d: [] for d in DIMENSIONS}
     would_quit = 0
@@ -371,6 +393,9 @@ async def run_playtest(
     many_quit = bool(spoke) and would_quit * 2 >= len(spoke)          # half or more (the Studio uses the same rule)
     if many_quit:
         blockers.append("Half or more of the playtesters would quit.")
+    if session and session.get("missed"):
+        blockers.append(f"In a {session.get('turns')}-turn goal session the player never managed: "
+                        + "; ".join(session["missed"]))
     ship_ready = heuristic["ship_hint"] and not many_quit
 
     summary = (
@@ -378,7 +403,11 @@ async def run_playtest(
         + ", ".join(f"{k}={v}" for k, v in avg.items() if v is not None)
         + (f"; quit={would_quit}/{len(spoke)}" if spoke else "; heuristic-only")
     )
-    _ledger_event(slug, mode, len(images), len(spoke), would_quit, avg, quotes, fixes)
+    goals = ({"turns": session.get("turns"), "reached": list(session.get("reached") or []),
+              "missed": list(session.get("missed") or []), "errors": list(session.get("errors") or [])[:3],
+              "notes": list(session.get("notes") or [])[-3:]}
+             if session else None)
+    _ledger_event(slug, mode, len(images), len(spoke), would_quit, avg, quotes, fixes, goals)
     return {
         "ok": True,
         "source": "https://github.com/MatrAIx-ai/MatrAIx-Persona-8B",
@@ -397,11 +426,12 @@ async def run_playtest(
         "many_quit": many_quit,
         "saw_frames": len(images),
         "frame_sha256s": shas,
+        "goals": goals,
     }
 
 
 def _ledger_event(slug: str, mode: str, frames: int, players: int, quit_n: int, avg: dict[str, Any],
-                  quotes: list[str], fixes: list[str]) -> None:
+                  quotes: list[str], fixes: list[str], goals: dict[str, Any] | None = None) -> None:
     """The audience test as one activity row in the Studio chat."""
     try:
         from .harness import runs
@@ -409,7 +439,7 @@ def _ledger_event(slug: str, mode: str, frames: int, players: int, quit_n: int, 
         if rid:
             runs.safe_event(rid, "playtest", {"slug": slug, "mode": mode, "frames": frames, "players": players,
                                               "would_quit": quit_n, "scores": avg, "quotes": quotes[:3],
-                                              "fixes": fixes[:3]})
+                                              "fixes": fixes[:3], **({"goals": goals} if goals else {})})
     except Exception:
         log.debug("playtest event skipped", exc_info=True)
 

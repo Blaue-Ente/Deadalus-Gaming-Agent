@@ -355,7 +355,9 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
         "name": "playtest",
         "description": (
             "MatrAIx-style simulated players critique a Playground game "
-            "(loop, controls, first 30s, win/lose)."
+            "(loop, controls, first 30s, win/lose). goal_session=true: a player first plays it for several "
+            "turns toward goals (start, score, lose, restart), one model call a turn; real-player numbers from "
+            "/apps are included when the game is published."
         ),
         "input_schema": {
             "type": "object",
@@ -364,6 +366,7 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
                 "kind": {"type": "string"},
                 "n": {"type": "integer"},
                 "use_browser": {"type": "boolean"},
+                "goal_session": {"type": "boolean"},
             },
             "required": ["slug"],
         },
@@ -1732,14 +1735,27 @@ async def execute_native_tool(
 
         if name == "playtest":
             from .playtest import format_for_prompt, gateway_see, run_playtest
+            slug_pt, kind_pt = str(args.get("slug") or ""), str(args.get("kind") or "static")
+            session = None
+            if args.get("goal_session"):
+                from .goal_play import goal_play
+                session = await goal_play(slug_pt, kind_pt, see=gateway_see)
             r = await run_playtest(          # the players play it and judge what they see (ran with no model before)
-                str(args.get("slug") or ""),
-                kind=str(args.get("kind") or "static"),
+                slug_pt,
+                kind=kind_pt,
                 n=int(args.get("n") or 4),
                 use_browser=bool(args.get("use_browser")),
                 see_fn=gateway_see,
+                session=session,
             )
-            return "── playtest ──\n" + format_for_prompt(r)
+            real = ""
+            if slug_pt:
+                try:
+                    from .play_analytics import format_for_prompt as real_players
+                    real = await asyncio.to_thread(real_players, slug_pt)
+                except Exception:
+                    log.warning("real-player numbers for %s unavailable", slug_pt, exc_info=True)
+            return "── playtest ──\n" + format_for_prompt(r) + (f"\n{real}" if real else "")
 
         if name == "play_lab":
             action = str(args.get("action") or "status").lower().strip()
