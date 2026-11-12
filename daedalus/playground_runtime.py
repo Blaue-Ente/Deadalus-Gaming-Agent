@@ -40,6 +40,13 @@ _ENV_ALLOW = frozenset({
     "NODE_ENV", "NPM_CONFIG_CACHE", "NIX_PATH",
     "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_DATA_DIRS",
     "npm_config_prefix", "NPM_CONFIG_PREFIX",
+    # How the machine reaches package registries: proxies and trusted CAs. Found live (2026-11-11): behind a proxy
+    # every `npm install` in a Playground project timed out (300 s, again and again) because these were stripped;
+    # Full Auto spent 47 minutes in M0 verify. They are the owner's own network settings, not Daedalus secrets.
+    "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "no_proxy", "all_proxy",
+    "NODE_EXTRA_CA_CERTS", "SSL_CERT_FILE", "SSL_CERT_DIR", "REQUESTS_CA_BUNDLE", "PIP_CERT", "PIP_INDEX_URL",
+    "npm_config_proxy", "npm_config_https_proxy", "npm_config_noproxy", "npm_config_registry",
+    "npm_config_cafile", "NPM_CONFIG_USERCONFIG", "NPM_CONFIG_REGISTRY",
 })
 
 # HTTP smoke probe config per process kind: (paths, optional body substrings).

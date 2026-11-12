@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-11T17:08:00.275059+00:00",
+  "generated_at": "2026-11-12T00:28:24.067236+00:00",
   "package_version": "0.3.8",
-  "git_commit": "bf346908b7dfb4088706ec20e276521d53db9712",
+  "git_commit": "ebb65e3a16a72d078c6252ca0a73e1eca0997225",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -19,8 +19,8 @@
     },
     {
       "path": "daedalus/native_tools.py",
-      "lines": 2286,
-      "broad_excepts": 23
+      "lines": 2306,
+      "broad_excepts": 24
     },
     {
       "path": "daedalus/identity.py",
@@ -130,8 +130,8 @@
     ]
   },
   "tests": {
-    "modules": 124,
-    "functions": 1391
+    "modules": 129,
+    "functions": 1411
   },
   "modules": {
     "daedalus": [
@@ -249,6 +249,7 @@
       "daedalus/improvements.py",
       "daedalus/job_contract.py",
       "daedalus/job_ledger.py",
+      "daedalus/js_deps.py",
       "daedalus/kernel/__init__.py",
       "daedalus/kernel/changeset.py",
       "daedalus/kernel/command_runner.py",
@@ -374,6 +375,7 @@
       "daedalus/reference_scout.py",
       "daedalus/reflection.py",
       "daedalus/rejection_lessons.py",
+      "daedalus/revive_job.py",
       "daedalus/run_budget.py",
       "daedalus/run_engine.py",
       "daedalus/sandbox.py",
@@ -389,6 +391,7 @@
       "daedalus/skill_catalog.py",
       "daedalus/spatial.py",
       "daedalus/standalone_boot.py",
+      "daedalus/static_build.py",
       "daedalus/stdio_utf8.py",
       "daedalus/steering_queue.py",
       "daedalus/store.py",

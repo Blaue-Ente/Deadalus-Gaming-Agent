@@ -351,3 +351,33 @@ async def project_asset_pipeline(slug: str, body: AssetPipelineBody) -> dict:
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result.get("error") or "pipeline failed")
     return {"ok": True, **result}
+
+
+# ---- Revive: repo → analyse → install and verify → repair → publish (a background job with visible steps) ----------
+class ReviveBody(BaseModel):
+    url: str = Field(..., min_length=3, max_length=500)
+    publish: str = Field(default="local", max_length=8)          # none | local | site
+    repair_rounds: int = Field(default=2, ge=0, le=4)
+    confirm_public: bool = False                                  # only needed for anonymous/public-by-default hosts
+
+
+@router.post("/revive")
+async def revive_start(body: ReviveBody) -> dict:
+    from daedalus import revive_job
+
+    try:
+        job = revive_job.start(body.url, publish=body.publish, repair_rounds=body.repair_rounds,
+                               confirm_public=body.confirm_public)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"ok": True, "job": job.public()}
+
+
+@router.get("/revive/{job_id}")
+async def revive_status(job_id: str) -> dict:
+    from daedalus import revive_job
+
+    job = revive_job.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="revive job not found")
+    return {"ok": True, "job": job.public()}

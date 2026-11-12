@@ -167,7 +167,13 @@
           <div class="row tight">
             <button id="git-clone" type="button" data-i18n="studio.clone">Clone</button>
             <button id="git-revive" type="button" data-i18n="studio.revive">Revive</button>
+            <select id="git-revive-publish" data-i18n-aria="studio.revivePublish" aria-label="After it runs">
+              <option value="local" data-i18n="studio.revivePublishLocal">Publish locally</option>
+              <option value="site" data-i18n="studio.revivePublishSite">Publish as a site</option>
+              <option value="none" data-i18n="studio.revivePublishNone">Only make it run</option>
+            </select>
           </div>
+          <ol id="git-revive-steps" class="revive-steps" hidden></ol>
           <div class="row tight">
             <button id="git-push" type="button" data-i18n="studio.push">Push</button>
             <button id="git-pr" type="button" data-i18n="studio.pullRequest">Pull request</button>
