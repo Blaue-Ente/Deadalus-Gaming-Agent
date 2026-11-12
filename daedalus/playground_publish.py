@@ -117,6 +117,11 @@ def _unzip_to(data: bytes, dest: Path) -> None:
 # Vite build step
 # ---------------------------------------------------------------------------
 
+def _static_plan(root: Path) -> dict | None:
+    from .static_build import plan
+    return plan(root)
+
+
 async def _build_vite(root: Path) -> Path:
     """Same as visual proof / compile gate: ``daedalus.web_build.build_web``."""
     from .web_build import build_web
@@ -221,6 +226,13 @@ async def publish(
     if kind in ("vite", "vite-react", "phaser"):
         dist = await _build_vite(root)
         publish_root = dist
+        kind = "static"
+        entry = "index.html"
+    elif kind == "node" and _static_plan(root):
+        # A web app that builds to static files (CRA, Vue CLI, webpack, Parcel, ...): publish its build output, never
+        # the raw source (found 2026-11-11 while reviving GitHub repos).
+        from .static_build import build as _static_build
+        publish_root = await _static_build(root)
         kind = "static"
         entry = "index.html"
     elif kind == "godot":

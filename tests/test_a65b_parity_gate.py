@@ -281,11 +281,16 @@ def test_revive_and_pull_request_are_clicked_send_their_bodies_and_a_refusal_sta
     with sync_playwright() as pw:
         browser, page = _browser(pw)
         revives, prs = [], []
-        answers = {"revive": (200, {"ok": False, "error": "not a game repository"}),
+        # Revive is a job (2026-11-11): the start returns a running job, the status reports how it ended.
+        job = {"id": "j1", "status": "running", "steps": [{"step": "clone", "ok": True, "detail": "old-game"}]}
+        failed = dict(job, status="failed", error="not a game repository",
+                      steps=job["steps"] + [{"step": "analyze", "ok": False, "detail": "not a game repository"}])
+        answers = {"revive": (200, {"ok": True, "job": job}), "status": (200, {"ok": True, "job": failed}),
                    "pr": (200, {"ok": True, "pr": {"url": "https://example.test/pr/7"}})}
         try:
-            page.route("**/admin/daedalus/playground/api/revive",
+            page.route("**/api/v1/playground/revive",
                        lambda r: (revives.append(json.loads(r.request.post_data or "{}")), _fulfill(r, *answers["revive"])))
+            page.route("**/api/v1/playground/revive/j1", lambda r: _fulfill(r, *answers["status"]))
             page.route(f"**/admin/daedalus/playground/api/projects/{game}/create-upstream-pr",
                        lambda r: (prs.append(json.loads(r.request.post_data or "{}")), _fulfill(r, *answers["pr"])))
             page.add_init_script("try { localStorage.setItem('dx.lang', 'en'); } catch (e) {}")
@@ -298,7 +303,8 @@ def test_revive_and_pull_request_are_clicked_send_their_bodies_and_a_refusal_sta
             page.locator("#git-url").fill("https://example.test/old-game.git")
             page.locator("#git-revive").click()
             page.wait_for_function("() => document.getElementById('git-status').textContent.includes('not a game repository')")
-            assert revives == [{"url": "https://example.test/old-game.git"}]
+            assert revives == [{"url": "https://example.test/old-game.git", "publish": "local"}]
+            assert page.locator("#git-revive-steps li.fail").count() == 1          # the failed step is shown
             assert page.locator("#git-status").get_attribute("data-state") == "error"   # ok:false is never shown as saved
             page.wait_for_function("() => !document.getElementById('git-pr').disabled")
             page.locator("#git-pr").click()

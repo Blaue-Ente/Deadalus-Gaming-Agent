@@ -715,6 +715,10 @@ button.textlink {
 }
 .workspace-panel[hidden] { display: none !important; }
 .workspace-status { margin: 0; color: var(--muted); font-size: 0.78rem; white-space: pre-wrap; }
+.revive-steps { margin: 6px 0 0; padding-left: 18px; font-size: 0.78rem; color: var(--muted); }
+.revive-steps li { margin: 2px 0; overflow-wrap: anywhere; }
+.revive-steps li.ok strong { color: var(--gold, #c9a227); }
+.revive-steps li.fail strong { color: #e07a5f; }
 .workspace-status[data-state="error"] { color: var(--err); }
 #fileview, #build-out {
   font-family: var(--mono);

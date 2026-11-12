@@ -175,7 +175,9 @@ async def ensure_local(slug: str) -> dict[str, Any]:
     if not proj:
         return {"ok": False, "error": f"project '{slug}' not found"}
     kind = (proj.get("kind") or "static").lower()
-    if not allows_static_live_publish(kind):
+    from .static_build import plan as _static_plan
+    static_node = kind == "node" and _static_plan(pg.project_dir(slug)) is not None
+    if not allows_static_live_publish(kind) and not static_node:
         return {
             "ok": False,
             "static": False,

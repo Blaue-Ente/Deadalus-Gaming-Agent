@@ -5350,10 +5350,44 @@
     if (!url) { showStatus("git-status", dx.t("studio.gitNeedUrl"), true); return; }
     gitCall($("git-clone"), "/admin/daedalus/playground/api/clone", { url }, false);
   });
+  // Revive: a background job (clone → analyse → install and verify → repair → publish) with its steps shown live.
+  function paintReviveSteps(job) {
+    const list = $("git-revive-steps");
+    list.hidden = false;
+    list.replaceChildren(...(job.steps || []).map((s) => {
+      const li = document.createElement("li");
+      li.className = s.ok === true ? "ok" : s.ok === false ? "fail" : "";
+      const name = document.createElement("strong");
+      name.textContent = s.step;
+      const detail = document.createElement("span");
+      detail.textContent = s.detail ? " · " + String(s.detail).slice(0, 300) : "";
+      li.append(name, detail);
+      return li;
+    }));
+  }
   $("git-revive").addEventListener("click", () => {
     const url = ($("git-url").value || "").trim();
     if (!url) { showStatus("git-status", dx.t("studio.gitNeedUrl"), true); return; }
-    gitCall($("git-revive"), "/admin/daedalus/playground/api/revive", { url }, false);
+    const publish = $("git-revive-publish").value || "local";
+    if (publish === "site" && !window.confirm(dx.t("studio.reviveSiteConfirm"))) return;
+    runAction($("git-revive"), "git-status", async () => {
+      const started = await postJson("/api/v1/playground/revive", { url, publish });
+      let job = started.job;
+      showStatus("git-status", dx.t("studio.reviveRunning"), false);
+      paintReviveSteps(job);
+      while (job.status === "running") {
+        await new Promise((r) => setTimeout(r, 2500));
+        job = (await dx.api("/api/v1/playground/revive/" + encodeURIComponent(job.id))).job;
+        paintReviveSteps(job);
+      }
+      if (job.slug) dx.selectSlug(job.slug);
+      if (job.status !== "done") {
+        showStatus("git-status", dx.t("studio.reviveFailed") + ": " + (job.error || ""), true);
+        return;
+      }
+      showStatus("git-status", job.site_url ? dx.t("studio.reviveSite", { url: job.site_url })
+        : job.local_url ? dx.t("studio.reviveLocal", { url: job.local_url }) : dx.t("studio.reviveRuns"), false);
+    });
   });
   $("git-push").addEventListener("click", () => {
     const slug = dx.getSlug();
