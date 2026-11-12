@@ -856,3 +856,16 @@ label.grow { flex: 1; min-width: 7rem; }
 .msg.turn-changes .change > span { flex: 1 1 12rem; font-family: var(--mono); font-size: 0.76rem; overflow-wrap: anywhere; }
 .msg.turn-changes .change > small { flex: 1 1 100%; color: var(--muted); }
 .msg.turn-changes .change > pre { flex: 1 1 100%; max-height: 18rem; overflow: auto; font-size: 0.72rem; }
+
+/* Team (gap 3b): the owner's members list; a member sees only their own sign-in. */
+.team-section { display: grid; gap: 8px; margin-bottom: 18px; }
+.team-invite { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; }
+.team-token code { display: block; word-break: break-all; padding: 8px; border: 1px solid var(--line, #3a3226);
+  border-radius: 6px; background: var(--panel, #1a1611); }
+.team-audit { margin: 6px 0 0; padding-left: 18px; font-size: 0.85em; }
+.team-chip { cursor: default; }
+.team-chip[hidden], #team-signout[hidden] { display: none; }
+body[data-role="designer"] #panel-settings > :not(.team-section):not(.kicker):not(#settings-status),
+body[data-role="tester"] #panel-settings > :not(.team-section):not(.kicker):not(#settings-status) { display: none; }
+body[data-role="designer"] #panel-settings > .kicker,
+body[data-role="tester"] #panel-settings > .kicker { display: none; }

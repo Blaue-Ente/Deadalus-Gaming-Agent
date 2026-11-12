@@ -44,6 +44,14 @@
     }
   }
 
+  function forget() {
+    try {
+      localStorage.removeItem(TOKEN_KEY);
+    } catch {
+      /* private mode */
+    }
+  }
+
   function save(token) {
     try {
       localStorage.setItem(TOKEN_KEY, token);
@@ -70,9 +78,10 @@
         /* remote / offline */
       }
       if (typeof window.prompt === "function") {
-        const typed = window.prompt(
-          "Собственически токен (DAEDALUS_TOKEN). На 127.0.0.1 Studio го взима сам."
-        );
+        const ask = (window.DaedalusI18n && window.DaedalusI18n.t) ? window.DaedalusI18n.t("studio.signInPrompt")
+          : "Sign in: paste the owner token (DAEDALUS_TOKEN) or your team sign-in (dt_…). " +
+            "On 127.0.0.1 Studio signs the owner in by itself.";
+        const typed = window.prompt(ask);
         if (typed && typed.trim()) {
           save(typed.trim());
           return typed.trim();
@@ -120,7 +129,11 @@
       headers.set("Authorization", "Bearer " + token);
     }
     next.headers = headers;
-    return origFetch(input, next);
+    const res = await origFetch(input, next);
+    if (res.status === 401 && stored() === token) {
+      forget();          // a disabled or replaced sign-in: ask again on the next call instead of failing forever
+    }
+    return res;
   };
 
   if (OrigES) {
@@ -138,6 +151,7 @@
   window.DaedalusAuth = {
     ensureToken,
     stored,
+    signOut: forget,
     url: (href) => withToken(href, stored()),
     eventSource: async (url, esInit) => {
       const token = await ensureToken();

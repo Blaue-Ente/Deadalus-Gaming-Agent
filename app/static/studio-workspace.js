@@ -4410,7 +4410,103 @@
     showStatus("harness-status", unique.length ? dx.t("studio.requestFailed") + ": " + unique.join(" · ") : "", unique.length > 0);
   }
 
+  // ── Team (gap 3b): who is signed in; the owner invites, re-roles and disables people ──────────────────────────
+  let teamMe = null;
+
+  function roleLabel(role) {
+    return tOr("studio.role." + role, role);
+  }
+
+  async function loadMe() {
+    try {
+      teamMe = await dx.api("/api/v1/team/me");
+    } catch (err) {
+      teamMe = null;
+      return null;
+    }
+    document.body.dataset.role = teamMe.role || "";
+    const chip = $("team-chip");
+    if (chip) {
+      chip.hidden = teamMe.role === "owner";
+      chip.textContent = teamMe.name + " · " + roleLabel(teamMe.role);
+    }
+    return teamMe;
+  }
+
+  function paintMembers(data) {
+    const box = $("team-members");
+    box.replaceChildren();
+    const rows = (data && data.members) || [];
+    if (!rows.length) {
+      const p = document.createElement("p");
+      p.className = "hint";
+      p.textContent = dx.t("studio.teamNobody");
+      box.appendChild(p);
+      return;
+    }
+    rows.forEach((m) => {
+      const other = m.role === "designer" ? "tester" : "designer";
+      box.appendChild(actionRow({
+        id: "member-" + m.id,
+        title: m.name,
+        sub: roleLabel(m.role) + (m.disabled ? " · " + dx.t("studio.teamDisabled") : ""),
+        buttons: [
+          { label: dx.t("studio.teamMakeRole", { role: roleLabel(other) }),
+            run: () => updateMember(m.id, { role: other }) },
+          { label: dx.t(m.disabled ? "studio.teamEnable" : "studio.teamDisable"),
+            run: () => updateMember(m.id, { disabled: !m.disabled }) },
+        ],
+      }));
+    });
+  }
+
+  async function updateMember(id, body) {
+    await postJson("/api/v1/team/members/" + encodeURIComponent(id), body);
+    await loadTeamLists();
+    return { text: dx.t("studio.saved"), bad: false };
+  }
+
+  function paintAudit(data) {
+    const list = $("team-audit");
+    list.replaceChildren();
+    ((data && data.entries) || []).slice(0, 40).forEach((e) => {
+      const li = document.createElement("li");
+      const when = new Date((e.ts || 0) * 1000).toLocaleString();
+      li.textContent = when + " · " + e.name + " (" + roleLabel(e.role) + ") · " + e.method + " " + e.path +
+        (e.status ? " → " + e.status : "");
+      list.appendChild(li);
+    });
+  }
+
+  async function loadTeamLists() {
+    paintMembers(await dx.api("/api/v1/team/members"));
+    try {
+      paintAudit(await dx.api("/api/v1/team/audit?limit=40"));
+    } catch (err) {
+      showStatus("team-status", dx.t("studio.requestFailed") + ": " + failText(err), true);
+    }
+  }
+
+  async function loadTeam() {
+    const me = teamMe || await loadMe();
+    $("team-me").textContent = me ? dx.t("studio.teamYou", { name: me.name, role: roleLabel(me.role) }) : "";
+    const owner = !!me && me.role === "owner";
+    $("team-owner").hidden = !owner;
+    $("team-not-owner").hidden = owner || !me;
+    $("team-signout").hidden = owner || !me;
+    if (owner) {
+      try {
+        await loadTeamLists();
+      } catch (err) {
+        showStatus("team-status", dx.t("studio.requestFailed") + ": " + failText(err), true);
+      }
+    }
+    return me;
+  }
+
   async function loadSettings() {
+    const me = await loadTeam();
+    if (me && me.role !== "owner") return;           // the rest of Settings is the owner's (the server says so too)
     showStatus("settings-status", dx.t("studio.loading"), false);
     $("settings-brain").replaceChildren();
     $("settings-fields").replaceChildren();
@@ -5547,7 +5643,36 @@
   syncSkillButtons();
   syncRefButtons();
 
+  $("team-invite").addEventListener("submit", (ev) => {
+    ev.preventDefault();
+    const name = ($("team-name").value || "").trim();
+    if (!name) return;
+    runAction(ev.submitter, "team-status", async () => {
+      const res = await postJson("/api/v1/team/members", { name, role: $("team-role").value });
+      $("team-name").value = "";
+      $("team-token-value").textContent = res.token || "";
+      $("team-trust").textContent = res.trust || "";
+      $("team-token").hidden = !res.token;            // shown once: gone on the next load of Settings
+      showStatus("team-status", dx.t("studio.teamInvited", { name: res.member ? res.member.name : name }), false);
+      await loadTeamLists();
+    });
+  });
+  $("team-token-copy").addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText($("team-token-value").textContent || "");
+      showStatus("team-status", dx.t("studio.teamCopied"), false);
+    } catch (err) {
+      showStatus("team-status", dx.t("studio.teamCopyFailed"), true);
+    }
+  });
+  $("team-signout").addEventListener("click", () => {
+    if (window.DaedalusAuth && window.DaedalusAuth.signOut) window.DaedalusAuth.signOut();
+    location.reload();
+  });
+  $("settings-link").addEventListener("click", () => { $("team-token").hidden = true; });
+
   const opening = readQuery();
+  loadMe();
   showPanel(opening.panel, opening.tab);
   dx.watchSlug(onSlug);
   loadCatalog();
