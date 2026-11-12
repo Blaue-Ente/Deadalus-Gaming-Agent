@@ -519,7 +519,7 @@ _LOGS_RE = re.compile(r"<NEED_LOGS:\s*(\d+)(?:\s*\|\s*([^>]{1,200}))?\s*>")
 _AUDIT_LOG = None  # lazy-initialised below
 
 
-def _self_improve_audit_log() -> "Path":
+def _self_improve_audit_log() -> "pathlib.Path":  # noqa: F821  (imported inside)
     from pathlib import Path
     from .self_improve import ADN_ROOT  # type: ignore[attr-defined]
     p = ADN_ROOT / "data" / "daedalus" / "self_improve_audit.log"
@@ -2147,6 +2147,7 @@ class Daedalus:
                     from .tool_status import native_tool_result_ok
 
                     ok = native_tool_result_ok(result_text)
+                    blocked = "BLOCKED" in (result_text or "")      # was an undefined name: NameError
                     tool_calls_used.append({
                         "tool": dump.name,
                         "ok": ok,
@@ -2957,7 +2958,7 @@ class Daedalus:
                     _blk_reason   = blocked_m.group(1).strip()
                     _blk_tried    = blocked_m.group(2).strip()
                     _blk_next     = blocked_m.group(3).strip()
-                    _blk_file     = block.get("file_path", "") if "block" in dir() else ""
+                    _blk_file     = ""          # no proposal block exists in this scope (was a dir() guard on it)
                     _blk_id = push_blocker(
                         reason=_blk_reason,
                         tried=_blk_tried,
@@ -3987,9 +3988,8 @@ class Daedalus:
                         f"Спирам опитите. Премини към NEED_BLOCKED или различен подход — "
                         f"НЕ повтаряй същия маркер."
                     )
-                    # Force-exit the tool reroll loop — append synthesis directive
-                    # to messages and break out so we don't keep burning iterations.
-                    messages.append({"role": "user", "content": tool_block})
+                    # Force-exit the tool reroll loop so we don't keep burning iterations. (It appended to an
+                    # undefined `messages` first: the NameError was swallowed below and the breaker never broke.)
                     raw = (
                         f"Спирам да опитвам — същата грешка от [{_repeat_tool}] "
                         f"се повтори. Премини към друг подход или ми кажи конкретно "
@@ -4482,7 +4482,8 @@ class Daedalus:
             from .clarification_tracker import detect_clarifying_question, log_clarification
             _clr_qs = detect_clarifying_question(raw or "")
             if _clr_qs:
-                import asyncio
+                # (a local "import asyncio" here made asyncio local to this whole function, so the digest task near
+                # its top always raised UnboundLocalError, swallowed by its except: found 2026-11-12)
                 asyncio.create_task(log_clarification(
                     session_id=session_id,
                     user_message=user_message,
@@ -4590,9 +4591,9 @@ class Daedalus:
                 "pct":        pct,
                 "msg":        msg,
                 "saved_at":   datetime.now(timezone.utc).isoformat(),
-                "expires_at": _time.time() + DaedalusAgent._PHASE_TTL_SECONDS,
+                "expires_at": _time.time() + Daedalus._PHASE_TTL_SECONDS,
             })
-            db[f"{DaedalusAgent._PHASE_KEY_PREFIX}{session_id}"] = payload
+            db[f"{Daedalus._PHASE_KEY_PREFIX}{session_id}"] = payload
             log.debug("phase_resume saved: session=%s pct=%.0f%% %s", session_id, pct * 100, task_name)
         except Exception as exc:
             log.debug("phase_save failed (non-fatal): %s", exc)
@@ -4603,13 +4604,13 @@ class Daedalus:
         try:
             import time as _time
             from .kv import db  # type: ignore
-            raw = db.get(f"{DaedalusAgent._PHASE_KEY_PREFIX}{session_id}")
+            raw = db.get(f"{Daedalus._PHASE_KEY_PREFIX}{session_id}")
             if raw is None:
                 return None
             data = json.loads(str(raw)) if isinstance(raw, str) else raw
             if isinstance(data, dict) and data.get("expires_at", 0) < _time.time():
                 try:
-                    del db[f"{DaedalusAgent._PHASE_KEY_PREFIX}{session_id}"]
+                    del db[f"{Daedalus._PHASE_KEY_PREFIX}{session_id}"]
                 except Exception:
                     pass
                 return None
@@ -4623,7 +4624,7 @@ class Daedalus:
         """Clear phase resume context (task completed or session closed)."""
         try:
             from .kv import db  # type: ignore
-            key = f"{DaedalusAgent._PHASE_KEY_PREFIX}{session_id}"
+            key = f"{Daedalus._PHASE_KEY_PREFIX}{session_id}"
             if db.get(key) is not None:
                 del db[key]
         except Exception:
@@ -4675,12 +4676,11 @@ class Daedalus:
         if phase_ctx:
             pct_pct = int((phase_ctx.get("pct", 0)) * 100)
             resume_note = (
-                f"[PHASE RESUME — ти вече работеше по тази задача в предишна сесия]\n"
-                f"Задача : {phase_ctx.get('task_name', '?')}\n"
-                f"Прогрес: {pct_pct}% — {phase_ctx.get('msg', '')}\n"
-                f"Запазено: {phase_ctx.get('saved_at', '?')}\n\n"
-                f"НЕ правй reconnaissance отново — продължи от {pct_pct}%. "
-                f"Емитирай NEED_DATA_PROPOSAL / NEED_PG директно.\n\n"
+                "[PHASE RESUME: you were already working on this task in an earlier session]\n"
+                f"Task: {phase_ctx.get('task_name', '?')}\n"
+                f"Progress: {pct_pct}% ({phase_ctx.get('msg', '')})\n"
+                f"Saved: {phase_ctx.get('saved_at', '?')}\n\n"
+                f"Do not redo the reconnaissance: continue from {pct_pct}%.\n\n"
             )
             msg = resume_note + msg
             log.info("phase_resume injected: session=%s pct=%d%% task=%s",
