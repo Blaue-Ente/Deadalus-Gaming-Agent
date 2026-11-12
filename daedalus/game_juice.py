@@ -84,6 +84,21 @@ function noise(dur, vol = 1, delay = 0) {
   src.start(t);
 }
 
+const files = {};
+function playFile(url) {          // a generated sound file (paid, only when the owner asked): decoded once, then cached
+  const a = audio();
+  if (!a || muted || a.state !== 'running') return;
+  const ready = files[url] || (files[url] = fetch(url).then((r) => r.arrayBuffer()).then((b) => a.decodeAudioData(b))
+    .catch(() => null));
+  ready.then((buf) => {
+    if (!buf || muted) return;
+    const src = a.createBufferSource();
+    src.buffer = buf;
+    src.connect(master);
+    src.start();
+  });
+}
+
 export const sfx = {
   jump: () => tone('square', 260, 620, 0.14, 0.5),
   score: () => { tone('square', 880, 880, 0.06, 0.4); tone('square', 1320, 1320, 0.09, 0.4, 0.06); },
@@ -95,6 +110,7 @@ export const sfx = {
   win: () => [523, 659, 784, 1047].forEach((f, i) => tone('square', f, f, 0.14, 0.4, i * 0.11)),
   get muted() { return muted; },
   setMuteKey: (key) => { muteKey = key ? String(key).toLowerCase() : null; },
+  file: (url) => playFile(url),
 };
 export default sfx;
 """

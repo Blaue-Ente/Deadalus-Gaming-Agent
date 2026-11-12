@@ -55,7 +55,10 @@ def test_a_member_never_gets_the_owners_key_unless_it_is_shared(keys):
     with pytest.raises(ValueError):
         credentials.set_key(DEE.id, "PATH", "x")
     with pytest.raises(ValueError):
-        credentials.set_key(DEE.id, "ELEVENLABS_API_KEY", "x")                 # offered only what takes effect
+        credentials.set_key(DEE.id, "AI_INTEGRATIONS_OPENAI_API_KEY", "x")     # offered only what takes effect
+    credentials.set_key(DEE.id, "ELEVENLABS_API_KEY", "dee-11")               # read by paid_sound (gap 4b)
+    with _As(DEE):
+        assert credentials.env("ELEVENLABS_API_KEY") == "dee-11"
 
 
 def test_a_vault_is_private_and_values_never_leave_it(keys):

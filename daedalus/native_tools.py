@@ -177,9 +177,28 @@ NATIVE_TOOL_SPECS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "paid_sound",
+        "description": (
+            "PAID: an ElevenLabs sound effect saved as assets/sfx/<name>.mp3 (play it with sfx.file(path)). Runs "
+            "only in an epic turn or when the owner asked for generated sound, on the user's own ElevenLabs key; "
+            "otherwise use the free sfx.js sounds."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "slug": {"type": "string"},
+                "name": {"type": "string", "description": "file name, e.g. boss-roar"},
+                "prompt": {"type": "string", "description": "the sound in words, e.g. 'deep monster roar, short'"},
+                "seconds": {"type": "number", "description": "0.5-10, default 2"},
+            },
+            "required": ["slug", "name", "prompt"],
+        },
+    },
+    {
         "name": "generate_image",
         "description": (
-            "Generate a game/app asset image and save it under the slug's assets/ folder. "
+            "PAID: generate a game/app asset image and save it under the slug's assets/ folder. Runs only in an "
+            "epic turn or when the owner asked for generated art; otherwise draw the art in code. "
             "filename is the name inside assets/ (keeper.png or sfx/icon.png) — do not prefix assets/."
         ),
         "input_schema": {
@@ -1980,10 +1999,23 @@ async def execute_native_tool(
                 f"{json.dumps(r, ensure_ascii=False, default=str)[:6000]}"
             )
 
+        if name == "paid_sound":
+            from .paid_assets import generate_sound
+            r = await generate_sound(str(args.get("slug") or ""), str(args.get("name") or ""),
+                                     str(args.get("prompt") or ""), float(args.get("seconds") or 2.0))
+            if not r.get("ok"):
+                return f"── paid_sound SKIPPED ({r.get('error')}) ──\n{r.get('message', '')}"
+            return f"── paid_sound OK {r['path']} ──\n{r['cost']}. Play it with {r['play']}."
+
         if name == "generate_image":
             from .image_client import decode_image_bytes, generate_image
+            from .paid_assets import allowed as _paid_ok, ledger as _paid_ledger
             from .paths import data_root, playground_projects_dir
             prompt = str(args.get("prompt") or "")
+            ok_paid, why_not = _paid_ok()        # gap 4b: paid only in an epic turn or when the owner asked
+            if not ok_paid:
+                _paid_ledger("image", ok=False, what=prompt, cost="none", error="not requested")
+                return f"── generate_image SKIPPED (paid, not requested) ──\n{why_not}"
             slug = str(args.get("slug") or "")
             filename = str(args.get("filename") or "asset.png")
             size = str(args.get("size") or "512x512")
@@ -2009,6 +2041,8 @@ async def execute_native_tool(
                     dest.write_bytes(resp.content)
             else:
                 return "── generate_image FAILED: no b64/url ──"
+            _paid_ledger("image", ok=True, what=prompt, path=str(dest.relative_to(dest_dir.parent)),
+                         cost=f"one {size} image on {img.get('provider')} ({img.get('model')}), price not reported")
             return f"── generate_image OK {dest} ──\nprovider={img.get('provider')} model={img.get('model')}"
 
         if name == "remember":
