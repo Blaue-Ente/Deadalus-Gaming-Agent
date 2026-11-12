@@ -308,6 +308,7 @@ async def run_playtest(
     persona_ids: list[str] | None = None,
     see_fn: SeeFn | None = None,
     play: bool = True,
+    frames: tuple[list[dict[str, Any]], list[str]] | None = None,
 ) -> dict[str, Any]:
     """Run N simulated players against a Playground project. With ``see_fn`` they judge frames from actually playing
     it (the lead's browser play: start, first moves, a few seconds later); otherwise they read the source. Before,
@@ -331,16 +332,18 @@ async def run_playtest(
 
     images: list[dict[str, Any]] = []
     shas: list[str] = []
-    if play and see_fn is not None:
+    if frames is not None:                       # the lead just played this exact build: no second browser run
+        images, shas = list(frames[0]), list(frames[1])
+    elif play and see_fn is not None:
         try:
             from .mentor_lead import play_frames
             images, shas = await play_frames(slug, kind)
         except Exception as exc:
             log.info("playtest frames for %s skipped: %s", slug, exc)
 
-    turns: list[dict[str, Any]] = []
-    for persona in chosen:
-        turns.append(await _persona_turn(persona, snapshot, extra, llm_fn, see_fn, images))
+    import asyncio
+    turns: list[dict[str, Any]] = list(await asyncio.gather(        # the players are independent: play at once
+        *(_persona_turn(persona, snapshot, extra, llm_fn, see_fn, images) for persona in chosen)))
 
     scores: dict[str, list[float]] = {d: [] for d in DIMENSIONS}
     would_quit = 0
@@ -363,9 +366,9 @@ async def run_playtest(
     spoke = [t for t in turns if t.get("mode") in ("played", "source") and not t.get("error")]
     mode = ("played" if any(t.get("mode") == "played" for t in spoke) else "source" if spoke else "heuristic")
     blockers = list(heuristic["blockers"])
-    many_quit = bool(spoke) and would_quit >= max(1, len(spoke) // 2)
+    many_quit = bool(spoke) and would_quit * 2 >= len(spoke)          # half or more (the Studio uses the same rule)
     if many_quit:
-        blockers.append("More than half of the playtesters would quit.")
+        blockers.append("Half or more of the playtesters would quit.")
     ship_ready = heuristic["ship_hint"] and not many_quit
 
     summary = (
@@ -389,6 +392,7 @@ async def run_playtest(
         "ship_ready": ship_ready,
         "summary": summary,
         "mode": mode,
+        "many_quit": many_quit,
         "saw_frames": len(images),
         "frame_sha256s": shas,
     }

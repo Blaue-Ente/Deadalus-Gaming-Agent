@@ -910,7 +910,7 @@ def test_an_empty_reply_that_used_the_whole_budget_is_retried_once_with_room(gw,
     monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(AsyncOpenAI=Client))
     out = run(gw.call("critic", [{"role": "user", "content": "judge"}], max_tokens=500))
     assert out.ok and out.text == '{"ok": 1}' and [b["max_tokens"] for b in bodies] == [500, 2000]
-    assert out.usage == {"prompt_tokens": 20, "completion_tokens": 520}
+    assert out.usage == {"prompt_tokens": 20, "completion_tokens": 520} and out.retried_max_tokens == 2000
 
     bodies.clear()
 
@@ -924,3 +924,29 @@ def test_an_empty_reply_that_used_the_whole_budget_is_retried_once_with_room(gw,
     monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(AsyncOpenAI=Short))
     run(gw.call("critic", [{"role": "user", "content": "judge"}], max_tokens=500))
     assert len(bodies) == 1                                   # empty but not out of room: no retry
+
+
+def test_the_reasoning_retry_is_a_billed_call_and_passes_the_budget_gate(gw, monkeypatch):
+    """Review 2026-11-12: the retry spent past the budget the first gate enforces."""
+    bodies = []
+
+    class Client:
+        def __init__(self, **kw):
+            self.chat = types.SimpleNamespace(completions=types.SimpleNamespace(create=self.create))
+
+        async def create(self, **kw):
+            bodies.append(kw)
+            usage = types.SimpleNamespace(prompt_tokens=10, completion_tokens=kw.get("max_tokens"))
+            return types.SimpleNamespace(choices=[types.SimpleNamespace(message=types.SimpleNamespace(content=""))],
+                                         usage=usage)
+
+    monkeypatch.setitem(sys.modules, "openai", types.SimpleNamespace(AsyncOpenAI=Client))
+    state = {"n": 0}
+
+    def would_block(provider):
+        state["n"] += 1
+        return state["n"] > 1                        # the first call passes, the budget is spent after it
+
+    monkeypatch.setattr("daedalus.run_budget.would_block", would_block)
+    out = run(gw.call("critic", [{"role": "user", "content": "judge"}], max_tokens=500))
+    assert len(bodies) == 1 and out.retried_max_tokens == 0

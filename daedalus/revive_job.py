@@ -140,6 +140,8 @@ def judge_render(raw: dict[str, Any], how: str) -> dict[str, Any]:
     failure (live 2026-11-12: The-Labirinth rendered its full title screen and was failed for /api/config and
     /sw.js 404s). Daedalus's own builds keep the strict browser_verify verdict."""
     page_errors = [str(e) for e in raw.get("page_errors") or []]
+    if raw.get("error") and not raw.get("ok"):
+        page_errors.append(f"the browser check itself failed: {str(raw['error'])[:200]}")   # never "it runs" unseen
     failed = [str(r) for r in raw.get("failed_requests") or []]
     fatal_failed = [r for r in failed if any(t in r for t in _FATAL_TYPES)]
     reachable = raw.get("reachable", True)
@@ -212,7 +214,9 @@ async def run(job: ReviveJob, *, clone_fn: Any = None) -> ReviveJob:
             raise _Stop()
 
         # 5 publish
-        if job.publish in ("local", "site") and job.analysis.get("server") and not job.analysis.get("static_build"):
+        # A server app (kind node with express & co.) needs hosting that runs it. A static site that merely lists a
+        # dev server in package.json is published like any static site (review 2026-11-12).
+        if job.publish in ("local", "site") and job.analysis.get("server") and kind != "static":
             servers = ", ".join(job.analysis["server"])
             job.step("publish local", False, f"a server app ({servers}): it runs here, but it needs hosting that "
                                              "runs a server")

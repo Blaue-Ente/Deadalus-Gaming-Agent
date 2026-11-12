@@ -230,6 +230,8 @@ async def publish(
             # A revived repo: reuse the build verify made, and install with the repo's own manager (live
             # 2026-11-12: npm install crashed on The-Labirinth's pnpm node_modules).
             dist = await _sb.build(root)
+            from .web_build import stage_web_assets      # what build_web does after a build (review 2026-11-12)
+            stage_web_assets(root, dist)
         else:
             dist = await _build_vite(root)
         publish_root = dist

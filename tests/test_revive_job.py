@@ -309,12 +309,10 @@ def test_name_and_branch_reach_the_clone(a0_tmp, no_browser):  # noqa: F811
     ("vite build", "npm", ("npm", "run", "build", "--", "--base=./")),
     ("vite build", "pnpm", ("npx", "--yes", "pnpm", "run", "build", "--base=./")),
     ("vite build --mode prod", "yarn", ("npx", "--yes", "yarn", "run", "build", "--base=./")),
-    # Chained (The-Labirinth): the vite step runs directly with relative assets.
-    ("tsc --noEmit && tsc --noEmit -p api/tsconfig.json && vite build", "pnpm",
-     ("npx", "--yes", "pnpm", "exec", "vite", "build", "--base=./")),
-    ("tsc && vite build --mode web", "npm", ("npx", "--no-install", "vite", "build", "--mode", "web", "--base=./")),
-    ("vite build --base /x/ && node post.js", "npm", ("npm", "run", "build")),       # the owner chose a base
-    ("tsc && node build.js", "npm", ("npm", "run", "build")),                        # no vite step
+    # Chained: the whole script runs, every step kept; the output is made relative afterwards (make_relative).
+    ("tsc --noEmit && tsc --noEmit -p api/tsconfig.json && vite build", "pnpm", ("npx", "--yes", "pnpm", "run", "build")),
+    ("vite build && node scripts/copy-levels.js", "npm", ("npm", "run", "build")),
+    ("vite build --base /x/", "npm", ("npm", "run", "build")),                      # the owner chose a base
 ])
 def test_vite_builds_with_relative_assets_wherever_it_can(tmp_path, script, manager, cmd):
     (tmp_path / "package.json").write_text(json.dumps({"scripts": {"build": script}, "devDependencies": {"vite": "5"}}))
@@ -419,3 +417,61 @@ def test_a_root_absolute_build_is_not_reused(tmp_path):
         (tmp_path / "dist" / "index.html").write_text(html)
         os.utime(tmp_path / "dist" / "index.html", (later, later))
         assert (static_build.fresh_output(tmp_path) is not None) is reused, html
+
+
+def test_a_chained_build_keeps_every_step_and_is_made_relative_after(tmp_path, monkeypatch):
+    """Review 2026-11-12: running only the vite step dropped a copy step; The-Labirinth's chained build rendered blank."""
+    import asyncio as aio
+
+    (tmp_path / "package.json").write_text(json.dumps({"scripts": {"build": "vite build && node copy.js"},
+                                                       "devDependencies": {"vite": "5"}}))
+    (tmp_path / "index.html").write_text("<html>")
+
+    class Proc:
+        returncode = 0
+
+        def __init__(self, argv):
+            self.argv = argv
+
+        async def communicate(self):
+            if "build" in self.argv:
+                d = tmp_path / "dist"
+                (d / "assets").mkdir(parents=True, exist_ok=True)
+                (d / "index.html").write_text('<link href="/favicon.svg"><script src="/assets/a.js"></script>')
+                (d / "assets" / "a.js").write_text('fetch("/assets/level1.json")')
+                (d / "assets" / "level1.json").write_text("{}")          # what copy.js adds
+            return b"", b""
+
+    async def fake_exec(*argv, **kw):
+        return Proc(argv)
+
+    monkeypatch.setattr(aio, "create_subprocess_exec", fake_exec)
+    out = asyncio.run(static_build.build(tmp_path))
+    html = (out / "index.html").read_text()
+    assert 'src="./assets/a.js"' in html and 'href="./favicon.svg"' in html and static_build.relative_assets(out)
+    assert (out / "assets" / "level1.json").is_file() and "./assets/level1.json" in (out / "assets" / "a.js").read_text()
+
+
+def test_a_browser_check_that_failed_itself_is_not_it_runs():
+    raw = {"ok": False, "reachable": True, "blank_screen": False, "page_errors": [], "failed_requests": [],
+           "error": "Target page, context or browser has been closed"}
+    res = revive_job.judge_render(raw, "browser")
+    assert res["ok"] is False and "browser check itself failed" in res["error"]
+
+
+def test_a_static_site_with_a_dev_server_dependency_is_still_published(a0_tmp, no_browser):  # noqa: F811
+    """Review 2026-11-12: a site served as static (verified in the browser) that lists a dev server in package.json was
+    refused as "a server app". Only a project run as a server (kind node, verified by starting it) is refused."""
+    files = {"index.html": GAME, "package.json": json.dumps({"devDependencies": {"express": "4"}}),
+             "server.js": "require('express')"}
+    inner = _clone_from(files)
+
+    async def clone_static(url, **kw):
+        from daedalus import playground as pg
+        proj = await inner(url, **kw)
+        await pg.update_project(proj["slug"], kind="static")           # served as a static site
+        return {**proj, "kind": "static"}
+
+    job = asyncio.run(revive_job.run(revive_job.ReviveJob(url="https://github.com/me/site"), clone_fn=clone_static))
+    assert job.analysis["kind"] == "static" and job.analysis["server"] == ["express"]
+    assert job.status == "done", job.steps

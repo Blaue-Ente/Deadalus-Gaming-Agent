@@ -194,28 +194,32 @@ def legacy_openssl_env(env: dict[str, str], root: Path) -> dict[str, str]:
 
 
 def build_command(root: Path, p: dict[str, Any], manager: str) -> tuple[str, ...]:
-    """The build command. Vite gets relative assets (the site is served under /apps/<slug>/):
-    - a plain ``vite build`` script gets ``--base=./`` (npm needs ``--`` to pass it on; pnpm and yarn pass it
-      themselves and would hand a literal ``--`` to vite);
-    - a chained script (``tsc --noEmit && vite build``) runs its ``vite build`` step directly with ``--base=./``:
-      appended to the script the flag would reach the last command, and without it a real app served under
-      /apps/<slug>/ loads /assets/… and renders blank (live 2026-11-12, The-Labirinth). Type checks are skipped;
-      they do not change what runs.
-    """
+    """The build command. A plain ``vite build`` script gets ``--base=./`` (npm needs ``--`` to pass it on; pnpm and
+    yarn pass it themselves and would hand a literal ``--`` to vite). Any other script runs whole, every step and
+    pre/post hook included (review 2026-11-12: running only its vite step dropped copy and service-worker steps);
+    a root-absolute output is made relative after the build (``make_relative``)."""
     run_script = ("npm", "run", "build") if manager == "npm" else ("npx", "--yes", manager, "run", "build")
-    if p.get("framework") != "vite":
-        return run_script
     script = str(((_package(root) or {}).get("scripts") or {}).get("build") or "").strip()
     chained = any(op in script for op in ("&&", "||", ";", "|"))
-    if script.startswith("vite build") and not chained:
+    if p.get("framework") == "vite" and script.startswith("vite build") and not chained and "--base" not in script:
         return run_script + (("--", "--base=./") if manager == "npm" else ("--base=./",))
-    step = next((seg.strip() for seg in re.split(r"&&|\|\||;|\|", script) if seg.strip().startswith("vite build")), "")
-    if not chained or not step or "--base" in step:
-        return run_script
-    args = tuple(step.split()) + ("--base=./",)
-    if manager == "npm":
-        return ("npx", "--no-install", *args)
-    return ("npx", "--yes", manager, "exec", *args)
+    return run_script
+
+
+def make_relative(out: Path) -> int:
+    """Rewrite root-absolute /assets/ references so the site works under /apps/<slug>/ (live 2026-11-12: a chained
+    `tsc && vite build` rendered The-Labirinth blank there). Returns how many files changed."""
+    from .web_build import rewrite_absolute_assets_in_dist
+
+    changed = rewrite_absolute_assets_in_dist(out)
+    if not relative_assets(out):         # index.html also links /favicon.svg, /manifest… at the root
+        index = out / "index.html"
+        text = index.read_text(encoding="utf-8", errors="replace")
+        fixed = re.sub(r"""((?:src|href)\s*=\s*["'])/(?!/)""", r"\1./", text)
+        if fixed != text:
+            index.write_text(fixed, encoding="utf-8")
+            changed += 1
+    return changed
 
 
 async def build(root: Path, *, timeout_install: float = 600, timeout_build: float = 600) -> Path:
@@ -264,6 +268,8 @@ async def build(root: Path, *, timeout_install: float = 600, timeout_build: floa
     if rc != 0:
         raise RuntimeError(f"build failed (rc={rc}):\n{digest(out)}")
     found = find_output(root, p["outputs"], since=started)
+    if found and not relative_assets(found):
+        make_relative(found)
     if not found:
         raise RuntimeError(f"build finished but no folder with index.html in {', '.join(p['outputs'])}:\n{digest(out, 600)}")
     return found

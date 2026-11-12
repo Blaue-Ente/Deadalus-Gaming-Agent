@@ -112,13 +112,20 @@ class _Loop:
         self.route = types.SimpleNamespace(playbook=types.SimpleNamespace(id=playbook))
 
 
-def _report(ship_ready, mode="played"):
+def _report(ship_ready, mode="played", many_quit=None):
     async def fake(slug, **kw):
-        assert kw["see_fn"] is playtest.gateway_see
-        return {"mode": mode, "ship_ready": ship_ready, "summary": "playtest x (played, 4 frames): quit=3/4",
+        assert kw["see_fn"] is playtest.gateway_see and kw["frames"][0]
+        return {"mode": mode, "ship_ready": ship_ready,
+                "many_quit": (not ship_ready) if many_quit is None else many_quit,
+                "summary": "playtest x (played, 4 frames): quit=3/4",
                 "quotes": ["I could not tell what hit me"], "fixes": ["flash the car that hits the frog"],
                 "saw_frames": 4}
     return fake
+
+
+@pytest.fixture(autouse=True)
+def _lead_frames(monkeypatch):
+    _frames(monkeypatch, 4)
 
 
 def test_players_who_would_quit_send_the_game_back_with_their_fixes(game, monkeypatch):
@@ -160,6 +167,9 @@ def test_the_gate_stays_out_of_the_way(game, monkeypatch, change):
 def test_an_app_is_not_played_by_an_audience(game, monkeypatch):
     from daedalus import mentor_lead
 
+    from daedalus import playground as pg
+
+    pg.write_file(game, "index.html", "<form><input name=amount><button>Add</button></form>")   # an app page
     monkeypatch.setattr(playtest, "run_playtest", _report(False))
     assert asyncio.run(mentor_lead.audience_gate(_Loop(game, "playground.vite"), "a budget tracker app")) is None
     assert mentor_lead.is_game(_Loop(game, "playground.vite"), "направи игра с жаба")
@@ -171,3 +181,61 @@ def test_whisper_never_runs_an_audience(game, monkeypatch):
     monkeypatch.setattr(playtest, "run_playtest", _report(False))
     with task_effort.bind({"tier": "whisper"}):
         assert asyncio.run(mentor_lead.audience_gate(_Loop(game), "make a frog game")) is None
+
+
+def test_the_players_verdict_decides_not_the_source_heuristics(game, monkeypatch):
+    """Review 2026-11-12: a DOM game with no <canvas> failed the heuristic (ship_ready False) while 0/4 would quit."""
+    from daedalus import mentor_lead
+
+    monkeypatch.setattr(playtest, "run_playtest", _report(False, many_quit=False))
+    loop = _Loop(game)
+    assert asyncio.run(mentor_lead.audience_gate(loop, "make a word game")) is None and loop.audience_passed
+    assert loop.lead_fix_used == 0
+
+
+def test_the_audience_reuses_the_leads_play_and_spends_nothing_without_frames(game, monkeypatch):
+    from daedalus import mentor_lead
+
+    calls = []
+
+    async def no_play(slug, kind="static"):
+        calls.append("play")
+        return [], []
+
+    monkeypatch.setattr("daedalus.mentor_lead.play_frames", no_play)
+    monkeypatch.setattr(playtest, "run_playtest", lambda *a, **k: calls.append("players"))
+    loop = _Loop(game)
+    loop.lead_play_frames = ([], [])                    # the lead's own play produced no frames
+    assert asyncio.run(mentor_lead.audience_gate(loop, "make a frog game")) is None and calls == []
+
+
+def test_players_play_at_the_same_time(game, monkeypatch):
+    import time
+
+    async def see(system, user, images):
+        await asyncio.sleep(0.3)
+        return REPLY
+
+    t0 = time.monotonic()
+    asyncio.run(playtest.run_playtest(game, n=4, see_fn=see))
+    assert time.monotonic() - t0 < 0.9                   # 4 x 0.3 s one after another would be 1.2 s
+
+
+@pytest.mark.parametrize("words, game_", [("build me a music player app", False), ("a high-level dashboard", False),
+                                          ("make a frog game", True), ("направи игра", True)])
+def test_what_counts_as_a_game(game, words, game_):
+    from daedalus import mentor_lead
+    from daedalus import playground as pg
+
+    pg.write_file(game, "index.html", "<div>app</div>")
+    assert mentor_lead.is_game(_Loop(game, "playground.vite"), words) is game_
+
+
+def test_one_of_three_quitting_is_not_half(game, monkeypatch):
+    replies = iter([json.loads(REPLY) | {"would_quit": True}, json.loads(REPLY), json.loads(REPLY)])
+
+    async def see(system, user, images):
+        return json.dumps(next(replies))
+
+    r = asyncio.run(playtest.run_playtest(game, n=3, see_fn=see))
+    assert r["many_quit"] is False and not any("would quit" in b for b in r["blockers"])

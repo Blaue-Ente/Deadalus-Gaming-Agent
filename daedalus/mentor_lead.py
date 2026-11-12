@@ -154,7 +154,8 @@ async def _ask(system: str, user: str, *, max_tokens: int, images: list[dict[str
     data = _parse_json(res.text or "")
     if data is None:
         out_tokens = int((res.usage or {}).get("completion_tokens") or (res.usage or {}).get("output_tokens") or 0)
-        cut = out_tokens >= int(max_tokens * 0.95)
+        # The gateway already retried an empty reply with more room; its usage is the sum of both calls.
+        cut = not getattr(res, "retried_max_tokens", 0) and out_tokens >= int(max_tokens * 0.95)
         meta["error"] = "cut_at_limit" if cut else "bad_json"
         log.info("mentor lead %s: %s (out=%s of %s) %r", client_id, meta["error"], out_tokens, max_tokens,
                  (res.text or "")[:200])
@@ -432,6 +433,7 @@ async def review(loop: Any, request: str) -> dict[str, Any] | None:
         _event("mentor_review", {"skipped": why})
         return None
     images, shas = await play_frames(slug, str(getattr(loop, "kind", "") or "static"))
+    loop.lead_play_frames = (images, shas)                     # the audience test reuses this play of this build
     if not images:
         images, shas = await asyncio.to_thread(_frames, slug)
     source = await asyncio.to_thread(main_source, slug)
@@ -514,13 +516,22 @@ async def acceptance_nudge(loop: Any, request: str) -> str | None:
 
 
 GAME_PLAYBOOKS = {"playground.arcade", "playground.math3d", "playground.crowd", "playground.epic"}
-_GAME_WORDS = re.compile(r"\b(game|games|play(?:able|er)?|level|arcade)\b|игр|spiel|jeu|juego", re.I)
+# Narrow on purpose (review 2026-11-12): "player", "level" or "play" also name music players and dashboards.
+_GAME_WORDS = re.compile(r"\b(games?|arcade)\b|игр[аиуё]|spiel|\bjeu|juego", re.I)
 
 
 def is_game(loop: Any, request: str) -> bool:
+    """A game: a game playbook, the owner asked for one, or the project draws on a canvas in a loop and takes input."""
     route = getattr(loop, "route", None)
     pb = str(getattr(getattr(route, "playbook", None), "id", "") or "")
-    return pb in GAME_PLAYBOOKS or bool(_GAME_WORDS.search(request or ""))
+    if pb in GAME_PLAYBOOKS or _GAME_WORDS.search(request or ""):
+        return True
+    try:
+        from .playtest import _heuristic, _project_snapshot
+        sig = _heuristic(_project_snapshot(str(getattr(loop, "slug", "") or "")))["signals"]
+        return bool(sig.get("canvas") and sig.get("input") and sig.get("loop"))
+    except Exception:
+        return False
 
 
 async def audience_gate(loop: Any, request: str) -> str | None:
@@ -542,13 +553,20 @@ async def audience_gate(loop: Any, request: str) -> str | None:
         pass
     from .playtest import gateway_see, run_playtest
 
+    frames = getattr(loop, "lead_play_frames", None)          # what the lead just played, on this exact build
+    if frames is None:
+        frames = await play_frames(slug, kind)
+    if not frames[0]:
+        return None                                           # no play frames: no audience, and no calls spent
     try:
-        report = await run_playtest(slug, kind=kind, n=4, see_fn=gateway_see)
+        report = await run_playtest(slug, kind=kind, n=4, see_fn=gateway_see, frames=frames)
     except Exception:
         log.warning("audience test for %s failed", slug, exc_info=True)
         return None
-    loop.audience = {k: report.get(k) for k in ("mode", "summary", "ship_ready", "quotes", "fixes", "saw_frames")}
-    if report.get("mode") != "played" or report.get("ship_ready"):
+    keep = not report.get("many_quit")       # the players' verdict, not the source heuristics (review 2026-11-12)
+    loop.audience = {**{k: report.get(k) for k in ("mode", "summary", "quotes", "fixes", "saw_frames")},
+                     "ship_ready": keep}
+    if report.get("mode") != "played" or keep:
         loop.audience_passed = report.get("mode") == "played"
         return None
     used = int(getattr(loop, "lead_fix_used", 0) or 0)
