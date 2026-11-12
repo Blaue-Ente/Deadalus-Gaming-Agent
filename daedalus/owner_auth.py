@@ -4,7 +4,8 @@ Loopback Studio bootstraps a token from ``GET /api/v1/auth/bootstrap``.
 Public bind (not 127.0.0.1) refuses to start unless a token already exists
 in ``DAEDALUS_TOKEN`` or ``$DAEDALUS_DATA/owner.token``.
 
-This is not a multi-user ACL. One owner, one secret. Cookies are not used
+The owner token opens everything. Team members (``team``, gap 3) hold personal tokens whose role decides which
+routes they may call. Cookies are not used
 (CSRF). Send ``Authorization: Bearer`` or ``X-Daedalus-Token``. GET streams
 and file downloads may pass ``?daedalus_token=`` because EventSource cannot
 set headers.
@@ -262,12 +263,33 @@ class OwnerAuthMiddleware:
             return
         qs = parse_qs(scope.get("query_string", b"").decode("latin-1"), keep_blank_values=False)
         provided = extract_token(_headers_from_scope(scope), qs, method)
-        if token_ok(provided):
-            await self.app(scope, receive, send)
+        from . import team
+
+        member = team.resolve(provided)          # the owner token, or a team member's personal token (gap 3)
+        if member is None:
+            response = JSONResponse(
+                {"ok": False, "error": "owner token required"},
+                status_code=401,
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+            await response(scope, receive, send)
             return
-        response = JSONResponse(
-            {"ok": False, "error": "owner token required"},
-            status_code=401,
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-        await response(scope, receive, send)
+        if not team.allowed(member, method, path):
+            response = JSONResponse({"ok": False, "error": "role_forbidden", "role": member.role,
+                                     "needs": team.required_role(method, path)}, status_code=403)
+            await response(scope, receive, send)
+            return
+        bound = team.bind(member)
+        status: list[int] = []
+
+        async def send_seen(message: dict[str, Any]) -> None:
+            if message.get("type") == "http.response.start":
+                status.append(int(message.get("status") or 0))
+            await send(message)
+
+        try:
+            await self.app(scope, receive, send_seen)
+        finally:
+            team.unbind(bound)
+            if method not in ("GET", "HEAD"):
+                team.audit(member, method, path, status[0] if status else None)

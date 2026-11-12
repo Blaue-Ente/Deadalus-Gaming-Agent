@@ -103,7 +103,12 @@ def log_turn(slug: str, request: str, loop: Any) -> bool:
         open_items += [f"players: {f}" for f in (aud.get("fixes") or [])[:2]]
     if isinstance(tests, dict):
         open_items += [f"regression: {r}" for r in (tests.get("regressions") or [])[:3]]
-    entry = [f"### {time.strftime('%Y-%m-%d %H:%M', time.gmtime())} UTC: {' '.join((request or '').split())[:140]}",
+    from .team import current as _member
+
+    who = _member()
+    by = f" (by {who.name}, {who.role})" if who is not None and who.id != "owner" else ""
+    entry = [f"### {time.strftime('%Y-%m-%d %H:%M', time.gmtime())} UTC{by}: "
+             f"{' '.join((request or '').split())[:140]}",
              f"- Result: {'; '.join(result) or 'built (no review ran)'}"]
     if open_items:
         entry.append("- Still open:")

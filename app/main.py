@@ -143,6 +143,8 @@ app.include_router(admin_compat_router)
 app.include_router(harness_router)
 app.include_router(harness_core_router)
 app.include_router(catalog_router)
+from app.team_api import router as team_router  # noqa: E402  (gap 3)
+app.include_router(team_router)
 if _UI_STATIC.is_dir():
     app.mount("/admin/static", StaticFiles(directory=_UI_STATIC), name="admin-static")
 if _STATIC.is_dir():

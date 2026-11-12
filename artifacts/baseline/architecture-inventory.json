@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-12T17:27:36.857950+00:00",
+  "generated_at": "2026-11-12T18:02:00.356542+00:00",
   "package_version": "0.3.8",
-  "git_commit": "8d202ae9d1d22988a3b4fea318aed90b9a2512f1",
+  "git_commit": "9206c113b1f686c3685114d0e26275407655e2d1",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -127,8 +127,8 @@
     ]
   },
   "tests": {
-    "modules": 139,
-    "functions": 1535
+    "modules": 140,
+    "functions": 1543
   },
   "modules": {
     "daedalus": [
@@ -397,6 +397,7 @@
       "daedalus/task_playbooks.py",
       "daedalus/task_state.py",
       "daedalus/tdd_loop.py",
+      "daedalus/team.py",
       "daedalus/tool_catalog.py",
       "daedalus/tool_dumps.py",
       "daedalus/tool_parser.py",
@@ -429,6 +430,7 @@
       "app/harness_core_api.py",
       "app/main.py",
       "app/playground_api.py",
+      "app/team_api.py",
       "app/windows_gui.py"
     ]
   }

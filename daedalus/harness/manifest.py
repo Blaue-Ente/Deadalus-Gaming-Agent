@@ -16,6 +16,7 @@ ROUTER_SOURCES: tuple[tuple[str, str], ...] = (
     ("app.harness_api", "router"),
     ("app.harness_core_api", "router"),
     ("daedalus.skill_catalog", "catalog_router"),
+    ("app.team_api", "router"),
 )
 
 # The catch-all that answers every unknown /admin/daedalus/* call with a 404 stub.
