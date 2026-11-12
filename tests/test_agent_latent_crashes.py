@@ -52,3 +52,38 @@ def test_agent_py_has_no_undefined_names():
     out = subprocess.run([ruff, "check", "--select", "F821,F823", "--output-format", "concise", str(AGENT)],
                          capture_output=True, text=True)
     assert out.returncode == 0, out.stdout
+
+
+def test_a_finished_task_leaves_no_resume_note(a0_tmp):  # noqa: F811
+    """Review 2026-11-12: at 100% the note stayed for 72 h on every later message of the session."""
+    from daedalus.agent import Daedalus
+
+    Daedalus._phase_save("sess-2", 0.5, "level 3", "half")
+    Daedalus._phase_save("sess-2", 1.0, "level 3", "done")
+    assert Daedalus._phase_load("sess-2") is None
+
+
+def test_the_breaker_counts_one_turn_and_the_tracker_stays_small():
+    from daedalus.improvements import ErrorTracker
+
+    t = ErrorTracker()
+    assert t.should_break("turn-a", "read_file", "missing x", threshold=2) is False
+    assert t.should_break("turn-b", "read_file", "missing x", threshold=2) is False   # another turn: no carry-over
+    for i in range(ErrorTracker.MAX_KEYS + 50):
+        t.track_call(f"turn-{i}", "t")
+    assert len(t._tool_counts) <= ErrorTracker.MAX_KEYS + 1
+    src = AGENT.read_text(encoding="utf-8")
+    assert "tool_calls_used[-len(tool_results_text_parts):]" not in src and "_breaker_key" in src
+
+
+def test_reflection_is_opt_in():
+    """Revived by the asyncio fix, it is one more paid model call per turn and writes memory: the owner switches it on."""
+    src = AGENT.read_text(encoding="utf-8")
+    assert 'os.environ.get("DAEDALUS_REFLECTION")' in src and "elif not _reflect:" in src
+
+
+def test_a_missing_project_is_never_a_clean_scan(a0_tmp):  # noqa: F811
+    from daedalus.game_engineer import scan_project
+
+    out = scan_project("no-such-project")
+    assert out["ok"] is False and out["scanned"] == 0 and "not found" in out["error"]

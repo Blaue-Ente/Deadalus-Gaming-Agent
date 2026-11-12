@@ -1922,7 +1922,12 @@ class Daedalus:
         MAX_TOOL_ITERATIONS = 30
         _tool_loop_broke_with_fallback = False
         _promise_guard_count = 0  # no-silent-stall guard: max 3 re-rolls per session
+        # The repeated-error breaker counts this turn only (review 2026-11-12: its tracker is per session and was
+        # never reset, so failures from earlier turns cut later turns short once the breaker ran again).
+        _breaker_key = f"{session_id or 'no-session'}:{uuid.uuid4().hex[:8]}"
+        _calls_at_iter = 0
         for _tool_iter in range(MAX_TOOL_ITERATIONS):
+            _calls_at_iter = len(tool_calls_used)       # the calls this iteration adds are tool_calls_used[this:]
             # Tool re-roll: if Claude emitted any NEED_* marker, execute tools and re-call.
             hit = scan_need_markers(raw)
             search_q = hit.search_q
@@ -3947,10 +3952,10 @@ class Daedalus:
             try:
                 _err_tracker = get_error_tracker()
                 # Track ALL tool calls (success or fail) for budget enforcement
-                for _tc in tool_calls_used[-len(tool_results_text_parts):]:
-                    _err_tracker.track_call(session_id, _tc.get("tool", "unknown"))
+                for _tc in tool_calls_used[_calls_at_iter:]:
+                    _err_tracker.track_call(_breaker_key, _tc.get("tool", "unknown"))
                 _failed_now: list[tuple[str, str]] = []
-                for _tc in tool_calls_used[-len(tool_results_text_parts):]:
+                for _tc in tool_calls_used[_calls_at_iter:]:
                     if _tc.get("ok") is False:
                         _tool_name = _tc.get("tool", "unknown")
                         # Extract first FAILED line from tool_block as error sample
@@ -3971,12 +3976,12 @@ class Daedalus:
                 _should_break_repeat = False
                 _repeat_tool = ""
                 for _tn, _es in _failed_now:
-                    if _err_tracker.should_break(session_id, _tn, _es, threshold=2):
+                    if _err_tracker.should_break(_breaker_key, _tn, _es, threshold=2):
                         _should_break_repeat = True
                         _repeat_tool = _tn
                         break
                 # Per-tool budget: max 4 NEED_PG calls per session
-                if _err_tracker.tool_call_count(session_id, "postgres_query") > 4:
+                if _err_tracker.tool_call_count(_breaker_key, "postgres_query") > 4:
                     _should_break_repeat = True
                     _repeat_tool = "postgres_query (budget exceeded)"
                 if _should_break_repeat:
@@ -4352,8 +4357,13 @@ class Daedalus:
         # quietly adopt opinions about himself without owner approval — exactly
         # the bypass channel the discovery approval flow exists to close.
         # So we skip reflection entirely on for_self turns.
+        # Opt-in (DAEDALUS_REFLECTION=1): it is one more paid model call per turn and writes lessons to memory. It
+        # never actually ran before 2026-11-12 (a local "import asyncio" broke it); turning it on is the owner's call.
+        _reflect = (os.environ.get("DAEDALUS_REFLECTION") or "").strip().lower() in ("1", "true", "yes", "on")
         if for_self:
             log.info("session=%s reflection skipped (for_self=True; owner approval required)", session_id)
+        elif not _reflect:
+            pass
         else:
             try:
                 t = asyncio.create_task(run_reflection_cycle(
@@ -4581,7 +4591,11 @@ class Daedalus:
 
     @staticmethod
     def _phase_save(session_id: str, pct: float, task_name: str, msg: str) -> None:
-        """Save phase resume context to Replit DB for this session."""
+        """Save phase resume context for this session. A finished task (100%) clears it: a resume note on every later
+        message for 72 h would steer unrelated requests back to it (review 2026-11-12)."""
+        if pct >= 0.999:
+            Daedalus._phase_clear(session_id)
+            return
         try:
             from .kv import db  # type: ignore
             import time as _time
@@ -4608,7 +4622,8 @@ class Daedalus:
             if raw is None:
                 return None
             data = json.loads(str(raw)) if isinstance(raw, str) else raw
-            if isinstance(data, dict) and data.get("expires_at", 0) < _time.time():
+            if isinstance(data, dict) and (data.get("expires_at", 0) < _time.time()
+                                           or float(data.get("pct") or 0) >= 0.999):
                 try:
                     del db[f"{Daedalus._PHASE_KEY_PREFIX}{session_id}"]
                 except Exception:

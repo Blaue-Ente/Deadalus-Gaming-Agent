@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-12T14:48:33.618462+00:00",
+  "generated_at": "2026-11-12T14:55:42.137324+00:00",
   "package_version": "0.3.8",
-  "git_commit": "b37b4d34090453f31479933b27f7e2ac31561178",
+  "git_commit": "4f48186bdc51311095417c5c5dcff6ac9ecbc6f0",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -9,7 +9,7 @@
   "hotspots": [
     {
       "path": "daedalus/agent.py",
-      "lines": 5035,
+      "lines": 5050,
       "broad_excepts": 162
     },
     {
@@ -128,7 +128,7 @@
   },
   "tests": {
     "modules": 136,
-    "functions": 1476
+    "functions": 1481
   },
   "modules": {
     "daedalus": [
@@ -282,6 +282,7 @@
       "daedalus/mirofish_client.py",
       "daedalus/mobile_first.py",
       "daedalus/mode.py",
+      "daedalus/model_defaults.py",
       "daedalus/model_registry.py",
       "daedalus/model_router.py",
       "daedalus/native_tools.py",

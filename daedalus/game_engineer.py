@@ -161,6 +161,8 @@ def scan_project(slug: str) -> dict[str, Any]:
         root = pg.project_dir(slug)
     except Exception as exc:                 # not a clean scan: say so (it reported ok with 0 files scanned)
         return {"ok": False, "scanned": 0, "warnings": [], "error": f"project not readable: {str(exc)[:160]}"}
+    if not root.is_dir():                    # no project, no scan: never a clean "0 files" pass (review 2026-11-12)
+        return {"ok": False, "scanned": 0, "warnings": [], "error": f"project {slug} not found"}
     warnings: list[str] = []
     n = 0
     for rel, text in _iter_source(root):

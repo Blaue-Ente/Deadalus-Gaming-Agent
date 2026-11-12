@@ -14,6 +14,8 @@ Use cases:
 """
 from __future__ import annotations
 
+from .model_defaults import OPENROUTER_DEEP_MODEL, OPENROUTER_DEFAULT_MODEL, OPENROUTER_FAST_MODEL
+
 from typing import Optional
 
 from .llm_config import set_config
@@ -110,10 +112,10 @@ CONFIG_PRESETS: list[dict] = [
             "през OpenRouter (нужен OPENROUTER_API_KEY)."
         ),
         "budget": "~$0.80-10 / 1M токена (OpenRouter rates)",
-        "master":   {"provider": "openrouter", "model": "anthropic/claude-sonnet-5.5"},
-        "fast":     {"provider": "openrouter", "model": "anthropic/claude-haiku-5.5"},
+        "master":   {"provider": "openrouter", "model": OPENROUTER_DEFAULT_MODEL},
+        "fast":     {"provider": "openrouter", "model": OPENROUTER_FAST_MODEL},
         "balanced": {"provider": "openrouter", "model": "deepseek/deepseek-v3.2"},
-        "deep":     {"provider": "openrouter", "model": "anthropic/claude-opus-5.5"},
+        "deep":     {"provider": "openrouter", "model": OPENROUTER_DEEP_MODEL},
     },
     {
         "id": "code",
@@ -145,7 +147,7 @@ CONFIG_PRESETS: list[dict] = [
         "master":   {"provider": "novita",   "model": "deepseek/deepseek-v3.2"},
         "fast":     {"provider": "novita",   "model": "meta-llama/llama-3.1-8b-instruct"},
         "balanced": {"provider": "novita",   "model": "meta-llama/llama-3.3-70b-instruct"},
-        "deep":     {"provider": "openrouter","model": "anthropic/claude-sonnet-5.5"},
+        "deep":     {"provider": "openrouter","model": OPENROUTER_DEFAULT_MODEL},
     },
     {
         "id": "speed",
@@ -236,15 +238,15 @@ CONFIG_PRESETS: list[dict] = [
         "description": (
             "80% от Sonnet качеството за 20% от Sonnet цената. Master: "
             "DeepSeek V3 0324 ($0.27/$1.10) върши целия tool loop и discovery. "
-            "Deep worker: Claude Sonnet 4.5 — само за финални синтези, "
+            "Deep worker: Claude Sonnet 5.5 — само за финални синтези, "
             "architecture decisions и сложни code proposals. Fast: Llama 3.1 8B "
             "(wrap-up). Balanced: QwQ-32B (reasoning + код). Единен OpenRouter ключ."
         ),
         "budget": "~$0.27 (loop) + $3/$15 (само deep финали)",
         "master":   {"provider": "openrouter", "model": "deepseek/deepseek-v3.2"},
         "fast":     {"provider": "openrouter", "model": "meta-llama/llama-3.1-8b-instruct"},
-        "balanced": {"provider": "openrouter", "model": "qwen/qwq-32b"},
-        "deep":     {"provider": "openrouter", "model": "anthropic/claude-sonnet-5.5"},
+        "balanced": {"provider": "openrouter", "model": "qwen/qwen3.8-flash"},
+        "deep":     {"provider": "openrouter", "model": OPENROUTER_DEFAULT_MODEL},
     },
     {
         "id": "or_balanced",
@@ -260,22 +262,22 @@ CONFIG_PRESETS: list[dict] = [
         "master":   {"provider": "openrouter", "model": "deepseek/deepseek-v3.2"},
         "fast":     {"provider": "openrouter", "model": "meta-llama/llama-3.1-8b-instruct"},
         "balanced": {"provider": "openrouter", "model": "meta-llama/llama-3.3-70b-instruct"},
-        "deep":     {"provider": "openrouter", "model": "deepseek/deepseek-r1"},
+        "deep":     {"provider": "openrouter", "model": "deepseek/deepseek-v3.2"},
     },
     {
         "id": "or_claude",
-        "label": "🌐 OpenRouter: Claude Sonnet 4.5 Master",
+        "label": "🌐 OpenRouter: Claude Sonnet 5.5 Master",
         "is_default": False,
         "description": (
-            "Master: Claude Sonnet 4.5 — топ качество за complex reasoning и "
+            "Master: Claude Sonnet 5.5 — топ качество за complex reasoning и "
             "tool-use. Fast: Haiku 3.5 (бърз и евтин). Balanced: DeepSeek V3. "
-            "Deep: Claude Opus 4.5 за най-трудните задачи. Единен OpenRouter ключ."
+            "Deep: Claude Opus 5.5 за най-трудните задачи. Единен OpenRouter ключ."
         ),
         "budget": "~$0.25-15 / 1M токена",
-        "master":   {"provider": "openrouter", "model": "anthropic/claude-sonnet-5.5"},
-        "fast":     {"provider": "openrouter", "model": "anthropic/claude-haiku-3-5"},
+        "master":   {"provider": "openrouter", "model": OPENROUTER_DEFAULT_MODEL},
+        "fast":     {"provider": "openrouter", "model": OPENROUTER_FAST_MODEL},
         "balanced": {"provider": "openrouter", "model": "deepseek/deepseek-v3.2"},
-        "deep":     {"provider": "openrouter", "model": "anthropic/claude-opus-5.5"},
+        "deep":     {"provider": "openrouter", "model": OPENROUTER_DEEP_MODEL},
     },
     {
         "id": "or_gemini",
@@ -289,7 +291,7 @@ CONFIG_PRESETS: list[dict] = [
         ),
         "budget": "~$0.10-1.25 / 1M токена",
         "master":   {"provider": "openrouter", "model": "google/gemini-2.5-pro"},
-        "fast":     {"provider": "openrouter", "model": "google/gemini-2.0-flash-001"},
+        "fast":     {"provider": "openrouter", "model": "google/gemini-3.8-flash"},
         "balanced": {"provider": "openrouter", "model": "deepseek/deepseek-v3.2"},
         "deep":     {"provider": "openrouter", "model": "google/gemini-2.5-pro"},
     },
@@ -306,7 +308,7 @@ CONFIG_PRESETS: list[dict] = [
         "budget": "~$0.50-4.00 / 1M токена",
         "master":   {"provider": "openrouter", "model": "deepseek/deepseek-r1-0528"},
         "fast":     {"provider": "openrouter", "model": "meta-llama/llama-3.1-8b-instruct"},
-        "balanced": {"provider": "openrouter", "model": "qwen/qwq-32b"},
+        "balanced": {"provider": "openrouter", "model": "qwen/qwen3.8-flash"},
         "deep":     {"provider": "openrouter", "model": "deepseek/deepseek-r1-0528"},
     },
     {

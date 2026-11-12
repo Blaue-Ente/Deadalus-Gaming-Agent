@@ -21,6 +21,8 @@ Named configs:        `adn:worker_named_configs` (dict id→config)
 """
 from __future__ import annotations
 
+from .model_defaults import OPENROUTER_DEFAULT_MODEL
+
 import logging
 import re
 import time
@@ -370,7 +372,7 @@ DEFAULT_REGISTRY: list[dict] = [
         "id":             "claude-sonnet-openrouter",
         "display_name":   "Claude Sonnet 5.5",
         "provider":       "openrouter",
-        "model_id":       "anthropic/claude-sonnet-5.5",
+        "model_id":       OPENROUTER_DEFAULT_MODEL,
         "capabilities":   ["review", "reasoning", "orchestration", "writing",
                            "analysis", "tools"],
         "strengths":      "Нюансирано разбиране, финален review, complex reasoning, tool calling",

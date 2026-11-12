@@ -432,8 +432,7 @@ def _apply_nvidia_free_policy(cfg: dict) -> dict:
 
 # Current OpenRouter defaults, in one place (2026-11-12: the default brain was still Claude Sonnet 4.5, two
 # generations old and dearer than Sonnet 5.5; the review gate used Haiku 4.5 at 8x Haiku 5.5's price).
-OPENROUTER_DEFAULT_MODEL = "anthropic/claude-sonnet-5.5"
-OPENROUTER_FAST_MODEL = "anthropic/claude-haiku-5.5"
+from .model_defaults import OPENROUTER_DEFAULT_MODEL, OPENROUTER_FAST_MODEL  # noqa: E402,F401  (re-exported)
 
 
 def get_brain_config() -> dict:

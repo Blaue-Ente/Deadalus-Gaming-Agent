@@ -34,6 +34,14 @@ _METRICS: dict[str, dict[str, float]] = {
     "qwen/qwen3-coder-480b-a35b-instruct":          {"cin": .50, "cout": 1.50,"lat": 12,  "ctx": 64,  "q": 86, "r": 78, "c": 95},
     "qwen/qwq-32b":                                 {"cin": .10, "cout": .40, "lat": 10,  "ctx": 32,  "q": 74, "r": 84, "c": 70},
     "inclusionai/ling-2.6-flash":                   {"cin": .01, "cout": .02, "lat": 1.3, "ctx": 64,  "q": 58, "r": 40, "c": 55},
+    # Current Anthropic models on OpenRouter (prices from OpenRouter 2026-11-12; quality figures are estimates placed
+    # above their 4.x predecessors, so presets moved to 5.5 are not scored as unknown cheap models).
+    "anthropic/claude-sonnet-5.5":                  {"cin": 2.0, "cout": 10.0,"lat": 6,   "ctx": 200, "q": 97, "r": 96, "c": 91},
+    "anthropic/claude-haiku-5.5":                   {"cin": .10, "cout": .50, "lat": 2.5, "ctx": 200, "q": 82, "r": 66, "c": 75},
+    "anthropic/claude-opus-5.5":                    {"cin": 4.0, "cout": 20.0,"lat": 10,  "ctx": 200, "q": 99, "r": 99, "c": 93},
+    "deepseek/deepseek-v3.2":                       {"cin": .27, "cout": 1.10,"lat": 8,   "ctx": 64,  "q": 84, "r": 80, "c": 86},
+    "google/gemini-3.8-flash":                      {"cin": .75, "cout": 3.75,"lat": 3,   "ctx": 1000,"q": 84, "r": 74, "c": 80},
+    "qwen/qwen3.8-flash":                           {"cin": .15, "cout": .47, "lat": 3,   "ctx": 128, "q": 78, "r": 70, "c": 76},
     "anthropic/claude-sonnet-4-5":                  {"cin": 3.0, "cout": 15.0,"lat": 8,   "ctx": 200, "q": 96, "r": 95, "c": 88},
     "anthropic/claude-haiku-4-5":                   {"cin": .80, "cout": 4.0, "lat": 3,   "ctx": 200, "q": 78, "r": 60, "c": 70},
     "anthropic/claude-haiku-3-5":                   {"cin": .80, "cout": 4.0, "lat": 3,   "ctx": 200, "q": 75, "r": 56, "c": 66},

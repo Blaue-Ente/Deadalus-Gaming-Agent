@@ -337,6 +337,12 @@ PLAY_SCRIPT = (("Enter", 0), ("click", 0), ("Space", 0), ("ArrowUp", 0), ("Arrow
                ("click@240,360", 0), ("click@720,360", 0), ("click@480,180", 0), ("ArrowLeft", 500))
 
 
+_INTERACTIVE_AT = """([x, y]) => {
+  const e = document.elementFromPoint(x, y);
+  return !!(e && e.closest('a[href], button, input, select, textarea, label, [role=button], [role=link]'));
+}"""
+
+
 async def play_frames(slug: str, kind: str = "static") -> tuple[list[dict[str, Any]], list[str]]:
     """Frames the lead can judge a game by: the start screen, then a few seconds of play after pressing start keys.
 
@@ -387,6 +393,10 @@ async def play_frames(slug: str, kind: str = "static") -> tuple[list[dict[str, A
                         continue
                     if key == "click" or key.startswith("click@"):
                         x, y = (480, 320) if key == "click" else map(int, key[6:].split(","))
+                        # The sweep never presses a link, button or field (a help link or a pause button would
+                        # change what the frames show: review 2026-11-12). The centre click may press Start.
+                        if key != "click" and await page.evaluate(_INTERACTIVE_AT, [x, y]):
+                            continue
                         await page.mouse.click(x, y)
                     elif hold:
                         await page.keyboard.down(key)

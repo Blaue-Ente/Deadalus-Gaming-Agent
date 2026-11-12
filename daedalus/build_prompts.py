@@ -294,8 +294,9 @@ def fallback_build_model_tag() -> tuple[str, str]:
         return f"{prov}:{mdl}", f"fallback: brain {prov}/{mdl}"
     if "/" in mdl:
         return mdl, f"fallback: brain {mdl}"
+    from .model_defaults import OPENROUTER_DEFAULT_MODEL as _default
     return (
-        "openrouter:anthropic/claude-sonnet-4-5",
+        f"openrouter:{_default}",
         f"fallback: non-gateway brain ({prov})",
     )
 

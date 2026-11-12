@@ -746,7 +746,9 @@ def run_eng_check(ctx: dict[str, Any]) -> dict[str, Any]:
     slug = (ctx.get("project") or {}).get("slug") or ""
     scan = scan_project(slug) if slug else {"warnings": [], "scanned": 0}
     warns = list(scan.get("warnings") or [])
-    if warns:
+    if scan.get("error"):                    # the scan did not run: say so, never "pass, scanned 0 files"
+        checks.append(_check("n2", "O(N²) broadphase", "warn", f"not scanned: {scan['error']}"[:240]))
+    elif warns:
         checks.append(_check("n2", "O(N²) broadphase", "warn", "; ".join(warns)[:240]))
     else:
         checks.append(_check(
