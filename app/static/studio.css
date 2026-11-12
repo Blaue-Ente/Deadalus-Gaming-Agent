@@ -865,7 +865,7 @@ label.grow { flex: 1; min-width: 7rem; }
 .team-audit { margin: 6px 0 0; padding-left: 18px; font-size: 0.85em; }
 .team-chip { cursor: default; }
 .team-chip[hidden], #team-signout[hidden] { display: none; }
-body[data-role="designer"] #panel-settings > :not(.team-section):not(.kicker):not(#settings-status),
-body[data-role="tester"] #panel-settings > :not(.team-section):not(.kicker):not(#settings-status) { display: none; }
-body[data-role="designer"] #panel-settings > .kicker,
-body[data-role="tester"] #panel-settings > .kicker { display: none; }
+/* Anyone signed in who is not the owner sees only the Team section of Settings (the server refuses the rest). */
+body[data-role]:not([data-role="owner"]):not([data-role=""]) #panel-settings > :not(.team-section):not(#settings-status) {
+  display: none;
+}

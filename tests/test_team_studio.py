@@ -59,15 +59,44 @@ def test_a_designer_sees_their_badge_and_not_the_owners_settings(studio_server):
             browser.close()
 
 
-def test_a_disabled_member_is_asked_to_sign_in_again(studio_server):
+def test_a_paused_member_keeps_their_sign_in_and_an_unknown_one_is_asked_again(studio_server):
+    """Review 2026-11-12: a team sign-in is shown once; forgetting it on any refusal meant a new invite."""
     from playwright.sync_api import sync_playwright
 
     made = _api(studio_server, "POST", "/api/v1/team/members", {"name": "Cid", "role": "tester"})
-    _api(studio_server, "POST", f"/api/v1/team/members/{made['member']['id']}", {"disabled": True})
+    mid = made["member"]["id"]
+    _api(studio_server, "POST", f"/api/v1/team/members/{mid}", {"disabled": True})
     with sync_playwright() as p:
         browser, page = _page(p, studio_server, token=made["token"])
         try:
-            page.wait_for_function("() => localStorage.getItem('dx.ownerToken') !== %r" % made["token"])
+            status = page.evaluate("async () => (await fetch(new Request('/api/v1/team/me'))).status")
+            assert status == 403 and page.evaluate("localStorage.getItem('dx.ownerToken')") == made["token"]
+            _api(studio_server, "POST", f"/api/v1/team/members/{mid}", {"disabled": False})
+            assert page.evaluate("async () => (await fetch('/api/v1/team/me')).status") == 200   # works again
+        finally:
+            browser.close()
+        browser, page = _page(p, studio_server, token="dt_never-issued")
+        try:
+            page.evaluate("async () => (await fetch(new Request('/api/v1/team/me'))).status")
+            assert page.evaluate("localStorage.getItem('dx.ownerToken')") != "dt_never-issued"
+        finally:
+            browser.close()
+
+
+def test_the_sign_in_shows_once_whichever_way_settings_is_reopened(studio_server):
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as p:
+        browser, page = _page(p, studio_server)
+        try:
+            page.wait_for_selector("#team-owner:not([hidden])")
+            page.fill("#team-name", "Eve")
+            _hit(page, "#team-invite button[type=submit]")
+            page.wait_for_selector("#team-token:not([hidden])")
+            _hit(page, "button[data-panel=chat]")
+            _hit(page, "button[data-panel=settings]")
+            page.wait_for_selector("#team-owner:not([hidden])")
+            assert page.locator("#team-token").is_hidden() and page.locator("#team-token-value").inner_text() == ""
         finally:
             browser.close()
 
@@ -79,13 +108,15 @@ def test_the_sign_in_prompt_speaks_the_chosen_language(studio_server):
         browser = p.chromium.launch()
         page = browser.new_page()
         asked: list[str] = []
-        page.on("dialog", lambda d: (asked.append(d.message), d.dismiss()))
         page.add_init_script("try { localStorage.setItem('dx.lang', 'bg'); } catch (e) {}")
         page.route("**/api/v1/auth/bootstrap", lambda r: r.fulfill(status=403, body="{}"))   # as if remote
+        page.on("dialog", lambda d: (asked.append(d.message), d.dismiss()))   # a prompt blocks the page: answer it
         try:
             page.goto(studio_server["url"] + "/", wait_until="domcontentloaded")
-            page.wait_for_function("() => true")
-            page.wait_for_timeout(800)
+            for _ in range(150):                    # wait for the prompt itself (up to 15 s), not a fixed sleep
+                if asked:
+                    break
+                page.wait_for_timeout(100)
         finally:
             browser.close()
     assert asked and asked[0].startswith("Вход:") and "dt_" in asked[0]

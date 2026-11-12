@@ -274,13 +274,18 @@ class OwnerAuthMiddleware:
         provided = extract_token(_headers_from_scope(scope), qs, method)
         from . import team
 
-        member = team.resolve(provided)          # the owner token, or a team member's personal token (gap 3)
+        member, why = team.identify(provided)    # the owner token, or a team member's personal token (gap 3)
         if member is None:
-            response = JSONResponse(
-                {"ok": False, "error": "owner token required"},
-                status_code=401,
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+            if why == "disabled":                # paused by the owner: the sign-in stays valid for when it is back
+                response = JSONResponse({"ok": False, "error": "member_disabled"}, status_code=403)
+            elif why == "unavailable":           # the members file cannot be read right now
+                response = JSONResponse({"ok": False, "error": "team_unavailable"}, status_code=503)
+            else:
+                response = JSONResponse(
+                    {"ok": False, "error": "owner token required", "reason": why},
+                    status_code=401,
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
             await response(scope, receive, send)
             return
         if not team.allowed(member, method, path):

@@ -4126,7 +4126,7 @@
       btn.addEventListener("click", async () => {
         item.dataset.state = "";
         note.hidden = true;
-        await runAction(btn, "harness-status", async () => {
+        await runAction(btn, o.statusId || "harness-status", async () => {
           const res = await def.run();
           if (!res) return;
           lastNotes[o.id] = res;
@@ -4412,25 +4412,35 @@
 
   // ── Team (gap 3b): who is signed in; the owner invites, re-roles and disables people ──────────────────────────
   let teamMe = null;
+  let mePending = null;
 
   function roleLabel(role) {
     return tOr("studio.role." + role, role);
   }
 
-  async function loadMe() {
-    try {
-      teamMe = await dx.api("/api/v1/team/me");
-    } catch (err) {
-      teamMe = null;
-      return null;
-    }
-    document.body.dataset.role = teamMe.role || "";
+  function paintChip() {
     const chip = $("team-chip");
-    if (chip) {
-      chip.hidden = teamMe.role === "owner";
-      chip.textContent = teamMe.name + " · " + roleLabel(teamMe.role);
-    }
-    return teamMe;
+    document.body.dataset.role = teamMe ? (teamMe.role || "") : "";
+    if (!chip) return;
+    chip.hidden = !teamMe || teamMe.role === "owner";
+    chip.textContent = teamMe ? teamMe.name + " · " + roleLabel(teamMe.role) : "";
+  }
+
+  // Asked fresh each time Settings opens (a role the owner changed, a sign-in that changed in this page), and once
+  // at a time: the boot call and the Settings call share the request in flight.
+  function loadMe() {
+    if (mePending) return mePending;
+    mePending = (async () => {
+      try {
+        teamMe = await dx.api("/api/v1/team/me");
+      } catch (err) {
+        teamMe = null;
+      }
+      paintChip();
+      return teamMe;
+    })();
+    mePending.finally(() => { mePending = null; });
+    return mePending;
   }
 
   function paintMembers(data) {
@@ -4448,6 +4458,7 @@
       const other = m.role === "designer" ? "tester" : "designer";
       box.appendChild(actionRow({
         id: "member-" + m.id,
+        statusId: "team-status",
         title: m.name,
         sub: roleLabel(m.role) + (m.disabled ? " · " + dx.t("studio.teamDisabled") : ""),
         buttons: [
@@ -4460,9 +4471,19 @@
     });
   }
 
+  async function refreshTeamLists() {
+    // After a change that succeeded: a failed refresh is its own message, never the change's (review 2026-11-12:
+    // an invite that worked looked failed, and a second invite made a second live sign-in).
+    try {
+      await loadTeamLists();
+    } catch (err) {
+      showStatus("team-status", dx.t("studio.teamRefreshFailed") + ": " + failText(err), true);
+    }
+  }
+
   async function updateMember(id, body) {
     await postJson("/api/v1/team/members/" + encodeURIComponent(id), body);
-    await loadTeamLists();
+    refreshTeamLists();
     return { text: dx.t("studio.saved"), bad: false };
   }
 
@@ -4488,7 +4509,9 @@
   }
 
   async function loadTeam() {
-    const me = teamMe || await loadMe();
+    $("team-token").hidden = true;               // an invite's sign-in is shown once: never again on a later visit
+    $("team-token-value").textContent = "";
+    const me = await loadMe();
     $("team-me").textContent = me ? dx.t("studio.teamYou", { name: me.name, role: roleLabel(me.role) }) : "";
     const owner = !!me && me.role === "owner";
     $("team-owner").hidden = !owner;
@@ -5539,6 +5562,7 @@
     });
   });
 
+  document.addEventListener("daedalus:langchange", paintChip);
   document.addEventListener("daedalus:langchange", () => {
     renderAssetJobs(null);
     if (currentPanel === "review") {
@@ -5652,9 +5676,9 @@
       $("team-name").value = "";
       $("team-token-value").textContent = res.token || "";
       $("team-trust").textContent = res.trust || "";
-      $("team-token").hidden = !res.token;            // shown once: gone on the next load of Settings
+      $("team-token").hidden = !res.token;            // shown once: loadTeam hides it on any later visit
       showStatus("team-status", dx.t("studio.teamInvited", { name: res.member ? res.member.name : name }), false);
-      await loadTeamLists();
+      refreshTeamLists();
     });
   });
   $("team-token-copy").addEventListener("click", async () => {
@@ -5669,7 +5693,6 @@
     if (window.DaedalusAuth && window.DaedalusAuth.signOut) window.DaedalusAuth.signOut();
     location.reload();
   });
-  $("settings-link").addEventListener("click", () => { $("team-token").hidden = true; });
 
   const opening = readQuery();
   loadMe();
