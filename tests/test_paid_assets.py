@@ -26,7 +26,7 @@ class _Turn:
 
     def __enter__(self):
         from daedalus import task_effort
-        self.tok = paid_assets.set_turn_words(self.words)
+        self.tok = paid_assets._TURN_WORDS.set(self.words)
         self.bind = task_effort.bind({"tier": self.tier}) if self.tier else None
         if self.bind:
             self.bind.__enter__()
@@ -40,20 +40,48 @@ class _Turn:
         paid_assets._TURN_WORDS.reset(self.tok)
 
 
-@pytest.mark.parametrize("words,tier,ok", [
-    ("make a frog game", "", False),
-    ("make a frog game", "craft", False),
-    ("make a frog game", "epic", True),
-    ("make a frog game with generated sound effects", "", True),
-    ("use ElevenLabs for the boss roar", "", True),
-    ("AI art for the sprites please", "", True),
-    ("направи игра с генериран звук", "", True),
-    ("озвучи героя", "", True),
-    ("a game about a sound wave", "", False),
+@pytest.mark.parametrize("words,ok", [
+    ("make a frog game", False),
+    ("use ElevenLabs for the boss roar", True),
+    ("AI art for the sprites please", True),
+    ("ai-generated sound effects for the jumps", True),
+    ("generated sprites from an image model", True),
+    ("add a voice-over to the intro", True),
+    ("направи AI графика за героя", True),
+    ("озвучи героя", True),
+    ("спрайтове генерирани с ИИ", True),
+    # not a request to pay (review 2026-11-12)
+    ("snake game with procedurally generated music", False),
+    ("a game with real sound physics", False),
+    ("игра за изкуствен интелект", False),
+    ("a game about a sound wave", False),
+    ("no AI art please, keep it pixel", False),
+    ("without ElevenLabs, just beeps", False),
+    ("без AI графика", False),
+    ("не искам озвучаване", False),
 ])
-def test_paid_only_in_epic_or_when_asked(a0_tmp, words, tier, ok):  # noqa: F811
-    with _Turn(words, tier):
+def test_paid_only_when_the_words_ask(a0_tmp, words, ok):  # noqa: F811
+    with _Turn(words):
         assert paid_assets.allowed()[0] is ok
+
+
+def test_epic_counts_only_when_the_owner_chose_it(a0_tmp):  # noqa: F811
+    from daedalus import task_effort
+
+    with _Turn("make a small rpg"):
+        with task_effort.bind({"tier": "epic", "source": "auto"}):
+            assert paid_assets.allowed()[0] is False                # picked from the word 'rpg'
+        with task_effort.bind({"tier": "epic", "source": "owner"}):
+            assert paid_assets.allowed()[0] is True
+
+
+def test_a_nested_chat_keeps_the_owners_words(a0_tmp):  # noqa: F811
+    outer = paid_assets.set_turn_words("make a frog game")
+    try:
+        assert paid_assets.set_turn_words("planner step: add AI art for the sprites") is None
+        assert paid_assets.turn_words() == "make a frog game" and paid_assets.allowed()[0] is False
+    finally:
+        paid_assets._TURN_WORDS.reset(outer)
 
 
 class _Client:
@@ -96,7 +124,7 @@ def test_a_requested_sound_is_saved_on_the_owners_key_and_shown(game, http, monk
     seen = _events(monkeypatch)
     from daedalus import playground as pg
 
-    with _Turn("add generated sound effects for the boss"):
+    with _Turn("add ElevenLabs sound effects for the boss"):
         r = asyncio.run(paid_assets.generate_sound(game, "Boss Roar!", "deep monster roar", 30))
     assert r["ok"] and r["path"] == "assets/sfx/boss-roar.mp3" and r["seconds"] == paid_assets.MAX_SECONDS
     assert (pg.project_dir(game) / r["path"]).read_bytes() == _Client.body
@@ -117,11 +145,11 @@ def test_not_requested_means_not_called(game, http, monkeypatch):
 def test_a_member_never_spends_the_owners_elevenlabs_key(game, http, monkeypatch):
     dee = team.Member("dee123", "Dee", "designer")
     credentials.set_sharing(shared=["ELEVENLABS_API_KEY"])          # even shared: a direct call takes own keys only
-    with _Turn("generated sound effects please", member=dee):
+    with _Turn("ElevenLabs sound effects please", member=dee):
         r = asyncio.run(paid_assets.generate_sound(game, "x", "y"))
     assert r["error"] == "no_key" and http.calls == []
     credentials.set_key(dee.id, "ELEVENLABS_API_KEY", "DEE-11")
-    with _Turn("generated sound effects please", member=dee):
+    with _Turn("ElevenLabs sound effects please", member=dee):
         assert asyncio.run(paid_assets.generate_sound(game, "x", "y"))["ok"]
     assert http.calls[-1]["key"] == "DEE-11"
 
@@ -162,3 +190,46 @@ def test_the_member_tool_list_and_the_specs_agree():
     names = {s["name"] for s in NATIVE_TOOL_SPECS}
     assert "paid_sound" in names and "paid_sound" in team.MEMBER_TOOLS
     assert "ELEVENLABS_API_KEY" in credentials.member_key_names()
+
+
+def test_a_paid_sound_never_replaces_an_earlier_one_and_names_are_clean(game, http, monkeypatch):
+    with _Turn("use elevenlabs"):
+        first = asyncio.run(paid_assets.generate_sound(game, "boss-roar.mp3", "roar"))
+        second = asyncio.run(paid_assets.generate_sound(game, "boss-roar", "roar again"))
+        odd = asyncio.run(paid_assets.generate_sound(game, "x", "y", seconds="2s"))
+    assert first["path"] == "assets/sfx/boss-roar.mp3" and second["path"] == "assets/sfx/boss-roar-2.mp3"
+    assert odd["ok"] and odd["seconds"] == 2.0
+
+
+def test_paid_but_not_saved_is_said(game, http, monkeypatch):
+    seen = _events(monkeypatch)
+    monkeypatch.setattr("pathlib.Path.write_bytes", lambda self, data: (_ for _ in ()).throw(OSError("disk full")))
+    with _Turn("use elevenlabs"):
+        r = asyncio.run(paid_assets.generate_sound(game, "x", "y"))
+    assert r["error"] == "not_saved" and "disk full" in r["message"] and "paid but not saved" in seen[-1][1]["error"]
+
+
+def test_the_build_offers_the_paid_sound_tool_with_a_write_permission():
+    from daedalus.harness.manifest import TOOL_COST
+    from daedalus.native_tools import PERM_MAP, _PLAYGROUND_BUILD_NAMES
+    from daedalus.task_playbooks import PLAYBOOKS
+
+    assert "paid_sound" in _PLAYGROUND_BUILD_NAMES and PERM_MAP["paid_sound"] == "write_file"
+    assert TOOL_COST["paid_sound"] == "external"
+    assert all("paid_sound" in pb.tools for pb in PLAYBOOKS if "generate_image" in pb.tools)
+
+
+def test_an_image_from_an_owners_asset_button_is_shown(game, monkeypatch):
+    seen = _events(monkeypatch)
+    from daedalus import daedalus_mesh, playground_assets
+
+    async def fake_image(**kw):
+        return {"images": [{"b64_json": "iVBORw0KGgo="}]}
+
+    monkeypatch.setattr(daedalus_mesh, "generate_image", fake_image)
+    try:
+        asyncio.run(playground_assets.generate_asset(game, path="hero.png", prompt="a hero"))
+    except Exception:
+        pass                                                         # saving is not what this test is about
+    rows = [p for k, p in seen if k == "paid_asset"]
+    assert rows and rows[0]["service"] == "image" and "a hero" in rows[0]["what"]

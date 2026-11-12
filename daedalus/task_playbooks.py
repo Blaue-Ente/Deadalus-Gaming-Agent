@@ -410,7 +410,7 @@ PLAYBOOKS: tuple[Playbook, ...] = (
         ),
         regex=r"\b(snake|tetris|pong|canvas|змия|аркад)\b",
         tools=_CORE + (
-            "assets", "generate_image", "playtest", "browser", "game_canon", "production",
+            "assets", "generate_image", "paid_sound", "playtest", "browser", "game_canon", "production",
         ),
         expected_files=("index.html",),
         notes=(
@@ -469,7 +469,7 @@ PLAYBOOKS: tuple[Playbook, ...] = (
             r"(?:\bvite\b.{0,96}\bphaser\b)|(?:\bphaser\b.{0,96}\bvite\b)"
         ),
         tools=_CORE + (
-            "assets", "generate_image", "playtest", "browser",
+            "assets", "generate_image", "paid_sound", "playtest", "browser",
             "game_canon", "production", "game_lint",
         ),
         expected_files=("index.html", "src/main.js", "package.json"),
@@ -522,7 +522,7 @@ PLAYBOOKS: tuple[Playbook, ...] = (
         keywords=("игра", "game", "playground", "phaser", "three.js", "webgpu", "demo"),
         regex=r"\b(игра|game|playground|phaser|three\.?js|webgpu)\b",
         tools=_CORE + (
-            "math3d", "spatial", "game_canon", "assets", "generate_image",
+            "math3d", "spatial", "game_canon", "assets", "generate_image", "paid_sound",
             "playtest", "browser", "engine", "world", "game_lint", "play",
         ),
         notes="Unknown game: keep the senior kit available, build in the Playground slug.",

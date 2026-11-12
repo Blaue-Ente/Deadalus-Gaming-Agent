@@ -1737,7 +1737,7 @@ class Daedalus:
                 if not _owner_words or _owner_words not in user_message:
                     _owner_words = user_message
                 from .paid_assets import set_turn_words as _set_turn_words
-                _set_turn_words(_owner_words)        # gap 4b: paid art and sound only when these words ask
+                _set_turn_words(_owner_words)        # gap 4b: paid only when the owner's words ask (first chat only)
                 _pg_build = is_playground_work_session(session_id, user_message) or _looks_game(
                     _owner_words
                 )

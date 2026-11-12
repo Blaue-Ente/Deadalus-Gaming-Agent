@@ -85,11 +85,20 @@ function noise(dur, vol = 1, delay = 0) {
 }
 
 const files = {};
-function playFile(url) {          // a generated sound file (paid, only when the owner asked): decoded once, then cached
+function fetchFile(url) {         // the file's bytes, fetched once; a failed fetch is forgotten so a later call retries
+  if (!files[url]) {
+    files[url] = fetch(url).then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(r.status))))
+      .catch(() => { delete files[url]; return null; });
+  }
+  return files[url];
+}
+const decoded = {};
+function playFile(url) {          // a generated sound file (paid, only when the owner asked)
   const a = audio();
-  if (!a || muted || a.state !== 'running') return;
-  const ready = files[url] || (files[url] = fetch(url).then((r) => r.arrayBuffer()).then((b) => a.decodeAudioData(b))
-    .catch(() => null));
+  if (!a || muted || a.state !== 'running') { fetchFile(url); return; }   // not yet audible: preload only
+  const ready = decoded[url] || (decoded[url] = fetchFile(url)
+    .then((bytes) => (bytes ? a.decodeAudioData(bytes.slice(0)) : null))
+    .then((buf) => { if (!buf) delete decoded[url]; return buf; }, () => { delete decoded[url]; return null; }));
   ready.then((buf) => {
     if (!buf || muted) return;
     const src = a.createBufferSource();

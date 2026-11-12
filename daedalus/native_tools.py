@@ -34,6 +34,7 @@ PERM_MAP: dict[str, str | None] = {
     "edit_file": "write_file",
     "playground_new": None,
     "generate_image": None,
+    "paid_sound": "write_file",              # writes assets/sfx/*.mp3 into the project
     "remember": None,
     "browser": None,
     "mcp_call": None,
@@ -791,7 +792,7 @@ def native_tools_enabled() -> bool:
 _PLAYGROUND_BUILD_NAMES = frozenset({
     "playground_new", "write_file", "edit_file", "read_file", "list_dir",
     "math3d", "spatial", "game_canon", "game_lint", "profiler",
-    "assets", "generate_image", "playtest", "browser",
+    "assets", "generate_image", "paid_sound", "playtest", "browser",
     "run_command", "skill", "engine", "world",
     "milestones", "preview", "play", "runs", "ship_request",
 })
@@ -2002,7 +2003,7 @@ async def execute_native_tool(
         if name == "paid_sound":
             from .paid_assets import generate_sound
             r = await generate_sound(str(args.get("slug") or ""), str(args.get("name") or ""),
-                                     str(args.get("prompt") or ""), float(args.get("seconds") or 2.0))
+                                     str(args.get("prompt") or ""), args.get("seconds") or 2.0)
             if not r.get("ok"):
                 return f"── paid_sound SKIPPED ({r.get('error')}) ──\n{r.get('message', '')}"
             return f"── paid_sound OK {r['path']} ──\n{r['cost']}. Play it with {r['play']}."
@@ -2019,9 +2020,14 @@ async def execute_native_tool(
             slug = str(args.get("slug") or "")
             filename = str(args.get("filename") or "asset.png")
             size = str(args.get("size") or "512x512")
-            img = await generate_image(prompt=prompt, size=size)
+            try:
+                img = await generate_image(prompt=prompt, size=size)
+            except Exception as exc:             # shown in the activity too: an attempted paid call is never hidden
+                _paid_ledger("image", ok=False, what=prompt, cost="unknown", error=str(exc))
+                raise
             images = img.get("images") or []
             if not images:
+                _paid_ledger("image", ok=False, what=prompt, cost="unknown", error="no images returned")
                 return f"── generate_image FAILED: no images ({img}) ──"
             first = images[0]
             from .playground_assets import filename_under_assets
@@ -2035,11 +2041,16 @@ async def execute_native_tool(
                 dest.write_bytes(decoded)
             elif first.get("url"):
                 import httpx
-                async with httpx.AsyncClient(timeout=30.0) as client:
-                    resp = await client.get(first["url"])
-                    resp.raise_for_status()
-                    dest.write_bytes(resp.content)
+                try:
+                    async with httpx.AsyncClient(timeout=30.0) as client:
+                        resp = await client.get(first["url"])
+                        resp.raise_for_status()
+                        dest.write_bytes(resp.content)
+                except Exception as exc:
+                    _paid_ledger("image", ok=False, what=prompt, cost="billed, not saved", error=str(exc))
+                    raise
             else:
+                _paid_ledger("image", ok=False, what=prompt, cost="unknown", error="no b64/url in the reply")
                 return "── generate_image FAILED: no b64/url ──"
             _paid_ledger("image", ok=True, what=prompt, path=str(dest.relative_to(dest_dir.parent)),
                          cost=f"one {size} image on {img.get('provider')} ({img.get('model')}), price not reported")

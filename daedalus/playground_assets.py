@@ -653,15 +653,22 @@ async def generate_asset(
     if style_prefix and style_prefix not in aprompt:
         aprompt = f"{style_prefix}. {aprompt}"
 
-    img = await mesh.generate_image(
-        prompt=aprompt,
-        model=mesh.resolve_image_model(model),
-        size=size or DEFAULT_SIZE_SPRITE,
-        n=1,
-        image_type="png",
-        client_id=client_id or f"playground-img/{slug}",
-        max_wait=90.0,
-    )
+    from .paid_assets import ledger as _paid_ledger   # gap 4b: an owner's asset button is a request; still shown
+    try:
+        img = await mesh.generate_image(
+            prompt=aprompt,
+            model=mesh.resolve_image_model(model),
+            size=size or DEFAULT_SIZE_SPRITE,
+            n=1,
+            image_type="png",
+            client_id=client_id or f"playground-img/{slug}",
+            max_wait=90.0,
+        )
+    except Exception as exc:
+        _paid_ledger("image", ok=False, what=aprompt, cost="unknown", error=str(exc))
+        raise
+    _paid_ledger("image", ok=bool(img), what=aprompt, path=apath,
+                 cost=f"one {size or DEFAULT_SIZE_SPRITE} image ({model}), price not reported")
     first = (img.get("images") or [{}])[0]
     url = first.get("url", "")
     b64 = first.get("b64", "")
