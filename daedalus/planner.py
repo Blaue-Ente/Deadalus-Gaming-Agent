@@ -102,7 +102,7 @@ async def auto_plan_from_goal(goal: str) -> dict[str, Any]:
     # Намираме първия {...} блок
     m = _re.search(r"\{.*\}", raw_stripped, _re.DOTALL)
     if not m:
-        return {"ok": False, "error": "Дедал не върна валиден JSON", "raw_reply": raw[:1000]}
+        return {"ok": False, "error": "Daedalus returned no valid JSON", "raw_reply": raw[:1000]}
 
     try:
         parsed = _json.loads(m.group(0))
@@ -113,7 +113,7 @@ async def auto_plan_from_goal(goal: str) -> dict[str, Any]:
     description = str(parsed.get("description", ""))[:500]
     steps = parsed.get("steps", [])
     if not isinstance(steps, list) or not steps:
-        return {"ok": False, "error": "няма стъпки в JSON-а", "parsed": parsed}
+        return {"ok": False, "error": "no steps in the JSON", "parsed": parsed}
 
     # Pre-валидираме стъпките преди да пишем нещо в DB
     valid_steps: list[tuple[str, str]] = []
@@ -127,7 +127,7 @@ async def auto_plan_from_goal(goal: str) -> dict[str, Any]:
         valid_steps.append((s_title, s_desc))
 
     if not valid_steps:
-        return {"ok": False, "error": "няма валидни стъпки след филтриране", "parsed": parsed}
+        return {"ok": False, "error": "no valid steps after filtering", "parsed": parsed}
 
     # Atomic insert: plan + всички стъпки в една транзакция
     pid = _new_id("plan")
@@ -457,7 +457,7 @@ async def _self_repair_step(step: dict[str, Any], eval_result: dict[str, Any]) -
 
     if current_attempts >= MAX_REPAIR_ATTEMPTS:
         return {"ok": False, "action": "needs_review",
-                "note": f"Max repair attempts ({MAX_REPAIR_ATTEMPTS}) изчерпани"}
+                "note": f"Max repair attempts ({MAX_REPAIR_ATTEMPTS}) used up"}
 
     missing_str = ", ".join(eval_result["missing"]) or "none"
     diag = (

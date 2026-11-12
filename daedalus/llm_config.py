@@ -652,11 +652,11 @@ def _resolve_llm_config() -> dict:
         return local
 
     raise RuntimeError(
-        "Няма конфигуриран LLM provider. "
-        "Задай ALLTOKEN_API_KEY, OPENROUTER_API_KEY, NOVITA_API_KEY или NVIDIA_API_KEY, "
-        "или DAEDALUS_API_KEY + DAEDALUS_MODEL, "
-        "или пусни локален Ollama/LM Studio и задай DAEDALUS_PROVIDER=ollama "
-        "(или DAEDALUS_LOCAL_LLM=1)."
+        "No LLM provider configured. "
+        "Set ALLTOKEN_API_KEY, OPENROUTER_API_KEY, NOVITA_API_KEY or NVIDIA_API_KEY, "
+        "or DAEDALUS_API_KEY + DAEDALUS_MODEL, "
+        "or run a local Ollama/LM Studio and set DAEDALUS_PROVIDER=ollama "
+        "(or DAEDALUS_LOCAL_LLM=1)."
     )
 
 

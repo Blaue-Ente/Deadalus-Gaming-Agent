@@ -74,8 +74,8 @@ async def push_project_remote(
             raise RuntimeError(gh.github_error_hint("GITHUB_TOKEN not configured"))
 
     raise RuntimeError(
-        "Няма конфигуриран Git remote. Задай GITLAB_TOKEN или GITHUB_TOKEN "
-        "в Studio → Свързаност."
+        "No Git remote configured. Set GITLAB_TOKEN or GITHUB_TOKEN "
+        "in Studio → Connectors."
     )
 
 

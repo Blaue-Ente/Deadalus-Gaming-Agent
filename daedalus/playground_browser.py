@@ -389,7 +389,7 @@ async def browser_verify(
             "console_errors": console_errors, "page_errors": page_errors,
             "failed_requests": failed_requests, "dom_text_len": dom_text_len,
             "has_canvas": has_canvas, "screenshot_path": screenshot_path,
-            "summary": f"Browser verify грешка: {str(exc)[:160]}",
+            "summary": f"Browser verify error: {str(exc)[:160]}",
             "error": str(exc)[:200],
         }
 
@@ -518,7 +518,7 @@ async def verify_app(slug: str, kind: str) -> dict[str, Any]:
     """
     kind = pg.normalize_engine_kind(kind)
     if kind not in VISUAL_KINDS:
-        return {"ok": True, "skipped": True, "summary": f"Render-and-See пропуснат за {kind}",
+        return {"ok": True, "skipped": True, "summary": f"Render-and-See skipped for {kind}",
                 "console_errors": [], "page_errors": [], "failed_requests": [],
                 "blank_screen": False, "reachable": True, "dom_text_len": 0,
                 "has_canvas": False, "screenshot_path": None}
@@ -567,7 +567,7 @@ async def verify_app(slug: str, kind: str) -> dict[str, Any]:
             rec = await runner.start(slug, install_deps=True)
             port = rec.get("port")
             if not port:
-                return {"ok": True, "skipped": True, "summary": "Streamlit не стартира — verify пропуснат",
+                return {"ok": True, "skipped": True, "summary": "Streamlit did not start: verify skipped",
                         "console_errors": [], "page_errors": [], "failed_requests": [],
                         "blank_screen": False, "reachable": False, "dom_text_len": 0,
                         "has_canvas": False, "screenshot_path": None}
@@ -592,7 +592,7 @@ async def verify_app(slug: str, kind: str) -> dict[str, Any]:
             rec = await runner.start(slug, install_deps=True)
             port = rec.get("port")
             if not port:
-                return {"ok": True, "skipped": True, "summary": "Expo Metro не стартира — verify пропуснат",
+                return {"ok": True, "skipped": True, "summary": "Expo Metro did not start: verify skipped",
                         "console_errors": [], "page_errors": [], "failed_requests": [],
                         "blank_screen": False, "reachable": False, "dom_text_len": 0,
                         "has_canvas": False, "screenshot_path": None}

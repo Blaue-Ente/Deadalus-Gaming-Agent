@@ -392,14 +392,14 @@ async def remediate_infra_blocker(blocker_id: str, *, dry_run: bool = False) -> 
 
     slug = extract_playground_slug(b)
     if not slug:
-        return {"ok": False, "error": "no_playground_slug", "message": "Не намерих playground slug в текста."}
+        return {"ok": False, "error": "no_playground_slug", "message": "No playground slug found in the text."}
 
     blob = _blocker_blob(b).lower()
     if classify_blocker(b) != "infra" and "npm" not in blob and "firewall" not in blob:
         return {
             "ok": False,
             "error": "not_infra",
-            "message": "Remediate работи само за npm/firewall blockers.",
+            "message": "Remediate works only for npm/firewall blockers.",
         }
 
     try:
@@ -447,7 +447,7 @@ def auto_fix_blocker(blocker_id: str, *, hours: float = 8.0) -> dict[str, Any]:
         return {
             "ok": False,
             "error": "no_auto_fix",
-            "message": "Не открих permission за автоматично grant — опитай Resolve ръчно.",
+            "message": "No permission found to grant automatically: try Resolve by hand.",
             "blocker_id": blocker_id,
             "analysis": analysis,
         }

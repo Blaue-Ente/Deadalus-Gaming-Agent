@@ -753,8 +753,8 @@ async def start_milestone_guided(
             )
             raise ValueError(
                 f"milestone {mid} has no stages — "
-                + ("планът има етапи без milestone_id; презареди workspace или прегенерирай плана"
-                   if orphans else f"прегенерирай Studio плана или избери друг milestone")
+                + ("the plan has stages without milestone_id; reload the workspace or regenerate the plan"
+                   if orphans else f"regenerate the Studio plan or pick another milestone")
             )
         raise ValueError(f"milestone {mid} has no pending stages — run Verify or advance")
 
@@ -836,8 +836,8 @@ async def advance_project_milestone(
                 raise ValueError(f"run Verify for {current} before advancing")
             if can_advance_with_unity_waiver(cfg, plan):
                 raise ValueError(
-                    f"verify incomplete for {current} — Unity изисква локален Hub; "
-                    "използвай waiver или поправи и пусни Verify отново"
+                    f"verify incomplete for {current}: Unity needs a local Hub; "
+                    "use the waiver, or fix it and run Verify again"
                 )
             raise ValueError(f"verify failed for {current} — fix errors and re-run Verify")
     new_cfg = advance_milestone(cfg, plan)

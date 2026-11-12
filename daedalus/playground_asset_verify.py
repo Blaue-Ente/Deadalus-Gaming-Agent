@@ -50,7 +50,7 @@ def ensure_png_bytes(data: bytes) -> bytes:
     except Exception as exc:
         head = data[:8].hex()
         raise RuntimeError(
-            f"не мога да конвертирам изображение към PNG (header={head}): {exc}"
+            f"cannot convert the image to PNG (header={head}): {exc}"
         ) from exc
 
 
@@ -96,7 +96,7 @@ def verify_asset_file(slug: str, rel_path: str) -> dict[str, Any]:
     out: dict[str, Any] = {"path": rel, "ok": False}
 
     if not target.exists() or not target.is_file():
-        out["error"] = "липсва на диска"
+        out["error"] = "missing on disk"
         return out
 
     try:
@@ -137,7 +137,7 @@ def verify_assets(slug: str, paths: list[str] | None = None) -> dict[str, Any]:
                 checks.append({
                     "path": item["path"],
                     "ok": False,
-                    "error": "липсва на диска",
+                    "error": "missing on disk",
                     "bytes": 0,
                 })
             else:
@@ -176,9 +176,9 @@ def game_asset_gate(slug: str, *, min_count: int = 2) -> dict[str, Any]:
         "min_required": min_count,
         "gate_ok": ok,
         "message": (
-            f"{len(valid)}/{min_count} валидни PNG assets"
+            f"{len(valid)}/{min_count} valid PNG assets"
             if ok
-            else f"Нужни са поне {min_count} валидни PNG — има {len(valid)}"
+            else f"At least {min_count} valid PNGs are needed; there are {len(valid)}"
         ),
     }
 

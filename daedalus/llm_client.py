@@ -190,8 +190,8 @@ async def _complete_with_cfg(
             api_key = dummy_api_key(provider) if is_local_provider(provider) else (api_key or "omniroute")
         else:
             raise RuntimeError(
-                "Няма API ключ. Задай ALLTOKEN_API_KEY, OPENROUTER_API_KEY, "
-                "NOVITA_API_KEY или DAEDALUS_API_KEY, или пусни локален LLM "
+                "No API key. Set ALLTOKEN_API_KEY, OPENROUTER_API_KEY, "
+                "NOVITA_API_KEY or DAEDALUS_API_KEY, or run a local LLM "
                 "(DAEDALUS_PROVIDER=ollama)."
             )
 

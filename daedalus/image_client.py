@@ -110,7 +110,7 @@ async def generate_image(
     if os.environ.get("OPENROUTER_API_KEY", "").strip() or os.environ.get("ALLTOKEN_API_KEY", "").strip():
         return await _openrouter_image(prompt=prompt, model="gemini-flash-image", size=size, t0=t0)
     raise RuntimeError(
-        "Няма ключ за image gen. Задай NOVITA_API_KEY или OPENROUTER_API_KEY."
+        "No key for image generation. Set NOVITA_API_KEY or OPENROUTER_API_KEY."
     )
 
 

@@ -245,7 +245,7 @@ async def subscribe(job: "AutopilotJob", from_offset: int = 0) -> AsyncIterator[
                     stop = True
                 else:
                     out = {"event": "error",
-                           "data": {"message": job.error or "прекъснат",
+                           "data": {"message": job.error or "interrupted",
                                     "interrupted": job.status == "interrupted"}}
                     stop = True
             else:

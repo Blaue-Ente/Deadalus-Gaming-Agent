@@ -3532,7 +3532,7 @@ class Daedalus:
                         )
                     elif _action == "get":
                         if not _key:
-                            raise ValueError("get изисква ключ")
+                            raise ValueError("get needs a key")
                         _val = _rdb.get(_ns + _key)
                         tool_results_text_parts.append(
                             f"━━━ TOOL RESULTS — PLAYGROUND DB GET ━━━\n"
@@ -3540,7 +3540,7 @@ class Daedalus:
                         )
                     elif _action == "set":
                         if not _key:
-                            raise ValueError("set изисква ключ")
+                            raise ValueError("set needs a key")
                         try:
                             _val = _j.loads(_value_raw) if _value_raw else ""
                         except Exception:
@@ -3552,7 +3552,7 @@ class Daedalus:
                         )
                     elif _action == "del":
                         if not _key:
-                            raise ValueError("del изисква ключ")
+                            raise ValueError("del needs a key")
                         _all_k = list(_rdb.prefix(_ns))
                         if _ns + _key in _all_k:
                             del _rdb[_ns + _key]
@@ -3575,8 +3575,8 @@ class Daedalus:
                         )
                     else:
                         raise ValueError(
-                            f"Непознато действие: {_action!r}. "
-                            f"Позволени: list / get / set / del / clear"
+                            f"Unknown action: {_action!r}. "
+                            f"Allowed: list / get / set / del / clear"
                         )
                     tool_calls_used.append({"tool": "playground_db", "ok": True, "action": _action})
                 except Exception as exc:
@@ -3843,7 +3843,7 @@ class Daedalus:
                             if _sr.get("ok"):
                                 _staged_summary.append(
                                     f"  ✅ {_sb['action'].upper()} {_sb['file_path']} "
-                                    f"(+{_sr.get('lines_new',0)} реда)"
+                                    f"(+{_sr.get('lines_new',0)} lines)"
                                 )
                             else:
                                 _staged_summary.append(f"  ❌ {_sb['file_path']}: {_sr.get('error','unknown error')}")

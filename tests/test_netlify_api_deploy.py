@@ -67,7 +67,7 @@ async def _noop():
 def test_deploy_creates_a_site_uploads_a_clean_zip_and_waits(netlify):
     out = asyncio.run(lp.deploy_netlify(netlify, "orbit", anonymous=False))
     assert out == {"ok": True, "backend": "netlify", "url": "https://x.netlify.app", "site_id": "site1",
-                   "note": "Публичният линк е готов."}
+                   "note": "The public link is ready."}
     upload = next(c for c in FakeClient.calls if c[1] == "/sites/site1/deploys")
     assert upload[2]["Content-Type"] == "application/zip" and upload[2]["Authorization"] == "Bearer nfp_secret"
     names = zipfile.ZipFile(io.BytesIO(upload[3])).namelist()

@@ -30,7 +30,7 @@ def _now_iso() -> str:
 def normalize_reference(raw: str) -> str:
     ref = (raw or "").strip()
     if not ref:
-        raise ValueError("празна референция")
+        raise ValueError("empty reference")
     if ref.startswith("www."):
         ref = "https://" + ref
     elif not _URL_RE.match(ref) and "." in ref and " " not in ref and "/" in ref:
@@ -224,7 +224,7 @@ async def _synthesize_reference(
     return {
         "_degraded": True,
         "title": reference[:80],
-        "summary": f"Референция: {reference}. Вдъхнови се от механиките и визията.",
+        "summary": f"Reference: {reference}. Take inspiration from its mechanics and look.",
         "mechanics": [],
         "visual_style": "match reference game art style",
         "scope_hints": "Core loop first, polish later",

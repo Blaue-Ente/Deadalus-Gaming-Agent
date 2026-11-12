@@ -162,7 +162,7 @@ def enable(addon_id: str, extra_env: dict[str, str] | None = None) -> dict[str, 
     if not item:
         return {"ok": False, "error": f"unknown addon {addon_id}"}
     if item.get("kind") != "mcp":
-        return {"ok": True, "item": item, "message": "native/sidecar — няма mcp.json ред"}
+        return {"ok": True, "item": item, "message": "native/sidecar: no mcp.json entry"}
     import os
     path = config_path()
     data: dict[str, Any] = {"servers": {}}

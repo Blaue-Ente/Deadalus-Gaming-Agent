@@ -228,7 +228,7 @@ async def _run_gameplay_on_url(
             "ok": False,
             "skipped": True,
             "error": "chromium_not_found",
-            "summary": "Gameplay verify изисква Chromium — не е намерен",
+            "summary": "Gameplay verify needs Chromium: not found",
             "checks": [],
             "proof_incomplete": True,
         }
@@ -346,9 +346,9 @@ async def gameplay_verify_app(
             "ok": bool(uv.get("ok")),
             "skipped": True,
             "summary": (
-                "Unity: няма studio/preview — scaffold "
+                "Unity: no studio/preview, scaffold "
                 + ("OK" if uv.get("ok") else "FAIL")
-                + ". Отвори проекта в Unity Hub за пълен тест."
+                + ". Open the project in Unity Hub for a full test."
             ),
             "checks": [{"id": "unity_scaffold", "ok": bool(uv.get("ok")), "detail": uv.get("error") or "ok"}],
             "unity_local_required": True,
@@ -390,7 +390,7 @@ async def gameplay_verify_app(
             rec = await runner.start(slug, install_deps=True)
             port = rec.get("port")
             if not port:
-                return {"ok": False, "skipped": True, "summary": "Expo не стартира", "checks": []}
+                return {"ok": False, "skipped": True, "summary": "Expo did not start", "checks": []}
             return await _run_gameplay_on_url(
                 slug, f"http://127.0.0.1:{port}/", kind=kind, milestone_id=milestone_id,
             )

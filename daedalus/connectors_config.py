@@ -143,10 +143,10 @@ async def test_github_connection() -> dict[str, Any]:
             "code": "not_configured",
             "configured": False,
             "source": "none",
-            "error": "GITHUB_TOKEN не е зададен",
+            "error": "GITHUB_TOKEN is not set",
             "hint": (
-                "Отвори Studio → Свързаност и сложи GITHUB_TOKEN "
-                "(classic PAT с scope repo, или fine-grained Contents + Pull requests)."
+                "Open Studio → Connectors and add GITHUB_TOKEN "
+                "(a classic PAT with the repo scope, or fine-grained Contents + Pull requests)."
             ),
         }
     try:
@@ -165,8 +165,8 @@ async def test_github_connection() -> dict[str, Any]:
                 "code": "invalid_token",
                 "configured": True,
                 "source": github_token_source(),
-                "error": "Токенът е невалиден или изтекъл (401)",
-                "hint": "Обнови GITHUB_TOKEN в Studio → Свързаност.",
+                "error": "The token is invalid or expired (401)",
+                "hint": "Update GITHUB_TOKEN in Studio → Connectors.",
             }
         if r.status_code == 403:
             return {
@@ -174,7 +174,7 @@ async def test_github_connection() -> dict[str, Any]:
                 "code": "forbidden",
                 "configured": True,
                 "source": github_token_source(),
-                "error": "Достъпът е отказан (403) — липсва scope repo",
+                "error": "Access denied (403): the repo scope is missing",
                 "can_push": False,
                 "hint": _GITHUB_PUSH_SETUP_HINT,
             }
@@ -224,8 +224,8 @@ async def test_gitlab_connection() -> dict[str, Any]:
             "ok": False,
             "code": "not_configured",
             "configured": False,
-            "error": "GITLAB_TOKEN не е зададен",
-            "hint": "Добави GITLAB_TOKEN в Studio → Свързаност (scope api, write_repository).",
+            "error": "GITLAB_TOKEN is not set",
+            "hint": "Add GITLAB_TOKEN in Studio → Connectors (scopes api, write_repository).",
         }
     try:
         import httpx
@@ -263,9 +263,9 @@ def storage_status() -> dict[str, Any]:
         "configured": configured,
         "bucket_set": bool(bucket),
         "hint": (
-            "Object Storage е активен — published apps и workspace backups оцеляват при redeploy."
+            "Object Storage is active: published apps and workspace backups survive a redeploy."
             if configured
-            else "Object Storage не е конфигуриран — публикувай в /apps/ или задай DEFAULT_OBJECT_STORAGE_BUCKET_ID."
+            else "Object Storage is not configured: publish to /apps/ or set DEFAULT_OBJECT_STORAGE_BUCKET_ID."
         ),
     }
 

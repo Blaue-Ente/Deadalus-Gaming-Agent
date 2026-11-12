@@ -676,7 +676,7 @@ async def generate_asset(
             resp.raise_for_status()
             raw = resp.content
     else:
-        raise RuntimeError("няма URL от генератора")
+        raise RuntimeError("no URL from the generator")
 
     from .playground_asset_verify import ensure_png_bytes
 

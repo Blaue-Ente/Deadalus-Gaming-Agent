@@ -726,19 +726,19 @@ def edit_file(slug: str, rel: str, search: str, replace: str) -> dict[str, Any]:
     guard_write(slug, rel)
     target = _safe_join(project_dir(slug), rel)
     if not target.exists() or not target.is_file():
-        return {"ok": False, "error": f"файлът не съществува: {rel}", "file": rel}
+        return {"ok": False, "error": f"file does not exist: {rel}", "file": rel}
     try:
         content = target.read_text(encoding="utf-8", errors="replace")
     except Exception as exc:
-        return {"ok": False, "error": f"не мога да прочета файла: {exc}", "file": rel}
+        return {"ok": False, "error": f"cannot read the file: {exc}", "file": rel}
     if not search:
-        return {"ok": False, "error": "празен search текст", "file": rel}
+        return {"ok": False, "error": "empty search text", "file": rel}
     count = content.count(search)
     if count == 0:
-        return {"ok": False, "error": "search текстът не е намерен (трябва да съвпада точно, вкл. интервали)",
+        return {"ok": False, "error": "search text not found (it must match exactly, spaces included)",
                 "occurrences": 0, "file": rel}
     if count > 1:
-        return {"ok": False, "error": f"search текстът се среща {count} пъти — добави повече контекст за уникалност",
+        return {"ok": False, "error": f"the search text occurs {count} times: add more context to make it unique",
                 "occurrences": count, "file": rel}
     new_content = content.replace(search, replace, 1)
     target.write_text(new_content, encoding="utf-8")

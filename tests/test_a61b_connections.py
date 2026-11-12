@@ -110,9 +110,9 @@ def test_unconfigured_or_disabled_slots_are_refused_before_any_call(client, monk
 # ------------------------------------------------------------------------------------------------ git tests
 @pytest.mark.parametrize("raw,code", [
     ({"ok": True, "code": "ok", "configured": True, "login": "me", "can_push": True, "source": "env"}, "ok"),
-    ({"ok": False, "code": "not_configured", "configured": False, "error": "GITHUB_TOKEN не е зададен"}, "not_configured"),
+    ({"ok": False, "code": "not_configured", "configured": False, "error": "GITHUB_TOKEN is not set"}, "not_configured"),
     ({"ok": False, "code": "invalid_token", "configured": True, "error": "Токенът е невалиден или изтекъл (401)"}, "invalid_token"),
-    ({"ok": False, "code": "forbidden", "configured": True, "error": "Достъпът е отказан (403) — липсва scope repo"}, "forbidden"),
+    ({"ok": False, "code": "forbidden", "configured": True, "error": "Access denied (403): the repo scope is missing"}, "forbidden"),
     ({"ok": False, "code": "api_error", "configured": True, "error": "GitHub API 502"}, "api_error"),
     ({"ok": False, "code": "network", "configured": True, "error": "ConnectError: timed out"}, "network"),
     # the prose is never parsed: a network error that happens to mention 401 stays a network error

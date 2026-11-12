@@ -81,9 +81,9 @@ def snapshot() -> dict[str, Any]:
         "gpu": gpu,
         "class": klass,
         "note": {
-            "tiny": "1.5B–3B Q4. Разговор да, тежък код — на парчета.",
-            "laptop": "7B Q4 е сладкото място за код на 8–16 GB RAM.",
-            "studio": "14B Q4 влиза. 32B само ако имаш ≥16 GB VRAM или много RAM.",
-            "workstation": "14B–32B. Не дърпай 70B освен ако сам искаш диска.",
+            "tiny": "1.5B–3B Q4. Fine for conversation; heavy code only in pieces.",
+            "laptop": "7B Q4 is the sweet spot for code on 8–16 GB RAM.",
+            "studio": "14B Q4 fits. 32B only with ≥16 GB VRAM or a lot of RAM.",
+            "workstation": "14B–32B. Do not pull 70B unless you want to spend the disk.",
         }.get(klass, ""),
     }

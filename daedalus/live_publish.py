@@ -199,7 +199,7 @@ async def ensure_local(slug: str) -> dict[str, Any]:
     if not index.is_file():
         return {
             "ok": False,
-            "error": "няма index.html след publish — играта не е static",
+            "error": "no index.html after publishing: the game is not static",
             "published": published,
         }
     return {
@@ -296,7 +296,7 @@ async def deploy_netlify_api(static_dir: Path, slug: str, *, poll_s: float = 90.
 
     token = netlify_token()
     if not token:
-        raise RuntimeError("NETLIFY_AUTH_TOKEN липсва")
+        raise RuntimeError("NETLIFY_AUTH_TOKEN is missing")
     headers = {"Authorization": f"Bearer {token}", "User-Agent": "daedalus-live-publish"}
     prev = get_site(slug) or {}
     site_id = prev.get("site_id") if prev.get("backend") == "netlify" else None
@@ -332,7 +332,7 @@ async def deploy_netlify_api(static_dir: Path, slug: str, *, poll_s: float = 90.
     if not url:
         raise RuntimeError("netlify did not return a URL")
     return {"ok": True, "backend": "netlify", "url": url, "site_id": site_id,
-            "note": "Публичният линк е готов." if state == "ready" else f"Качено; Netlify още обработва ({state})."}
+            "note": "The public link is ready." if state == "ready" else f"Uploaded; Netlify is still processing ({state})."}
 
 
 async def deploy_netlify(static_dir: Path, slug: str, *, anonymous: bool = False) -> dict[str, Any]:
@@ -340,7 +340,7 @@ async def deploy_netlify(static_dir: Path, slug: str, *, anonymous: bool = False
         return await deploy_netlify_api(static_dir, slug)
     npx = _npx()
     if not npx:
-        raise RuntimeError("npx липсва — инсталирай Node.js, за да качваме на Netlify")
+        raise RuntimeError("npx is missing: install Node.js to upload to Netlify")
     # Anonymous preview only: the owner-token path returned above (the API; never a token in argv).
     args = [npx, "-y", "netlify-cli", "deploy", "--dir", str(static_dir), "--json", "--allow-anonymous"]
     extra: dict[str, str] = {}
@@ -356,7 +356,7 @@ async def deploy_netlify(static_dir: Path, slug: str, *, anonymous: bool = False
     if code != 0 and not url:
         raise RuntimeError(f"netlify deploy failed: {out[-500:]}")
     if not url:
-        raise RuntimeError(f"netlify не върна URL: {out[-400:]}")
+        raise RuntimeError(f"netlify returned no URL: {out[-400:]}")
     return {
         "ok": True,
         "backend": "netlify_anon" if anonymous else "netlify",
@@ -419,7 +419,7 @@ async def deploy_gitlab_pages(static_dir: Path, slug: str) -> dict[str, Any]:
         "url": url,
         "repo": full_name,
         "html_url": created.get("html_url") if created else f"https://{gl.gitlab_host()}/{full_name}",
-        "note": "GitLab Pages обикновено е живо след 1–2 минути (CI).",
+        "note": "GitLab Pages is usually live 1–2 minutes later (CI).",
         "created": created,
     }
 
@@ -472,7 +472,7 @@ async def publish_live(
         "url": None,
         "backend": "local",
         "chain": effective_chain(backend, confirm_public),
-        "note": "Играта е в /apps/ на тази машина.",
+        "note": "The game is at /apps/ on this machine.",
     }
     static_dir = local.get("dir")
     if isinstance(static_dir, str):
@@ -508,7 +508,7 @@ async def publish_live(
             "site_id": remote.get("site_id"),
             "repo": remote.get("repo"),
             "expires": remote.get("expires"),
-            "note": remote.get("note") or "Публичният линк е готов.",
+            "note": remote.get("note") or "The public link is ready.",
             "html_url": remote.get("html_url"),
         })
         record_site(slug, {k: v for k, v in result.items() if k != "chain"})

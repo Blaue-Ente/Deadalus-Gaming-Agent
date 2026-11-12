@@ -2167,7 +2167,7 @@ async def skill_creator_generate(request: Request):
     if not session.get("ready_for_generation") and not force:
         return JSONResponse({
             "ok": False,
-            "error": "Skill не е готов за генериране — отговори на уточняващите въпроси или използвай force=true",
+            "error": "The skill is not ready to generate: answer the clarifying questions or use force=true",
             **sc.session_public_view(session),
         }, status_code=409)
     try:
@@ -3002,7 +3002,7 @@ async def daedalus_upgrade_pool_scan():
     from daedalus.upgrade_pool_scanner import get_adn_candidates, run_upgrade_pool_scan
     candidates = get_adn_candidates()
     if not candidates:
-        return JSONResponse({"ok": True, "candidates": 0, "message": "Няма нови кандидати в Upgrade Pool."})
+        return JSONResponse({"ok": True, "candidates": 0, "message": "No new candidates in the Upgrade Pool."})
     from daedalus.agent import get_daedalus
     agent = get_daedalus()
     session_id = f"bg-upgrade-{uuid.uuid4().hex[:8]}"
@@ -3015,7 +3015,7 @@ async def daedalus_upgrade_pool_scan():
         "ok": True,
         "candidates": len(candidates),
         "session_id": session_id,
-        "message": f"Стартиран scan на {len(candidates)} кандидата. Резултатът ще дойде в Outbox.",
+        "message": f"Started a scan of {len(candidates)} candidates. The result will arrive in the Outbox.",
     })
 
 
@@ -3037,7 +3037,7 @@ async def daedalus_generate_style_lesson():
         await generate_daily_lesson(agent)
 
     asyncio.create_task(_lesson())
-    return JSONResponse({"ok": True, "message": "Генериране на стил урок стартирано."})
+    return JSONResponse({"ok": True, "message": "Style lesson generation started."})
 
 
 @router.get("/daedalus/rate_limit_stats")
