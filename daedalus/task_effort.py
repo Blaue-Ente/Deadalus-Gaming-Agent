@@ -333,18 +333,18 @@ def briefing(decision: dict[str, Any]) -> str:
     tier = decision.get("tier")
     if tier == "whisper":
         return (
-            "[EFFORT: whisper] Отговори в 2–6 изречения. Без инструменти, "
-            "освен remember / едно status четене. Не започвай игра."
+            "[EFFORT: whisper] Answer in 2-6 sentences. No tools except remember or one status read. "
+            "Do not start a game."
         )
     if tier == "epic":
         return (
-            "[EFFORT: epic] Усилие = сложност. Не стъпквай целия свят в един файл. "
-            "Пиши/обнови world/bible.md, world/map.json, world/quests.json, characters/, levels/. "
-            "Една играема среза на ход. Продължавай през journal / resume. "
-            "world({action: prove}) трябва да мине — празен JSON не е кампания. "
-            "Definition of Done: loop + регион + персонаж + квест/диалог, не placeholder."
+            "[EFFORT: epic] Effort = depth. Do not cram the whole world into one file. "
+            "Write or update world/bible.md, world/map.json, world/quests.json, characters/, levels/. "
+            "One playable slice per turn; continue through journal / resume. "
+            "world({action: prove}) must pass: empty JSON is not a campaign. "
+            "Definition of done: loop + region + character + quest/dialogue, no placeholders."
         )
     return (
-        "[EFFORT: craft] Една завършена среза: input → update → render → win/lose. "
-        "Реални assets/*.png или assets({action:atlas|sfx|font}). После разширявай."
+        "[EFFORT: craft] One finished slice: input -> update -> render -> win/lose. "
+        "Real assets/*.png or assets({action: atlas|sfx|font}). Then expand."
     )

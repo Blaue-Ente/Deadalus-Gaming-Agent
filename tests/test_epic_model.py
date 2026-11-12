@@ -59,3 +59,15 @@ def test_the_owner_can_name_the_epic_model(cloud, monkeypatch):
     assert (out["model"], out["provider"], out["model_source"]) == ("anthropic/claude-sonnet-5.5", "openrouter", "owner-epic")
     monkeypatch.setenv("DAEDALUS_OFFLINE", "1")
     assert te.resolve_model({"apply_model": True, "tier": "epic"}).get("model_source") != "owner-epic"
+
+
+def test_model_facing_briefings_do_not_pull_the_reply_into_bulgarian():
+    """Live 2026-11-12: an English request got a Bulgarian reply; every turn carried a Bulgarian effort briefing."""
+    import re
+
+    from daedalus.tool_router import format_system, route
+
+    for tier in te.TIERS:
+        assert not re.search(r"[А-Яа-я]", te.briefing({"tier": tier}))
+    sys = format_system(route("Build a small web game with a frog", kind="static"), user_message="Build a frog game")
+    assert "language of the owner's request" in sys
