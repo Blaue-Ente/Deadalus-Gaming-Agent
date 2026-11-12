@@ -305,18 +305,21 @@ def test_name_and_branch_reach_the_clone(a0_tmp, no_browser):  # noqa: F811
     assert job.status == "done" and seen["name"] == "Lamp" and seen["branch"] == "dev"
 
 
-@pytest.mark.parametrize("script, manager, cmd", [
-    ("vite build", "npm", ("npm", "run", "build", "--", "--base=./")),
-    ("vite build", "pnpm", ("npx", "--yes", "pnpm", "run", "build", "--base=./")),
-    ("vite build --mode prod", "yarn", ("npx", "--yes", "yarn", "run", "build", "--base=./")),
-    # Chained: the whole script runs, every step kept; the output is made relative afterwards (make_relative).
-    ("tsc --noEmit && tsc --noEmit -p api/tsconfig.json && vite build", "pnpm", ("npx", "--yes", "pnpm", "run", "build")),
-    ("vite build && node scripts/copy-levels.js", "npm", ("npm", "run", "build")),
-    ("vite build --base /x/", "npm", ("npm", "run", "build")),                      # the owner chose a base
+@pytest.mark.parametrize("script, manager, cmd, patched", [
+    ("vite build", "npm", ("npm", "run", "build", "--", "--base=./"), None),
+    ("vite build", "pnpm", ("npx", "--yes", "pnpm", "run", "build", "--base=./"), None),
+    ("vite build --mode prod", "yarn", ("npx", "--yes", "yarn", "run", "build", "--base=./"), None),
+    # Chained (The-Labirinth): the whole script runs, with --base=./ put into its own vite step.
+    ("tsc --noEmit && tsc --noEmit -p api/tsconfig.json && vite build", "pnpm", ("npx", "--yes", "pnpm", "run", "build"),
+     "tsc --noEmit && tsc --noEmit -p api/tsconfig.json && vite build --base=./"),
+    ("vite build && node scripts/copy-levels.js", "npm", ("npm", "run", "build"),
+     "vite build --base=./ && node scripts/copy-levels.js"),
+    ("vite build --base /x/ && node post.js", "npm", ("npm", "run", "build"), None),    # the owner chose a base
+    ("tsc && node build.js", "npm", ("npm", "run", "build"), None),                      # no vite step
 ])
-def test_vite_builds_with_relative_assets_wherever_it_can(tmp_path, script, manager, cmd):
+def test_vite_builds_with_relative_assets_wherever_it_can(tmp_path, script, manager, cmd, patched):
     (tmp_path / "package.json").write_text(json.dumps({"scripts": {"build": script}, "devDependencies": {"vite": "5"}}))
-    assert static_build.build_command(tmp_path, {"framework": "vite"}, manager) == cmd
+    assert static_build.build_command(tmp_path, {"framework": "vite"}, manager) == (cmd, patched)
 
 
 def test_an_old_webpack_build_gets_the_legacy_openssl_switch(tmp_path, monkeypatch):
@@ -419,13 +422,18 @@ def test_a_root_absolute_build_is_not_reused(tmp_path):
         assert (static_build.fresh_output(tmp_path) is not None) is reused, html
 
 
-def test_a_chained_build_keeps_every_step_and_is_made_relative_after(tmp_path, monkeypatch):
-    """Review 2026-11-12: running only the vite step dropped a copy step; The-Labirinth's chained build rendered blank."""
+def test_a_chained_build_runs_whole_with_a_relative_base_and_package_json_is_restored(tmp_path, monkeypatch):
+    """Live 2026-11-12: running only the vite step dropped other steps (review); fixing paths after the build lost
+    The-Labirinth's CSS background. The script runs whole with --base=./ in its vite step; package.json comes back."""
     import asyncio as aio
+    import os
 
-    (tmp_path / "package.json").write_text(json.dumps({"scripts": {"build": "vite build && node copy.js"},
-                                                       "devDependencies": {"vite": "5"}}))
+    pkg = {"scripts": {"build": "vite build && node copy.js"}, "devDependencies": {"vite": "5"}}
+    (tmp_path / "package.json").write_text(json.dumps(pkg))
+    os.utime(tmp_path / "package.json", (1_000_000_000, 1_000_000_000))
+    original = (tmp_path / "package.json").read_bytes()
     (tmp_path / "index.html").write_text("<html>")
+    seen = []
 
     class Proc:
         returncode = 0
@@ -435,21 +443,19 @@ def test_a_chained_build_keeps_every_step_and_is_made_relative_after(tmp_path, m
 
         async def communicate(self):
             if "build" in self.argv:
-                d = tmp_path / "dist"
-                (d / "assets").mkdir(parents=True, exist_ok=True)
-                (d / "index.html").write_text('<link href="/favicon.svg"><script src="/assets/a.js"></script>')
-                (d / "assets" / "a.js").write_text('fetch("/assets/level1.json")')
-                (d / "assets" / "level1.json").write_text("{}")          # what copy.js adds
+                seen.append(json.loads((tmp_path / "package.json").read_text())["scripts"]["build"])
+                (tmp_path / "dist").mkdir(exist_ok=True)
+                (tmp_path / "dist" / "index.html").write_text('<script src="./assets/a.js"></script>')
             return b"", b""
 
     async def fake_exec(*argv, **kw):
         return Proc(argv)
 
     monkeypatch.setattr(aio, "create_subprocess_exec", fake_exec)
-    out = asyncio.run(static_build.build(tmp_path))
-    html = (out / "index.html").read_text()
-    assert 'src="./assets/a.js"' in html and 'href="./favicon.svg"' in html and static_build.relative_assets(out)
-    assert (out / "assets" / "level1.json").is_file() and "./assets/level1.json" in (out / "assets" / "a.js").read_text()
+    assert asyncio.run(static_build.build(tmp_path)) == tmp_path / "dist"
+    assert seen == ["vite build --base=./ && node copy.js"]
+    assert (tmp_path / "package.json").read_bytes() == original
+    assert (tmp_path / "package.json").stat().st_mtime == 1_000_000_000
 
 
 def test_a_browser_check_that_failed_itself_is_not_it_runs():
@@ -475,3 +481,18 @@ def test_a_static_site_with_a_dev_server_dependency_is_still_published(a0_tmp, n
     job = asyncio.run(revive_job.run(revive_job.ReviveJob(url="https://github.com/me/site"), clone_fn=clone_static))
     assert job.analysis["kind"] == "static" and job.analysis["server"] == ["express"]
     assert job.status == "done", job.steps
+
+
+def test_a_revived_repo_keeps_its_own_readme(a0_tmp):  # noqa: F811
+    """The real order (playground_github.clone_repo): the clone lands first, then the project record is created."""
+    from daedalus import playground as pg
+
+    readme = "# Tiny\n\nThe owner's own words.\n"
+    root = pg.project_dir("tiny")
+    root.mkdir(parents=True)
+    (root / "README.md").write_text(readme)
+    (root / "index.html").write_text(GAME)
+    asyncio.run(pg.create_project("tiny", source="revived", slug="tiny"))
+    assert (root / "README.md").read_text() == readme
+    built = asyncio.run(pg.create_project("Own Game", kind="static"))
+    assert "## Status (Daedalus)" in (pg.project_dir(built["slug"]) / "README.md").read_text()
