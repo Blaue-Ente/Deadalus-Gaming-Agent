@@ -188,6 +188,23 @@ def build_critic_messages(
     ]
 
 
+PLAY_SHOT = "assets/_gameplay_screenshot.png"
+
+
+def _fresh_play_shot(slug: str, project_dir: Any) -> Any:
+    """The gameplay check's frame, taken after pressing start, when it shows the current code. The critic judged the
+    first paint before: live 2026-11-12, a working lantern maze was rejected as "a bare black start menu"."""
+    try:
+        shot = project_dir / PLAY_SHOT
+        if not shot.is_file():
+            return None
+        from .harness.perception import _project_edit_mtime
+        return shot if shot.stat().st_mtime >= _project_edit_mtime(slug) else None
+    except Exception:
+        return None
+
+
+
 async def evaluate(
     *,
     slug: str,
@@ -220,14 +237,17 @@ async def evaluate(
         idx_lines = []
     code_index = "\n".join(idx_lines)
     screenshot_b64 = ""
+    in_play = _fresh_play_shot(slug, project_dir)
     try:
         shot_rel = bv.get("screenshot_path") if isinstance(bv, dict) else None
-        if shot_rel:
-            shot_abs = project_dir / shot_rel
-            if shot_abs.exists():
-                screenshot_b64 = base64.b64encode(shot_abs.read_bytes()).decode()
+        shot_abs = in_play or (project_dir / shot_rel if shot_rel else None)
+        if shot_abs is not None and shot_abs.exists():
+            screenshot_b64 = base64.b64encode(shot_abs.read_bytes()).decode()
     except Exception:
         screenshot_b64 = ""
+    if in_play is not None:
+        description = ((description or "") + "\n\n[The screenshot shows the game DURING PLAY, after pressing start "
+                       "and playing the input scenario; it is not the start screen.]")
     try:
         res = await route_fn(
             messages=build_critic_messages(
