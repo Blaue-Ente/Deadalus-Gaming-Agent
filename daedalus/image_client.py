@@ -75,6 +75,21 @@ def resolve_image_model(preferred: str = "seedream") -> str:
     return pref or "seedream"
 
 
+def parse_size(size: str) -> tuple[int, int]:
+    """'512x512' -> (512, 512); anything unreadable -> (1024, 1024)."""
+    return _size(size)
+
+
+def seedream_size(w: int, h: int) -> str:
+    """Seedream renders at least 1024 on its shorter side: scale both sides by one factor (the aspect is kept)."""
+    scale = max(1.0, 1024 / max(1, min(w, h)))
+    w2, h2 = round(w * scale), round(h * scale)
+    cap = 4096 / max(w2, h2)
+    if cap < 1:
+        w2, h2 = round(w2 * cap), round(h2 * cap)
+    return f"{w2}x{h2}"
+
+
 def _size(size: str) -> tuple[int, int]:
     try:
         w, h = (int(x) for x in size.lower().replace("×", "x").split("x"))
@@ -95,8 +110,12 @@ async def generate_image(
     image_type: str = "png",
     **_ignored: Any,
 ) -> dict[str, Any]:
-    """Return ``{images: [{url, b64, width, height}], provider, model}``. When the chosen Novita model fails and
-    OpenRouter can serve, the result says so (``fallback_from``): a switch of provider is never silent."""
+    """Return ``{images: [{url, b64, width, height}], provider, model}``. When the chosen Novita model fails (not a
+    timeout) and OpenRouter can serve, the result says so (``fallback_from``): a switch is never silent.
+
+    One image per call (``n`` is kept for old callers; Seedream and the OpenRouter models return one). The format is
+    the provider's (often JPEG): sprite_alpha.finalize_image makes it the PNG and size the game asked for.
+    ``poll_interval`` and ``image_type`` are accepted for old callers and unused (Novita no longer polls)."""
     t0 = time.perf_counter()
     resolved = resolve_image_model(model)
     if resolved in _OR_MODELS:
@@ -104,6 +123,10 @@ async def generate_image(
     if _cred_env("NOVITA_API_KEY", "").strip():
         try:
             return await _novita_image(prompt=prompt, model=resolved, size=size, max_wait=max_wait, t0=t0)
+        except httpx.TimeoutException as exc:
+            # Novita may still finish and bill: a second, paid image elsewhere would be paid twice (review 2026-11-12).
+            raise RuntimeError(f"Novita {resolved} did not answer in time; it may still finish and be billed. "
+                               "Not retried elsewhere.") from exc
         except Exception as exc:
             log.warning("Novita image (%s) failed: %s", resolved, exc)
             if _cred_env("OPENROUTER_API_KEY", "").strip() or _cred_env("ALLTOKEN_API_KEY", "").strip():
@@ -129,9 +152,9 @@ async def _novita_image(*, prompt: str, model: str, size: str, max_wait: float, 
                                    "seed": -1, "steps": 4, "image_num": 1}
     else:
         url = NOVITA_SEEDREAM_URL
-        # Seedream renders at least ~1 megapixel; a smaller sprite is asked for at 1024 and scaled by the caller.
-        side = "x".join(str(max(v, 1024)) for v in (w, h))
-        payload = {"prompt": prompt, "size": side, "watermark": False}
+        # Seedream renders at least 1024 on the shorter side: asked larger with the same aspect, fitted by the
+        # caller (sprite_alpha.finalize_image) to the size the game asked for.
+        payload = {"prompt": prompt, "size": seedream_size(w, h), "watermark": False}
     async with httpx.AsyncClient(timeout=max(30.0, max_wait)) as c:
         resp = await c.post(url, headers=headers, json=payload)
     if resp.status_code != 200:

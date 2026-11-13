@@ -23,7 +23,7 @@ MANIFEST_REL = "assets/_manifest.json"
 STYLE_BIBLE_REL = "assets/_style_bible.json"
 MAX_ASSETS_DEFAULT = 6
 MAX_ASSETS_CAP = 32
-DEFAULT_MODEL = "seedream"     # Novita Seedream 4.0 (the old SDXL route is gone: 404, checked 2026-11-12)
+DEFAULT_MODEL = "sdxl"   # a name MeshRouter knows; standalone, image_client maps it to Novita Seedream 4.0
 DEFAULT_SIZE_SPRITE = "512x512"
 DEFAULT_SIZE_BG = "1024x768"
 
@@ -687,13 +687,12 @@ async def generate_asset(
     else:
         raise RuntimeError("no URL from the generator")
 
+    from .image_client import parse_size
     from .playground_asset_verify import ensure_png_bytes
-    from .sprite_alpha import prepare_sprite, wants_alpha
+    from .sprite_alpha import finalize_image
 
-    alpha: dict[str, Any] = {}
-    if wants_alpha(apath):                   # a sprite gets a transparent background and the size it asked for
-        from .image_client import _size
-        raw, alpha = await asyncio.to_thread(prepare_sprite, raw, size=_size(size or DEFAULT_SIZE_SPRITE))
+    # PNG at the asked size; a sprite on a transparent background, a scene covered without stretching.
+    raw, alpha = await asyncio.to_thread(finalize_image, raw, apath, parse_size(size or DEFAULT_SIZE_SPRITE))
     raw = ensure_png_bytes(raw)
     nbytes = write_bytes(slug, apath, raw)
     _update_manifest_entry(slug, apath, prompt=aprompt, size=size, bytes_written=nbytes)

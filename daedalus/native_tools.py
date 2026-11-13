@@ -2052,17 +2052,18 @@ async def execute_native_tool(
             else:
                 _paid_ledger("image", ok=False, what=prompt, cost="unknown", error="no b64/url in the reply")
                 return "── generate_image FAILED: no b64/url ──"
-            from .sprite_alpha import prepare_sprite, wants_alpha
-            alpha_line = ""
-            if wants_alpha(filename):              # a sprite: transparent background, the size it asked for (free)
-                from .image_client import _size
-                png, alpha = await asyncio.to_thread(prepare_sprite, dest.read_bytes(), size=_size(size))
+            from .image_client import parse_size
+            from .sprite_alpha import finalize_image
+            final, fin = await asyncio.to_thread(finalize_image, dest.read_bytes(), filename, parse_size(size))
+            if fin.get("png"):                     # PNG at the asked size; a sprite on a transparent background
                 if dest.suffix.lower() != ".png":
                     dest.unlink(missing_ok=True)
                     dest = dest.with_suffix(".png")
-                dest.write_bytes(png)
-                alpha_line = ("\ntransparent background, " + "x".join(map(str, alpha.get("size") or [])) if
-                              alpha.get("alpha") else f"\nbackground kept: {alpha.get('note', '')}")
+                dest.write_bytes(final)
+                alpha_line = (f"\n{fin['kind']}, {'x'.join(map(str, fin.get('size') or []))}"
+                              + (", transparent background" if fin.get("alpha") else ""))
+            else:                                  # no Pillow: kept as delivered, under its own name
+                alpha_line = f"\nkept as delivered: {fin.get('note', '')}"
             if img.get("fallback_from"):
                 alpha_line += f"\nnote: {img['fallback_from']} (served by {img.get('provider')} instead)"
             _paid_ledger("image", ok=True, what=prompt, path=str(dest.relative_to(dest_dir.parent)),

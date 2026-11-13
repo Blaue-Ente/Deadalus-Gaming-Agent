@@ -67,6 +67,9 @@ def test_novita_seedream_is_asked_at_its_minimum_size(a0_tmp, monkeypatch, http)
     assert out["images"][0]["url"] == "https://img.example/1.jpg"
     call = http.calls[0]
     assert call["url"] == image_client.NOVITA_SEEDREAM_URL and call["json"]["size"] == "1024x1024"
+    assert image_client.seedream_size(1024, 768) == "1365x1024"      # the aspect is kept (review 2026-11-12)
+    assert image_client.seedream_size(512, 256) == "2048x1024"
+    assert image_client.seedream_size(3000, 3000) == "3000x3000"
     assert call["json"]["watermark"] is False and call["auth"] == "Bearer nov"
 
 
@@ -150,12 +153,15 @@ def test_without_pillow_the_image_is_unchanged(monkeypatch):
     monkeypatch.setattr(builtins, "__import__", no_pil)
     data = _sprite_on_white()
     out, rep = sprite_alpha.prepare_sprite(data)
-    assert out == data and "Pillow is not installed" in rep["note"]
+    assert out == data and rep["png"] is False and "Pillow is not installed" in rep["note"]
 
 
 @pytest.mark.parametrize("name,ok", [("hero.png", True), ("sprites/frog.png", True), ("enemy_bat.png", True),
                                      ("bg.png", False), ("background-forest.png", False), ("sky.png", False),
-                                     ("tiles/grass.png", False), ("level1_bg.jpg", False), ("title.png", False)])
+                                     ("tiles/grass.png", False), ("level1_bg.jpg", False), ("title.png", False),
+                                     # plurals, folders and camelCase (review 2026-11-12)
+                                     ("backgrounds/forest.png", False), ("textures/stone.png", False),
+                                     ("walls/a.png", False), ("forestBg.png", False), ("level2.png", False)])
 def test_only_sprites_are_cut_out(name, ok):
     assert sprite_alpha.wants_alpha(name) is ok
 
@@ -184,3 +190,63 @@ def test_the_image_tool_saves_a_transparent_png(a0_tmp, monkeypatch):  # noqa: F
     saved = pg.project_dir(slug) / "assets" / "hero.png"
     assert saved.is_file() and not (pg.project_dir(slug) / "assets" / "hero.jpg").exists()
     assert Image.open(saved).mode == "RGBA"
+
+
+def test_a_sprite_comes_back_at_exactly_the_requested_size_never_upscaled():
+    out, rep = sprite_alpha.finalize_image(_sprite_on_white(), "hero.png", (256, 128))
+    im = Image.open(io.BytesIO(out))
+    assert im.size == (256, 128) and rep["cropped_to"] == [100, 100]
+    box = im.getbbox()
+    assert box[2] - box[0] == 100 and box[3] - box[1] == 100                # padded, not stretched or upscaled
+
+
+def test_a_scene_is_covered_to_the_requested_size_without_stretching():
+    im = Image.new("RGB", (1365, 1024))
+    for x in range(1365):
+        im.putpixel((x, 0), (x % 256, 10, 10))
+    out, rep = sprite_alpha.finalize_image(_png(im), "backgrounds/forest.jpg", (1024, 768))
+    assert rep["kind"] == "scene" and rep["png"] and Image.open(io.BytesIO(out)).size == (1024, 768)
+
+
+def test_a_timeout_is_not_paid_twice(a0_tmp, monkeypatch):  # noqa: F811
+    import httpx
+
+    _keys(monkeypatch, NOVITA_API_KEY="nov", OPENROUTER_API_KEY="or")
+
+    async def slow(**kw):
+        raise httpx.ReadTimeout("slow")
+
+    async def must_not(**kw):
+        raise AssertionError("no second paid image after a timeout")
+
+    monkeypatch.setattr(image_client, "_novita_image", slow)
+    monkeypatch.setattr(image_client, "_openrouter_image", must_not)
+    with pytest.raises(RuntimeError, match="may still finish and be billed"):
+        asyncio.run(image_client.generate_image(prompt="frog"))
+
+
+def test_without_pillow_the_tool_keeps_the_delivered_file_and_name(a0_tmp, monkeypatch):  # noqa: F811
+    import base64
+
+    from daedalus import native_tools, paid_assets
+    from daedalus import playground as pg
+
+    slug = asyncio.run(pg.create_project("Frog", kind="static"))["slug"]
+    jpeg = b"\xff\xd8\xff\xe0fake-jpeg"
+
+    async def fake(**kw):
+        return {"provider": "novita", "model": "seedream-4.0", "images": [{"b64": base64.b64encode(jpeg).decode()}]}
+
+    monkeypatch.setattr("daedalus.image_client.generate_image", fake)
+    monkeypatch.setattr("daedalus.sprite_alpha.finalize_image",
+                        lambda data, name, size: (data, {"png": False, "alpha": False, "note": "no Pillow"}))
+    tok = paid_assets._TURN_WORDS.set("AI art please")
+    try:
+        out = asyncio.run(native_tools.execute_native_tool(
+            "generate_image", {"prompt": "frog", "slug": slug, "filename": "hero.jpg"},
+            memory=None, session_id="s", read_file_fn=None))
+    finally:
+        paid_assets._TURN_WORDS.reset(tok)
+    assets = pg.project_dir(slug) / "assets"
+    assert "kept as delivered" in out and (assets / "hero.jpg").read_bytes() == jpeg
+    assert not (assets / "hero.png").exists()
