@@ -46,9 +46,6 @@
           <button type="button" data-mentor="on" aria-pressed="false" data-i18n="studio.mentor.on">ON</button>
           <button type="button" data-mentor="off" aria-pressed="false" data-i18n="studio.mentor.off">OFF</button>
         </div>
-        <label class="sr-only" for="mentor-choice" data-i18n="studio.mentorChoiceAria">Mentor model</label>
-        <select id="mentor-choice" class="mentor-choice" data-i18n-aria="studio.mentorChoiceAria" aria-label="Mentor model"></select>
-        <button type="button" id="mentor-custom" class="mentor-custom" data-i18n-aria="studio.mentorCustomAria" aria-label="Custom mentor model" title="Custom model">⋯</button>
         <span id="mentor-spend" class="mentor-spend" title=""></span>
       </div>
       <div class="dx-lang" role="group" data-i18n-aria="lang.aria" aria-label="Language">
@@ -595,15 +592,16 @@
           </select>
           <div class="settings-pages">
             <div class="settings-page" data-page="models">
-              <p class="hint" data-i18n="studio.settingsHarnessHint">Each setting shows what is in effect, where it comes from, and whether an environment variable locks it.</p>
-              <div id="settings-config-models" class="cfg-list"></div>
-              <details id="settings-intents-box">
+              <p class="kicker" data-i18n="studio.mpMainTitle">Main model</p>
+              <p class="hint" data-i18n="studio.mpMainHint">The model that chats, writes and builds unless a task below has its own.</p>
+              <div id="settings-brain" class="dx-mp-card"></div>
+              <details id="settings-intents-box" open>
                 <summary class="kicker" data-i18n="studio.settingsModels">Models per task</summary>
-                <p class="hint" data-i18n="studio.settingsModelsHint">Use provider:model, for example openrouter:openai/gpt-4o. Empty uses the default.</p>
+                <p class="hint" data-i18n="studio.mpTasksHint">Leave a task on "Same as main", or give it its own model.</p>
                 <div id="settings-intents" class="cfg-list"></div>
               </details>
-              <p class="kicker" data-i18n="studio.settingsBrain">Brain</p>
-              <div id="settings-brain"></div>
+              <p class="hint" data-i18n="studio.settingsHarnessHint">Each setting shows what is in effect, where it comes from, and whether an environment variable locks it.</p>
+              <div id="settings-config-models" class="cfg-list"></div>
             </div>
             <div class="settings-page" data-page="local" hidden>
               <p class="hint" data-i18n="studio.localPageHint">Local models are managed in the Brain tab of the side panel for now: choose Ollama, Cloud or Offline and pull models there.</p>
@@ -874,28 +872,6 @@
       <button type="button" id="dx-confirm-cancel" class="chip"></button>
       <button type="button" id="dx-confirm-ok" class="primary"></button>
     </div>
-  </dialog>
-  <dialog id="mentor-custom-dlg" class="mentor-dlg">
-    <form method="dialog" id="mentor-custom-form">
-      <p class="kicker" data-i18n="studio.mentorCustomTitle">Director model</p>
-      <p class="hint" data-i18n="studio.mentorCustomHint">Any OpenRouter / AllToken / Novita id. Mentor still caps tokens.</p>
-      <label class="sr-only" for="mentor-prov" data-i18n="studio.mentorProvider">Provider</label>
-      <select id="mentor-prov" aria-label="Provider">
-        <option value="openrouter">openrouter</option>
-        <option value="alltoken">alltoken</option>
-        <option value="novita">novita</option>
-        <option value="openai">openai</option>
-        <option value="nvidia">nvidia</option>
-        <option value="anthropic">anthropic</option>
-      </select>
-      <label class="sr-only" for="mentor-model" data-i18n="studio.mentorModel">Model</label>
-      <input id="mentor-model" list="mentor-model-list" autocomplete="off" placeholder="anthropic/claude-fable-5.1" />
-      <datalist id="mentor-model-list"></datalist>
-      <div class="row tight">
-        <button type="submit" class="primary" id="mentor-custom-apply" data-i18n="studio.mentorCustomApply">Use this</button>
-        <button type="button" id="mentor-custom-cancel" data-i18n="studio.mentorCustomCancel">Cancel</button>
-      </div>
-    </form>
   </dialog>
   <script src="/static/studio.js"></script>
   <script src="/static/studio-workspace.js"></script>

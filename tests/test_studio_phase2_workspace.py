@@ -364,7 +364,7 @@ def test_review_actions_and_write_only_secret(studio_server):
         page.route("**/admin/daedalus/proposals/prop1/approve", approve)
         page.route("**/admin/daedalus/connectors/overview", overview)
         page.route("**/admin/daedalus/connectors/secrets", secrets)
-        page.route("**/api/v1/llm/status", lambda route: _fulfill(route, 500, {"detail": "brain down"}))
+        page.route("**/api/v1/harness/models", lambda route: _fulfill(route, 500, {"detail": "brain down"}))
         page.goto(studio_server["url"] + "/?panel=review&tab=proposals", wait_until="domcontentloaded")
         page.get_by_text("Keep the notes").wait_for()
         page.locator("#review-list button[data-act=approve]").click()
@@ -376,7 +376,7 @@ def test_review_actions_and_write_only_secret(studio_server):
         page.locator("#review-list button[data-act=grant]").first.click()
         page.wait_for_selector("#review-list button[data-act=revoke]")
         page.locator("#workspace-nav [data-panel=settings]").click()
-        page.wait_for_function("() => document.getElementById('settings-status').textContent.includes('brain down')")
+        page.wait_for_function("() => document.getElementById('harness-status').textContent.includes('brain down')")
         assert page.locator("#settings-brain").inner_text().strip() == ""
         assert planted not in page.locator("#panel-settings").inner_text()
         page.locator("#settings-nav button[data-page=keys]").click()          # the key form lives on Keys & services

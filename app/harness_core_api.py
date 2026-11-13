@@ -5,6 +5,7 @@ from typing import Any
 
 import asyncio
 import json
+import os
 
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -76,9 +77,8 @@ class IntentBody(BaseModel):
     model: str = Field(default="", max_length=200)  # "provider:model"; empty clears the owner's choice
 
 
-@router.get("/api/v1/harness/intents")
-def harness_intents() -> dict[str, Any]:
-    """Which model serves each LLM intent, and which of them the owner may change."""
+def _intent_rows() -> tuple[list[dict[str, Any]], bool]:
+    """One row per LLM intent (shared by GET intents and GET models) and whether DAEDALUS_MODEL locks them."""
     from daedalus.harness import gateway as gw
 
     rows: list[dict[str, Any]] = []
@@ -87,7 +87,7 @@ def harness_intents() -> dict[str, Any]:
         sel = gw._SELECTOR.get(intent, intent)
         row: dict[str, Any] = {"intent": intent, "selectable": sel in gw.OVERRIDABLE or intent == "mentor"}
         if intent == "mentor":
-            # The mentor keeps its own choice (Studio header); this view reports it and POST delegates to it.
+            # The mentor keeps its own choice; this view reports it and POST delegates to it.
             from daedalus import mentor_helm
 
             try:
@@ -111,7 +111,158 @@ def harness_intents() -> dict[str, Any]:
             row.update({"owner_choice": overrides.get(sel), "default": gw.default_tag_for(intent),
                         "resolved": resolved})
         rows.append(row)
-    return {"ok": True, "env_locked": gw.model_locked_by_env(), "intents": rows}
+    return rows, gw.model_locked_by_env()
+
+
+@router.get("/api/v1/harness/intents")
+def harness_intents() -> dict[str, Any]:
+    """Which model serves each LLM intent, and which of them the owner may change."""
+    rows, locked = _intent_rows()
+    return {"ok": True, "env_locked": locked, "intents": rows}
+
+
+# ---- Model manager: the main model, the providers and models to pick from, a model per task -----------------------
+_PROVIDER_LABELS = {
+    "anthropic": "Anthropic", "openai": "OpenAI", "groq": "Groq", "gemini": "Google Gemini", "novita": "Novita",
+    "openrouter": "OpenRouter", "alltoken": "AllToken", "poolside": "Poolside", "nvidia": "NVIDIA",
+    "omniroute": "OmniRoute", "replit_openai": "OpenAI (Replit)", "replit_gemini": "Gemini (Replit)",
+    "ollama": "Ollama", "lmstudio": "LM Studio", "llamacpp": "llama.cpp", "vllm": "vLLM",
+}
+
+
+def _brain_lock_env() -> str:
+    """The environment variable that pins the main model, or an empty string."""
+    for name in ("DAEDALUS_MODEL", "DAEDALUS_PROVIDER"):
+        if (os.environ.get(name) or "").strip():
+            return name
+    return ""
+
+
+def _source_kind(provider: str, source: str) -> str:
+    from daedalus.local_llm import is_local_provider
+
+    src = (source or "").lower()
+    if provider and is_local_provider(provider):
+        return "local"
+    if src.startswith("db"):
+        return "saved"
+    if src.startswith("env"):
+        return "server"
+    return "auto" if provider else ""
+
+
+def _provider_rows() -> list[dict[str, Any]]:
+    from daedalus.llm_config import PROVIDER_DEFAULTS, resolve_provider_api_key
+    from daedalus.local_llm import LOCAL_PROVIDERS
+
+    show_replit = (os.environ.get("DAEDALUS_SHOW_REPLIT_LLM") or "").strip().lower() in ("1", "true", "yes", "on")
+    rows: list[dict[str, Any]] = []
+    for pid in PROVIDER_DEFAULTS:
+        if pid in ("replit_openai", "replit_gemini") and not show_replit:
+            continue
+        local = pid in LOCAL_PROVIDERS
+        try:
+            has_key = True if local else bool(resolve_provider_api_key(pid))
+        except Exception:
+            has_key = False
+        rows.append({"id": pid, "label": _PROVIDER_LABELS.get(pid, pid), "kind": "local" if local else "cloud",
+                     "has_key": has_key})
+    return rows
+
+
+def _model_catalog() -> dict[str, list[dict[str, Any]]]:
+    from daedalus.llm_config import list_preset_models
+
+    catalog: dict[str, list[dict[str, Any]]] = {}
+    for m in list_preset_models():
+        prov, mid = str(m.get("provider") or ""), str(m.get("id") or "")
+        if prov and mid:
+            catalog.setdefault(prov, []).append({"id": mid, "label": str(m.get("label") or mid),
+                                                 "tier": str(m.get("tier") or "unknown")})
+    try:
+        from daedalus import mentor_helm
+
+        for row in mentor_helm.CATALOG:
+            prov, mid = str(row.get("provider") or ""), str(row.get("model") or "")
+            if prov and mid and not any(x["id"] == mid for x in catalog.get(prov, [])):
+                catalog.setdefault(prov, []).append({"id": mid, "label": str(row.get("label") or mid),
+                                                     "tier": "unknown"})
+    except Exception:
+        pass
+    return catalog
+
+
+def _brain_view() -> dict[str, Any]:
+    from daedalus.llm_config import NotConfiguredError, get_brain_config
+
+    lock_env = _brain_lock_env()
+    out: dict[str, Any] = {"provider": "", "model": "", "base_url": "", "source": "", "source_kind": "",
+                           "has_key": False, "locked": bool(lock_env), "lock_env": lock_env}
+    try:
+        cfg = get_brain_config() or {}
+    except NotConfiguredError:
+        return {"configured": False, **out}
+    except Exception as exc:   # never fail the page: report it as "not set up" with the reason
+        return {"configured": False, **out, "error": str(exc)[:160]}
+    provider = str(cfg.get("provider") or "")
+    out.update({"provider": provider, "model": str(cfg.get("model") or ""), "base_url": str(cfg.get("base_url") or ""),
+                "source": str(cfg.get("source") or ""), "source_kind": _source_kind(provider, str(cfg.get("source") or "")),
+                "has_key": bool(cfg.get("api_key"))})
+    return {"configured": bool(provider and out["model"]), **out}
+
+
+@router.get("/api/v1/harness/models")
+def harness_models() -> dict[str, Any]:
+    """Everything the Models page needs in one call: the main model, providers, model catalog and per-task rows.
+    Never fails when nothing is configured. No key value is ever returned."""
+    view = _brain_view()
+    try:
+        tasks, env_locked = _intent_rows()
+    except Exception:
+        tasks, env_locked = [], False
+    return {"ok": True, "configured": view.pop("configured"), "env_locked": env_locked, "brain": view, "providers": _provider_rows(),
+            "catalog": _model_catalog(), "tasks": tasks}
+
+
+class BrainBody(BaseModel):
+    provider: str = Field(..., min_length=1, max_length=40)
+    model: str = Field(..., min_length=1, max_length=200)
+    base_url: str = Field(default="", max_length=300)
+
+
+@router.post("/api/v1/harness/brain")
+def harness_brain_set(body: BrainBody) -> Any:
+    """Choose the main model. Saved like Connectors does, and the wardrobe is kept in step so a leftover local
+    backend cannot override the choice (step 0 of llm_config). Never accepts or returns a key."""
+    from daedalus import llm_wardrobe
+    from daedalus.llm_config import PROVIDER_DEFAULTS, set_config
+    from daedalus.llm_router_config import router_write_context
+    from daedalus.local_llm import is_local_provider, normalize_provider
+
+    lock_env = _brain_lock_env()
+    if lock_env:
+        return JSONResponse({"ok": False, "error": "env_locked", "field": "brain", "env": lock_env}, status_code=409)
+    raw = body.provider.strip().lower()
+    local = is_local_provider(raw)
+    provider = normalize_provider(raw) if local else raw
+    if provider not in PROVIDER_DEFAULTS:
+        return JSONResponse({"ok": False, "error": "unknown_provider", "provider": body.provider}, status_code=400)
+    model = body.model.strip()
+    base_url = body.base_url.strip()
+    if not model:
+        return JSONResponse({"ok": False, "error": "model_required"}, status_code=400)
+    if base_url and not base_url.lower().startswith(("http://", "https://")):
+        return JSONResponse({"ok": False, "error": "invalid_base_url"}, status_code=400)
+    with router_write_context():
+        set_config(model=model, api_key="", provider=provider, base_url=base_url, use_cache=provider == "anthropic")
+    if local:
+        llm_wardrobe.use_local(provider)
+        data = llm_wardrobe.load()
+        data["active"] = model
+        llm_wardrobe.save(data)
+    else:
+        llm_wardrobe.use_cloud()
+    return harness_models()
 
 
 @router.post("/api/v1/harness/intents")

@@ -85,8 +85,8 @@ SETTINGS: dict[str, tuple[str, str]] = {
     "setting:run_budget": ("Run budget", "implemented"),
     "setting:effort": ("Effort (client state)", "implemented"),
     "setting:language": ("Language EN/BG (client state)", "implemented"),
-    "setting:brain": ("Brain provider and model", "partial"),
-    "setting:intents": ("Per-intent model overrides", "planned"),
+    "setting:brain": ("Brain provider and model", "implemented"),
+    "setting:intents": ("Per-intent model overrides", "implemented"),
 }
 
 WORKFLOWS: dict[str, tuple[str, str]] = {
