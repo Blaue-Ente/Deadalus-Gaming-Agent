@@ -13,6 +13,10 @@ import pytest
 from fastapi.testclient import TestClient
 from httpx import Headers
 
+# Studio servers the tests start must not open the first-run onboarding over the page they click (2026-11-13);
+# test_onboarding turns it on for its own server.
+os.environ.setdefault("DAEDALUS_ONBOARDING_AUTO", "0")
+
 _PRODUCT = Path(__file__).resolve().parents[1]
 if str(_PRODUCT) not in sys.path:
     sys.path.insert(0, str(_PRODUCT))

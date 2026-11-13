@@ -56,6 +56,7 @@
         <button type="button" data-lang="bg" aria-pressed="false">BG</button>
       </div>
       <span id="team-chip" class="chip team-chip" hidden></span>
+      <button type="button" id="onb-link" class="chip" data-i18n="studio.setup">Setup</button>
       <button type="button" id="settings-link" class="chip" data-i18n="studio.settings">Settings</button>
       <p id="header-status" class="header-status" role="status" hidden></p>
       <div class="pills" id="pills"></div>
@@ -765,6 +766,24 @@
       </div>
     </section>
   </div>
+  <dialog id="onb-dlg" class="onb-dlg" aria-labelledby="onb-title">
+    <div class="onb-top">
+      <div>
+        <p class="kicker" data-i18n="onb.kicker">First steps</p>
+        <h2 id="onb-title" class="onb-title" data-i18n="onb.title">Welcome to Daedalus</h2>
+        <p class="hint" data-i18n="onb.intro">Daedalus makes games and apps with you. This page checks what this computer has, says what to add for each ability, and shows which keys matter.</p>
+      </div>
+      <div class="onb-lang" role="group" data-i18n-aria="lang.aria" aria-label="Language">
+        <button type="button" data-lang="en" aria-pressed="true">EN</button>
+        <button type="button" data-lang="bg" aria-pressed="false">BG</button>
+      </div>
+    </div>
+    <div id="onb-body" class="onb-body"></div>
+    <div class="row onb-actions">
+      <button type="button" id="onb-recheck" class="chip" data-i18n="onb.recheck">Check again</button>
+      <button type="button" id="onb-close" class="primary" data-i18n="onb.done">Done</button>
+    </div>
+  </dialog>
   <dialog id="mentor-custom-dlg" class="mentor-dlg">
     <form method="dialog" id="mentor-custom-form">
       <p class="kicker" data-i18n="studio.mentorCustomTitle">Director model</p>
@@ -789,5 +808,6 @@
   </dialog>
   <script src="/static/studio.js"></script>
   <script src="/static/studio-workspace.js"></script>
+  <script src="/static/studio-onboarding.js"></script>
 </body>
 </html>
