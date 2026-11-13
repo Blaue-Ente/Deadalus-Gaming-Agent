@@ -5,6 +5,8 @@ Assets live under ``playground/projects/{slug}/assets/``. Metadata is stored in
 """
 from __future__ import annotations
 
+import asyncio
+
 import json
 import logging
 import re
@@ -21,7 +23,7 @@ MANIFEST_REL = "assets/_manifest.json"
 STYLE_BIBLE_REL = "assets/_style_bible.json"
 MAX_ASSETS_DEFAULT = 6
 MAX_ASSETS_CAP = 32
-DEFAULT_MODEL = "sdxl"
+DEFAULT_MODEL = "sdxl"   # a name MeshRouter knows; standalone, image_client maps it to Novita Seedream 4.0
 DEFAULT_SIZE_SPRITE = "512x512"
 DEFAULT_SIZE_BG = "1024x768"
 
@@ -685,8 +687,12 @@ async def generate_asset(
     else:
         raise RuntimeError("no URL from the generator")
 
+    from .image_client import parse_size
     from .playground_asset_verify import ensure_png_bytes
+    from .sprite_alpha import finalize_image
 
+    # PNG at the asked size; a sprite on a transparent background, a scene covered without stretching.
+    raw, alpha = await asyncio.to_thread(finalize_image, raw, apath, parse_size(size or DEFAULT_SIZE_SPRITE))
     raw = ensure_png_bytes(raw)
     nbytes = write_bytes(slug, apath, raw)
     _update_manifest_entry(slug, apath, prompt=aprompt, size=size, bytes_written=nbytes)
@@ -696,6 +702,8 @@ async def generate_asset(
         "prompt": aprompt,
         "size": size,
         "url": url,
+        "transparent": bool(alpha.get("alpha")),
+        **({"alpha_note": alpha["note"]} if alpha.get("note") else {}),
     }
 
 

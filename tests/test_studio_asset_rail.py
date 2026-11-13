@@ -297,7 +297,7 @@ def test_generate_posts_the_old_body_and_names_the_file(studio_server):
         assert posts[0]["body"] == {"path": "assets/tree.png", "prompt": "a small tree", "size": "1024x768"}
         assert f"/projects/{game}/assets/generate" in posts[0]["url"]
         assert "model" not in posts[0]["body"]
-        assert "sdxl" in seen[0] and "PNG" in seen[0] and game in seen[0]
+        assert "image service" in seen[0] and "PNG" in seen[0] and game in seen[0]   # no stale model name
         assert "not safe to retry" in seen[0]
         text = page.locator("#asset-status").inner_text()
         assert "Wrote assets/tree.png (40 bytes)." == text

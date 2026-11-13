@@ -299,7 +299,7 @@ async def generate_image(**kwargs: Any) -> dict[str, Any]:
     return await image_client.generate_image(**kwargs)
 
 
-def resolve_image_model(preferred: str = "sdxl") -> str:
+def resolve_image_model(preferred: str = "") -> str:
     if use_mesh_router():
         try:
             from argos_data_nexus.modules import mesh_router as mr
