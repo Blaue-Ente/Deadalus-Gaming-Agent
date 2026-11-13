@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from test_studio_phase2_workspace import _fulfill, _hit, studio_server  # noqa: F401  (fixture and helpers)
 
 KEYS = ["mentor.enabled", "mentor.day_token_cap", "run_budget.usd", "writer_assist.mode", "evolution.enabled",
-        "auto_apply.enabled", "play.max_sessions", "kv.backend", "brain.model"]
+        "auto_apply.enabled", "play.max_sessions", "subq.shadow", "kv.backend", "brain.model"]
 INTENTS = ["persona", "writer", "tools", "mentor", "critic", "planner", "navigator", "summary", "scout", "asset",
            "worker", "test"]
 

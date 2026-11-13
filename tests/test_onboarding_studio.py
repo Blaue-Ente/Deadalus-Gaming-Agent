@@ -85,12 +85,10 @@ def test_first_steps_open_once_save_the_switch_and_come_back_from_setup(server, 
             page.wait_for_function("() => document.getElementById('onb-body').innerText.includes('Какво може Дедал')")
             page.locator("#onb-dlg [data-lang='en']").click()
 
-            page.locator("#onb-close").click()
+            with page.expect_response(lambda r: r.url.endswith("/api/v1/onboarding/seen")) as seen:
+                page.locator("#onb-close").click()
+            assert seen.value.ok
             dlg.wait_for(state="hidden")
-            page.wait_for_function("() => true")
-            deadline = time.time() + 5
-            while time.time() < deadline and not any(u.endswith("/api/v1/onboarding/seen") for u, _ in posts):
-                page.wait_for_timeout(100)
             assert json.loads(settings.read_text())["onboarding_seen"] >= 1
             assert json.loads(settings.read_text())["subq_shadow"] is (not was)
 
