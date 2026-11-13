@@ -4,9 +4,38 @@ from __future__ import annotations
 import pytest
 
 
+def _budget_writer(monkeypatch: pytest.MonkeyPatch) -> None:
+    from daedalus import llm_config
+
+    monkeypatch.setattr(
+        llm_config,
+        "_resolve_llm_config",
+        lambda: {"provider": "openrouter", "model": "owner/pick", "api_key": "k", "base_url": "", "sdk": "openai",
+                 "source": "db"},
+    )
+    monkeypatch.setattr(
+        "daedalus.run_budget.applied_writer",
+        lambda: {"model": "moonshotai/kimi-k3", "provider": "openrouter", "model_source": "run-budget",
+                 "apply_model": True, "tier": "budget-20"},
+    )
+
+
+def test_run_budget_overlay_is_skipped_when_its_provider_has_no_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The overlay switches model only on a provider it can actually call (a key in the env). This used to pass
+    # only because an earlier test leaked OPENROUTER_API_KEY into the process.
+    from daedalus import llm_config
+
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    _budget_writer(monkeypatch)
+    eff = llm_config.get_config()
+    assert eff.get("model") == "owner/pick"
+    assert eff.get("effort_skipped") == "no-atomic-route"
+
+
 def test_get_brain_config_skips_run_budget_overlay(monkeypatch: pytest.MonkeyPatch) -> None:
     from daedalus import llm_config
 
+    monkeypatch.setenv("OPENROUTER_API_KEY", "k")     # the budget writer's provider must be callable
     monkeypatch.setattr(
         llm_config,
         "_resolve_llm_config",

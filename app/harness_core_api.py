@@ -208,6 +208,8 @@ def _brain_view() -> dict[str, Any]:
     out.update({"provider": provider, "model": str(cfg.get("model") or ""), "base_url": str(cfg.get("base_url") or ""),
                 "source": str(cfg.get("source") or ""), "source_kind": _source_kind(provider, str(cfg.get("source") or "")),
                 "has_key": bool(cfg.get("api_key"))})
+    if lock_env and out["source_kind"] != "local":
+        out["source_kind"] = "server"    # DAEDALUS_MODEL pins it, whichever provider path filled in the rest
     return {"configured": bool(provider and out["model"]), **out}
 
 

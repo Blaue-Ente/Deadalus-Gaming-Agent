@@ -4099,13 +4099,15 @@
 
     if (opts.locked) {
       [select, input, save].forEach((el) => { el.disabled = true; });
-      if (test) test.disabled = true;
+      save.hidden = true;                          // nothing to save or test here: the server owns this choice
+      if (test) { test.disabled = true; test.hidden = true; }
       const b = document.createElement("span");
       b.className = "badge";
       b.dataset.src = "env";
       b.textContent = dx.t("studio.mpLocked");
       line.appendChild(b);
-      say(dx.t("studio.mpLockedNote", { env: opts.lockEnv || "DAEDALUS_MODEL" }), false);
+      // quietLock: the table says it once above the rows (seven copies of one sentence are noise)
+      if (!opts.quietLock) say(dx.t("studio.mpLockedNote", { env: opts.lockEnv || "DAEDALUS_MODEL" }), false);
       root.dataset.state = "locked";
     } else {
       save.addEventListener("click", async () => {
@@ -4242,7 +4244,7 @@
       holder.className = "cfg-control";
       item.appendChild(holder);
       modelPicker(holder, {
-        value: parseTag(intentTag(row)), allowSameAsMain: true, locked,
+        value: parseTag(intentTag(row)), allowSameAsMain: true, locked, quietLock: envLocked,
         lockEnv: mentorLocked ? "DAEDALUS_MENTOR_MODEL" : "DAEDALUS_MODEL",
         label: tOr("studio.mpTask." + row.intent, row.intent),
         onSave: (v) => saveIntent(row.intent, v.provider ? v.provider + ":" + v.model : "", item),
@@ -4260,6 +4262,12 @@
     const box = $("settings-intents");
     box.replaceChildren();
     const rows = (data && data.tasks) || [];
+    if (data && data.env_locked) {
+      const note = document.createElement("p");
+      note.className = "hint dx-mp-lockall";
+      note.textContent = dx.t("studio.mpLockedNote", { env: "DAEDALUS_MODEL" });
+      box.appendChild(note);
+    }
     TASK_ORDER.forEach((intent) => {
       const row = rows.find((r) => r.intent === intent);
       if (row) box.appendChild(buildTaskRow(row, data));

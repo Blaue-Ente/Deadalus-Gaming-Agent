@@ -127,6 +127,8 @@ def studio_server(tmp_path_factory):
     })
     env.pop("DAEDALUS_MENTOR", None)
     env.pop("DAEDALUS_RUN_BUDGET", None)
+    for name in ("DAEDALUS_MODEL", "DAEDALUS_PROVIDER", "DAEDALUS_LOCAL_LLM"):   # a pinned model locks the Models page
+        env.pop(name, None)
     server_log = tempfile.TemporaryFile()  # a file, never an unread pipe: a full pipe blocks the server
     proc = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", str(port)],

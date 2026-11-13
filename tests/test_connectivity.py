@@ -34,8 +34,16 @@ def conn_tmp(tmp_path, monkeypatch):
     repo_root.cache_clear()
     from daedalus.store import reset_sqlite_pool
     reset_sqlite_pool()
+    before = dict(os.environ)
     yield tmp_path
     reset_sqlite_pool()
+    # set_secrets writes os.environ directly (not through monkeypatch): put the process env back as it was, or a
+    # pinned DAEDALUS_MODEL leaks into every later test and server started from this process
+    for key in set(os.environ) - set(before):
+        os.environ.pop(key, None)
+    for key, value in before.items():
+        if os.environ.get(key) != value:
+            os.environ[key] = value
 
 
 def test_mask_and_forbidden_keys(conn_tmp):

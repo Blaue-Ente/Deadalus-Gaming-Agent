@@ -82,6 +82,16 @@ def test_choosing_is_refused_while_the_server_pins_the_model(fresh, monkeypatch)
     assert view["locked"] is True and view["lock_env"] == "DAEDALUS_MODEL"
 
 
+def test_a_pinned_model_is_reported_as_set_by_the_server_not_picked_automatically(fresh, monkeypatch):
+    # provider + key from the env take the "openrouter default" path, but DAEDALUS_MODEL is what pins the model
+    monkeypatch.setenv("DAEDALUS_MODEL", "pinned/model")
+    monkeypatch.setenv("DAEDALUS_PROVIDER", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", SECRET)
+    view = fresh.get("/api/v1/harness/models").json()["brain"]
+    assert view["locked"] is True and view["source_kind"] == "server", view
+    assert SECRET not in json.dumps(view)
+
+
 def _saved_row():
     from daedalus.llm_config import _read_db
 
@@ -235,6 +245,13 @@ def test_a_server_pinned_model_shows_disabled_with_a_badge():
             assert box.locator("button.dx-mp-save").count() == 0 or box.locator("button.dx-mp-save").is_disabled()
             assert box.locator(".badge").count() == 1
             assert "DAEDALUS_MODEL" in box.inner_text() and "Change it where the server is started" in box.inner_text()
+            # the task table says it once, not once per row, so a locked Models page stays short
+            page.wait_for_selector("#settings-intents .cfg-row[data-intent='writer'][data-locked='1']", state="attached")
+            intents = page.locator("#settings-intents")
+            assert intents.locator(".dx-mp-lockall").count() == 1
+            assert intents.inner_text().count("Change it where the server is started") == 1
+            height = page.evaluate("() => document.querySelector('#panel-settings .settings-shell').scrollHeight")
+            assert height <= 1400, height
             browser.close()
     finally:
         proc.terminate()
