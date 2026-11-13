@@ -16,6 +16,7 @@ import urllib.request
 from pathlib import Path
 
 import pytest
+from dx_confirm_support import FlagDict
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML = (ROOT / "app" / "static" / "studio.html").read_text(encoding="utf-8")
@@ -230,7 +231,7 @@ def test_skill_and_reference_contract_names_the_real_routes():
     assert 'id="skill-gist"' in review and 'data-i18n="studio.skillGist" hidden' in review
     gist = WORK[WORK.find('$("skill-gist").addEventListener'):]
     gist = gist[:gist.find("});\n")]
-    assert 'window.confirm(dx.t("studio.skillGistConfirm"))' in gist and "confirm_public: true" in gist
+    assert 'await askDanger("skillGist", dx.t("studio.skillGistConfirm"))' in gist and "confirm_public: true" in gist
     assert "innerHTML" not in review
     for key in (
         "studio.skillStartConfirm",
@@ -665,14 +666,14 @@ def test_skill_and_reference_review_flow(studio_server):
     held = {"start": [], "refine": [], "generate": [], "scout": []}
     posts = []
     dialogs = []
-    accept = {"on": False}
+    accept = FlagDict(on=False)
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         leaked = _guard(page)
         _arm(page, state, held, posts)
-        page.on("dialog", lambda dialog: (dialogs.append(dialog.message), dialog.accept() if accept["on"] else dialog.dismiss()))
+        dialogs = accept.bind(page)   # answers #dx-confirm-ok when on, #dx-confirm-cancel when off
         try:
             page.goto(studio_server["url"] + "/?panel=review", wait_until="domcontentloaded")
             page.wait_for_selector("#skill-start")

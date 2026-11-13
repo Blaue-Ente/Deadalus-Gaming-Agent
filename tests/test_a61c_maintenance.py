@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 from a0_support import a0_tmp  # noqa: F401
+from dx_confirm_support import answer_confirms
 from fastapi.testclient import TestClient
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -293,15 +294,8 @@ def _note(page, row, text=None):
 
 
 def _dialogs(page, decisions):
-    asked: list[str] = []
-    queue = list(decisions)
-
-    def handle(dialog):
-        asked.append(dialog.message)
-        (dialog.accept if queue.pop(0) else dialog.dismiss)()
-
-    page.on("dialog", handle)
-    return asked
+    """Answer each styled confirm (click #dx-confirm-ok for True, #dx-confirm-cancel for False) and list the questions."""
+    return answer_confirms(page, decisions=decisions, accept=True)
 
 
 def _pool_stub(page, *, candidates=3, running=False, last=None, scan=None):

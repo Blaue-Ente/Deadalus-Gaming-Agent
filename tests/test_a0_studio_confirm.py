@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 
+from dx_confirm_support import ConfirmAnswerer
 from test_studio_phase2_workspace import _fulfill, studio_server  # noqa: F401  (fixture)
 
 
@@ -35,17 +36,17 @@ def test_live_publish_asks_before_public_backends(studio_server):
         page.locator(f"#plist [data-slug='{game}']").wait_for()
 
         # Decline: exactly one request, no confirm flag, no public link claimed.
-        seen = []
-        page.once("dialog", lambda d: (seen.append(d.message), d.dismiss()))
+        answer = ConfirmAnswerer(page, accept=False)   # clicks #dx-confirm-cancel
         page.locator("#preview-live").click()
         page.wait_for_function(
             "() => document.getElementById('preview-status').textContent.includes('No public link')"
         )
         assert len(calls) == 1 and "confirm_public" not in _bodies(calls)[0]
-        assert seen and "Anonymous Netlify" in seen[0]
+        page.wait_for_function("() => window.__dxAnswer.seen.length === 1")
+        assert answer.messages and "Anonymous Netlify" in answer.messages[0]
 
         # Accept: a second request carrying confirm_public, then the live link is reported.
-        page.once("dialog", lambda d: d.accept())
+        answer.set(True)                                # clicks #dx-confirm-ok
         page.locator("#preview-live").click()
         page.wait_for_function(
             "() => document.getElementById('preview-status').textContent === 'Live link is ready.'"
@@ -81,14 +82,14 @@ def test_git_push_force_only_after_confirm(studio_server):
         page.locator(f"#plist [data-slug='{game}']").wait_for()
 
         page.locator("#git-menu summary").click()
-        page.once("dialog", lambda d: d.dismiss())
+        answer = ConfirmAnswerer(page, accept=False)    # clicks #dx-confirm-cancel
         page.locator("#git-push").click()
         page.wait_for_function(
             "() => document.getElementById('git-status').textContent.includes('non_fast_forward')"
         )
         assert len(calls) == 1 and _bodies(calls)[0].get("force") is None
 
-        page.once("dialog", lambda d: d.accept())
+        answer.set(True)                                # clicks #dx-confirm-ok
         page.locator("#git-push").click()
         page.wait_for_function(
             "() => document.getElementById('git-status').textContent === 'Saved.'"

@@ -625,6 +625,7 @@ def test_review_actions_fit_and_are_really_clickable(studio_server, size):
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": size[0], "height": size[1]})
         _blockers_page(page)
+        _dialogs(page, [False] * 20)                    # the bulk buttons ask first: click #dx-confirm-cancel, as the browser did
         _open_review(page, studio_server, "permissions")
         page.wait_for_selector("#blocker-list button[data-role='autofix']")
         page.wait_for_function("() => { const s = document.getElementById('review-status'); return s.hidden; }")

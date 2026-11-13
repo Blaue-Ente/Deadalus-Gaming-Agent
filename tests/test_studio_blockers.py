@@ -17,6 +17,7 @@ import urllib.request
 from pathlib import Path
 
 import pytest
+from dx_confirm_support import FlagDict
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML = (ROOT / "app" / "static" / "studio.html").read_text(encoding="utf-8")
@@ -359,14 +360,14 @@ def test_review_lists_blockers_and_resolve_posts_the_note(studio_server):
     held = {"get": [], "post": []}
     posts = []
     dialogs = []
-    accept = {"on": False}
+    accept = FlagDict(on=False)
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         leaked = _guard(page)
         _arm(page, state, held, posts)
-        page.on("dialog", lambda dialog: (dialogs.append(dialog.message), dialog.accept() if accept["on"] else dialog.dismiss()))
+        dialogs = accept.bind(page)   # answers #dx-confirm-ok when on, #dx-confirm-cancel when off
         _open(page, studio_server)
         panel = page.locator("#blocker-controls")
         assert panel.locator("img").count() == 0
@@ -485,14 +486,14 @@ def test_leaving_review_drops_late_replies_and_a_stale_button(studio_server):
     held = {"get": [], "post": []}
     posts = []
     dialogs = []
-    accept = {"on": True}
+    accept = FlagDict(on=True)
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         leaked = _guard(page)
         _arm(page, state, held, posts)
-        page.on("dialog", lambda dialog: (dialogs.append(dialog.message), dialog.accept() if accept["on"] else dialog.dismiss()))
+        dialogs = accept.bind(page)   # answers #dx-confirm-ok when on, #dx-confirm-cancel when off
         page.goto(studio_server["url"] + "/?panel=review", wait_until="domcontentloaded")
         _wait_len(page, held["get"], 1)
         _hit(page, "#workspace-nav button[data-panel=build]")

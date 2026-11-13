@@ -79,8 +79,12 @@
       return dx.t("studio.timeout");
     }
     if (err && String(err.message || "") === "full_auto_running") return dx.t("studio.ctlErrFullAuto");
-    return dx.errText(err);
+    return dx.humanError(err, { raw: true });
   }
+
+  // Styled confirm: a short title per call (studio.cf.<name>), the existing question as the body.
+  function ask(name, body) { return dx.confirm({ title: dx.t("studio.cf." + name), body }); }
+  function askDanger(name, body) { return dx.confirm({ title: dx.t("studio.cf." + name), body, danger: true }); }
 
   // Every write to a status line bumps its stamp. A background refresh remembers the stamp when it starts and
   // writes only if nothing else has written since, so a slow answer can never replace a newer result.
@@ -788,11 +792,11 @@
     }
   }
 
-  function emptyNote(list) {
+  function emptyNote(list, hintKey) {
     const empty = document.createElement("div");
     empty.className = "empty";
-    empty.textContent = dx.t("studio.emptyList");
     list.appendChild(empty);
+    dx.emptyState(empty, { text: dx.t(hintKey || "studio.emptyList") });
   }
 
   function actionButton(act, id, label) {
@@ -906,12 +910,12 @@
     }
   }
 
-  function resolveBlocker(id, gen, btn) {
+  async function resolveBlocker(id, gen, btn) {
     if (blockerFlight) return;
     if (currentPanel !== "review" || !btn.isConnected) return;
     if (btn.dataset.gen !== String(blockerGen) || gen !== blockerGen) return;
     const note = ($("blocker-note").value || "").trim();
-    if (!window.confirm(dx.t("studio.blockerConfirm", { id }))) return;
+    if (!await ask("blockerResolve", dx.t("studio.blockerConfirm", { id }))) return;
     if (currentPanel !== "review" || !btn.isConnected) return;
     if (btn.dataset.gen !== String(blockerGen) || gen !== blockerGen) return;
     const flight = ++blockerSeq;
@@ -954,7 +958,7 @@
       if (currentTab === "proposals") {
         const data = await dx.api("/admin/daedalus/proposals/api");
         const rows = data.proposals || [];
-        if (!rows.length) emptyNote(list);
+        if (!rows.length) emptyNote(list, "studio.emptyProposals");
         else list.appendChild(approveAllToolbar(rows.filter((item) => item.status === "pending" && item.id).map((item) => String(item.id))));
         rows.forEach((item) => {
           list.appendChild(row(item.reason || item.id || "", item.status || "", [
@@ -967,7 +971,7 @@
       } else if (currentTab === "skills") {
         const data = await dx.api("/admin/daedalus/skills/api");
         const rows = data.skills || [];
-        if (!rows.length) emptyNote(list);
+        if (!rows.length) emptyNote(list, "studio.emptySkills");
         rows.forEach((item) => {
           list.appendChild(row(item.label || item.name || "", item.enabled ? dx.t("studio.settingsSet") : dx.t("studio.settingsUnset"), [
             actionButton("toggle", item.name, dx.t("studio.toggle")),
@@ -976,7 +980,7 @@
       } else if (currentTab === "bundles") {
         const data = await dx.api("/admin/daedalus/bundles/api");
         const rows = data.bundles || [];
-        if (!rows.length) emptyNote(list);
+        if (!rows.length) emptyNote(list, "studio.emptyBundles");
         rows.forEach((item) => {
           list.appendChild(row(item.title || item.name || item.id || "", item.status || "", [
             actionButton("detail-bundle", item.id, dx.t("studio.detail")),
@@ -991,7 +995,7 @@
           if (item.active) active[item.perm_class] = true;
         });
         const catalog = data.catalog || [];
-        if (!catalog.length) emptyNote(list);
+        if (!catalog.length) emptyNote(list, "studio.emptyPermissions");
         else list.appendChild(permissionsToolbar());
         catalog.forEach((item) => {
           const on = !!active[item.id];
@@ -1004,7 +1008,7 @@
       } else if (currentTab === "outbox") {
         const data = await dx.api("/admin/daedalus/outbox/api");
         const rows = data.items || [];
-        if (!rows.length) emptyNote(list);
+        if (!rows.length) emptyNote(list, "studio.emptyOutbox");
         rows.forEach((item) => {
           list.appendChild(row(item.title || item.id || "", item.status || "", [
             actionButton("out-dismiss", item.id, dx.t("studio.dismiss")),
@@ -1183,7 +1187,7 @@
     }
   }
 
-  function generatePlan() {
+  async function generatePlan() {
     if (planFlight || planGenerateOp || currentPanel !== "review") return;
     const goal = ($("plan-goal").value || "").trim();
     if (!goal) {
@@ -1195,7 +1199,7 @@
       return;
     }
     const gen = planGen;
-    if (!window.confirm(dx.t("studio.planGenerateConfirm", { goal }))) return;
+    if (!await ask("planGenerate", dx.t("studio.planGenerateConfirm", { goal }))) return;
     if (!planStill(gen) || planGenerateOp) return;
     planGenerateOp = "pending";
     syncPlanButtons();
@@ -1257,11 +1261,11 @@
     });
   }
 
-  function approvePlan(id, gen, btn) {
+  async function approvePlan(id, gen, btn) {
     if (currentPanel !== "review" || !btn.isConnected) return;
     if (btn.dataset.gen !== String(planGen) || gen !== planGen) return;
     if (planApproved.has(id) || planDeleted.has(id) || planApproveOp.has(id)) return;
-    if (!window.confirm(dx.t("studio.planApproveConfirm", { id }))) return;
+    if (!await ask("planApprove", dx.t("studio.planApproveConfirm", { id }))) return;
     if (!planStill(gen) || !btn.isConnected || btn.dataset.gen !== String(planGen)) return;
     if (planApproved.has(id) || planApproveOp.has(id)) return;
     planApproveOp.set(id, "pending");
@@ -1300,11 +1304,11 @@
     });
   }
 
-  function deletePlan(id, gen, btn) {
+  async function deletePlan(id, gen, btn) {
     if (planFlight || currentPanel !== "review" || !btn.isConnected) return;
     if (btn.dataset.gen !== String(planGen) || gen !== planGen) return;
     if (planDeleted.has(id)) return;
-    if (!window.confirm(dx.t("studio.planDeleteConfirm", { id }))) return;
+    if (!await askDanger("planDelete", dx.t("studio.planDeleteConfirm", { id }))) return;
     if (!planStill(gen) || !btn.isConnected || btn.dataset.gen !== String(planGen)) return;
     const flight = ++planSeq;
     planFlight = flight;
@@ -1445,13 +1449,13 @@
     }
   }
 
-  function approveDiscovery(id, gen, btn, meta) {
+  async function approveDiscovery(id, gen, btn, meta) {
     if (currentPanel !== "review" || !btn.isConnected) return;
     if (btn.dataset.gen !== String(discoveryGen) || gen !== discoveryGen) return;
     if (discoveryApproved.has(id) || discoveryRejected.has(id) || discoveryApproveOp.has(id)) return;
     let question = dx.t("studio.discoveryApproveConfirm", { id });
     if (meta && meta.for_self) question += "\n" + dx.t("studio.discoveryForSelf");
-    if (!window.confirm(question)) return;
+    if (!await ask("discoveryApprove", question)) return;
     if (!discoveryStill(gen) || !btn.isConnected || btn.dataset.gen !== String(discoveryGen)) return;
     if (discoveryApproved.has(id) || discoveryApproveOp.has(id)) return;
     discoveryApproveOp.set(id, "pending");
@@ -1492,11 +1496,11 @@
     });
   }
 
-  function rejectDiscovery(id, gen, btn) {
+  async function rejectDiscovery(id, gen, btn) {
     if (discoveryFlight || currentPanel !== "review" || !btn.isConnected) return;
     if (btn.dataset.gen !== String(discoveryGen) || gen !== discoveryGen) return;
     if (discoveryApproved.has(id) || discoveryRejected.has(id) || discoveryApproveOp.has(id)) return;
-    if (!window.confirm(dx.t("studio.discoveryRejectConfirm", { id }))) return;
+    if (!await ask("discoveryReject", dx.t("studio.discoveryRejectConfirm", { id }))) return;
     if (!discoveryStill(gen) || !btn.isConnected || btn.dataset.gen !== String(discoveryGen)) return;
     const flight = ++discoverySeq;
     discoveryFlight = flight;
@@ -1703,7 +1707,7 @@
     finishSkill(reviewFail(err, "studio.skillUnknown"), true);
   }
 
-  function startSkill() {
+  async function startSkill() {
     if (skillOp || currentPanel !== "review") return;
     const idea = ($("skill-idea").value || "").trim();
     const platform = skillPlatform();
@@ -1711,7 +1715,7 @@
       showStatus("skill-status", dx.t("studio.skillNeedIdea"), true);
       return;
     }
-    if (!window.confirm(dx.t("studio.skillStartConfirm", { idea, platform }))) return;
+    if (!await ask("skillStart", dx.t("studio.skillStartConfirm", { idea, platform }))) return;
     if (skillOp || currentPanel !== "review") return;
     skillOp = { action: "start", state: "pending" };
     syncSkillButtons();
@@ -1732,7 +1736,7 @@
     }).catch((err) => skillCaught("start", err));
   }
 
-  function refineSkill() {
+  async function refineSkill() {
     if (skillOp || currentPanel !== "review" || !skillView || !skillView.session_id) return;
     const message = ($("skill-message").value || "").trim();
     if (!message) {
@@ -1740,7 +1744,7 @@
       return;
     }
     const id = skillView.session_id;
-    if (!window.confirm(dx.t("studio.skillRefineConfirm", { id }))) return;
+    if (!await ask("skillRefine", dx.t("studio.skillRefineConfirm", { id }))) return;
     if (skillOp || currentPanel !== "review") return;
     skillOp = { action: "refine", state: "pending" };
     syncSkillButtons();
@@ -1765,14 +1769,14 @@
     }).catch((err) => skillCaught("refine", err));
   }
 
-  function generateSkill(force) {
+  async function generateSkill(force) {
     if (skillOp || currentPanel !== "review" || !skillView || !skillView.session_id) return;
     if (!force && skillView.ready_for_generation !== true) return;
     const id = skillView.session_id;
     const question = force
       ? dx.t("studio.skillForceConfirm", { id })
       : dx.t("studio.skillGenerateConfirm", { id });
-    if (!window.confirm(question)) return;
+    if (!await ask("skillGenerate", question)) return;
     if (skillOp || currentPanel !== "review") return;
     skillOp = { action: "generate", state: "pending" };
     syncSkillButtons();
@@ -1894,14 +1898,14 @@
     if (scout) scout.disabled = refOp !== null;
   }
 
-  function scoutReference() {
+  async function scoutReference() {
     if (refOp || currentPanel !== "review") return;
     const reference = ($("ref-input").value || "").trim();
     if (!reference) {
       showStatus("ref-status", dx.t("studio.refNeed"), true);
       return;
     }
-    if (!window.confirm(dx.t("studio.refConfirm", { reference }))) return;
+    if (!await ask("refScout", dx.t("studio.refConfirm", { reference }))) return;
     if (refOp || currentPanel !== "review") return;
     refOp = "pending";
     syncRefButtons();
@@ -2020,7 +2024,7 @@
         const h = Number(hours.value);
         try {
           const prev = await dx.api("/api/v1/harness/review/permissions");
-          if (!window.confirm(dx.t("studio.permGrantAllConfirm", { n: (prev.known || []).length, h }))) return null;
+          if (!await askDanger("permGrantAll", dx.t("studio.permGrantAllConfirm", { n: (prev.known || []).length, h }))) return null;
           const r = await postJson("/api/v1/harness/review/permissions/grant-all", { hours: h, confirm: true });
           await loadReview("permissions");
           return { text: dx.t("studio.permGranted", { n: r.count, h: r.hours }), bad: false };
@@ -2032,7 +2036,7 @@
           const prev = await dx.api("/api/v1/harness/review/permissions");
           const n = (prev.renewable || []).length;
           if (!n) return { text: dx.t("studio.permNothingToRenew"), bad: false };
-          if (!window.confirm(dx.t("studio.permRenewConfirm", { n, h }))) return null;
+          if (!await ask("permRenew", dx.t("studio.permRenewConfirm", { n, h }))) return null;
           const r = await postJson("/api/v1/harness/review/permissions/renew-expired", { hours: h, confirm: true });
           await loadReview("permissions");
           return { text: dx.t("studio.permGranted", { n: r.count, h: r.hours }), bad: false };
@@ -2045,7 +2049,7 @@
     return bulkBox("bulk-approve-all", "studio.approveAllTitle", null, null, [
       { label: dx.t("studio.approveAll"), run: async () => {
         if (!pendingIds.length) return { text: dx.t("studio.approveAllNone"), bad: false };
-        if (!window.confirm(dx.t("studio.approveAllConfirm", { n: pendingIds.length }))) return null;
+        if (!await askDanger("approveAll", dx.t("studio.approveAllConfirm", { n: pendingIds.length }))) return null;
         try {
           // exactly the proposals the question was about: one added meanwhile is not approved by this click
           const r = await postJson("/api/v1/harness/review/proposals/approve-all", { ids: pendingIds, confirm: true });
@@ -2140,9 +2144,9 @@
     }
   }
 
-  function blockerAutoFix(id, btn) {
+  async function blockerAutoFix(id, btn) {
     const h = Number($("blocker-hours").value);
-    if (!window.confirm(dx.t("studio.blockerAutoFixConfirm", { h }))) return Promise.resolve();
+    if (!await ask("blockerAutoFix", dx.t("studio.blockerAutoFixConfirm", { h }))) return Promise.resolve();
     return blockerLocked(btn, async (still) => {
       const r = await postJson("/api/v1/harness/review/blockers/auto-fix", { id, hours: h, confirm: true });
       if (still()) showStatus("blocker-status", dx.t("studio.blockerFixed", { n: (r.granted || []).length, h: r.hours }), false);
@@ -2154,7 +2158,7 @@
     return blockerLocked(btn, async (still) => {
       const prev = await dx.api("/api/v1/harness/review/blockers/" + encodeURIComponent(id) + "/remediation");
       if (!still()) return false;
-      if (prev.changes_kind && !window.confirm(dx.t("studio.blockerRemediateConfirm", { slug: prev.slug, old: prev.old_kind }))) return false;
+      if (prev.changes_kind && !await ask("blockerRemediate", dx.t("studio.blockerRemediateConfirm", { slug: prev.slug, old: prev.old_kind }))) return false;
       const r = await postJson("/api/v1/harness/review/blockers/" + encodeURIComponent(id) + "/remediate", { confirm_kind_change: !!prev.changes_kind });
       if (still()) showStatus("blocker-status", dx.t(r.already_static ? "studio.blockerAlreadyStatic" : "studio.blockerRemediated", { slug: r.slug, old: r.old_kind || "" }), false);
       return true;
@@ -2166,7 +2170,7 @@
     return blockerLocked(btn, async (still) => {
       const prev = await dx.api("/api/v1/harness/review/blockers");
       if (!still()) return false;
-      if (!window.confirm(dx.t("studio.blockerAutoFixAllConfirm", { h, n: prev.open }))) return false;
+      if (!await ask("blockerAutoFixAll", dx.t("studio.blockerAutoFixAllConfirm", { h, n: prev.open }))) return false;
       const r = await postJson("/api/v1/harness/review/blockers/auto-fix", { all: true, hours: h, confirm: true });
       // "fixed 0, skipped N" is a result to read, not an error to hide
       if (still()) showStatus("blocker-status", dx.t("studio.blockerFixedAll", { fixed: r.fixed, skipped: r.skipped }), r.ok === false);
@@ -2180,7 +2184,7 @@
       const prev = await dx.api("/api/v1/harness/review/blockers");
       if (!still()) return false;
       const list = prev.recommended || [];
-      if (!window.confirm(dx.t("studio.blockerGrantRecConfirm", { n: list.length, h, list: list.join(", ") }))) return false;
+      if (!await ask("blockerGrantRec", dx.t("studio.blockerGrantRecConfirm", { n: list.length, h, list: list.join(", ") }))) return false;
       const r = await postJson("/api/v1/harness/review/blockers/grant-recommended", { hours: h, confirm: true });
       if (still()) showStatus("blocker-status", dx.t("studio.blockerFixed", { n: r.count, h: r.hours }), false);
       return false;
@@ -2288,8 +2292,8 @@
       actions.appendChild(pause);
     }
     if (status === "paused") {
-      const resume = xbtn(dx.t("studio.planResume"), (b) => {
-        if (!window.confirm(dx.t("studio.planResumeConfirm"))) return;
+      const resume = xbtn(dx.t("studio.planResume"), async (b) => {
+        if (!await ask("planResume", dx.t("studio.planResumeConfirm"))) return;
         extraRun(b, "plan-status", async (say) => {
           await postJson("/api/v1/harness/review/planner/plans/" + encodeURIComponent(id) + "/resume", { confirm: true });
           say(dx.t("studio.planResumed"), false);
@@ -2394,10 +2398,10 @@
         sel.appendChild(o);
       });
       if (STEP_STATES.indexOf(st.status) >= 0) sel.value = st.status;
-      const set = xbtn(dx.t("studio.stepSet"), (btn) => {
+      const set = xbtn(dx.t("studio.stepSet"), async (btn) => {
         const status = sel.value;
         const needs = status === "passed" || (status === "pending" && active);
-        if (needs && !window.confirm(dx.t(status === "passed" ? "studio.stepSetPassedConfirm" : "studio.stepSetPendingConfirm"))) return;
+        if (needs && !await ask("stepSet", dx.t(status === "passed" ? "studio.stepSetPassedConfirm" : "studio.stepSetPendingConfirm"))) return;
         extraRun(btn, "plan-status", async () => {
           await postJson("/api/v1/harness/review/planner/plans/" + encodeURIComponent(id) + "/steps/" + encodeURIComponent(st.id) + "/mark", { status, confirm: needs });
           await renderManager(id, el);
@@ -2406,8 +2410,8 @@
         });
       });
       set.dataset.role = "set";
-      const over = xbtn(dx.t("studio.stepOverride"), (btn) => {
-        if (!window.confirm(dx.t("studio.stepOverrideConfirm"))) return;
+      const over = xbtn(dx.t("studio.stepOverride"), async (btn) => {
+        if (!await ask("stepOverride", dx.t("studio.stepOverrideConfirm"))) return;
         extraRun(btn, "plan-status", async () => {
           await postJson("/api/v1/harness/review/planner/plans/" + encodeURIComponent(id) + "/steps/" + encodeURIComponent(st.id) + "/override", { confirm: true });
           await renderManager(id, el);
@@ -2463,8 +2467,8 @@
       deps.appendChild(o);
     });
     if (!steps.length) deps.hidden = true;
-    const add = xbtn(dx.t("studio.stepAdd"), (btn) => {
-      if (active && !window.confirm(dx.t("studio.stepAddConfirm"))) return;
+    const add = xbtn(dx.t("studio.stepAdd"), async (btn) => {
+      if (active && !await ask("stepAdd", dx.t("studio.stepAddConfirm"))) return;
       extraRun(btn, "plan-status", async () => {
         await postJson("/api/v1/harness/review/planner/plans/" + encodeURIComponent(id) + "/steps", {
           title: title.value, description: desc.value, depends_on: Array.from(deps.selectedOptions).map((o) => o.value), confirm: active,
@@ -2480,13 +2484,13 @@
   }
 
   async function runStep(btn, planId, stepId, el) {
-    if (!window.confirm(dx.t("studio.stepRunConfirm"))) return;
+    if (!await ask("stepRun", dx.t("studio.stepRunConfirm"))) return;
     let list = [];
     try {
       list = (await dx.api("/api/v1/harness/review/blockers")).recommended || [];
     } catch (err) { list = []; }
     // A second, separate question: running the step grants nothing unless the owner says yes to this.
-    const grant = list.length > 0 && window.confirm(dx.t("studio.stepRunGrant", { list: list.join(", ") }));
+    const grant = list.length > 0 && await ask("stepRunGrant", dx.t("studio.stepRunGrant", { list: list.join(", ") }));
     await extraRun(btn, "plan-status", async (say) => {
       await postJson("/api/v1/harness/review/planner/plans/" + encodeURIComponent(planId) + "/steps/" + encodeURIComponent(stepId) + "/run", { confirm: true, grant_recommended: grant });
       await renderManager(planId, el);
@@ -2511,8 +2515,8 @@
   function discoveryExtras(id, actions) {
     if (regenWatch.size) watchRegenerations();         // back on Review after leaving it: look at the server's state again
     if (!id) return;
-    const regen = xbtn(dx.t("studio.discRegen"), (b) => {
-      if (!window.confirm(dx.t("studio.discRegenConfirm"))) return;
+    const regen = xbtn(dx.t("studio.discRegen"), async (b) => {
+      if (!await ask("discRegen", dx.t("studio.discRegenConfirm"))) return;
       extraRun(b, "discovery-status", async (say) => {
         await postJson("/api/v1/harness/review/discoveries/" + encodeURIComponent(id) + "/regenerate", { confirm: true });
         regenWatch.add(id);
@@ -2521,8 +2525,8 @@
       });
     });
     regen.dataset.role = "regenerate";
-    const del = xbtn(dx.t("studio.discDelete"), (b) => {
-      if (!window.confirm(dx.t("studio.discDeleteConfirm"))) return;
+    const del = xbtn(dx.t("studio.discDelete"), async (b) => {
+      if (!await askDanger("discDelete", dx.t("studio.discDeleteConfirm"))) return;
       extraRun(b, "discovery-status", async (say) => {
         await postJson("/api/v1/harness/review/discoveries/" + encodeURIComponent(id) + "/delete", { confirm: true });
         say(dx.t("studio.discDeleted"), false);
@@ -2704,8 +2708,8 @@
     nRow.className = "row tight";
     nRow.appendChild(mnote(dx.t("studio.memNavigator", { calls: n.total_calls || 0, fast: n.fast_path_pct || 0, ms: n.avg_latency_ms || 0,
       state: dx.t(n.enabled ? "studio.memOn" : "studio.memOff") })));
-    nRow.appendChild(mbtn(dx.t("studio.memNavigatorReset"), "navigator-reset", (b) => {
-      if (!window.confirm(dx.t("studio.memNavigatorResetConfirm"))) return;
+    nRow.appendChild(mbtn(dx.t("studio.memNavigatorReset"), "navigator-reset", async (b) => {
+      if (!await askDanger("memNavReset", dx.t("studio.memNavigatorResetConfirm"))) return;
       memRun(b, async (say) => {
         await postJson(MEM + "/navigator/reset", { confirm: true });
         say(dx.t("studio.memNavigatorResetDone"), false);
@@ -2720,10 +2724,10 @@
     const jobs = d.jobs || { running: [], last: {} };
     const jRow = document.createElement("div");
     jRow.className = "row tight";
-    [["consolidate", "studio.memConsolidate", "studio.memConsolidateConfirm"], ["lesson", "studio.memLesson", "studio.memLessonConfirm"]].forEach(([name, key, ask]) => {
+    [["consolidate", "studio.memConsolidate", "studio.memConsolidateConfirm"], ["lesson", "studio.memLesson", "studio.memLessonConfirm"]].forEach(([name, key, askKey]) => {
       const running = (jobs.running || []).indexOf(name) >= 0;
-      const b = mbtn(dx.t(running ? "studio.memJobRunning" : key), "job-" + name, (btn) => {
-        if (!window.confirm(dx.t(ask))) return;
+      const b = mbtn(dx.t(running ? "studio.memJobRunning" : key), "job-" + name, async (btn) => {
+        if (!await ask("memJob", dx.t(askKey))) return;
         memRun(btn, async (say) => {
           await postJson(MEM + "/jobs/" + name, { confirm: true });
           say(dx.t("studio.memJobStarted"), false);
@@ -2753,11 +2757,11 @@
   function paintMemFacts(list, data) {
     const box = msection(list, "studio.memFacts", "facts");
     if (!data.available) { box.appendChild(mnote(dx.t("studio.memFactsUnavailable"))); return; }
-    if (!(data.facts || []).length) { emptyNote(box); return; }
+    if (!(data.facts || []).length) { emptyNote(box, "studio.emptyFacts"); return; }
     if (data.total > data.shown) box.appendChild(mnote(dx.t("studio.memFactsShown", { shown: data.shown, total: data.total })));
     data.facts.forEach((f) => {
-      const del = mbtn(dx.t("studio.memDelete"), "fact-delete", (b) => {
-        if (!window.confirm(dx.t("studio.memDeleteConfirm"))) return;
+      const del = mbtn(dx.t("studio.memDelete"), "fact-delete", async (b) => {
+        if (!await askDanger("memDelete", dx.t("studio.memDeleteConfirm"))) return;
         memRun(b, async (say) => {
           await postJson(MEM + "/episodic/" + encodeURIComponent(f.id) + "/delete", { confirm: true });
           say(dx.t("studio.memDeleted"), false);
@@ -2774,7 +2778,7 @@
   function paintMemTasks(list, data) {
     const box = msection(list, "studio.memTasks", "tasks");
     (data.tasks || []).forEach((t) => box.appendChild(row(t.title, [t.status, t.summary].filter(Boolean).join(" · "), [])));
-    if (!(data.tasks || []).length) emptyNote(box);
+    if (!(data.tasks || []).length) emptyNote(box, "studio.emptyTasks");
     const form = document.createElement("div");
     form.className = "add-step";
     const title = document.createElement("input");
@@ -2798,7 +2802,7 @@
   function paintMemSessions(list, data) {
     const box = msection(list, "studio.memSessions", "sessions");
     if (!data.available) { box.appendChild(mnote(dx.t("studio.memSessionsUnavailable"))); return; }
-    if (!(data.sessions || []).length) { emptyNote(box); return; }
+    if (!(data.sessions || []).length) { emptyNote(box, "studio.emptySessions"); return; }
     data.sessions.forEach((s) => {
       const open = mbtn(dx.t("studio.memSessionOpen"), "session-open", (b) => {
         const shown = item.querySelector(".mem-turns");
@@ -3037,11 +3041,11 @@
     const ultraText = document.createElement("span");
     ultraText.textContent = dx.t("studio.ctlUltra");
     ultra.append(ultraBox, ultraText);
-    const create = cbtn(dx.t("studio.ctlCreatePlan"), "plan-create", (b) => {
+    const create = cbtn(dx.t("studio.ctlCreatePlan"), "plan-create", async (b) => {
       const description = ($("build-idea").value || "").trim();
       if (!description) { showStatus("build-ctl-status", dx.t("studio.needIdea"), true); return; }
       const replace = !!plan;
-      if (!window.confirm(dx.t(replace ? "studio.ctlCreateReplaceConfirm" : "studio.ctlCreateConfirm"))) return;
+      if (!await ask("ctlCreate", dx.t(replace ? "studio.ctlCreateReplaceConfirm" : "studio.ctlCreateConfirm"))) return;
       ctlRun(b, slug, async (say) => {
         let res;
         try {
@@ -3059,16 +3063,16 @@
     });
     const buttons = [create];
     if (plan) {
-      buttons.push(cbtn(dx.t("studio.ctlExpand"), "plan-expand", (b) => {
-        if (!window.confirm(dx.t("studio.ctlExpandConfirm"))) return;
+      buttons.push(cbtn(dx.t("studio.ctlExpand"), "plan-expand", async (b) => {
+        if (!await ask("ctlExpand", dx.t("studio.ctlExpandConfirm"))) return;
         ctlRun(b, slug, async (say) => {
           const res = await postJson(ctlPath(slug, "/plan/expand"), { confirm: true });
           say(dx.t("studio.ctlExpanded", { before: res.before.stages, after: res.plan.stages }), false);
           loadControls(slug);
         });
       }));
-      buttons.push(cbtn(dx.t("studio.ctlClear"), "plan-clear", (b) => {
-        if (!window.confirm(dx.t("studio.ctlClearConfirm"))) return;
+      buttons.push(cbtn(dx.t("studio.ctlClear"), "plan-clear", async (b) => {
+        if (!await askDanger("ctlClear", dx.t("studio.ctlClearConfirm"))) return;
         ctlRun(b, slug, async (say) => {
           await postJson(ctlPath(slug, "/plan/clear"), { confirm: true });
           say(dx.t("studio.ctlCleared"), false);
@@ -3122,8 +3126,8 @@
           say(dx.t("studio.faStopping"), false);
           loadControls(slug);
         }))
-      : cbtn(dx.t("studio.faStart"), "fa-start", (b) => {
-          if (!window.confirm(dx.t("studio.faConfirm"))) return;
+      : cbtn(dx.t("studio.faStart"), "fa-start", async (b) => {
+          if (!await ask("fullAuto", dx.t("studio.faConfirm"))) return;
           ctlRun(b, slug, async (say) => {
             await postJson(ctlPath(slug, "/full-auto"), { confirm: true });
             say(dx.t("studio.faStarted"), false);
@@ -3334,7 +3338,7 @@
           showStatus("ship-requests-status", dx.t("studio.shipReqCannot", { kind: kindLabel }), true);
           return;
         }
-        if (!window.confirm(dx.t("studio.shipReqRunConfirm", { kind: kindLabel, slug: req.slug }))) return;
+        if (!await ask("shipReqRun", dx.t("studio.shipReqRunConfirm", { kind: kindLabel, slug: req.slug }))) return;
         if (!(await answer("approved"))) return;
         showStatus("ship-requests-status", dx.t("studio.shipReqStarted", { kind: kindLabel }), false);
         if (req.kind === "push") { const menu = $("git-menu"); if (menu) menu.open = true; }
@@ -3440,9 +3444,9 @@
     say(dx.t("studio.codingSaved", { slug, mode: codingSaved[slug] }), false);
   }));
 
-  $("build-ideas").addEventListener("click", (ev) => {
+  $("build-ideas").addEventListener("click", async (ev) => {
     const slug = dx.getSlug();
-    if (slug && !window.confirm(dx.t("studio.ideasConfirm", { slug }))) return;
+    if (slug && !await ask("ideas", dx.t("studio.ideasConfirm", { slug }))) return;
     extrasRun("build-extras", ev.currentTarget, async (slug2, say, live) => {
       const res = await postJson(PGX + "/projects/" + slugPath(slug2) + "/suggest", { lang: uiLang() });
       if (!live()) return;
@@ -3487,9 +3491,9 @@
     say(dx.t("studio.hintsDone", { kind: res.effective_kind || project.kind || "?" }), false);
   }));
 
-  $("build-describe").addEventListener("click", (ev) => {
+  $("build-describe").addEventListener("click", async (ev) => {
     const slug = dx.getSlug();
-    if (slug && !window.confirm(dx.t("studio.describeConfirm", { slug }))) return;
+    if (slug && !await ask("describe", dx.t("studio.describeConfirm", { slug }))) return;
     extrasRun("build-extras", ev.currentTarget, async (slug2, say, live) => {
       const project = projectOf(slug2) || {};
       const res = await postJson(PGX + "/ai-gen-desc", {
@@ -3505,9 +3509,9 @@
       use.type = "button";
       use.id = "build-describe-use";
       use.textContent = dx.t("studio.describeUse");
-      use.addEventListener("click", () => {              // the idea field is the owner's text: never replaced without a yes
+      use.addEventListener("click", async () => {              // the idea field is the owner's text: never replaced without a yes
         const idea = $("build-idea");
-        if ((idea.value || "").trim() && !window.confirm(dx.t("studio.describeReplaceConfirm"))) return;
+        if ((idea.value || "").trim() && !await ask("describeReplace", dx.t("studio.describeReplaceConfirm"))) return;
         idea.value = text;
       });
       out.appendChild(use);
@@ -3550,9 +3554,9 @@
     say(dx.t("studio.publishedDone", { n: apps.length }), false);
   }));
 
-  $("preview-backup").addEventListener("click", (ev) => {
+  $("preview-backup").addEventListener("click", async (ev) => {
     const slug = dx.getSlug();
-    if (slug && !window.confirm(dx.t("studio.backupConfirm", { slug }))) return;
+    if (slug && !await ask("backup", dx.t("studio.backupConfirm", { slug }))) return;
     extrasRun("preview-extras", ev.currentTarget, async (slug2, say) => {
       const res = await postJson(PGX + "/projects/" + slugPath(slug2) + "/backup-workspace", {});
       if (res && res.ok === true) say(dx.t("studio.backupDone", { kb: Math.round((res.size_bytes || 0) / 1024) }), false);
@@ -3571,8 +3575,8 @@
     show.type = "button";
     show.id = "preview-qr-show";
     show.textContent = dx.t("studio.qrShow");
-    show.addEventListener("click", () => {
-      if (!window.confirm(dx.t("studio.qrConfirm"))) return;
+    show.addEventListener("click", async () => {
+      if (!await ask("qr", dx.t("studio.qrConfirm"))) return;
       const img = document.createElement("img");
       img.id = "preview-qr";
       img.alt = dx.t("studio.qrAlt");
@@ -3584,9 +3588,9 @@
     out.appendChild(show);
   }
 
-  $("preview-tunnel").addEventListener("click", (ev) => {
+  $("preview-tunnel").addEventListener("click", async (ev) => {
     const slug = dx.getSlug();
-    if (slug && !window.confirm(dx.t("studio.tunnelConfirm", { slug }))) return;
+    if (slug && !await ask("tunnel", dx.t("studio.tunnelConfirm", { slug }))) return;
     extrasRun("preview-extras", ev.currentTarget, async (slug2, say, live) => {
       const res = await postJson(PGX + "/projects/" + slugPath(slug2) + "/run", { install_deps: true, tunnel: true });
       if (!res || res.ok !== true) throw new Error((res && res.error) || dx.t("studio.requestFailed"));
@@ -3680,8 +3684,8 @@
       const del = document.createElement("button");
       del.type = "button";
       del.textContent = dx.t("studio.appDataDelete");
-      del.addEventListener("click", () => {
-        if (!window.confirm(dx.t("studio.appDataDeleteConfirm", { key }))) return;
+      del.addEventListener("click", async () => {
+        if (!await askDanger("appDataDelete", dx.t("studio.appDataDeleteConfirm", { key }))) return;
         appDataRun(del, async (s, say, g) => {
           if (s !== slug) return;
           await dx.api(appDataPath(s, key), { method: "DELETE" });
@@ -3693,7 +3697,7 @@
       item.dataset.key = key;
       list.appendChild(item);
     });
-    if (!keys.length) emptyNote(list);
+    if (!keys.length) emptyNote(list, "studio.emptyAppData");
     return keys.length;
   }
 
@@ -3713,9 +3717,9 @@
       say(dx.t("studio.appDataSaved", { key }), false);
     });
   });
-  $("app-data-clear").addEventListener("click", (ev) => {
+  $("app-data-clear").addEventListener("click", async (ev) => {
     const slug = appDataSlug();
-    if (!slug || !window.confirm(dx.t("studio.appDataClearConfirm", { slug }))) return;
+    if (!slug || !await askDanger("appDataClear", dx.t("studio.appDataClearConfirm", { slug }))) return;
     appDataRun(ev.currentTarget, async (s, say, gen) => {
       const res = await dx.api(appDataPath(s, null), { method: "DELETE" });
       await loadAppKeys(s, gen);
@@ -3727,7 +3731,7 @@
   $("skill-gist").addEventListener("click", async () => {
     const id = skillView && skillView.session_id;
     if (!id || gistFlight || skillOp) return;
-    if (!window.confirm(dx.t("studio.skillGistConfirm"))) return;
+    if (!await askDanger("skillGist", dx.t("studio.skillGistConfirm"))) return;
     gistFlight = true;
     syncSkillButtons();
     try {
@@ -4196,7 +4200,7 @@
   }
 
   async function toggleMcp(row, enable) {
-    if (enable && !window.confirm(dx.t("studio.mcpConfirm", { id: row.id }))) return null;
+    if (enable && !await ask("mcp", dx.t("studio.mcpConfirm", { id: row.id }))) return null;
     const data = await postJson("/api/v1/harness/mcp", { id: row.id, enabled: enable });
     if (!data || data.ok === false || !Array.isArray(data.servers)) {            // a refused toggle must not empty the list
       showStatus("harness-status", dx.t("studio.requestFailed") + (data && data.error ? ": " + data.error : ""), true);
@@ -4342,13 +4346,13 @@
   }
 
   async function pushKernel(saved) {
-    if (!window.confirm(dx.t("studio.kernelConfirm", { repo: saved.repo, branch: saved.branch }))) return null;
+    if (!await ask("kernel", dx.t("studio.kernelConfirm", { repo: saved.repo, branch: saved.branch }))) return null;
     let res;
     try {
       res = await postJson("/api/v1/harness/kernel/push", { confirm: true });
     } catch (err) {
       if (String((err && err.message) || "") !== "non_fast_forward") return { text: kernelErr(err), bad: true };
-      if (!window.confirm(dx.t("studio.kernelForce", { branch: saved.branch }))) return { text: dx.t("studio.kernelNotPushed"), bad: true };
+      if (!await askDanger("kernelForce", dx.t("studio.kernelForce", { branch: saved.branch }))) return { text: dx.t("studio.kernelNotPushed"), bad: true };
       try {
         res = await postJson("/api/v1/harness/kernel/push", { confirm: true, force: true });
       } catch (err2) { return { text: kernelErr(err2), bad: true }; }
@@ -4381,7 +4385,7 @@
   }
 
   async function scanPool() {
-    if (!window.confirm(dx.t("studio.poolConfirm"))) return null;
+    if (!await ask("pool", dx.t("studio.poolConfirm"))) return null;
     let res;
     try {
       res = await postJson("/api/v1/harness/upgrade-pool/scan", {});
@@ -4658,7 +4662,7 @@
         data = await postJson(path, body);
       } catch (err) {
         // A plain push the remote rejected: force only after the owner confirms.
-        if (/non_fast_forward/.test(String((err && err.message) || "")) && window.confirm(dx.t("studio.confirmForce"))) {
+        if (/non_fast_forward/.test(String((err && err.message) || "")) && await askDanger("forcePush", dx.t("studio.confirmForce"))) {
           data = await postJson(path, Object.assign({}, body, { force: true }));
         } else {
           throw err;
@@ -4884,7 +4888,7 @@
     showStatus("asset-status", text, true);
   }
 
-  function startAsset(kind, path, body, timeoutMs, describe) {
+  async function startAsset(kind, path, body, timeoutMs, describe) {
     if (assetFlight) return;
     const slug = dx.getSlug();
     if (!slug) {
@@ -4904,7 +4908,7 @@
       return;
     }
     const action = kind === "pipeline" ? body.action : kind;
-    if (!window.confirm(assetConfirm(action, slug, body))) return;
+    if (!await ask("asset", assetConfirm(action, slug, body))) return;
     const gen = assetGen;
     const flight = ++assetFlight;
     syncAssetButtons();
@@ -5207,7 +5211,7 @@
     };
   }
 
-  function runShip(action) {
+  async function runShip(action) {
     if (shipFlight) return;
     const slug = dx.getSlug();
     if (!slug) {
@@ -5215,7 +5219,7 @@
       return;
     }
     const plan = shipPlan(action, shipFields());
-    if (!window.confirm(plan.confirm)) return;
+    if (!await ask("ship", plan.confirm)) return;
     const gen = shipGen;
     const flight = ++shipFlight;
     syncShipButtons();
@@ -5444,10 +5448,10 @@
       showStatus("build-status", dx.t("studio.stopped"), false);
     });
   });
-  [["build-waive-unity", "unity_waiver", "studio.waiveUnityConfirm"], ["build-waive-proof", "proof_waiver", "studio.waiveProofConfirm"]].forEach(([id, flag, ask]) => {
-    $(id).addEventListener("click", () => {
+  [["build-waive-unity", "unity_waiver", "studio.waiveUnityConfirm"], ["build-waive-proof", "proof_waiver", "studio.waiveProofConfirm"]].forEach(([id, flag, askKey]) => {
+    $(id).addEventListener("click", async () => {
       const slug = dx.getSlug();
-      if (!slug || !window.confirm(dx.t(ask))) return;
+      if (!slug || !await askDanger("waive", dx.t(askKey))) return;
       runAction($(id), "build-status", async () => {
         const data = await postJson("/admin/daedalus/game-studio/api/projects/" + slugPath(slug) + "/milestones/advance", { [flag]: true });
         if (data.ok === false) throw new Error(data.error || dx.t("studio.requestFailed"));
@@ -5541,7 +5545,7 @@
       const livePublic = !!(data && data.url && data.backend && data.backend !== "local");
       if (suffix === "/live" && data && data.needs_confirm && !livePublic) {
         // Anonymous Netlify / GitLab Pages create a public site: only after the owner confirms.
-        if (window.confirm(dx.t("studio.confirmPublic"))) {
+        if (await askDanger("publicLink", dx.t("studio.confirmPublic"))) {
           data = await postJson(url, Object.assign({}, body || {}, { confirm_public: true }));
         }
       }
@@ -5579,11 +5583,11 @@
       return li;
     }));
   }
-  $("git-revive").addEventListener("click", () => {
+  $("git-revive").addEventListener("click", async () => {
     const url = ($("git-url").value || "").trim();
     if (!url) { showStatus("git-status", dx.t("studio.gitNeedUrl"), true); return; }
     const publish = $("git-revive-publish").value || "local";
-    if (publish === "site" && !window.confirm(dx.t("studio.reviveSiteConfirm"))) return;
+    if (publish === "site" && !await ask("reviveSite", dx.t("studio.reviveSiteConfirm"))) return;
     runAction($("git-revive"), "git-status", async () => {
       // The owner just confirmed a public site: that answer travels with the request (review 2026-11-11).
       const body = publish === "site" ? { url, publish, confirm_public: true } : { url, publish };
@@ -5620,10 +5624,10 @@
       true
     );
   });
-  $("project-delete").addEventListener("click", () => {
+  $("project-delete").addEventListener("click", async () => {
     const slug = dx.getSlug();
     if (!slug) return;
-    if (!window.confirm(dx.t("studio.deleteConfirm"))) return;
+    if (!await askDanger("deleteProject", dx.t("studio.deleteConfirm"))) return;
     runAction($("project-delete"), "git-status", async () => {
       await dx.api("/api/v1/playground/projects/" + slugPath(slug), { method: "DELETE" });
       showStatus("git-status", dx.t("studio.saved"), false);

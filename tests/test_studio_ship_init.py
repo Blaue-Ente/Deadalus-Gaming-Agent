@@ -16,6 +16,7 @@ import urllib.request
 from pathlib import Path
 
 import pytest
+from dx_confirm_support import FlagDict, answer_confirms
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML = (ROOT / "app" / "static" / "studio.html").read_text(encoding="utf-8")
@@ -263,7 +264,7 @@ def test_unity_chain_names_overwrite_clone_and_stops(studio_server):
     paths = [f"studio/file-{i}.txt" for i in range(9)]
     mode = {"firebase": 500, "unity": "clone"}
     dialogs = []
-    accept = {"on": False}
+    accept = FlagDict(on=False)
 
     def reply(route, posts):
         url = route.request.url
@@ -315,14 +316,7 @@ def test_unity_chain_names_overwrite_clone_and_stops(studio_server):
         leaked = _guard(page)
         posts = _arm(page, reply)
 
-        def on_dialog(dialog):
-            dialogs.append(dialog.message)
-            if accept["on"]:
-                dialog.accept()
-            else:
-                dialog.dismiss()
-
-        page.on("dialog", on_dialog)
+        dialogs = accept.bind(page)   # answers #dx-confirm-ok when on, #dx-confirm-cancel when off
         _open(page, studio_server, game)
         assert page.locator("#ship-template").input_value() == "daedalus_minimal"
         assert page.locator("#ship-preset").input_value() == "custom"
@@ -495,7 +489,7 @@ def test_hybrid_order_and_exports_stay_honest(studio_server):
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         leaked = _guard(page)
         posts = _arm(page, reply)
-        page.on("dialog", lambda dialog: dialog.accept())
+        answer_confirms(page)   # every question: click #dx-confirm-ok
         _open(page, studio_server, vite)
         page.wait_for_function("() => !document.getElementById('ship-hybrid-init').hidden")
         assert page.locator("#ship-cap-init").is_visible()
@@ -576,7 +570,7 @@ def test_slug_switch_stops_the_chain_and_context_stays(studio_server):
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         leaked = _guard(page)
         posts = _arm(page, reply)
-        page.on("dialog", lambda dialog: dialog.accept())
+        answer_confirms(page)   # every question: click #dx-confirm-ok
         _open(page, studio_server, game)
         page.locator("#ship-firebase-project").fill("demo-fb")
         page.locator("#ship-unity-init").click()
