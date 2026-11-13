@@ -57,7 +57,6 @@ _MODEL_ALIASES: dict[str, str] = {
     "nvidia/nemotron-3.5-lightning-30b-a3b":                        "nvidia/nemotron-3.5-lightning-30b-a3b",
     "nvidia:openai/gpt-oss-20b":     "openai/gpt-oss-20b",
     "nvidia:nvidia/nemotron-3-ultra-550b-a55b": "nvidia/nemotron-3-ultra-550b-a55b",
-    "nvidia:moonshotai/kimi-k2.6":   "moonshotai/kimi-k2.6",
     "nvidia:meta/llama-3.2-90b-vision-instruct": "meta/llama-3.2-90b-vision-instruct",
     "nvidia:nvidia/nemotron-3.5-bolt-e4b": "nvidia/nemotron-3.5-bolt-e4b",
     "claude-opus-4-7":            "claude-opus-4-8",

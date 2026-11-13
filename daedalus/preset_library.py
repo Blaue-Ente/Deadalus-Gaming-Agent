@@ -96,12 +96,12 @@ _METRICS: dict[str, dict[str, float]] = {
     "qwen3.7-max":                                  {"cin": .300,"cout": 1.200,"lat": 6.0,"ctx": 128, "q": 84, "r": 78, "c": 82},
     # ── NVIDIA NIM free tier (integrate.api.nvidia.com) ───────────────────────
     "mistralai/mistral-large-4-1t-a52b":   {"cin": .000,"cout": .000,"lat": 11.0,"ctx": 262, "q": 90, "r": 88, "c": 92},
-    "nvidia/nemotron-3.5-lightning-30b-a3b":                  {"cin": .000,"cout": .000,"lat": 4.0, "ctx": 64,  "q": 74, "r": 58, "c": 76},
+    "nvidia/nemotron-3.5-lightning-30b-a3b":        {"cin": .000,"cout": .000,"lat": 3.0, "ctx": 64,  "q": 74, "r": 58, "c": 76},
     "openai/gpt-oss-120b":                          {"cin": .000,"cout": .000,"lat": 10.0,"ctx": 128, "q": 86, "r": 88, "c": 84},
     "openai/gpt-oss-20b":                           {"cin": .000,"cout": .000,"lat": 3.0, "ctx": 128, "q": 70, "r": 58, "c": 68},
-    "nvidia/nemotron-3-ultra-550b-a55b":                  {"cin": .000,"cout": .000,"lat": 9.0, "ctx": 64,  "q": 88, "r": 82, "c": 90},
-    "meta/llama-3.2-90b-vision-instruct":      {"cin": .000,"cout": .000,"lat": 6.0, "ctx": 1000,"q": 78, "r": 62, "c": 68},
-    "nvidia/nemotron-3.5-bolt-e4b":                   {"cin": .000,"cout": .000,"lat": 2.0, "ctx": 128, "q": 55, "r": 38, "c": 48},
+    "nvidia/nemotron-3-ultra-550b-a55b":            {"cin": .000,"cout": .000,"lat": 3.0, "ctx": 128, "q": 88, "r": 82, "c": 90},
+    "meta/llama-3.2-90b-vision-instruct":           {"cin": .000,"cout": .000,"lat": 8.0, "ctx": 128, "q": 76, "r": 58, "c": 62},
+    "nvidia/nemotron-3.5-bolt-e4b":                 {"cin": .000,"cout": .000,"lat": 1.0, "ctx": 128, "q": 55, "r": 38, "c": 48},
 }
 
 _DEFAULT_METRIC = {"cin": .30, "cout": 1.0, "lat": 6, "ctx": 64, "q": 70, "r": 60, "c": 65}

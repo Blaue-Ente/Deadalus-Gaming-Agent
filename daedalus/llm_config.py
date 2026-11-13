@@ -295,7 +295,7 @@ PRESET_MODELS = [
     {"id": "mistralai/mistral-large-4-1t-a52b", "label": "Mistral Large 4 (NVIDIA) 🆓 code", "provider": "nvidia", "tier": "power"},
     {"id": "nvidia/nemotron-3.5-lightning-30b-a3b",             "label": "Nemotron 3.5 Lightning 30B (NVIDIA) 🆓 ⚡",       "provider": "nvidia", "tier": "fast"},
     {"id": "openai/gpt-oss-20b",                      "label": "GPT-OSS 20B (NVIDIA) 🆓 reasoning",   "provider": "nvidia", "tier": "fast"},
-    {"id": "nvidia/nemotron-3-ultra-550b-a55b",        "label": "Nemotron 3 Ultra 550B (NVIDIA) 🆓 ⚡",       "provider": "nvidia", "tier": "fast"},
+    {"id": "nvidia/nemotron-3-ultra-550b-a55b",        "label": "Nemotron 3 Ultra 550B (NVIDIA) 🆓 code", "provider": "nvidia", "tier": "power"},
     # ── Local (Ollama / LM Studio / llama.cpp / vLLM) ────────────────────────
     # OmniRoute sidecar — virtual combos; the gateway picks a healthy free/paid target.
     {"id": "auto",              "label": "OmniRoute auto (sidecar) 🆓",         "provider": "omniroute", "tier": "cheap"},
@@ -436,6 +436,26 @@ def _apply_nvidia_free_policy(cfg: dict) -> dict:
 from .model_defaults import OPENROUTER_DEFAULT_MODEL, OPENROUTER_FAST_MODEL  # noqa: E402,F401  (re-exported)
 
 
+# NVIDIA models that are gone (checked live 2026-11-13: 404 or absent from /v1/models) and what replaces each. A saved
+# configuration that still names one keeps working instead of failing on every call.
+NVIDIA_RETIRED: dict[str, str] = {
+    "qwen/qwen3-next-80b-a3b-instruct": "nvidia/nemotron-3-ultra-550b-a55b",
+    "mistralai/mistral-large-3-675b-instruct-2512": "mistralai/mistral-large-4-1t-a52b",
+    "deepseek-ai/deepseek-v4-flash": "nvidia/nemotron-3.5-lightning-30b-a3b",
+    "deepseek-ai/deepseek-v4-pro": "nvidia/nemotron-3-ultra-550b-a55b",
+    "meta/llama-4-maverick-17b-128e-instruct": "meta/llama-3.2-90b-vision-instruct",
+    "meta/llama-3.2-3b-instruct": "nvidia/nemotron-3.5-bolt-e4b",
+    "moonshotai/kimi-k2.6": "nvidia/nemotron-3-ultra-550b-a55b",
+}
+
+
+def current_nvidia_model(provider: str, model: str) -> str:
+    """The live replacement for a retired NVIDIA model; any other model unchanged."""
+    if (provider or "").strip().lower() == "nvidia":
+        return NVIDIA_RETIRED.get(model, model)
+    return model
+
+
 def get_brain_config() -> dict:
     """Effective Connectors / wardrobe brain — no task_effort or run_budget overlay.
 
@@ -444,7 +464,12 @@ def get_brain_config() -> dict:
     run-budget writer overlays for that turn only.
     """
     from .credentials import member_config
-    return member_config(_resolve_llm_config())      # gap 3c: a team member's call carries a key of theirs
+    cfg = _resolve_llm_config()
+    if isinstance(cfg, dict):
+        live = current_nvidia_model(str(cfg.get("provider") or ""), str(cfg.get("model") or ""))
+        if live != cfg.get("model"):
+            cfg = {**cfg, "model": live, "model_migrated_from": cfg.get("model")}
+    return member_config(cfg)      # gap 3c: a team member's call carries a key of theirs
 
 
 def get_config() -> dict:
