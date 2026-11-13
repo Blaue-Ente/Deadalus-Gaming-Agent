@@ -80,7 +80,7 @@ def test_legacy_intent_names_map(gw):
 
 def test_owner_override_applies_to_core_intents_only(gw):
     with pytest.raises(ValueError):
-        gw.set_override("scout", "openrouter:foo/bar")
+        gw.set_override("summary", "openrouter:foo/bar")     # pre-built cheap route: not owner-selectable
     with pytest.raises(ValueError):
         gw.set_override("critic", "not-a-tag")
     gw.set_override("critic", "openrouter:foo/bar")
@@ -116,6 +116,7 @@ def test_call_site_hint_and_slot_route(gw):
 def test_unreachable_explicit_model_is_a_routing_error(gw, monkeypatch):
     monkeypatch.delenv("ALLTOKEN_API_KEY", raising=False)
     monkeypatch.setattr("daedalus.llm_config.resolve_provider_api_key", lambda *a, **k: "", raising=False)
+    gw.set_override("scout", "alltoken:some-model")      # the owner picked it, so a missing key is an error
     result = run(gw.call("scout", [{"role": "user", "content": "x"}]))
     assert result.ok is False and result.error.type == "routing"
 
@@ -754,7 +755,8 @@ def test_intents_api_lists_resolution_and_never_leaks_keys(gw):
     assert body["ok"] is True and [r["intent"] for r in body["intents"]] == list(gw.INTENTS)
     by = {r["intent"]: r for r in body["intents"]}
     assert by["writer"]["selectable"] and by["critic"]["selectable"] and by["planner"]["selectable"]
-    assert by["mentor"]["selectable"] and not by["scout"]["selectable"] and not by["navigator"]["selectable"]
+    assert by["mentor"]["selectable"] and by["scout"]["selectable"] and not by["navigator"]["selectable"]
+    assert not by["summary"]["selectable"] and not by["worker"]["selectable"] and not by["test"]["selectable"]
     assert by["scout"]["default"] == "alltoken:deepseek-v3.2" and by["scout"]["resolved"]["source"] == "registry-default"
     assert by["persona"]["resolved"]["model"] == "owner/pick"
     assert '"api_key"' not in repr(body) and "base_url" not in repr(body)
@@ -773,7 +775,7 @@ def test_intents_api_set_clear_and_errors(gw):
     assert gw.resolve("critic").source == "owner-override"
     cleared = client.post("/api/v1/harness/intents", json={"intent": "critic", "model": ""})
     assert {r["intent"]: r for r in cleared.json()["intents"]}["critic"]["resolved"]["source"] == "brain"
-    assert client.post("/api/v1/harness/intents", json={"intent": "scout", "model": "openrouter:a/b"}).status_code == 400
+    assert client.post("/api/v1/harness/intents", json={"intent": "summary", "model": "openrouter:a/b"}).status_code == 400
     assert client.post("/api/v1/harness/intents", json={"intent": "critic", "model": "nonsense"}).status_code == 400
 
 

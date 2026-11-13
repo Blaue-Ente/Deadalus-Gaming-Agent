@@ -9,7 +9,8 @@ from a0_support import a0_tmp  # noqa: F401
 from fastapi.testclient import TestClient
 from test_studio_phase2_workspace import _fulfill, _hit, studio_server  # noqa: F401  (fixture and helpers)
 
-KEYS = ["mentor.enabled", "mentor.day_token_cap", "run_budget.usd", "writer_assist.mode", "evolution.enabled",
+KEYS = ["mentor.enabled", "mentor.day_token_cap", "run_budget.usd", "writer_assist.mode", "fallback.mode",
+        "fallback.triggers", "evolution.enabled",
         "auto_apply.enabled", "play.max_sessions", "subq.shadow", "kv.backend", "brain.model"]
 INTENTS = ["persona", "writer", "tools", "mentor", "critic", "planner", "navigator", "summary", "scout", "asset",
            "worker", "test"]
@@ -185,7 +186,7 @@ def test_a_task_model_is_set_and_cleared_with_real_clicks(studio_server):
         page.wait_for_function("() => document.querySelector(\".cfg-row[data-intent='critic'] .cfg-note:not([hidden])\") !== null")
         assert "provider:model" in page.inner_text(".cfg-row[data-intent='critic'] .cfg-note")
         # tasks that only follow the brain have no input
-        assert page.locator(".cfg-row[data-intent='scout'] input").count() == 0
+        assert page.locator(".cfg-row[data-intent='summary'] input").count() == 0
         browser.close()
 
 
@@ -264,7 +265,8 @@ def test_pinned_and_shared_tasks_are_labelled_honestly(studio_server):
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         _open(page, studio_server)
-        assert "Built-in default" in page.inner_text(".cfg-row[data-intent='scout'] .cfg-note")      # not 'follows the brain'
+        assert "Follows the Studio brain" in page.inner_text(".cfg-row[data-intent='summary'] .cfg-note")
+        assert page.locator(".cfg-row[data-intent='scout'] input").count() == 1      # scout is owner-selectable now
         assert "share one setting" in page.inner_text(".cfg-row[data-intent='persona'] .cfg-note")
         assert "share one setting" in page.inner_text(".cfg-row[data-intent='writer'] .cfg-note")
         page.locator(".cfg-row[data-intent='persona'] input").fill("openrouter:test/shared")

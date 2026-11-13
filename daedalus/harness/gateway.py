@@ -38,7 +38,12 @@ INTENTS = (
     "summary", "scout", "asset", "worker", "test",
 )
 # The owner can pick a model for these in Settings. "persona" shares the writer's selector.
-OVERRIDABLE = ("writer", "mentor", "critic", "planner")
+# Each one reaches a code path that reads the override: writer/persona and critic (playtest) via ``resolve``,
+# planner via ``llm_client.complete(intent="json")``, tools via ``llm_client.call_with_tools``, scout/asset via
+# ``model_tag_or_empty``, and the draft reviewer (critic) in ``improvements``. Mentor is listed but its real choice lives in ``mentor_helm`` (``POST /harness/intents``
+# delegates there; its calls pass a pre-built route). NOT listed, on purpose: summary and navigator (always a
+# pre-built ``cheap_route``), worker (one pre-built route per slot) and test (a connection check of one slot).
+OVERRIDABLE = ("writer", "mentor", "critic", "planner", "tools", "scout", "asset")
 _SELECTOR = {"persona": "writer"}
 
 # Registry defaults for intents that today hard-code a model. Others follow the brain config.
@@ -301,6 +306,23 @@ def set_override(intent: str, model_tag: str) -> dict[str, str]:
     return current
 
 
+def default_tag_for(intent: str) -> str | None:
+    """The registry default for ``intent``, only while its provider has a key; else None (= "same as main")."""
+    tag = INTENT_DEFAULTS.get(canonical_intent(intent))
+    if not tag:
+        return None
+    try:
+        from ..model_router import _route_for_provider, parse_provider_model_tag
+
+        prov, mid = parse_provider_model_tag(tag)
+        if prov and mid and _route_for_provider(prov, mid, source="registry-default") is None:
+            return None
+    except Exception:
+        log.debug("registry default check failed for %s", intent, exc_info=True)
+        return None
+    return tag
+
+
 def model_tag_for(intent: str) -> str | None:
     """The explicit ``provider:model`` tag an intent resolves to before brain fallback, if any."""
     intent = canonical_intent(intent)
@@ -308,7 +330,7 @@ def model_tag_for(intent: str) -> str | None:
         tag = get_overrides().get(_SELECTOR.get(intent, intent))
         if tag:
             return tag
-    return INTENT_DEFAULTS.get(intent)
+    return default_tag_for(intent)
 
 
 def model_tag_or_empty(intent: str) -> str:
@@ -331,7 +353,7 @@ def resolve(intent: str, *, model_hint: str | None = None, route: dict[str, Any]
     elif locked:
         # DAEDALUS_MODEL pins the brain and the owner-selectable intents. Registry defaults (scout, asset)
         # are not owner choices and keep applying, exactly as the old hard-coded call sites did.
-        tag = INTENT_DEFAULTS.get(intent)
+        tag = default_tag_for(intent)
         source = "registry-default" if tag else "env-lock"
     else:
         tag = model_tag_for(intent)

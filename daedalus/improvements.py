@@ -824,9 +824,13 @@ async def review_gate_critique(user_message: str, draft_reply: str,
         from .harness import gateway as _gw
         if _gw.path_enabled("reviewer"):
             _prov = "openrouter" if _cred_env("OPENROUTER_API_KEY") else "novita"
+            # The owner's critic model (Settings) wins over the cheap reviewer default; env locks are honoured
+            # inside ``model_tag_for``. Without a route the gateway resolves the override itself.
+            _critic_tag = _gw.model_tag_for("critic")
             _res = await _gw.call(
                 "critic", [{"role": "user", "content": user_prompt}], system=sys_prompt, max_tokens=400,
-                route=_gw.route_for(_prov, review_model, key, url), client_id="daedalus/draft-reviewer",
+                route=None if _critic_tag else _gw.route_for(_prov, review_model, key, url),
+                client_id="daedalus/draft-reviewer",
             )
             if not _res.ok:
                 if _res.budget_stopped:

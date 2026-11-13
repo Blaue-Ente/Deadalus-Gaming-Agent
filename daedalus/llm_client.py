@@ -169,18 +169,30 @@ def mark_empty_reply(out: dict[str, Any], *, max_tokens: int) -> dict[str, Any]:
     return out
 
 
-def _is_recoverable_llm_error(text: str) -> bool:
-    """True when failing the primary call might succeed on another backend (credits, auth, missing model)."""
-    t = (text or "").lower()
-    return any(
-        phrase in t
-        for phrase in (
-            "401", "403", "429", "rate", "limit", "unauthorized", "permission",
-            "insufficient", "credit", "quota", "timeout", "timed out", "connection",
-            "unavailable", "503", "502", "invalid_api_key", "does not exist",
-            "not found", "incorrect api key", "no such model",
-        )
-    )
+class LLMCallError(RuntimeError):
+    """A failed model call. In ``fallback.mode=ask`` it carries ``fallback_available``, ``fallback_reason`` and ``result``."""
+
+    result: dict[str, Any] | None = None
+    fallback_available: bool = False
+    fallback_reason: str = ""
+
+
+# Intents whose owner override ``complete()`` applies when the caller passed no explicit model. Writer/persona are
+# left out on purpose: the agent loop reaches them through the gateway, and bare ``complete()`` helpers default to
+# the chat intent, which must keep following the brain.
+_OVERRIDE_INTENTS = ("planner", "critic", "tools", "scout", "asset")
+
+
+def _override_model_tag(intent: str) -> str:
+    try:
+        from .harness import gateway as _gw
+
+        if _gw.canonical_intent(intent) not in _OVERRIDE_INTENTS:
+            return ""
+        return _gw.model_tag_or_empty(intent)
+    except Exception:
+        log.debug("intent override lookup failed for %s", intent, exc_info=True)
+        return ""
 
 
 async def _complete_with_cfg(
@@ -308,6 +320,8 @@ async def complete(
     from .local_llm import is_local_provider, resolve_local_config
     from .model_router import config_for_explicit_model
 
+    if not (model and str(model).strip()):
+        model = _override_model_tag(intent) or model
     base = get_config()
     cfg = config_for_explicit_model(base, model, source="llm_client.complete")
     err_note = str(cfg.get("routing_error") or "").strip()
@@ -355,33 +369,39 @@ async def complete(
         first_err = str(exc)[:500]
         log.warning("LLM primary call failed: %s", first_err)
 
-    # Fallback: explicit non-local request failed → try active local Ollama once (explicit only)
-    if model and str(model).strip():
-        try:
-            prov_explicit, _mid_explicit = str(model).split(":", 1) if ":" in str(model) else ("", "")
-            prov_explicit = prov_explicit.strip().lower()
+    # Fallback: an explicit cloud request failed. Never silent, and only when the owner opted in
+    # (``fallback.mode``): ``auto`` retries once on local Ollama, ``ask`` only reports that it could.
+    fallback_info: dict[str, Any] | None = None
+    if model and str(model).strip() and first_err:
+        from . import routing_fallback as _rf
+
+        fb_mode = _rf.mode()
+        prov_explicit = str(model).split(":", 1)[0].strip().lower() if ":" in str(model) else ""
+        reason = _rf.matches(first_err) if fb_mode != "off" else None
+        if reason and prov_explicit and not is_local_provider(prov_explicit):
             local_cfg = resolve_local_config("ollama")
-            if (
-                local_cfg
-                and prov_explicit
-                and not is_local_provider(prov_explicit)
-                and _is_recoverable_llm_error(first_err or "")
-            ):
+            if local_cfg and fb_mode == "auto":
                 fb = dict(local_cfg)
-                log.warning(
-                    "LLM fallback to local Ollama after failure on %s (explicit request)",
-                    model,
-                )
-                out, _b = await _complete_with_cfg(
-                    fb, system=system, user=user, intent=intent, client_id=client_id + "/fallback-local",
-                    max_tokens=max_tokens, temperature=temperature, json_mode=json_mode,
-                )
-                out["routing_fallback"] = "local_ollama"
-                out["routing_fallback_reason"] = first_err or "primary_failed"
-                out["requested_model"] = model
-                return out
-        except Exception as exc2:
-            log.warning("LLM local fallback failed: %s", exc2)
+                to_tag = f"{fb.get('provider') or 'ollama'}:{fb.get('model') or ''}"
+                log.warning("LLM fallback to local %s after %s failure on %s: %s", to_tag, reason, model, first_err[:200])
+                try:
+                    out, _b = await _complete_with_cfg(
+                        fb, system=system, user=user, intent=intent, client_id=client_id + "/fallback-local",
+                        max_tokens=max_tokens, temperature=temperature, json_mode=json_mode,
+                    )
+                    out["routing_fallback"] = {"from": str(model), "to": to_tag, "reason": reason}
+                    out["routing_fallback_error"] = first_err
+                    out["requested_model"] = model
+                    return out
+                except Exception as exc2:
+                    log.warning("LLM local fallback failed: %s", exc2)
+            elif local_cfg and fb_mode == "ask":
+                log.warning("LLM call on %s failed (%s); a local fallback is available but fallback.mode is ask",
+                            model, reason)
+                fallback_info = {"fallback_available": True, "fallback_reason": reason,
+                                 "routing_fallback": {"from": str(model), "to": "ollama", "reason": reason}}
+        elif fb_mode == "off":
+            log.warning("LLM call on %s failed and fallback.mode is off: not retrying locally", model)
 
     if first_err:
         try:
@@ -392,11 +412,16 @@ async def complete(
             )
         except Exception:
             pass
-        raise RuntimeError(
+        err = LLMCallError(
             "LLM call failed for "
             f"{cfg.get('provider')}/{cfg.get('model')}: {first_err}. "
             "If this is a missing API key or credits, set the key or switch to a local model."
-        ) from None
+        )
+        if fallback_info:
+            err.result = {"ok": False, "error": first_err, **fallback_info}
+            err.fallback_available = True
+            err.fallback_reason = fallback_info["fallback_reason"]
+        raise err from None
     raise RuntimeError("LLM call failed without detail")
 
 
@@ -418,6 +443,15 @@ async def call_with_tools(
     from .native_tools import openai_tool_specs, to_anthropic_messages, to_openai_messages
 
     cfg = get_config()
+    _tag = _override_model_tag("tools")
+    if _tag:  # the owner's model for tool rounds; a tag without credentials keeps the brain (and is logged)
+        from .model_router import config_for_explicit_model
+
+        _over = config_for_explicit_model(cfg, _tag, source="llm_client.call_with_tools")
+        if _over.get("routing_error"):
+            log.warning("tools override ignored: %s", _over["routing_error"])
+        else:
+            cfg = _over
     api_key = cfg.get("api_key", "")
     base_url = cfg.get("base_url", "")
     model = cfg.get("model", "")

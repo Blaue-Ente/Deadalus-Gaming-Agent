@@ -108,7 +108,7 @@ def harness_intents() -> dict[str, Any]:
                 resolved = gw.resolve(intent).public()
             except Exception as exc:  # nothing configured yet: say so, never fail the whole list (fresh installs)
                 resolved = {"provider": "", "model": "", "source": "unconfigured", "error": str(exc)[:160]}
-            row.update({"owner_choice": overrides.get(sel), "default": gw.INTENT_DEFAULTS.get(intent),
+            row.update({"owner_choice": overrides.get(sel), "default": gw.default_tag_for(intent),
                         "resolved": resolved})
         rows.append(row)
     return {"ok": True, "env_locked": gw.model_locked_by_env(), "intents": rows}

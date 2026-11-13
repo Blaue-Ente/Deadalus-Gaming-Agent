@@ -83,6 +83,38 @@ def _writer_modes() -> list[str]:
     return list(writer_assist.MODES)
 
 
+def _fb_mode() -> dict[str, Any]:
+    from .. import routing_fallback as rf, settings_file
+    raw = settings_file.load().get("fallback_mode")
+    return {"effective": rf.mode(), "persisted": raw if raw in rf.MODES else None, "default": rf.DEFAULT_MODE}
+
+
+def _write_fb_mode(v: Any) -> Any:
+    from .. import settings_file
+    return settings_file.update({"fallback_mode": str(v)})
+
+
+def _fb_modes() -> list[str]:
+    from .. import routing_fallback as rf
+    return list(rf.MODES)
+
+
+def _fb_triggers() -> dict[str, Any]:
+    from .. import routing_fallback as rf, settings_file
+    raw = settings_file.load().get("fallback_triggers")
+    return {"effective": rf.triggers(), "persisted": raw if raw in rf.TRIGGERS else None, "default": rf.DEFAULT_TRIGGERS}
+
+
+def _write_fb_triggers(v: Any) -> Any:
+    from .. import settings_file
+    return settings_file.update({"fallback_triggers": str(v)})
+
+
+def _fb_trigger_choices() -> list[str]:
+    from .. import routing_fallback as rf
+    return list(rf.TRIGGERS)
+
+
 def _play_max() -> dict[str, Any]:
     from .. import settings_file
     from .play_worker.manager import max_sessions
@@ -150,6 +182,10 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("run_budget.usd", "settings.runBudget", "spend", "int", "DAEDALUS_RUN_BUDGET", _budget, _write_budget),
     Setting("writer_assist.mode", "settings.writerAssist", "quality", "enum", "DAEDALUS_WRITER_ASSIST", _writer_assist, _write_writer_assist,
             choices=_writer_modes),
+    Setting("fallback.mode", "settings.fallbackMode", "runtime", "enum", "DAEDALUS_FALLBACK", _fb_mode, _write_fb_mode,
+            choices=_fb_modes),
+    Setting("fallback.triggers", "settings.fallbackTriggers", "runtime", "enum", "", _fb_triggers, _write_fb_triggers,
+            choices=_fb_trigger_choices),
     Setting("evolution.enabled", "settings.evolution", "evolution", "bool", "DAEDALUS_EVOLUTION", _evolution, _write_evolution),
     Setting("auto_apply.enabled", "settings.autoApply", "evolution", "bool", "", _auto_apply, _write_auto_apply),
     Setting("play.max_sessions", "settings.playMax", "runtime", "int", "DAEDALUS_PLAY_MAX", _play_max, _write_play_max,
