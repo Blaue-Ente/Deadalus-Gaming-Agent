@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-13T12:20:15.725837+00:00",
+  "generated_at": "2026-11-13T18:32:43.781411+00:00",
   "package_version": "0.3.8",
-  "git_commit": "c4f6e7154bfd94335bc5acb8322968bcf99d7d61",
+  "git_commit": "0e041e54087ad4832a408d3dfd5babb3d4ecc026",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -14,8 +14,8 @@
     },
     {
       "path": "app/admin_compat.py",
-      "lines": 3070,
-      "broad_excepts": 69
+      "lines": 3079,
+      "broad_excepts": 71
     },
     {
       "path": "daedalus/native_tools.py",
@@ -128,8 +128,8 @@
     ]
   },
   "tests": {
-    "modules": 151,
-    "functions": 1642
+    "modules": 154,
+    "functions": 1669
   },
   "modules": {
     "daedalus": [
@@ -377,6 +377,7 @@
       "daedalus/reflection.py",
       "daedalus/rejection_lessons.py",
       "daedalus/revive_job.py",
+      "daedalus/routing_fallback.py",
       "daedalus/run_budget.py",
       "daedalus/run_engine.py",
       "daedalus/sandbox.py",
