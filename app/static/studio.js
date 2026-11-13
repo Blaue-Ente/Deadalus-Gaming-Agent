@@ -721,7 +721,7 @@
         el.onclick = async () => {
           try {
             if (!row.installed && w.ollama) {
-              if (!confirm(t("studio.pullConfirm", { name: row.ollama }))) return;
+              if (!await ask("pullModel", t("studio.pullConfirm", { name: row.ollama }))) return;
               text($("llmbox"), t("studio.pulling", { name: row.ollama }));
               await api("/api/v1/llm/wardrobe/pull", {
                 method: "POST",
@@ -1555,9 +1555,9 @@
         finished = true;
         try { src.close(); } catch { /* ignore */ }
         act.finish(!err && payload && payload.status === "done" ? "done" : "stopped");
-        if (err) text(last, t("studio.errorPrefix") + ": " + errText(err));
+        if (err) text(last, t("studio.errorPrefix") + ": " + humanError(err, { raw: true }));
         else if (payload && payload.status === "cancelled") text(last, t("studio.stopped"));
-        else if (payload && payload.status === "error") text(last, t("studio.errorPrefix") + ": " + (payload.error || t("studio.chatStopped")));
+        else if (payload && payload.status === "error") text(last, t("studio.errorPrefix") + ": " + (payload.error ? humanError(payload.error, { raw: true }) : t("studio.chatStopped")));
         else applyChatResult(last, payload);
         if (payload && payload.project) renderTurnChanges(payload);
         chatBusy(false);
@@ -1604,7 +1604,7 @@
       };
     } catch (e) {
       act.finish("stopped");
-      text(last, t("studio.errorPrefix") + ": " + errText(e));
+      text(last, t("studio.errorPrefix") + ": " + humanError(e, { raw: true }));
       chatBusy(false);
     }
   }
@@ -1666,7 +1666,7 @@
         undo.dataset.role = "revert";
         text(undo, t("studio.changeRevert"));
         undo.onclick = async () => {
-          if (!window.confirm(t(c.status === "created" ? "studio.revertCreatedConfirm" : "studio.revertConfirm", { path: c.path }))) return;
+          if (!await ask("revert", t(c.status === "created" ? "studio.revertCreatedConfirm" : "studio.revertConfirm", { path: c.path }))) return;
           busy(undo, true, "…");
           try {
             const res = await api("/api/v1/daedalus/chat/jobs/" + encodeURIComponent(job.id) + "/revert", {
@@ -2298,11 +2298,93 @@
     }
   }
   document.addEventListener("daedalus:langchange", relabelChrome);
+  // PR3 primitives: one styled confirm, readable errors, and one empty-state shape.
+  let confirmPending = null;
+  function confirmDialog(opts) {
+    const o = opts || {};
+    const dlg = document.getElementById("dx-confirm");
+    if (!dlg || typeof dlg.showModal !== "function") {
+      return Promise.resolve(false);   // fail closed: never proceed without an answer
+    }
+    if (confirmPending) confirmPending(false);
+    const ok = document.getElementById("dx-confirm-ok");
+    const cancel = document.getElementById("dx-confirm-cancel");
+    const titleEl = document.getElementById("dx-confirm-title");
+    const bodyEl = document.getElementById("dx-confirm-body");
+    text(titleEl, o.title || "");
+    titleEl.hidden = !o.title;
+    text(bodyEl, o.body || "");
+    text(ok, o.confirmLabel || t("studio.confirmOk"));
+    text(cancel, o.cancelLabel || t("studio.confirmCancel"));
+    ok.classList.toggle("danger", !!o.danger);
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (value) => {
+        if (done) return;
+        done = true;
+        confirmPending = null;
+        ok.removeEventListener("click", onOk);
+        cancel.removeEventListener("click", onCancel);
+        dlg.removeEventListener("cancel", onEsc);
+        dlg.removeEventListener("close", onClose);
+        if (dlg.open) dlg.close();
+        resolve(value);
+      };
+      const onOk = () => finish(true);
+      const onCancel = () => finish(false);
+      const onEsc = () => finish(false);
+      const onClose = () => { if (!dlg.open) finish(false); };   // a late 'close' from the previous question must not answer this one
+      confirmPending = finish;
+      ok.addEventListener("click", onOk);
+      cancel.addEventListener("click", onCancel);
+      dlg.addEventListener("cancel", onEsc);
+      dlg.addEventListener("close", onClose);
+      dlg.showModal();
+      (o.danger ? cancel : ok).focus();
+    });
+  }
+
+  function ask(name, body) { return confirmDialog({ title: t("studio.cf." + name), body }); }
+  function askDanger(name, body) { return confirmDialog({ title: t("studio.cf." + name), body, danger: true }); }
+
+  function humanError(err, opts) {
+    const o = opts || {};
+    const raw = err == null ? "" : typeof err === "string" ? err : String(err.message || err.detail || err.error || err);
+    let text_ = null;
+    if (err && err.name === "AbortError" || /timed out|timeout|aborted/i.test(raw)) text_ = t("studio.timeout");
+    else if (/llm_failed|no_mentor_model|No LLM provider configured/i.test(raw)) text_ = t("studio.err.noModel");
+    else if (/synthesis_failed|search_failed/i.test(raw)) text_ = t("studio.err.tryAgain");
+    else if (/\b(401|403|429)\b|quota|credit/i.test(raw)) text_ = t("studio.err.key");
+    if (text_ == null) text_ = o.raw && raw ? raw : t("studio.err.generic");
+    return o.details ? { text: text_, details: raw } : text_;
+  }
+
+  function emptyState(el, opts) {
+    if (!el) return;
+    const o = opts || {};
+    const wrap = document.createElement("div");
+    wrap.className = "dx-empty";
+    const p = document.createElement("p");
+    text(p, o.text || t("studio.emptyList"));
+    wrap.appendChild(p);
+    if (o.actionLabel && typeof o.onAction === "function") {
+      const b = document.createElement("button");
+      b.type = "button";
+      text(b, o.actionLabel);
+      b.addEventListener("click", o.onAction);
+      wrap.appendChild(b);
+    }
+    el.replaceChildren(wrap);
+  }
+
   window.dxStudio = {
     api,
     t,
     text,
     errText,
+    confirm: confirmDialog,
+    humanError,
+    emptyState,
     busy,
     getSlug() { return state.slug; },
     projects() { return state.projects.slice(); },

@@ -16,6 +16,7 @@ import urllib.request
 from pathlib import Path
 
 import pytest
+from dx_confirm_support import answer_confirms
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML = (ROOT / "app" / "static" / "studio.html").read_text(encoding="utf-8")
@@ -252,7 +253,7 @@ def test_generate_cancel_and_empty_prompt_send_nothing(studio_server):
         assert posts == []
         assert "Enter a prompt." in page.locator("#asset-status").inner_text()
         page.locator("#asset-prompt").fill("a small tree")
-        page.once("dialog", lambda dialog: dialog.dismiss())
+        answer_confirms(page, accept=False)   # click #dx-confirm-cancel
         page.locator("#asset-generate").click()
         assert posts == []
         assert leaked == []
@@ -279,11 +280,7 @@ def test_generate_posts_the_old_body_and_names_the_file(studio_server):
             route, 200, {"ok": True, "path": "assets/tree.png", "bytes": 40},
         ))
 
-        def accept(dialog):
-            seen.append(dialog.message)
-            dialog.accept()
-
-        page.on("dialog", accept)
+        seen = answer_confirms(page)   # click #dx-confirm-ok, list the questions
         _open(page, studio_server, game)
         page.locator("#asset-path").fill("assets/tree.png")
         page.locator("#asset-prompt").fill("a small tree")
@@ -320,7 +317,7 @@ def test_generate_empty_200_and_500_are_not_a_file(studio_server):
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         leaked = _guard(page)
         posts = _arm(page, reply)
-        page.on("dialog", lambda dialog: dialog.accept())
+        answer_confirms(page)   # every question: click #dx-confirm-ok
         _open(page, studio_server, game)
         page.locator("#asset-prompt").fill("a small tree")
         for needle in ("did not succeed", "image down"):
@@ -360,7 +357,7 @@ def test_autopack_shows_partial_and_empty_built(studio_server):
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         leaked = _guard(page)
         posts = _arm(page, reply)
-        page.on("dialog", lambda dialog: (seen.append(dialog.message), dialog.accept()))
+        seen = answer_confirms(page)   # click #dx-confirm-ok, list the questions
         _open(page, studio_server, game)
         page.locator("#asset-autopack").click()
         assert "Enter a description for auto-pack." in page.locator("#asset-status").inner_text()
@@ -414,7 +411,7 @@ def test_pipeline_renders_each_contract_without_extra_fields(studio_server):
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         leaked = _guard(page)
         posts = _arm(page, reply)
-        page.on("dialog", lambda dialog: dialog.accept())
+        answer_confirms(page)   # every question: click #dx-confirm-ok
         _open(page, studio_server, game)
         for action, _payload, expect in cases:
             page.locator("#asset-action").select_option(action)
@@ -479,7 +476,7 @@ def test_mesh_prompt_job_check_and_slug_clears_the_binding(studio_server):
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         leaked = _guard(page)
         posts = _arm(page, reply)
-        page.on("dialog", lambda dialog: dialogs.append(dialog.message) or dialog.accept())
+        dialogs = answer_confirms(page)   # click #dx-confirm-ok, list the questions
         _open(page, studio_server, game)
         page.locator("#asset-action").select_option("mesh")
         page.locator("#asset-mesh-prompt").fill("   ")
@@ -568,7 +565,7 @@ def test_slug_change_discards_the_reply_and_a_second_click_does_not_post(studio_
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         leaked = _guard(page)
         posts = _arm(page, reply)
-        page.on("dialog", lambda dialog: dialog.accept())
+        answer_confirms(page)   # every question: click #dx-confirm-ok
         _open(page, studio_server, game)
         page.locator("#asset-prompt").fill("a small tree")
         page.locator("#asset-generate").click()
@@ -603,7 +600,7 @@ def test_languages_and_settings_viewports_stay_put(studio_server):
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         leaked = _guard(page)
         _arm(page, lambda route, _posts: _fulfill(route, 500, {"ok": False, "error": "provider-raw-error"}))
-        page.on("dialog", lambda dialog: dialog.accept())
+        answer_confirms(page)   # every question: click #dx-confirm-ok
         _open(page, studio_server, game)
         page.locator(".dx-lang button[data-lang=bg]").click()
         page.wait_for_function(

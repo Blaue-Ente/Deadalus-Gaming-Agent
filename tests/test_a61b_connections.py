@@ -9,6 +9,7 @@ import zlib
 
 import pytest
 from a0_support import a0_tmp  # noqa: F401
+from dx_confirm_support import ConfirmAnswerer
 from fastapi.testclient import TestClient
 
 BRAIN = {"provider": "openrouter", "model": "owner/pick", "api_key": "SECRET-MASTER-KEY", "base_url": "http://x",
@@ -401,18 +402,13 @@ def test_mcp_is_enabled_only_after_a_confirm_and_a_declined_confirm_changes_noth
         _open_links(page, studio_server)
         row = page.locator(".cfg-row[data-id='mcp-git']")
         assert "off" in row.inner_text() and row.locator("button").inner_text() == "Enable"
-        asked: list[str] = []
-
-        def decline(dialog):
-            asked.append(dialog.message)
-            dialog.dismiss()
-
-        page.once("dialog", decline)
+        answer = ConfirmAnswerer(page, accept=False)   # clicks #dx-confirm-cancel
         row.locator("button").click()
         page.wait_for_timeout(300)
+        asked = answer.messages
         assert asked and "git" in asked[0] and "local program" in asked[0]
         assert posts == [] and page.locator(".cfg-row[data-id='mcp-git'] button").inner_text() == "Enable"   # nothing was sent
-        page.once("dialog", lambda d: d.accept())
+        answer.set(True)                                # clicks #dx-confirm-ok
         page.locator(".cfg-row[data-id='mcp-git'] button").click()
         page.wait_for_function("() => document.querySelector(\".cfg-row[data-id='mcp-git'] button\").textContent === 'Disable'")
         assert "on" in page.inner_text(".cfg-row[data-id='mcp-git']") and len(posts) == 1
@@ -494,6 +490,7 @@ def test_new_sections_fit_and_their_buttons_are_really_clickable(studio_server, 
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": size[0], "height": size[1]})
         _stub_remote(page)
+        ConfirmAnswerer(page, accept=False)             # the MCP Enable click asks first: Cancel, as before
         _open_links(page, studio_server)
         over = page.evaluate("""() => { const p = document.getElementById('panel-settings');
           return {sw: p.scrollWidth, cw: p.clientWidth, docw: document.documentElement.scrollWidth, vw: window.innerWidth}; }""")
@@ -594,7 +591,7 @@ def test_a_refused_mcp_toggle_keeps_the_list_and_does_not_say_saved(studio_serve
         _open_links(page, studio_server)
         before = page.locator(".cfg-row[data-id^='mcp-']").count()
         assert before >= 2
-        page.once("dialog", lambda d: d.accept())
+        ConfirmAnswerer(page, accept=True)              # clicks #dx-confirm-ok
         page.locator(".cfg-row[data-id='mcp-git'] button").click()
         page.wait_for_function("() => /mcp.json unreadable/.test(document.getElementById('harness-status').textContent)")
         assert page.locator(".cfg-row[data-id^='mcp-']").count() == before            # the list is still there
