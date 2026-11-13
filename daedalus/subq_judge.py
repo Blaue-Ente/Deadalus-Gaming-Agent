@@ -10,6 +10,8 @@ questions as a probability of yes in about 0.7 s and bills only the input tokens
 says how often they agree and lists the disagreements, so the owner can decide whether SubQ takes over. Nothing
 happens without a key (``SUBQ_API_KEY``: the owner's in the environment, a team member's own), with
 ``DAEDALUS_SUBQ_SHADOW=0``, or for a text already judged in this process. Never raises.
+
+Setting the key is the consent: the request text (at most 4,000 characters) then goes to api.subq.ai.
 """
 from __future__ import annotations
 
@@ -30,6 +32,7 @@ TIMEOUT = 8.0
 YES = 0.5
 MAX_STATE = 4000
 _SEEN_MAX = 512
+MAX_ROWS = 5000            # the shadow log keeps the latest rows: summary reads it whole
 _seen: OrderedDict[tuple[str, str], None] = OrderedDict()
 _lock = threading.Lock()
 
@@ -88,8 +91,13 @@ def _record(row: dict[str, Any]) -> None:
     try:
         path = _path()
         path.parent.mkdir(parents=True, exist_ok=True)
-        with _lock, path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+        with _lock:
+            with path.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+            if path.stat().st_size > MAX_ROWS * 400:
+                lines = path.read_text(encoding="utf-8").splitlines()
+                if len(lines) > MAX_ROWS:
+                    path.write_text("\n".join(lines[-MAX_ROWS:]) + "\n", encoding="utf-8")
     except OSError:
         log.info("subq: shadow row not written", exc_info=True)
 

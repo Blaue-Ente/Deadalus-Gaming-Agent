@@ -106,3 +106,12 @@ def test_the_owner_route_reports_the_summary(judge, tmp_path):
     subq_judge.shadow("is_game", "a frog", True, wait=True)
     res = TestClient(app).get("/api/v1/harness/subq", headers={"Authorization": "Bearer pytest-owner-token"})
     assert res.status_code == 200 and res.json()["questions"]["is_game"]["judged"] == 1
+
+
+def test_the_shadow_log_keeps_only_the_latest_rows(judge, monkeypatch, tmp_path):
+    monkeypatch.setattr(subq_judge, "MAX_ROWS", 3)
+    for i in range(12):
+        subq_judge._record({"question": "is_game", "text": "x" * 500 + str(i), "current": True, "subq": 0.9,
+                            "agree": True})
+    rows = _rows(tmp_path)
+    assert len(rows) <= 3 + 3 and rows[-1]["text"].endswith("11")
