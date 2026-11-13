@@ -58,12 +58,15 @@ def genres_for(text: str) -> list[str]:
     return [title for _h, _i, title in sorted(scored)[:MAX_GENRES]]
 
 
-def for_request(text: str, *, limit: int = LIMIT) -> str:
-    """The handbook block for a game request: Core, its genres, the checklist. '' when the file is missing."""
+def for_request(text: str, *, context: str = "", limit: int = LIMIT) -> str:
+    """The handbook block for a game request: Core, its genres, the checklist. '' when the file is missing.
+
+    ``context`` (the project's bible) names the genres when the request does not: a follow-up turn ("fix the
+    jump") still gets the platformer rules of the game it continues."""
     by_title = {title: body for title, _w, body in sections()}
     if "Core" not in by_title:
         return ""
-    picked = ["Core", *genres_for(text), "Checklist before done"]
+    picked = ["Core", *(genres_for(text) or genres_for(context)), "Checklist before done"]
     while True:
         block = _HEAD + "\n\n".join(f"## {t}\n{by_title[t]}" for t in picked if t in by_title)
         if len(block) <= limit or len(picked) <= len(_ALWAYS):

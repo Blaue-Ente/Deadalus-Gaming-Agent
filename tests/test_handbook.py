@@ -32,3 +32,9 @@ def test_the_writer_gets_the_handbook_on_a_game_build_not_on_an_app():
     assert "GAME QUALITY HANDBOOK" in game and "## Arcade and endless" in game
     app = format_system(route("Build a budget tracker app", kind="vite-react"), user_message="budget tracker app")
     assert "GAME QUALITY HANDBOOK" not in app
+
+
+def test_a_follow_up_turn_gets_the_genre_from_the_project_bible():
+    block = handbook.for_request("fix the bug please", context="A platformer: the frog jumps between lily pads.")
+    assert "## Platformer" in block
+    assert "## Racing" in handbook.for_request("a racing game", context="A platformer.")   # the request wins

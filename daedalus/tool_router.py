@@ -362,7 +362,14 @@ def format_system(rt: Route, *, extra: str = "", user_message: str = "", offered
         if (getattr(rt, "kind", "") or "static") in WEB_KINDS:    # gap 4a: sound and a look, free (browser games)
             lines.append(JUICE)
         from .handbook import for_request as _handbook          # owner 2026-11-13: the writer reads the handbook
-        hb = _handbook(user_message or pb.title)
+        bible = ""
+        if slug:
+            try:
+                from .project_bible import text as _bible_text
+                bible = _bible_text(slug, max_chars=2000)
+            except Exception:
+                bible = ""
+        hb = _handbook(user_message or pb.title, context=bible)
         if hb:
             lines.append(hb)
     lines.append(f"Write your replies to the owner in {reply_language(user_message)} (the owner's request). "
