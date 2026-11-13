@@ -53,7 +53,10 @@ def set_turn_words(text: str):
     step that mentions 'AI art' never becomes permission (review 2026-11-12). Returns None when already set."""
     if _TURN_WORDS.get():
         return None
-    return _TURN_WORDS.set((text or "").strip())
+    words = (text or "").strip()
+    from .subq_judge import shadow             # SubQ Snap judges the same words in the background (shadow mode)
+    shadow("wants_paid_assets", words, asks_for_paid(words))
+    return _TURN_WORDS.set(words)
 
 
 def turn_words() -> str:

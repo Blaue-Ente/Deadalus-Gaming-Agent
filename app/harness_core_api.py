@@ -22,6 +22,14 @@ def harness_capabilities(request: Request, kind: str = "", status: str = "") -> 
     return registry_payload(request.app, kind=kind.strip(), status=status.strip())
 
 
+@router.get("/api/v1/harness/subq")
+def harness_subq(limit: int = 20) -> dict[str, Any]:
+    """SubQ Snap in shadow mode: per question, how often it agreed with Daedalus's own decision, and where not."""
+    from daedalus.subq_judge import summary
+
+    return summary(limit=max(1, min(int(limit), 200)))
+
+
 @router.get("/api/v1/harness/parity")
 def harness_parity(request: Request) -> dict[str, Any]:
     """The no-loss parity table and any rows that do not resolve against the registry."""
