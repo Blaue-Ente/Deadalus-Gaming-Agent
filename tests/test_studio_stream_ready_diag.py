@@ -289,7 +289,7 @@ def test_late_inactive_active_does_not_open_a_second_stream(studio_server):
         gates = _Gates(page, game, hold_post=False)
         try:
             gates.install([_checkpoint_sse()])
-            page.goto(studio_server["url"] + f"/?panel=build&slug={game}", wait_until="domcontentloaded")
+            page.goto(studio_server["url"] + f"/?panel=build&subtab=run&slug={game}", wait_until="domcontentloaded")
             diag.wait(
                 page,
                 gates.trace,
@@ -329,7 +329,7 @@ def test_late_active_job_after_stream_start_does_not_consume_checkpoint_body(stu
         gates = _Gates(page, game, hold_post=False)
         try:
             gates.install([_checkpoint_sse()])
-            page.goto(studio_server["url"] + f"/?panel=build&slug={game}", wait_until="domcontentloaded")
+            page.goto(studio_server["url"] + f"/?panel=build&subtab=run&slug={game}", wait_until="domcontentloaded")
             diag.wait(
                 page,
                 gates.trace,
@@ -383,7 +383,7 @@ def test_active_job_before_guided_post_keeps_the_explicit_checkpoint(studio_serv
         gates = _Gates(page, game, hold_post=True)
         try:
             gates.install([_checkpoint_sse(), _log_sse("surviving-log")])
-            page.goto(studio_server["url"] + f"/?panel=build&slug={game}", wait_until="domcontentloaded")
+            page.goto(studio_server["url"] + f"/?panel=build&subtab=run&slug={game}", wait_until="domcontentloaded")
             diag.wait(
                 page,
                 gates.trace,

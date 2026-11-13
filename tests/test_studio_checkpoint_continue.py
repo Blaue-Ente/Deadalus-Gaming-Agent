@@ -184,7 +184,7 @@ def _arm(page, game, bodies, continue_for):
 
 def _open(page, server, game):
     trace = diag.attach(page)
-    page.goto(server["url"] + f"/?panel=build&slug={game}", wait_until="domcontentloaded")
+    page.goto(server["url"] + f"/?panel=build&subtab=run&slug={game}", wait_until="domcontentloaded")
     diag.wait(
         page,
         trace,

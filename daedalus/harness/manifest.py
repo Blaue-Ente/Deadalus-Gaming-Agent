@@ -50,7 +50,7 @@ PANELS: dict[str, tuple[str, str, str]] = {
     "panel:rail": ("Projects and files rail", "implemented", "studio.html left rail"),
     "panel:chat": ("Chat", "implemented", "chat jobs"),
     "panel:build": ("Build", "implemented", "brainstorm, GDD, guided/autopilot"),
-    "panel:preview": ("Preview and publish", "implemented", "run, stop, preview, publish, capsule, git menu"),
+    "panel:preview": ("Preview and publish", "implemented", "run, stop, preview; Publish & Git sub-tab: publish, capsule, git menu"),
     "panel:world": ("World / tools rail", "implemented", "right rail: shell, flight, brain, world"),
     "panel:settings": ("Settings", "implemented", "brain readout, git provider, connectors, secrets"),
     "panel:review/proposals": ("Review: proposals", "implemented", ""),
@@ -76,7 +76,7 @@ PANELS: dict[str, tuple[str, str, str]] = {
     "panel:build/controls": ("Build: autopilot controls, Unity, presets, dissect", "implemented", "A6.3a: pause/resume, continue, plan create/expand/clear, Full Auto M0→M8; A6.3b: Unity init/attach/build scripts and presets (ship menu), Unity/proof waivers, dissection and labs (World rail)"),
     "panel:preview/ship-requests": ("Preview: requests from Daedalus to publish or push", "implemented", "A7: the brain asks; the owner runs or declines"),
     "panel:preview/apps": ("Preview: app data editor and tunnel", "implemented", "A6.3c app data editor; A6.5c Expo tunnel with QR (run with tunnel), published apps, workspace backup"),
-    "panel:rail/git": ("Project git menu: browse and status", "implemented", "A6.3c: connections, GitHub repos/branches, GitLab projects, compat check"),
+    "panel:preview/git": ("Preview, Publish & Git: git menu, browse and status", "implemented", "A6.3c: connections, GitHub repos/branches, GitLab projects, compat check"),
 }
 
 SETTINGS: dict[str, tuple[str, str]] = {

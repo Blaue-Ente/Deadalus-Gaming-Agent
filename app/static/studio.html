@@ -62,39 +62,19 @@
       <div class="pills" id="pills"></div>
     </header>
 
-    <aside>
+<aside>
       <div>
-        <p class="kicker" data-i18n="studio.project">Project</p>
-        <p class="hint" data-i18n="studio.projectHint">Epic writes a world kit. Craft is one slice. The name is the game, not the pitch deck.</p>
-        <label class="sr-only" for="pname" data-i18n="studio.nameAria">Project name</label>
-        <input id="pname" data-i18n-placeholder="studio.namePh" placeholder="Game / app name" autocomplete="off" data-i18n-aria="studio.nameAria" aria-label="Game or app name" />
-        <label class="sr-only" for="pdesc" data-i18n="studio.descAria">Description</label>
-        <textarea id="pdesc" rows="2" data-i18n-placeholder="studio.descPh" placeholder="What are you building? Tone, player, first slice. Epic reads this." data-i18n-aria="studio.descAria" aria-label="Project description"></textarea>
-        <div class="row tight">
-          <label class="sr-only" for="pkind" data-i18n="studio.kindAria">Project kind</label>
-          <select id="pkind" data-i18n-aria="studio.kindAria" aria-label="Project kind">
-            <option value="auto" data-i18n="studio.kind.auto">auto — Daedalus chooses</option>
-            <option value="static" data-i18n="studio.kind.static">game / static</option>
-            <option value="vite">vite</option>
-            <option value="vite-react">vite-react</option>
-            <option value="fastapi">fastapi</option>
-            <option value="streamlit">streamlit</option>
-            <option value="expo">expo</option>
-            <option value="node">node</option>
-            <option value="godot">godot</option>
-            <option value="unity">unity</option>
-          </select>
-          <button class="primary" id="pcreate" type="button" data-i18n="studio.new">New</button>
-        </div>
-        <div class="row">
-          <button id="pcapsule" type="button" disabled data-i18n="studio.capsule">Capsule</button>
-          <button id="ppub" type="button" disabled>/apps/</button>
-          <button class="primary" id="plive" type="button" disabled data-i18n="studio.live">Live</button>
-        </div>
+        <button class="primary" id="new-project" type="button" data-i18n="studio.newProject">New project</button>
         <div class="kind-filter" id="kind-filter" role="group" data-i18n-aria="studio.filterAria" aria-label="Project filter">
           <button type="button" data-filter="all" aria-pressed="true" data-i18n="studio.filter.all">All</button>
           <button type="button" data-filter="games" aria-pressed="false" disabled data-i18n="studio.filter.games">Games</button>
           <button type="button" data-filter="apps" aria-pressed="false" disabled data-i18n="studio.filter.apps">Apps</button>
+          <details id="project-menu" class="project-menu">
+            <summary data-i18n-aria="studio.projectMenu" aria-label="Project actions" data-i18n-title="studio.projectMenu" title="Project actions">&#8943;</summary>
+            <div class="project-menu-body">
+              <button id="project-delete" type="button" data-i18n="studio.delete">Delete</button>
+            </div>
+          </details>
         </div>
         <div class="list" id="plist"></div>
         <div class="files">
@@ -102,118 +82,7 @@
           <p id="file-status" class="workspace-status" role="status" hidden></p>
           <div class="list" id="filelist"></div>
           <pre id="fileview"></pre>
-          <p class="kicker" data-i18n="studio.assets">Assets</p>
-          <div class="asset-controls" id="asset-controls">
-            <p id="asset-status" class="workspace-status" role="status" hidden></p>
-            <label><span data-i18n="studio.assetPath">Path</span>
-              <input id="asset-path" value="assets/custom.png" autocomplete="off" spellcheck="false" data-i18n-aria="studio.assetPath" aria-label="Path" />
-            </label>
-            <label><span data-i18n="studio.assetPrompt">Prompt</span>
-              <input id="asset-prompt" autocomplete="off" data-i18n-aria="studio.assetPrompt" aria-label="Prompt" />
-            </label>
-            <label><span data-i18n="studio.assetSize">Size</span>
-              <select id="asset-size" data-i18n-aria="studio.assetSize" aria-label="Size">
-                <option value="512x512">512x512</option>
-                <option value="1024x768">1024x768</option>
-                <option value="1024x1024">1024x1024</option>
-              </select>
-            </label>
-            <button id="asset-generate" type="button" data-i18n="studio.assetGenerate">Generate</button>
-            <label><span data-i18n="studio.assetDesc">Description</span>
-              <textarea id="asset-desc" rows="2" data-i18n-aria="studio.assetDesc" aria-label="Description"></textarea>
-            </label>
-            <button id="asset-autopack" type="button" data-i18n="studio.assetAutopack">Auto-pack</button>
-            <label><span data-i18n="studio.assetAction">Pipeline</span>
-              <select id="asset-action" data-i18n-aria="studio.assetAction" aria-label="Pipeline">
-                <option value="status" selected>status</option>
-                <option value="providers">providers</option>
-                <option value="atlas">atlas</option>
-                <option value="tileset">tileset</option>
-                <option value="sfx">sfx</option>
-                <option value="font">font</option>
-                <option value="greybox">greybox</option>
-                <option value="music">music</option>
-                <option value="mesh">mesh</option>
-              </select>
-            </label>
-            <label id="asset-mesh-prompt-field" hidden><span data-i18n="studio.assetMeshPrompt">Mesh prompt</span>
-              <textarea id="asset-mesh-prompt" rows="2" data-i18n-aria="studio.assetMeshPrompt" aria-label="Mesh prompt"></textarea>
-            </label>
-            <label id="asset-mesh-name-field" hidden><span data-i18n="studio.assetMeshName">Name</span>
-              <input id="asset-mesh-name" value="hero" autocomplete="off" spellcheck="false" data-i18n-aria="studio.assetMeshName" aria-label="Name" />
-            </label>
-            <label id="asset-mesh-provider-field" hidden><span data-i18n="studio.assetMeshProvider">Provider</span>
-              <select id="asset-mesh-provider" data-i18n-aria="studio.assetMeshProvider" aria-label="Provider">
-                <option value="auto" selected>auto</option>
-                <option value="fal">fal</option>
-                <option value="tripo">tripo</option>
-                <option value="meshy">meshy</option>
-              </select>
-            </label>
-            <label id="asset-job-field"><span data-i18n="studio.assetJob">Job</span>
-              <select id="asset-job" data-i18n-aria="studio.assetJob" aria-label="Job">
-                <option value="" selected data-i18n="studio.assetJobLocal">Local list</option>
-              </select>
-            </label>
-            <p class="hint" id="asset-kit-note" hidden data-i18n="studio.assetKitNote">Atlas and tileset write the built-in kit only. The API accepts custom source images. This control does not send them.</p>
-            <button id="asset-pipeline" type="button" data-i18n="studio.assetRun">Run</button>
-            <p class="hint" id="asset-backend-note" data-i18n="studio.assetBackendNote">Cancel on the question sends nothing. After a request is sent, leaving this page does not stop the server.</p>
-          </div>
-          <div class="list" id="assetlist"></div>
         </div>
-        <details id="git-menu">
-          <summary data-i18n="studio.gitMenu">Git</summary>
-          <label><span data-i18n="studio.gitUrl">Remote URL</span>
-            <input id="git-url" autocomplete="off" data-i18n-aria="studio.gitUrl" aria-label="Remote URL" />
-          </label>
-          <div class="row tight">
-            <button id="git-clone" type="button" data-i18n="studio.clone">Clone</button>
-            <button id="git-revive" type="button" data-i18n="studio.revive">Revive</button>
-            <select id="git-revive-publish" data-i18n-aria="studio.revivePublish" aria-label="After it runs">
-              <option value="local" data-i18n="studio.revivePublishLocal">Publish locally</option>
-              <option value="site" data-i18n="studio.revivePublishSite">Publish as a site</option>
-              <option value="none" data-i18n="studio.revivePublishNone">Only make it run</option>
-            </select>
-          </div>
-          <ol id="git-revive-steps" class="revive-steps" hidden></ol>
-          <div class="row tight">
-            <button id="git-push" type="button" data-i18n="studio.push">Push</button>
-            <button id="git-pr" type="button" data-i18n="studio.pullRequest">Pull request</button>
-            <button id="project-delete" type="button" data-i18n="studio.delete">Delete</button>
-          </div>
-          <p id="git-status" class="workspace-status" role="status" hidden></p>
-          <div class="git-browse" id="git-browse">
-            <p class="kicker" data-i18n="studio.gitBrowse">Browse</p>
-            <div class="row tight">
-              <button id="git-connections" type="button" data-i18n="studio.gitConnections">Connections</button>
-              <button id="git-gh-repos" type="button" data-i18n="studio.gitGhRepos">GitHub repos</button>
-              <button id="git-gl-projects" type="button" data-i18n="studio.gitGlProjects">GitLab projects</button>
-              <button id="git-compat" type="button" data-i18n="studio.gitCompat">Check URL</button>
-            </div>
-            <p id="git-browse-status" class="workspace-status" role="status" hidden></p>
-            <div id="git-browse-list"></div>
-          </div>
-        </details>
-      </div>
-      <div class="prefs">
-        <p class="kicker" data-i18n="studio.prefs">Preferences</p>
-        <p class="hint" data-i18n="studio.prefsHint">Or in chat: “remember I prefer Phaser”.</p>
-        <input id="preftext" data-i18n-placeholder="studio.prefPh" placeholder="Remember…" data-i18n-aria="studio.prefAria" aria-label="New preference" />
-        <div class="row tight"><button id="prefadd" type="button" data-i18n="studio.save">Save</button></div>
-        <div class="list" id="preflist"></div>
-      </div>
-      <div class="session-skills">
-        <p class="kicker" data-i18n="studio.sessionSkills">Session skills</p>
-        <p class="hint" data-i18n="studio.sessionSkillsHint">Pinned for this chat. + adds a skill for one turn.</p>
-        <label class="sr-only" for="skillpick" data-i18n="studio.ctxSkills">Skills</label>
-        <select id="skillpick" data-i18n-aria="studio.ctxSkills" aria-label="Skills"></select>
-        <div class="row tight"><button id="skillpin" type="button" data-i18n="studio.pin">Pin</button></div>
-        <div class="list" id="skillpins"></div>
-      </div>
-      <div class="lessons">
-        <p class="kicker" data-i18n="studio.lessons">Lessons</p>
-        <p class="hint" data-i18n="studio.lessonsHint" data-i18n-html>Failures wait for <b>Approve</b>. The agent does not inject them into the next turn.</p>
-        <div class="list" id="lessonlist"></div>
       </div>
     </aside>
 
@@ -275,169 +144,287 @@
       <section id="panel-build" class="workspace-panel" data-panel="build" hidden>
         <p class="kicker" data-i18n="studio.panel.build">Build</p>
         <p class="hint" id="build-slug"></p>
-        <label><span data-i18n="studio.buildIdea">Idea</span>
-          <textarea id="build-idea" rows="3" data-i18n-aria="studio.buildIdea" aria-label="Idea"></textarea>
-        </label>
-        <div class="row">
-          <label class="grow"><span data-i18n="studio.genre">Genre</span>
-            <select id="build-genre" data-i18n-aria="studio.genre" aria-label="Genre"></select>
-          </label>
-          <label class="grow"><span data-i18n="studio.audience">Audience</span>
-            <select id="build-audience" data-i18n-aria="studio.audience" aria-label="Audience"></select>
-          </label>
-          <label class="grow"><span data-i18n="studio.platform">Platform</span>
-            <select id="build-platform" data-i18n-aria="studio.platform" aria-label="Platform"></select>
-          </label>
-          <label class="grow"><span data-i18n="studio.buildMode">Mode</span>
-            <select id="build-mode" data-i18n-aria="studio.buildMode" aria-label="Mode"></select>
-          </label>
-        </div>
-        <div class="row">
-          <button id="build-brainstorm" type="button" data-i18n="studio.brainstorm">Brainstorm</button>
-          <button id="build-gdd" type="button" data-i18n="studio.gdd">GDD</button>
-          <button class="primary" id="build-start" type="button" data-i18n="studio.startProject">Start</button>
+        <div id="build-tabs" class="workspace-nav subtabs" role="tablist" data-i18n-aria="studio.buildTabsAria" aria-label="Build sections">
+          <button type="button" data-tab="design" aria-selected="true" data-i18n="studio.sub.design">Design</button>
+          <button type="button" data-tab="run" aria-selected="false" data-i18n="studio.sub.run">Run</button>
+          <button type="button" data-tab="assets" aria-selected="false" data-i18n="studio.sub.assets">Assets</button>
+          <button type="button" data-tab="export" aria-selected="false" data-i18n="studio.sub.export">Export</button>
         </div>
         <p id="build-status" class="workspace-status" role="status" hidden></p>
         <pre id="build-out"></pre>
-        <div id="build-checkpoint" class="checkpoint" hidden>
-          <p class="kicker" data-i18n="studio.checkpoint">Checkpoint</p>
-          <p id="build-cp-review" data-cp-review></p>
-          <label><span data-i18n="studio.checkpointNotes">Notes</span>
-            <textarea id="build-cp-notes" rows="2" data-i18n-aria="studio.checkpointNotes" aria-label="Notes"></textarea>
-          </label>
-          <div class="row" id="build-cp-options" data-cp-options></div>
-        </div>
-        <div class="row">
-          <button id="build-guided" type="button" disabled data-i18n="studio.guided">Guided</button>
-          <button id="build-autopilot" type="button" disabled data-i18n="studio.autopilot">Autopilot</button>
-          <button id="build-stop" type="button" hidden data-i18n="studio.stop">Stop</button>
-          <button id="build-gates" type="button" disabled data-i18n="studio.gates">Gates</button>
-          <button id="build-verify" type="button" disabled data-i18n="studio.verify">Verify</button>
-          <button id="build-advance" type="button" disabled data-i18n="studio.advance">Advance</button>
-          <button id="build-waive-unity" type="button" hidden data-i18n="studio.waiveUnity">Advance with Unity waiver</button>
-          <button id="build-waive-proof" type="button" hidden data-i18n="studio.waiveProof">Advance with proof waiver</button>
-        </div>
-        <ul id="build-milestones"></ul>
-        <div class="run-controls" id="build-controls" hidden>
-          <p class="kicker" data-i18n="studio.ctlTitle">Run controls</p>
-          <p id="build-ctl-status" class="workspace-status" role="status" hidden></p>
-          <div id="build-ctl-body"></div>
-        </div>
-        <div class="app-data" id="build-extras">
-          <p class="kicker" data-i18n="studio.extrasTitle">Project tools</p>
-          <p class="hint" data-i18n="studio.extrasHint">Ideas and a description each make one model call. Hints are a read. Nothing here changes project files.</p>
-          <div class="row tight">
-            <label><span data-i18n="studio.codingMode">Coding mode</span>
-              <select id="build-coding-mode" disabled data-i18n-aria="studio.codingMode" aria-label="Coding mode">
-                <option value="lite">lite</option>
-                <option value="pro">pro</option>
-                <option value="premium">premium</option>
-              </select>
-            </label>
-            <button id="build-coding-save" type="button" data-i18n="studio.codingSave">Save mode</button>
-          </div>
-          <div class="row tight">
-            <button id="build-ideas" type="button" data-i18n="studio.ideas">Ideas</button>
-            <button id="build-hints" type="button" data-i18n="studio.hints">Hints</button>
-            <button id="build-describe" type="button" data-i18n="studio.describe">Write description</button>
-          </div>
-          <p id="build-extras-status" class="workspace-status" role="status" hidden></p>
-          <div id="build-extras-out"></div>
-        </div>
-        <div class="ship-controls" id="ship-controls">
-          <p class="kicker" data-i18n="studio.shipTitle">Init and export</p>
-          <p id="ship-status" class="workspace-status" role="status" hidden></p>
-          <label><span data-i18n="studio.shipTemplate">Unity template</span>
-            <select id="ship-template" data-i18n-aria="studio.shipTemplate" aria-label="Unity template">
-              <option value="daedalus_minimal" selected>daedalus_minimal</option>
-              <option value="unity_game_framework" data-clone="1">unity_game_framework</option>
-              <option value="daedalus_ugf" data-clone="1">daedalus_ugf</option>
-            </select>
-          </label>
-          <label><span data-i18n="studio.shipPreset">Studio preset</span>
-            <select id="ship-preset" data-i18n-aria="studio.shipPreset" aria-label="Studio preset">
-              <option value="custom" selected>custom</option>
-              <option value="action">action</option>
-              <option value="rpg_collection">rpg_collection</option>
-              <option value="puzzle">puzzle</option>
-              <option value="strategy">strategy</option>
-              <option value="survival">survival</option>
-              <option value="platformer">platformer</option>
-              <option value="racing">racing</option>
-              <option value="godot_2d">godot_2d</option>
-              <option value="godot_3d">godot_3d</option>
-              <option value="open_world">open_world</option>
-              <option value="multiplayer">multiplayer</option>
-              <option value="hybrid_mobile">hybrid_mobile</option>
-              <option value="backend_api">backend_api</option>
-            </select>
-          </label>
-          <label><span data-i18n="studio.shipFirebaseProject">Firebase project id</span>
-            <input id="ship-firebase-project" autocomplete="off" spellcheck="false" data-i18n-aria="studio.shipFirebaseProject" aria-label="Firebase project id" />
-          </label>
-          <label><span data-i18n="studio.shipBundle">Bundle id</span>
-            <input id="ship-bundle" autocomplete="off" spellcheck="false" data-i18n-aria="studio.shipBundle" aria-label="Bundle id" />
+        <div class="subpanel" id="build-sub-design" data-sub="design">
+          <label><span data-i18n="studio.buildIdea">Idea</span>
+            <textarea id="build-idea" rows="3" data-i18n-aria="studio.buildIdea" aria-label="Idea"></textarea>
           </label>
           <div class="row">
-            <button id="ship-unity-init" type="button" data-i18n="studio.shipUnityInit">Init Unity</button>
-            <button id="ship-unity-build" type="button" data-i18n="studio.shipUnityBuild">Build scripts</button>
-            <button id="ship-unity-attach" type="button" hidden data-i18n="studio.shipUnityAttach">Attach template</button>
-            <button id="ship-firebase" type="button" data-i18n="studio.shipFirebase">Firebase</button>
-            <button id="ship-hybrid-init" type="button" hidden data-i18n="studio.shipHybridInit">Init hybrid</button>
-            <button id="ship-hybrid-export" type="button" hidden data-i18n="studio.shipHybridExport">Export hybrid</button>
-            <button id="ship-cap-init" type="button" hidden data-i18n="studio.shipCapInit">Init Capacitor</button>
-            <button id="ship-cap-export" type="button" hidden data-i18n="studio.shipCapExport">Export Capacitor</button>
+            <label class="grow"><span data-i18n="studio.genre">Genre</span>
+              <select id="build-genre" data-i18n-aria="studio.genre" aria-label="Genre"></select>
+            </label>
+            <label class="grow"><span data-i18n="studio.audience">Audience</span>
+              <select id="build-audience" data-i18n-aria="studio.audience" aria-label="Audience"></select>
+            </label>
+            <label class="grow"><span data-i18n="studio.platform">Platform</span>
+              <select id="build-platform" data-i18n-aria="studio.platform" aria-label="Platform"></select>
+            </label>
+            <label class="grow" hidden><span data-i18n="studio.buildMode">Mode</span>
+              <select id="build-mode" data-i18n-aria="studio.buildMode" aria-label="Mode"></select>
+            </label>
           </div>
-          <p class="hint" id="ship-overwrite" data-i18n="studio.shipOverwrite">Scaffold and hybrid files are written only when missing. Build scripts, Firebase files, both export manifests, and Capacitor package.json are overwritten.</p>
-          <p class="hint" id="ship-note" data-i18n="studio.shipNote">Cancel on the question sends nothing. After a request is sent, leaving this page does not stop the server. A timed-out call is not retried.</p>
+          <div class="row">
+            <button id="build-brainstorm" type="button" data-i18n="studio.brainstorm">Brainstorm</button>
+            <button id="build-gdd" type="button" data-i18n="studio.gdd">GDD</button>
+            <button class="primary" id="build-start" type="button" data-i18n="studio.startProject">Start</button>
+          </div>
+          <div class="app-data" id="build-extras">
+            <p class="kicker" data-i18n="studio.extrasTitle">Project tools</p>
+            <p class="hint" data-i18n="studio.extrasHint">Ideas and a description each make one model call. Hints are a read. Nothing here changes project files.</p>
+            <div class="row tight">
+              <label><span data-i18n="studio.codingMode">Coding mode</span>
+                <select id="build-coding-mode" disabled data-i18n-aria="studio.codingMode" aria-label="Coding mode">
+                  <option value="lite">lite</option>
+                  <option value="pro">pro</option>
+                  <option value="premium">premium</option>
+                </select>
+              </label>
+              <button id="build-coding-save" type="button" data-i18n="studio.codingSave">Save mode</button>
+            </div>
+            <div class="row tight">
+              <button id="build-ideas" type="button" data-i18n="studio.ideas">Ideas</button>
+              <button id="build-hints" type="button" data-i18n="studio.hints">Hints</button>
+              <button id="build-describe" type="button" data-i18n="studio.describe">Write description</button>
+            </div>
+            <p id="build-extras-status" class="workspace-status" role="status" hidden></p>
+            <div id="build-extras-out"></div>
+          </div>
+        </div>
+        <div class="subpanel" id="build-sub-run" data-sub="run" hidden>
+          <div id="build-checkpoint" class="checkpoint" hidden>
+            <p class="kicker" data-i18n="studio.checkpoint">Checkpoint</p>
+            <p id="build-cp-review" data-cp-review></p>
+            <label><span data-i18n="studio.checkpointNotes">Notes</span>
+              <textarea id="build-cp-notes" rows="2" data-i18n-aria="studio.checkpointNotes" aria-label="Notes"></textarea>
+            </label>
+            <div class="row" id="build-cp-options" data-cp-options></div>
+          </div>
+          <div class="row">
+            <button id="build-guided" type="button" disabled data-i18n="studio.guided">Guided</button>
+            <button id="build-autopilot" type="button" disabled data-i18n="studio.autopilot">Autopilot</button>
+            <button id="build-stop" type="button" hidden data-i18n="studio.stop">Stop</button>
+            <button id="build-gates" type="button" disabled data-i18n="studio.gates">Gates</button>
+            <button id="build-verify" type="button" disabled data-i18n="studio.verify">Verify</button>
+            <button id="build-advance" type="button" disabled data-i18n="studio.advance">Advance</button>
+            <button id="build-waive-unity" type="button" hidden data-i18n="studio.waiveUnity">Advance with Unity waiver</button>
+            <button id="build-waive-proof" type="button" hidden data-i18n="studio.waiveProof">Advance with proof waiver</button>
+          </div>
+          <ul id="build-milestones"></ul>
+          <div class="run-controls" id="build-controls" hidden>
+            <p class="kicker" data-i18n="studio.ctlTitle">Run controls</p>
+            <p id="build-ctl-status" class="workspace-status" role="status" hidden></p>
+            <div id="build-ctl-body"></div>
+          </div>
+        </div>
+        <div class="subpanel" id="build-sub-assets" data-sub="assets" hidden>
+          <div class="asset-section">
+            <div class="asset-controls" id="asset-controls">
+              <p id="asset-status" class="workspace-status" role="status" hidden></p>
+              <label><span data-i18n="studio.assetPath">Path</span>
+                <input id="asset-path" value="assets/custom.png" autocomplete="off" spellcheck="false" data-i18n-aria="studio.assetPath" aria-label="Path" />
+              </label>
+              <label><span data-i18n="studio.assetPrompt">Prompt</span>
+                <input id="asset-prompt" autocomplete="off" data-i18n-aria="studio.assetPrompt" aria-label="Prompt" />
+              </label>
+              <label><span data-i18n="studio.assetSize">Size</span>
+                <select id="asset-size" data-i18n-aria="studio.assetSize" aria-label="Size">
+                  <option value="512x512">512x512</option>
+                  <option value="1024x768">1024x768</option>
+                  <option value="1024x1024">1024x1024</option>
+                </select>
+              </label>
+              <button id="asset-generate" type="button" data-i18n="studio.assetGenerate">Generate</button>
+              <label><span data-i18n="studio.assetDesc">Description</span>
+                <textarea id="asset-desc" rows="2" data-i18n-aria="studio.assetDesc" aria-label="Description"></textarea>
+              </label>
+              <button id="asset-autopack" type="button" data-i18n="studio.assetAutopack">Auto-pack</button>
+              <label><span data-i18n="studio.assetAction">Pipeline</span>
+                <select id="asset-action" data-i18n-aria="studio.assetAction" aria-label="Pipeline">
+                  <option value="status" selected>status</option>
+                  <option value="providers">providers</option>
+                  <option value="atlas">atlas</option>
+                  <option value="tileset">tileset</option>
+                  <option value="sfx">sfx</option>
+                  <option value="font">font</option>
+                  <option value="greybox">greybox</option>
+                  <option value="music">music</option>
+                  <option value="mesh">mesh</option>
+                </select>
+              </label>
+              <label id="asset-mesh-prompt-field" hidden><span data-i18n="studio.assetMeshPrompt">Mesh prompt</span>
+                <textarea id="asset-mesh-prompt" rows="2" data-i18n-aria="studio.assetMeshPrompt" aria-label="Mesh prompt"></textarea>
+              </label>
+              <label id="asset-mesh-name-field" hidden><span data-i18n="studio.assetMeshName">Name</span>
+                <input id="asset-mesh-name" value="hero" autocomplete="off" spellcheck="false" data-i18n-aria="studio.assetMeshName" aria-label="Name" />
+              </label>
+              <label id="asset-mesh-provider-field" hidden><span data-i18n="studio.assetMeshProvider">Provider</span>
+                <select id="asset-mesh-provider" data-i18n-aria="studio.assetMeshProvider" aria-label="Provider">
+                  <option value="auto" selected>auto</option>
+                  <option value="fal">fal</option>
+                  <option value="tripo">tripo</option>
+                  <option value="meshy">meshy</option>
+                </select>
+              </label>
+              <label id="asset-job-field"><span data-i18n="studio.assetJob">Job</span>
+                <select id="asset-job" data-i18n-aria="studio.assetJob" aria-label="Job">
+                  <option value="" selected data-i18n="studio.assetJobLocal">Local list</option>
+                </select>
+              </label>
+              <p class="hint" id="asset-kit-note" hidden data-i18n="studio.assetKitNote">Atlas and tileset write the built-in kit only. The API accepts custom source images. This control does not send them.</p>
+              <button id="asset-pipeline" type="button" data-i18n="studio.assetRun">Run</button>
+              <p class="hint" id="asset-backend-note" data-i18n="studio.assetBackendNote">Cancel on the question sends nothing. After a request is sent, leaving this page does not stop the server.</p>
+            </div>
+            <div class="list" id="assetlist"></div>
+          </div>
+        </div>
+        <div class="subpanel" id="build-sub-export" data-sub="export" hidden>
+          <div class="ship-controls" id="ship-controls">
+            <p class="kicker" data-i18n="studio.shipTitle">Init and export</p>
+            <p id="ship-status" class="workspace-status" role="status" hidden></p>
+            <label><span data-i18n="studio.shipTemplate">Unity template</span>
+              <select id="ship-template" data-i18n-aria="studio.shipTemplate" aria-label="Unity template">
+                <option value="daedalus_minimal" selected>daedalus_minimal</option>
+                <option value="unity_game_framework" data-clone="1">unity_game_framework</option>
+                <option value="daedalus_ugf" data-clone="1">daedalus_ugf</option>
+              </select>
+            </label>
+            <label><span data-i18n="studio.shipPreset">Studio preset</span>
+              <select id="ship-preset" data-i18n-aria="studio.shipPreset" aria-label="Studio preset">
+                <option value="custom" selected>custom</option>
+                <option value="action">action</option>
+                <option value="rpg_collection">rpg_collection</option>
+                <option value="puzzle">puzzle</option>
+                <option value="strategy">strategy</option>
+                <option value="survival">survival</option>
+                <option value="platformer">platformer</option>
+                <option value="racing">racing</option>
+                <option value="godot_2d">godot_2d</option>
+                <option value="godot_3d">godot_3d</option>
+                <option value="open_world">open_world</option>
+                <option value="multiplayer">multiplayer</option>
+                <option value="hybrid_mobile">hybrid_mobile</option>
+                <option value="backend_api">backend_api</option>
+              </select>
+            </label>
+            <label><span data-i18n="studio.shipFirebaseProject">Firebase project id</span>
+              <input id="ship-firebase-project" autocomplete="off" spellcheck="false" data-i18n-aria="studio.shipFirebaseProject" aria-label="Firebase project id" />
+            </label>
+            <label><span data-i18n="studio.shipBundle">Bundle id</span>
+              <input id="ship-bundle" autocomplete="off" spellcheck="false" data-i18n-aria="studio.shipBundle" aria-label="Bundle id" />
+            </label>
+            <div class="row">
+              <button id="ship-unity-init" type="button" data-i18n="studio.shipUnityInit">Init Unity</button>
+              <button id="ship-unity-build" type="button" data-i18n="studio.shipUnityBuild">Build scripts</button>
+              <button id="ship-unity-attach" type="button" hidden data-i18n="studio.shipUnityAttach">Attach template</button>
+              <button id="ship-firebase" type="button" data-i18n="studio.shipFirebase">Firebase</button>
+              <button id="ship-hybrid-init" type="button" hidden data-i18n="studio.shipHybridInit">Init hybrid</button>
+              <button id="ship-hybrid-export" type="button" hidden data-i18n="studio.shipHybridExport">Export hybrid</button>
+              <button id="ship-cap-init" type="button" hidden data-i18n="studio.shipCapInit">Init Capacitor</button>
+              <button id="ship-cap-export" type="button" hidden data-i18n="studio.shipCapExport">Export Capacitor</button>
+            </div>
+            <p class="hint" id="ship-overwrite" data-i18n="studio.shipOverwrite">Scaffold and hybrid files are written only when missing. Build scripts, Firebase files, both export manifests, and Capacitor package.json are overwritten.</p>
+            <p class="hint" id="ship-note" data-i18n="studio.shipNote">Cancel on the question sends nothing. After a request is sent, leaving this page does not stop the server. A timed-out call is not retried.</p>
+          </div>
         </div>
       </section>
       <section id="panel-preview" class="workspace-panel" data-panel="preview" hidden>
         <p class="kicker" data-i18n="studio.panel.preview">Preview</p>
-        <div class="row">
-          <button class="primary" id="preview-run" type="button" data-i18n="studio.previewRun">Run</button>
-          <button id="preview-stop" type="button" data-i18n="studio.previewStop">Stop</button>
-          <button id="preview-logs" type="button" data-i18n="studio.previewLogs">Logs</button>
-          <button id="preview-show" type="button" data-i18n="studio.showPreview">Show preview</button>
+        <div id="preview-tabs" class="workspace-nav subtabs" role="tablist" data-i18n-aria="studio.previewTabsAria" aria-label="Preview sections">
+          <button type="button" data-tab="play" aria-selected="true" data-i18n="studio.sub.play">Play</button>
+          <button type="button" data-tab="publish" aria-selected="false" data-i18n="studio.sub.publish">Publish &amp; Git</button>
+          <button type="button" data-tab="data" aria-selected="false" data-i18n="studio.sub.data">Data</button>
         </div>
         <p id="preview-status" class="workspace-status" role="status" hidden></p>
-        <div class="computer-frame"><iframe id="preview-frame" title="Preview" data-i18n-title="studio.showPreview"></iframe></div>
-        <div class="row">
-          <button id="preview-local" type="button" data-i18n="studio.publishLocal">Local copy</button>
-          <button id="preview-live" type="button" data-i18n="studio.liveBtn">Live</button>
-          <button id="preview-capsule" type="button" data-i18n="studio.capsuleBtn">Capsule</button>
-        </div>
-        <div class="app-data" id="app-data">
-          <p class="kicker" data-i18n="studio.appData">App data</p>
-          <p class="hint" data-i18n="studio.appDataHint">What a published app stored (its PlaygroundDB). Values are JSON. Only a published app can be written to.</p>
-          <div class="row tight">
-            <button id="app-data-load" type="button" data-i18n="studio.appDataLoad">Show stored keys</button>
-            <button id="app-data-clear" type="button" data-i18n="studio.appDataClear">Clear all</button>
-          </div>
-          <p id="app-data-status" class="workspace-status" role="status" hidden></p>
-          <div id="app-data-list"></div>
-          <div class="app-data-form">
-            <input id="app-data-key" type="text" autocomplete="off" spellcheck="false" data-i18n-placeholder="studio.appDataKey" placeholder="Key" data-i18n-aria="studio.appDataKey" aria-label="Key" />
-            <textarea id="app-data-value" rows="3" spellcheck="false" data-i18n-placeholder="studio.appDataValue" placeholder="Value (JSON)" data-i18n-aria="studio.appDataValue" aria-label="Value (JSON)"></textarea>
-            <button id="app-data-save" type="button" data-i18n="studio.appDataSave">Save value</button>
-          </div>
-        </div>
-        <div class="app-data" id="ship-requests">
-          <p class="kicker" data-i18n="studio.shipReqTitle">Requests from Daedalus</p>
-          <p class="hint" data-i18n="studio.shipReqHint">Daedalus cannot publish or push by itself. It asks here. Run uses the Studio's own button, with its own questions.</p>
-          <div class="row tight">
-            <button id="ship-req-refresh" type="button" data-i18n="studio.shipReqRefresh">Show requests</button>
-          </div>
-          <p id="ship-requests-status" class="workspace-status" role="status" hidden></p>
-          <div id="ship-requests-list"></div>
-        </div>
-        <div class="app-data" id="preview-extras">
-          <p class="kicker" data-i18n="studio.previewExtras">Published apps and backup</p>
-          <div class="row tight">
-            <button id="preview-published" type="button" data-i18n="studio.publishedList">Published apps</button>
-            <button id="preview-backup" type="button" data-i18n="studio.backup">Back up workspace</button>
+        <div class="subpanel" id="preview-sub-play" data-sub="play">
+          <div class="row">
+            <button class="primary" id="preview-run" type="button" data-i18n="studio.previewRun">Run</button>
+            <button id="preview-stop" type="button" data-i18n="studio.previewStop">Stop</button>
+            <button id="preview-logs" type="button" data-i18n="studio.previewLogs">Logs</button>
+            <button id="preview-show" type="button" data-i18n="studio.showPreview">Show preview</button>
             <button id="preview-tunnel" type="button" hidden data-i18n="studio.tunnel">Run with tunnel</button>
           </div>
+          <div class="computer-frame"><iframe id="preview-frame" title="Preview" data-i18n-title="studio.showPreview"></iframe></div>
+        </div>
+        <div class="subpanel" id="preview-sub-publish" data-sub="publish" hidden>
+          <div class="row">
+            <button id="preview-local" type="button" data-i18n="studio.publishLocal">Local copy</button>
+            <button id="preview-live" type="button" data-i18n="studio.liveBtn">Live</button>
+            <button id="preview-capsule" type="button" data-i18n="studio.capsuleBtn">Capsule</button>
+          </div>
+          <div class="app-data" id="preview-extras-btns">
+            <p class="kicker" data-i18n="studio.previewExtras">Published apps and backup</p>
+            <div class="row tight">
+              <button id="preview-published" type="button" data-i18n="studio.publishedList">Published apps</button>
+              <button id="preview-backup" type="button" data-i18n="studio.backup">Back up workspace</button>
+              </div>
+          </div>
+          <div class="app-data" id="ship-requests">
+            <p class="kicker" data-i18n="studio.shipReqTitle">Requests from Daedalus</p>
+            <p class="hint" data-i18n="studio.shipReqHint">Daedalus cannot publish or push by itself. It asks here. Run uses the Studio's own button, with its own questions.</p>
+            <div class="row tight">
+              <button id="ship-req-refresh" type="button" data-i18n="studio.shipReqRefresh">Show requests</button>
+            </div>
+            <p id="ship-requests-status" class="workspace-status" role="status" hidden></p>
+            <div id="ship-requests-list"></div>
+          </div>
+          <details id="git-menu">
+            <summary data-i18n="studio.gitMenu">Git</summary>
+            <label><span data-i18n="studio.gitUrl">Remote URL</span>
+              <input id="git-url" autocomplete="off" data-i18n-aria="studio.gitUrl" aria-label="Remote URL" />
+            </label>
+            <div class="row tight">
+              <button id="git-clone" type="button" data-i18n="studio.clone">Clone</button>
+              <button id="git-revive" type="button" data-i18n="studio.revive">Revive</button>
+              <select id="git-revive-publish" data-i18n-aria="studio.revivePublish" aria-label="After it runs">
+                <option value="local" data-i18n="studio.revivePublishLocal">Publish locally</option>
+                <option value="site" data-i18n="studio.revivePublishSite">Publish as a site</option>
+                <option value="none" data-i18n="studio.revivePublishNone">Only make it run</option>
+              </select>
+            </div>
+            <ol id="git-revive-steps" class="revive-steps" hidden></ol>
+            <div class="row tight">
+              <button id="git-push" type="button" data-i18n="studio.push">Push</button>
+              <button id="git-pr" type="button" data-i18n="studio.pullRequest">Pull request</button>
+            </div>
+            <p id="git-status" class="workspace-status" role="status" hidden></p>
+            <div class="git-browse" id="git-browse">
+              <p class="kicker" data-i18n="studio.gitBrowse">Browse</p>
+              <div class="row tight">
+                <button id="git-connections" type="button" data-i18n="studio.gitConnections">Connections</button>
+                <button id="git-gh-repos" type="button" data-i18n="studio.gitGhRepos">GitHub repos</button>
+                <button id="git-gl-projects" type="button" data-i18n="studio.gitGlProjects">GitLab projects</button>
+                <button id="git-compat" type="button" data-i18n="studio.gitCompat">Check URL</button>
+              </div>
+              <p id="git-browse-status" class="workspace-status" role="status" hidden></p>
+              <div id="git-browse-list"></div>
+            </div>
+          </details>
+        </div>
+        <div class="subpanel" id="preview-sub-data" data-sub="data" hidden>
+          <div class="app-data" id="app-data">
+            <p class="kicker" data-i18n="studio.appData">App data</p>
+            <p class="hint" data-i18n="studio.appDataHint">What a published app stored (its PlaygroundDB). Values are JSON. Only a published app can be written to.</p>
+            <div class="row tight">
+              <button id="app-data-load" type="button" data-i18n="studio.appDataLoad">Show stored keys</button>
+              <button id="app-data-clear" type="button" data-i18n="studio.appDataClear">Clear all</button>
+            </div>
+            <p id="app-data-status" class="workspace-status" role="status" hidden></p>
+            <div id="app-data-list"></div>
+            <div class="app-data-form">
+              <input id="app-data-key" type="text" autocomplete="off" spellcheck="false" data-i18n-placeholder="studio.appDataKey" placeholder="Key" data-i18n-aria="studio.appDataKey" aria-label="Key" />
+              <textarea id="app-data-value" rows="3" spellcheck="false" data-i18n-placeholder="studio.appDataValue" placeholder="Value (JSON)" data-i18n-aria="studio.appDataValue" aria-label="Value (JSON)"></textarea>
+              <button id="app-data-save" type="button" data-i18n="studio.appDataSave">Save value</button>
+            </div>
+          </div>
+        </div>
+        <div class="app-data" id="preview-extras">
           <p id="preview-extras-status" class="workspace-status" role="status" hidden></p>
           <div id="preview-extras-out"></div>
         </div>
@@ -455,6 +442,20 @@
         <p class="hint" data-i18n="studio.classicRemain">The classic page stays available until the old routes redirect. These controls call the same admin routes.</p>
         <p id="review-status" class="workspace-status" role="status" hidden></p>
         <div id="review-list"></div>
+        <div id="memory-extras" class="memory-extras" hidden>
+          <div class="prefs">
+            <p class="kicker" data-i18n="studio.prefs">Preferences</p>
+            <p class="hint" data-i18n="studio.prefsHint">Or in chat: “remember I prefer Phaser”.</p>
+            <input id="preftext" data-i18n-placeholder="studio.prefPh" placeholder="Remember…" data-i18n-aria="studio.prefAria" aria-label="New preference" />
+            <div class="row tight"><button id="prefadd" type="button" data-i18n="studio.save">Save</button></div>
+            <div class="list" id="preflist"></div>
+          </div>
+          <div class="lessons">
+            <p class="kicker" data-i18n="studio.lessons">Lessons</p>
+            <p class="hint" data-i18n="studio.lessonsHint" data-i18n-html>Failures wait for <b>Approve</b>. The agent does not inject them into the next turn.</p>
+            <div class="list" id="lessonlist"></div>
+          </div>
+        </div>
         <div class="blocker-controls" id="blocker-controls">
           <p class="kicker" data-i18n="studio.blockerTitle">Blockers</p>
           <p id="blocker-status" class="workspace-status" role="status" hidden></p>
@@ -818,6 +819,36 @@
       </div>
     </section>
   </div>
+  <dialog id="new-project-dlg" class="new-project-dlg" aria-labelledby="new-project-title">
+    <form method="dialog" id="new-project-form">
+      <h2 id="new-project-title" data-i18n="studio.newProject">New project</h2>
+      <p class="hint" data-i18n="studio.projectHint">Epic writes a world kit. Craft is one slice. The name is the game, not the pitch deck.</p>
+      <label class="sr-only" for="pname" data-i18n="studio.nameAria">Project name</label>
+      <input id="pname" data-i18n-placeholder="studio.namePh" placeholder="Game / app name" autocomplete="off" data-i18n-aria="studio.nameAria" aria-label="Game or app name" />
+      <label class="sr-only" for="pdesc" data-i18n="studio.descAria">Description</label>
+      <textarea id="pdesc" rows="2" data-i18n-placeholder="studio.descPh" placeholder="What are you building? Tone, player, first slice. Epic reads this." data-i18n-aria="studio.descAria" aria-label="Project description"></textarea>
+      <div class="row tight">
+        <label class="sr-only" for="pkind" data-i18n="studio.kindAria">Project kind</label>
+        <select id="pkind" data-i18n-aria="studio.kindAria" aria-label="Project kind">
+          <option value="auto" data-i18n="studio.kind.auto">auto — Daedalus chooses</option>
+          <option value="static" data-i18n="studio.kind.static">game / static</option>
+          <option value="vite">vite</option>
+          <option value="vite-react">vite-react</option>
+          <option value="fastapi">fastapi</option>
+          <option value="streamlit">streamlit</option>
+          <option value="expo">expo</option>
+          <option value="node">node</option>
+          <option value="godot">godot</option>
+          <option value="unity">unity</option>
+        </select>
+        <button class="primary" id="pcreate" type="button" data-i18n="studio.new">New</button>
+      </div>
+      <p id="pname-msg" class="field-note" role="alert" hidden></p>
+      <div class="row tight dlg-actions">
+        <button type="button" id="pcancel" data-i18n="studio.confirmCancel">Cancel</button>
+      </div>
+    </form>
+  </dialog>
   <dialog id="onb-dlg" class="onb-dlg" aria-labelledby="onb-title">
     <div class="onb-top">
       <div>

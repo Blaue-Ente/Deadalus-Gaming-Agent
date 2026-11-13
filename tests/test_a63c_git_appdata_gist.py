@@ -56,10 +56,10 @@ REPOS = {"ok": True, "count": 2, "repos": [
      "private": True, "language": "", "default_branch": "dev"}]}
 
 
-def _open(page, server, panel="build", lang="en"):
+def _open(page, server, panel="build", lang="en", sub=""):
     assert _game(server) == G
     page.add_init_script(f"try {{ localStorage.setItem('dx.lang', '{lang}'); }} catch (e) {{}}")
-    page.goto(server["url"] + f"/?panel={panel}&slug={G}", wait_until="domcontentloaded")
+    page.goto(server["url"] + f"/?panel={panel}" + (f"&subtab={sub}" if sub else "") + f"&slug={G}", wait_until="domcontentloaded")
     page.wait_for_function(f"() => window.dxStudio && window.dxStudio.getSlug() === '{G}'")
 
 
@@ -76,7 +76,7 @@ def test_connections_say_what_is_configured_and_working(studio_server):
         page.route(f"**{PG}/git/status", lambda r: _fulfill(r, 200, {"ok": True, "github": {"configured": True, "ok": True, "login": "nik"},
                                                                   "gitlab": {"configured": True, "ok": False, "code": "invalid_token",
                                                                              "error": "Токенът е невалиден"}}))
-        _open(page, studio_server)
+        _open(page, studio_server, panel="preview", sub="publish")
         _git(page)
         page.locator("#git-connections").click()
         page.wait_for_selector("#git-browse-list .item")
@@ -97,7 +97,7 @@ def test_github_repos_fill_the_remote_field_and_show_branches_without_cloning(st
         page.route(f"**{PG}/github/repos/nik/space-game/branches",
                    lambda r: _fulfill(r, 200, {"ok": True, "branches": [{"name": "main"}, {"name": "feature/x"}], "tags": [{"name": "v1"}],
                                                "default_branch": "main"}))
-        _open(page, studio_server)
+        _open(page, studio_server, panel="preview", sub="publish")
         _git(page)
         page.locator("#git-gh-repos").click()
         page.wait_for_selector("#git-browse-list .item[data-repo='nik/secret-tool']")
@@ -122,7 +122,7 @@ def test_missing_tokens_and_a_missing_url_are_said_plainly(studio_server):
                    lambda r: _fulfill(r, 400, {"ok": False, "error": "GITLAB_TOKEN not configured", "projects": []}))
         compat = _record(page, f"**{PG}/github/compat-check",
                          [(200, {"ok": True, "compat": {"level": "medium", "score": 55, "kind": "vite", "warnings": ["no license"]}})])
-        _open(page, studio_server)
+        _open(page, studio_server, panel="preview", sub="publish")
         _git(page)
         page.locator("#git-gl-projects").click()
         _status_has(page, "git-browse-status", "GitLab is not configured.")
@@ -167,7 +167,7 @@ def test_app_data_lists_views_saves_and_deletes_with_questions_first(studio_serv
         browser, page = _browser(pw)
         keys, values, writes = ["best"], {"best": {"score": 42}}, []
         _db(page, keys, values, writes)
-        _open(page, studio_server, panel="preview")
+        _open(page, studio_server, panel="preview", sub="data")
         page.locator("#app-data-load").click()
         _status_has(page, "app-data-status", "1 stored keys.")
         page.locator("#app-data-list .item[data-key='best'] button").first.click()
@@ -206,7 +206,7 @@ def test_an_unpublished_app_says_so_instead_of_failing_quietly(studio_server):
     with sync_playwright() as pw:
         browser, page = _browser(pw)
         page.route(re.compile(rf".*/apps/{G}/db/x$"), lambda r: _fulfill(r, 404, {"ok": False, "error": "not a published app"}))
-        _open(page, studio_server, panel="preview")
+        _open(page, studio_server, panel="preview", sub="data")
         page.locator("#app-data-key").fill("x")
         page.locator("#app-data-value").fill("1")
         page.locator("#app-data-save").click()
@@ -275,7 +275,7 @@ def test_bulgarian_shows_the_new_controls_without_raw_keys(studio_server):
 
     with sync_playwright() as pw:
         browser, page = _browser(pw, (910, 640))
-        _open(page, studio_server, panel="preview", lang="bg")
+        _open(page, studio_server, panel="preview", sub="data", lang="bg")
         page.wait_for_selector("#app-data-load")
         assert page.inner_text("#app-data-load") == "Покажи ключовете"
         text = page.text_content("body") or ""
@@ -291,12 +291,13 @@ def test_the_new_controls_fit_and_are_really_clickable(studio_server, size):
 
     with sync_playwright() as pw:
         browser, page = _browser(pw, size)
-        _open(page, studio_server, panel="preview")
+        _open(page, studio_server, panel="preview", sub="data")
         for selector in ("#app-data-load", "#app-data-clear", "#app-data-save"):
             page.locator(selector).evaluate("el => el.scrollIntoView({block: 'center'})")
             _uncovered(page, selector)
         over = page.evaluate("() => ({docw: document.documentElement.scrollWidth, vw: window.innerWidth})")
         assert over["docw"] <= over["vw"] + 1, over
+        page.locator('#preview-tabs button[data-tab="publish"]').click()
         _git(page)
         for selector in ("#git-connections", "#git-gh-repos", "#git-gl-projects", "#git-compat"):
             page.locator(selector).evaluate("el => el.scrollIntoView({block: 'center'})")
@@ -323,7 +324,7 @@ def test_switching_project_clears_the_app_data_shown_for_the_old_one(studio_serv
         browser, page = _browser(pw)
         keys, values, writes = ["best"], {"best": 1}, []
         _db(page, keys, values, writes)
-        _open(page, studio_server, panel="preview")
+        _open(page, studio_server, panel="preview", sub="data")
         page.locator("#app-data-load").click()
         page.wait_for_selector("#app-data-list .item[data-key='best']")
         page.locator("#app-data-key").fill("best")

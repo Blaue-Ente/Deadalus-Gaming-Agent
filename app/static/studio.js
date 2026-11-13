@@ -60,6 +60,27 @@
     }
   }
 
+  // An inline message next to a field, for an action that has nothing to do yet (an empty name, an empty command).
+  function fieldNote(anchor, message) {
+    if (!anchor) return;
+    const id = anchor.id + "-msg";
+    let note = document.getElementById(id);
+    if (!note) {
+      note = document.createElement("p");
+      note.id = id;
+      note.className = "field-note";
+      note.setAttribute("role", "alert");
+      anchor.insertAdjacentElement("afterend", note);
+    }
+    if (!anchor.dataset.noteWired) {
+      anchor.dataset.noteWired = "1";
+      anchor.addEventListener("input", () => { note.hidden = true; });
+    }
+    note.hidden = !message;
+    note.textContent = message || "";
+    if (message) anchor.focus();
+  }
+
   async function api(path, opts) {
     const options = opts ? Object.assign({}, opts) : {};
     const timeoutMs = options.timeoutMs == null ? 45000 : options.timeoutMs;
@@ -549,7 +570,7 @@
     chip.title = p ? t("studio.clickToClear") : "";
     text(chip, p ? (p.name || p.slug) : t("studio.noProject"));
     const locked = !state.slug;
-    ["pcapsule", "ppub", "plive", "build", "ptest", "dissectbtn"].forEach((id) => {
+    ["build", "ptest", "dissectbtn"].forEach((id) => {
       const n = $(id);
       if (n) n.disabled = locked;
     });
@@ -959,44 +980,6 @@
     return state.skillIndex.find((s) => s.id === id || s.name === id) || null;
   }
 
-  function renderSkillSelect() {
-    const sel = $("skillpick");
-    if (!sel) return;
-    const keep = sel.value;
-    sel.replaceChildren();
-    const blank = document.createElement("option");
-    blank.value = "";
-    text(blank, t("studio.ctxSkills"));
-    sel.appendChild(blank);
-    state.skillIndex.forEach((s) => {
-      const o = document.createElement("option");
-      o.value = s.id;
-      text(o, (s.name || s.id) + (s.origin === "installed" ? " · catalog" : ""));
-      sel.appendChild(o);
-    });
-    if (keep && [...sel.options].some((o) => o.value === keep)) sel.value = keep;
-  }
-
-  function renderSessionPins() {
-    const box = $("skillpins");
-    if (!box) return;
-    box.replaceChildren();
-    if (!state.pinSkills.length) {
-      const empty = document.createElement("div");
-      empty.className = "empty";
-      text(empty, t("studio.ctxEmpty"));
-      box.appendChild(empty);
-      return;
-    }
-    state.pinSkills.forEach((id) => {
-      const s = skillById(id);
-      const el = itemEl(s ? (s.name || id) : id, s ? (s.description || s.origin || "") : "pinned", true);
-      el.title = t("studio.unpin");
-      el.onclick = () => unpinSkill(id);
-      box.appendChild(el);
-    });
-  }
-
   function renderChips() {
     const box = $("ctxchips");
     if (!box) return;
@@ -1066,14 +1049,12 @@
     state.pinSkills = state.pinSkills.concat(id);
     state.turnSkills = state.turnSkills.filter((x) => x !== id);
     await persistPins();
-    renderSessionPins();
     renderChips();
   }
 
   async function unpinSkill(id) {
     state.pinSkills = state.pinSkills.filter((x) => x !== id);
     await persistPins();
-    renderSessionPins();
     renderChips();
   }
 
@@ -1087,8 +1068,6 @@
     try {
       const data = await api("/api/v1/daedalus/learned-skills");
       state.skillIndex = data.skills || [];
-      renderSkillSelect();
-      renderSessionPins();
       renderChips();
     } catch {
       state.skillIndex = [];
@@ -1104,7 +1083,6 @@
       state.pinSkills = [];
       state.pinMcp = [];
     }
-    renderSessionPins();
     renderChips();
   }
 
@@ -1399,10 +1377,6 @@
     renderChips();
   }
 
-  $("skillpin") && ($("skillpin").onclick = () => {
-    const id = $("skillpick").value;
-    if (id) pinSkill(id);
-  });
   $("ctxplus") && ($("ctxplus").onclick = () => setSheet($("ctxsheet").hidden));
   $("ctxclose") && ($("ctxclose").onclick = () => setSheet(false));
   document.querySelectorAll("[data-ctx]").forEach((btn) => {
@@ -1426,9 +1400,18 @@
     });
   }
 
+  // New project: the sidebar button opens a dialog; creating closes it and selects the new project.
+  const newDlg = $("new-project-dlg");
+  $("new-project").onclick = () => {
+    fieldNote($("pname"), "");
+    if (newDlg.showModal && !newDlg.open) newDlg.showModal();
+    $("pname").focus();
+  };
+  $("pcancel").onclick = () => { if (newDlg.open) newDlg.close(); };
+  $("new-project-form").addEventListener("submit", (ev) => { ev.preventDefault(); $("pcreate").click(); });
   $("pcreate").onclick = async () => {
     const name = $("pname").value.trim();
-    if (!name) return;
+    if (!name) { fieldNote($("pname"), t("studio.needName")); return; }
     const description = ($("pdesc").value.trim() || $("prompt").value.trim() || name);
     busy($("pcreate"), true, "…");
     try {
@@ -1442,6 +1425,7 @@
         }),
       });
       if (!res.project) {
+        fieldNote($("pname"), res.detail || t("studio.createFailed"));
         add("bot", res.detail || t("studio.createFailed"));
         return;
       }
@@ -1449,11 +1433,14 @@
       localStorage.setItem("dx.slug", state.slug);
       $("pname").value = "";
       $("pdesc").value = "";
+      fieldNote($("pname"), "");
+      if (newDlg.open) newDlg.close();
       await refreshProjects();
       if (state.effort === "epic" || /кампани|необят|персонаж|сюжет/i.test(description)) {
         add("bot", t("studio.epicCreated"));
       }
     } catch (e) {
+      fieldNote($("pname"), t("studio.projectErr") + ": " + errText(e));
       add("bot", t("studio.projectErr") + ": " + errText(e));
     } finally {
       busy($("pcreate"), false);
@@ -1462,7 +1449,7 @@
 
   $("prefadd").onclick = async () => {
     const value = $("preftext").value.trim();
-    if (!value) return;
+    if (!value) { fieldNote($("preftext"), t("studio.needPref")); return; }
     busy($("prefadd"), true, "…");
     try {
       await api("/api/v1/daedalus/preferences", {
@@ -1761,7 +1748,7 @@
 
   $("shrun").onclick = async () => {
     const command = $("shcmd").value.trim();
-    if (!command) return;
+    if (!command) { fieldNote($("shcmd"), t("studio.needCommand")); return; }
     text($("shout"), "$ " + command + "\n…");
     busy($("shrun"), true, "…");
     try {
@@ -2118,36 +2105,6 @@
     }
   };
 
-  $("pcapsule").onclick = () => {
-    if (!state.slug) return;
-    const href = "/api/v1/playground/projects/" + state.slug + "/capsule";
-    window.location = (window.DaedalusAuth && DaedalusAuth.url)
-      ? DaedalusAuth.url(href)
-      : href;
-  };
-  $("ppub").onclick = async () => {
-    if (!state.slug) return;
-    try {
-      const data = await api("/api/v1/playground/projects/" + state.slug + "/publish-local", { method: "POST" });
-      add("bot", data.ok ? (t("studio.published") + ": " + (data.url || "/apps/" + state.slug + "/")) : (data.detail || JSON.stringify(data)));
-    } catch (e) { add("bot", "publish: " + errText(e)); }
-  };
-  $("plive").onclick = async () => {
-    if (!state.slug) return;
-    const last = add("bot", t("studio.goingLive"));
-    try {
-      const data = await api("/api/v1/playground/projects/" + state.slug + "/live", {
-        method: "POST",
-        body: JSON.stringify({ backend: "auto" }),
-        timeoutMs: 120000,
-      });
-      const bits = [];
-      if (data.local_url) bits.push(t("studio.here") + ": " + data.local_url);
-      if (data.url) bits.push(t("studio.internet") + ": " + data.url);
-      if (data.backend) bits.push(data.backend);
-      text(last, (data.note || t("studio.done")) + (bits.length ? "\n" + bits.join("\n") : ""));
-    } catch (e) { text(last, t("studio.liveErr") + ": " + errText(e)); }
-  };
   $("ptest").onclick = async () => {
     if (!state.slug) return;
     document.querySelector('[data-pane="world"]').click();
@@ -2167,7 +2124,7 @@
   $("dissectbtn").onclick = async () => {
     if (!state.slug) return;
     const source = ($("dissectsrc").value || "").trim();
-    if (!source) { $("dissectsrc").focus(); return; }
+    if (!source) { fieldNote($("dissectsrc"), t("studio.needSource")); return; }
     document.querySelector('[data-pane="world"]').click();
     text($("worldbox"), t("studio.dissecting", { source: source }));
     try {
@@ -2420,6 +2377,7 @@
     },
     gameIndexState() { return state.gameIndex; },
     kindOf: projectBucket,
+    refreshMemoryExtras() { refreshPrefs(); refreshLessons(); },
   };
   showGreeting();
   refreshHealth();

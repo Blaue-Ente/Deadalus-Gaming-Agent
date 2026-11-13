@@ -206,7 +206,7 @@ def _arm(page, reply):
 
 
 def _open(page, server, game):
-    page.goto(server["url"] + "/?slug=" + game, wait_until="domcontentloaded")
+    page.goto(server["url"] + "/?panel=build&subtab=assets&slug=" + game, wait_until="domcontentloaded")
     page.wait_for_function(
         """(slug) => {
           const btn = document.getElementById('asset-generate');

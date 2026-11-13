@@ -160,7 +160,7 @@ def test_ideas_ask_first_show_what_came_back_and_one_goes_to_the_chat(studio_ser
                           [(200, {"ok": True, "suggestions": ["Add a boss fight", "Add a shop"], "fallback": False}),
                            (200, {"ok": True, "suggestions": ["Add a high-score table"], "fallback": True})])
             asked = _dialogs(page, [False, True, True])
-            _open_build(page, studio_server)
+            _open_build(page, studio_server, sub="design")
             page.locator("#build-ideas").click()                              # declined: nothing is sent
             assert _until(page, lambda: len(asked) == 1) and "one model call" in asked[0] and posts == []
             page.locator("#build-ideas").click()
@@ -197,7 +197,7 @@ def test_hints_and_a_description_use_the_idea_and_say_when_the_model_did_not_wri
                          [(200, {"ok": True, "description": "A neon maze with three floors.", "generated": True}),
                           (200, {"ok": True, "description": "Build Orbit UI as a static project.", "generated": False})])
             asked = _dialogs(page, [True, True, False])
-            _open_build(page, studio_server)
+            _open_build(page, studio_server, sub="design")
             page.locator("#build-idea").fill("a maze with three floors")
             page.locator("#build-hints").click()
             page.wait_for_function("() => document.getElementById('build-extras-out').textContent.includes('Central game loop')")
@@ -226,7 +226,7 @@ def test_the_coding_mode_shows_the_saved_one_and_a_change_is_saved_on_the_real_s
         browser, page = _browser(pw)
         try:
             _build_page(page)
-            _open_build(page, studio_server)
+            _open_build(page, studio_server, sub="design")
             page.wait_for_function("() => !document.getElementById('build-coding-mode').disabled")
             assert page.locator("#build-coding-mode").input_value() == "lite"
             page.locator("#build-coding-mode").select_option("premium")
@@ -244,7 +244,7 @@ def test_the_coding_mode_shows_the_saved_one_and_a_change_is_saved_on_the_real_s
 
 def _open_preview(page, server, slug):
     page.add_init_script("try { localStorage.setItem('dx.lang', 'en'); } catch (e) {}")
-    page.goto(server["url"] + f"/?panel=preview&slug={slug}", wait_until="domcontentloaded")
+    page.goto(server["url"] + f"/?panel=preview&subtab=publish&slug={slug}", wait_until="domcontentloaded")
     page.locator(f"#plist [data-slug='{slug}']").wait_for()
     page.wait_for_function("() => !document.getElementById('preview-backup').disabled")
 
@@ -400,7 +400,7 @@ def test_bulgarian_shows_the_new_controls_without_raw_keys(studio_server):
         browser, page = _browser(pw)
         try:
             _build_page(page)
-            _open_build(page, studio_server, lang="bg")
+            _open_build(page, studio_server, lang="bg", sub="design")
             page.wait_for_selector(f"{X} #build-ideas")
             for sel in (X, "#preview-extras"):
                 text = page.locator(sel).evaluate("el => el.textContent")
@@ -419,7 +419,7 @@ def test_the_new_controls_fit_and_are_really_clickable(studio_server, size):
         browser, page = _browser(pw, size)
         try:
             _build_page(page)
-            _open_build(page, studio_server)
+            _open_build(page, studio_server, sub="design")
             page.wait_for_function("() => !document.getElementById('build-coding-mode').disabled")
             for sel in ("#build-ideas", "#build-hints", "#build-describe", "#build-coding-save"):
                 loc = page.locator(sel)

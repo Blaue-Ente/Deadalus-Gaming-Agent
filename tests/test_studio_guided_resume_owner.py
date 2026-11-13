@@ -285,7 +285,7 @@ def _report(page, owned, seen):
 
 
 def _open(page, server, game):
-    page.goto(server["url"] + f"/?panel=build&slug={game}", wait_until="domcontentloaded")
+    page.goto(server["url"] + f"/?panel=build&subtab=run&slug={game}", wait_until="domcontentloaded")
     page.wait_for_function("() => !document.getElementById('build-guided').disabled")
     page.evaluate("() => 1")
 
@@ -581,7 +581,7 @@ def test_guided_error_and_timeout_do_not_resurrect_a_stale_job(studio_server):
                 lambda: owned.release_actives({"active": True, "job_id": "job-early"}),
             )
             assert owned.streams == []
-            page.goto(studio_server["url"] + f"/?panel=build&slug={game}", wait_until="domcontentloaded")
+            page.goto(studio_server["url"] + f"/?panel=build&subtab=run&slug={game}", wait_until="domcontentloaded")
             page.wait_for_function("() => !document.getElementById('build-guided').disabled")
             _pump(page)
             owned.streams.clear()

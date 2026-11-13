@@ -209,7 +209,8 @@ def test_studio_has_context_sheet():
     i18n = (ROOT / "app" / "static" / "i18n.js").read_text(encoding="utf-8")
     assert 'id="ctxplus"' in html
     assert 'id="ctxsheet"' in html
-    assert 'id="skillpins"' in html
+    assert 'data-ctx="skills"' in html           # skills are pinned from the context sheet, not the sidebar
+    assert 'id="skillpins"' not in html
     assert "skill_ids" in js
     assert "attachment_ids" in js
     assert "studio.sessionSkills" in i18n

@@ -370,11 +370,11 @@ def _game(server):
     return _made["slug"]
 
 
-def _open_build(page, server, lang="en"):
+def _open_build(page, server, lang="en", sub="run"):
     assert _game(server) == G
     page.add_init_script(f"try {{ localStorage.setItem('dx.lang', '{lang}'); }} catch (e) {{}}")
-    page.goto(server["url"] + f"/?panel=build&slug={G}", wait_until="domcontentloaded")
-    page.wait_for_selector("#build-controls:not([hidden]) button[data-ctl]")
+    page.goto(server["url"] + f"/?panel=build&subtab={sub}&slug={G}", wait_until="domcontentloaded")
+    page.wait_for_selector("#build-controls:not([hidden]) button[data-ctl]", state="attached")
 
 
 def _browser(pw, size=(1280, 800)):
@@ -477,7 +477,9 @@ def test_creating_a_plan_needs_the_idea_asks_and_says_when_replacing(studio_serv
         _open_build(page, studio_server)
         page.locator(_ctl("plan-create")).click()
         _status_has(page, "build-ctl-status", "Write the idea first.")
+        page.locator('#build-tabs button[data-tab="design"]').click()
         page.locator("#build-idea").fill("a space shooter")
+        page.locator('#build-tabs button[data-tab="run"]').click()
         asked = _dialogs(page, [False, True, True])
         page.locator("#build-ctl-body input[data-role='ultra']").check()
         page.locator(_ctl("plan-create")).click()

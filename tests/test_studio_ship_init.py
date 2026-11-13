@@ -226,7 +226,7 @@ def _arm(page, reply):
 
 
 def _open(page, server, slug):
-    page.goto(server["url"] + "/?slug=" + slug + "&panel=build", wait_until="domcontentloaded")
+    page.goto(server["url"] + "/?slug=" + slug + "&panel=build&subtab=export", wait_until="domcontentloaded")
     page.wait_for_function(
         """(slug) => {
           const btn = document.getElementById('ship-unity-init');

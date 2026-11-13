@@ -1,6 +1,7 @@
 """Phase 2 Game Studio shell: real panels, same slug, honest failures."""
 from __future__ import annotations
 
+from dx_confirm_support import answer_confirms
 import importlib.util
 import json
 import shutil
@@ -274,7 +275,7 @@ def test_build_stays_on_slug_and_gdd_failure_is_honest(studio_server):
                 route.fallback()
 
         page.route("**/admin/daedalus/game-studio/api/gdd", gdd)
-        page.goto(studio_server["url"] + f"/?panel=build&slug={game}", wait_until="domcontentloaded")
+        page.goto(studio_server["url"] + f"/?panel=build&subtab=run&slug={game}", wait_until="domcontentloaded")
         page.wait_for_function("() => document.querySelectorAll('#build-genre option').length > 1")
         page.locator("#build-idea").fill("a small puzzle")
         page.locator("#build-gdd").click()
@@ -298,12 +299,14 @@ def test_preview_git_and_publish_failures(studio_server):
         page.route("**/admin/daedalus/playground/api/projects/" + game + "/run", lambda route: _fulfill(route, 500, {"detail": "preview down"}))
         page.route("**/api/v1/playground/projects/" + game + "/publish-local", lambda route: _fulfill(route, 200, {"ok": True, "harness_check": True}))
         page.route("**/admin/daedalus/playground/api/clone", lambda route: _fulfill(route, 500, {"detail": "clone down"}))
+        answer_confirms(page)                      # Local copy now asks first
         page.goto(studio_server["url"] + f"/?panel=preview&slug={game}", wait_until="domcontentloaded")
         page.locator(f"#plist [data-slug='{game}']").wait_for()
         page.locator("#preview-run").click()
         page.wait_for_function("() => document.getElementById('preview-status').textContent.includes('preview down')")
         assert page.locator("#preview-run").is_enabled()
         assert not page.locator("#preview-frame").get_attribute("src")
+        page.locator('#preview-tabs button[data-tab="publish"]').click()
         page.locator("#preview-local").click()
         page.wait_for_function("() => document.getElementById('preview-status').textContent === 'Harness check'")
         page.locator("#git-menu summary").click()
@@ -393,7 +396,7 @@ def test_language_keeps_user_text_and_screenshots(studio_server):
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": 1280, "height": 800})
-        page.goto(studio_server["url"] + f"/?panel=build&slug={game}", wait_until="domcontentloaded")
+        page.goto(studio_server["url"] + f"/?panel=build&subtab=run&slug={game}", wait_until="domcontentloaded")
         page.wait_for_selector(f"#plist [data-slug='{game}']")
         page.locator(".dx-lang button[data-lang=bg]").click()
         page.wait_for_function("() => document.querySelector('#kind-filter [data-filter=games]').textContent === 'Игри'")
@@ -541,7 +544,7 @@ def test_build_progress_and_guided_stream_are_visible(studio_server):
         ))
         page.route(f"**/game-studio/api/projects/{game}", workspace)
         trace = diag.attach(page)
-        page.goto(studio_server["url"] + f"/?panel=build&slug={game}", wait_until="domcontentloaded")
+        page.goto(studio_server["url"] + f"/?panel=build&subtab=run&slug={game}", wait_until="domcontentloaded")
         page.wait_for_selector("#build-milestones li[data-current]")
         assert "1/4" in page.locator("#build-milestones").inner_text()
         assert "Boot" in page.locator("#build-milestones").inner_text()
@@ -599,7 +602,7 @@ def test_build_stream_failure_and_cancel_are_visible(studio_server):
         ))
         page.route(f"**/game-studio/api/projects/{game}", workspace)
         trace = diag.attach(page)
-        page.goto(studio_server["url"] + f"/?panel=build&slug={game}", wait_until="domcontentloaded")
+        page.goto(studio_server["url"] + f"/?panel=build&subtab=run&slug={game}", wait_until="domcontentloaded")
         page.locator("#build-guided").click()
         diag.wait(
             page,
@@ -651,12 +654,14 @@ def test_preview_rejects_false_ok_and_distinguishes_publish_copy(studio_server):
             "**/api/v1/playground/projects/" + game + "/capsule.json",
             lambda route: _fulfill(route, 200, {"ok": True, "slug": game, "has_index": True}),
         )
+        answer_confirms(page)                      # Local copy now asks first
         page.goto(studio_server["url"] + f"/?panel=preview&slug={game}", wait_until="domcontentloaded")
         page.locator(f"#plist [data-slug='{game}']").wait_for()
         page.locator("#preview-run").click()
         page.wait_for_function("() => document.getElementById('preview-status').textContent.includes('runner refused')")
         assert "Started." not in page.locator("#preview-status").inner_text()
         page.unroute("**/playground/api/projects/" + game + "/run")
+        page.locator('#preview-tabs button[data-tab="publish"]').click()
         page.route(
             "**/api/v1/playground/projects/" + game + "/live",
             lambda route: _fulfill(route, 200, {

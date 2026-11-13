@@ -294,7 +294,7 @@ def test_revive_and_pull_request_are_clicked_send_their_bodies_and_a_refusal_sta
             page.route(f"**/admin/daedalus/playground/api/projects/{game}/create-upstream-pr",
                        lambda r: (prs.append(json.loads(r.request.post_data or "{}")), _fulfill(r, *answers["pr"])))
             page.add_init_script("try { localStorage.setItem('dx.lang', 'en'); } catch (e) {}")
-            page.goto(studio_server["url"] + f"/?panel=preview&slug={game}", wait_until="domcontentloaded")
+            page.goto(studio_server["url"] + f"/?panel=preview&subtab=publish&slug={game}", wait_until="domcontentloaded")
             page.locator(f"#plist [data-slug='{game}']").wait_for()
             page.locator("#git-menu summary").click()
             page.locator("#git-revive").click()                                    # no URL: asked for, nothing sent
