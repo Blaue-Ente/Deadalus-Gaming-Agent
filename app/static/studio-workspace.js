@@ -4111,6 +4111,7 @@
       save.addEventListener("click", async () => {
         const prov = select.value;
         const model = input.value.trim();
+        if (!prov && !opts.allowSameAsMain) { say(dx.t("studio.mpNeedProvider"), true); return; }
         if (prov && !model) { say(dx.t("studio.mpNeedModel"), true); return; }
         dx.busy(save, true, "…");
         try {
@@ -4153,9 +4154,16 @@
     return p;
   }
 
-  async function reloadModels() {
+  let modelsSeq = 0;
+  // After a main-model save only the main card is repainted: the task rows keep what the owner typed but has not saved.
+  // A response that a newer reload (or a full settings load) has overtaken is dropped, like loadHarnessSettings does.
+  async function reloadBrainCard() {
+    const mine = ++modelsSeq;
+    const page = harnessSeq;
     const data = await dx.api("/api/v1/harness/models");
-    paintModels(data);
+    if (mine !== modelsSeq || page !== harnessSeq) return null;
+    modelsData = data || null;
+    paintBrain(data);
     return data;
   }
 
@@ -4176,8 +4184,8 @@
       locked: !!brain.locked, lockEnv: brain.lock_env, label: dx.t("studio.mpMainTitle"),
       onSave: async (v) => {
         await postJson("/api/v1/harness/brain", { provider: v.provider, model: v.model });
-        await reloadModels();                      // the card is rebuilt from what the server now says
-        const fresh = $("settings-brain").querySelector(".dx-mp-note");
+        const data = await reloadBrainCard();      // the card is rebuilt from what the server now says
+        const fresh = data && $("settings-brain").querySelector(".dx-mp-note");
         if (fresh && !fresh.textContent) { fresh.textContent = dx.t("studio.saved"); fresh.hidden = false; fresh.dataset.state = "ok"; }
         showStatus("harness-status", dx.t("studio.saved"), false);
       },
@@ -5893,9 +5901,10 @@
     if (!await askDanger("deleteProject", dx.t("studio.deleteConfirm"))) return;
     const menu = $("project-menu");
     if (menu) menu.open = false;
-    runAction($("project-delete"), "workspace-status", async () => {
+    // The result is shown in the header so it is visible from whichever panel the owner is on.
+    runAction($("project-delete"), "header-status", async () => {
       await dx.api("/api/v1/playground/projects/" + slugPath(slug), { method: "DELETE" });
-      showStatus("workspace-status", dx.t("studio.saved"), false);
+      showStatus("header-status", dx.t("studio.saved"), false);
       dx.selectSlug(null);
     });
   });

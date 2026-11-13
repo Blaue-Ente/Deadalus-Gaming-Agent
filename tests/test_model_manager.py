@@ -82,6 +82,52 @@ def test_choosing_is_refused_while_the_server_pins_the_model(fresh, monkeypatch)
     assert view["locked"] is True and view["lock_env"] == "DAEDALUS_MODEL"
 
 
+def _saved_row():
+    from daedalus.llm_config import _read_db
+
+    return _read_db()
+
+
+def test_changing_only_the_model_keeps_the_saved_key_of_the_same_provider(fresh):
+    from daedalus.llm_config import set_config
+    from daedalus.llm_router_config import router_write_context
+
+    with router_write_context():
+        set_config(model="claude-a", api_key="k1", provider="anthropic")
+    res = fresh.post("/api/v1/harness/brain", json={"provider": "anthropic", "model": "other"})
+    assert res.status_code == 200, res.text
+    row = _saved_row()
+    assert row["model"] == "other" and row["api_key"] == "k1"
+    assert "k1" not in res.text
+    res = fresh.post("/api/v1/harness/brain", json={"provider": "openai", "model": "gpt-x"})
+    assert res.status_code == 200, res.text
+    row = _saved_row()
+    assert row["provider"] == "openai" and not row.get("api_key")        # a key never travels to another provider
+
+
+def test_only_daedalus_model_locks_the_main_model(fresh, monkeypatch):
+    monkeypatch.setenv("DAEDALUS_PROVIDER", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "k")
+    view = fresh.get("/api/v1/harness/models").json()
+    assert view["brain"]["locked"] is False and view["env_locked"] is False
+    assert fresh.post("/api/v1/harness/brain", json={"provider": "openrouter", "model": "x/y"}).status_code == 200
+    monkeypatch.setenv("DAEDALUS_MODEL", "pinned/model")
+    view = fresh.get("/api/v1/harness/models").json()
+    assert view["brain"]["locked"] is True and view["env_locked"] is True
+    assert fresh.post("/api/v1/harness/brain", json={"provider": "openrouter", "model": "x/y"}).status_code == 409
+
+
+def test_a_catalog_mentor_choice_is_reported_as_provider_model(fresh):
+    from daedalus import mentor_helm
+
+    mentor_helm.set_choice({"choice_id": "p:openrouter:x/mentor-model"})
+    rows = {r["intent"]: r for r in fresh.get("/api/v1/harness/models").json()["tasks"]}
+    assert rows["mentor"]["owner_tag"] == "openrouter:x/mentor-model"
+    mentor_helm.set_choice({"choice_id": "rules"})
+    rows = {r["intent"]: r for r in fresh.get("/api/v1/harness/models").json()["tasks"]}
+    assert rows["mentor"]["owner_tag"] == ""
+
+
 def test_an_unknown_provider_or_bad_input_is_a_400(fresh):
     assert fresh.post("/api/v1/harness/brain", json={"provider": "nope", "model": "x"}).status_code == 400
     assert fresh.post("/api/v1/harness/brain", json={"provider": "openrouter", "model": "  "}).status_code == 400
@@ -193,3 +239,31 @@ def test_a_server_pinned_model_shows_disabled_with_a_badge():
     finally:
         proc.terminate()
         proc.wait(timeout=10)
+
+
+def test_saving_the_main_model_keeps_unsaved_task_row_edits_and_refuses_an_empty_provider(studio_server):  # noqa: F811
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1366, "height": 768})
+        posts = []
+        page.on("request", lambda r: posts.append(r.url) if r.method == "POST" and "/harness/brain" in r.url else None)
+        _open(page, studio_server)
+        brain = page.locator("#settings-brain")
+        # an empty provider cannot be saved: an inline message, no request
+        brain.locator("select.dx-mp-provider").select_option("")
+        brain.locator("button.dx-mp-save").click()
+        page.wait_for_function("() => !document.querySelector('#settings-brain .dx-mp-note').hidden")
+        assert brain.locator(".dx-mp-note").inner_text().strip() != "" and posts == []
+        # an unsaved edit in a task row survives a main-model save
+        row = page.locator(".cfg-row[data-intent='critic']")
+        row.locator("select.dx-mp-provider").select_option("openrouter")
+        row.locator("input.dx-mp-model").fill("x/unsaved-typed")
+        brain.locator("select.dx-mp-provider").select_option("openrouter")
+        brain.locator("input.dx-mp-model").fill("x/fix2-main")
+        brain.locator("button.dx-mp-save").click()
+        page.wait_for_function("() => document.querySelector('#settings-brain .dx-mp-note').textContent.includes('Saved')")
+        assert len(posts) == 1
+        assert page.locator(".cfg-row[data-intent='critic'] input.dx-mp-model").input_value() == "x/unsaved-typed"
+        browser.close()

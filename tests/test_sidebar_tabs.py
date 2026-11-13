@@ -240,3 +240,20 @@ def test_empty_shell_and_dissection_say_so(studio_server):
         page.locator("#dissectbtn").click()
         assert page.locator("#dissectsrc-msg").is_visible()
         browser.close()
+
+
+def test_project_delete_reports_in_the_header_from_any_panel(studio_server):
+    from playwright.sync_api import sync_playwright
+    res = _api(studio_server, "POST", "/api/v1/playground/projects", {"name": "Delete Me Game", "kind": "static"})
+    slug = res["project"]["slug"]
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page(viewport={"width": 1366, "height": 768})
+        _open(page, studio_server, f"?panel=review&tab=memory&slug={slug}")
+        page.locator("#project-menu summary").click()
+        page.locator("#project-delete").click()
+        page.locator("#dx-confirm-ok").click()
+        page.wait_for_function("() => { const h = document.getElementById('header-status'); return h && !h.hidden && h.textContent.trim() !== ''; }")
+        assert page.locator("#header-status").get_attribute("data-state") == "ok"
+        assert page.locator("#workspace-status").inner_text().strip() == ""
+        browser.close()

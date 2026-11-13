@@ -94,7 +94,7 @@ def _intent_rows() -> tuple[list[dict[str, Any]], bool]:
                 choice = mentor_helm.get_choice()
                 row.update({"owner_choice": choice.get("id"),
                             "owner_tag": (f"{choice.get('provider')}:{choice.get('model')}"
-                                          if choice.get("id") == "custom" and choice.get("provider") and choice.get("model")
+                                          if choice.get("id") not in ("auto", "brain", "rules") and choice.get("provider") and choice.get("model")
                                           else ""),
                             "resolved": {
                     "provider": choice.get("provider"), "model": choice.get("model"),
@@ -131,11 +131,11 @@ _PROVIDER_LABELS = {
 
 
 def _brain_lock_env() -> str:
-    """The environment variable that pins the main model, or an empty string."""
-    for name in ("DAEDALUS_MODEL", "DAEDALUS_PROVIDER"):
-        if (os.environ.get(name) or "").strip():
-            return name
-    return ""
+    """The environment variable that pins the main model, or an empty string. One rule, shared with the gateway:
+    only DAEDALUS_MODEL pins it (a saved choice wins over DAEDALUS_PROVIDER alone)."""
+    from daedalus.harness import gateway as gw
+
+    return "DAEDALUS_MODEL" if gw.model_locked_by_env() else ""
 
 
 def _source_kind(provider: str, source: str) -> str:
@@ -235,7 +235,7 @@ def harness_brain_set(body: BrainBody) -> Any:
     """Choose the main model. Saved like Connectors does, and the wardrobe is kept in step so a leftover local
     backend cannot override the choice (step 0 of llm_config). Never accepts or returns a key."""
     from daedalus import llm_wardrobe
-    from daedalus.llm_config import PROVIDER_DEFAULTS, set_config
+    from daedalus.llm_config import PROVIDER_DEFAULTS, _read_db, set_config
     from daedalus.llm_router_config import router_write_context
     from daedalus.local_llm import is_local_provider, normalize_provider
 
@@ -253,8 +253,11 @@ def harness_brain_set(body: BrainBody) -> Any:
         return JSONResponse({"ok": False, "error": "model_required"}, status_code=400)
     if base_url and not base_url.lower().startswith(("http://", "https://")):
         return JSONResponse({"ok": False, "error": "invalid_base_url"}, status_code=400)
+    prev = _read_db() or {}
+    # Keep the owner's saved key only for the same provider; a key never travels to another one.
+    keep_key = (prev.get("api_key") or "") if (prev.get("provider") or "").strip().lower() == provider else ""
     with router_write_context():
-        set_config(model=model, api_key="", provider=provider, base_url=base_url, use_cache=provider == "anthropic")
+        set_config(model=model, api_key=keep_key, provider=provider, base_url=base_url, use_cache=provider == "anthropic")
     if local:
         llm_wardrobe.use_local(provider)
         data = llm_wardrobe.load()
