@@ -972,3 +972,56 @@ body[data-role]:not([data-role="owner"]):not([data-role=""]) #panel-settings > :
 }
 .dx-empty { color: var(--faint); font-size: 0.8rem; }
 .dx-empty p { margin: 0 0 0.4rem; color: var(--muted); }
+
+/* PR10: the sidebar holds projects and files; Build and Preview have sub-tabs */
+aside #new-project { width: 100%; }
+aside #plist { max-height: 15rem; overflow: auto; }
+aside #filelist { max-height: 14rem; overflow: auto; }
+aside #fileview { max-height: 9rem; }
+.kind-filter { align-items: center; }
+.project-menu { position: relative; margin-left: auto; }
+.project-menu summary {
+  list-style: none;
+  cursor: pointer;
+  color: var(--muted);
+  padding: 0.2rem 0.5rem;
+  border-radius: var(--radius);
+}
+.project-menu summary::-webkit-details-marker { display: none; }
+.project-menu[open] summary, .project-menu summary:hover { color: var(--gold-2); }
+.project-menu-body {
+  position: absolute;
+  right: 0;
+  z-index: 5;
+  min-width: 7rem;
+  margin-top: 0.15rem;
+  padding: 0.3rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raise);
+}
+.project-menu-body button { width: 100%; }
+.subpanel { display: flex; flex-direction: column; gap: 0.45rem; flex: none; }
+.subpanel[hidden] { display: none !important; }
+.subtabs { margin-bottom: 0.15rem; }
+.field-note { margin: 0.25rem 0 0; color: var(--err); font-size: 0.78rem; }
+.field-note[hidden] { display: none !important; }
+.memory-extras[hidden] { display: none !important; }
+.memory-extras { display: flex; flex-direction: column; gap: 0.6rem; margin-top: 0.6rem; }
+.memory-extras .prefs { margin-top: 0; }
+.new-project-dlg {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raise);
+  color: var(--ink);
+  padding: 0.9rem 1rem;
+  width: min(26rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 1rem);
+  overflow: auto;
+}
+.new-project-dlg::backdrop { background: rgba(8, 6, 4, 0.6); }
+.new-project-dlg h2 { font-family: var(--serif); color: var(--gold-2); margin: 0 0 0.4rem; font-size: 1.05rem; }
+.new-project-dlg .hint { margin: 0 0 0.5rem; }
+.new-project-dlg input, .new-project-dlg textarea { width: 100%; }
+.new-project-dlg .row { margin-top: 0.4rem; }
+.new-project-dlg .dlg-actions { justify-content: flex-end; }

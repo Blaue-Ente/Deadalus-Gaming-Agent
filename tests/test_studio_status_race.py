@@ -102,7 +102,7 @@ def test_build_buttons_are_not_greyed_out_again_after_the_workspace_loaded(studi
                                   "milestone_summary": {"milestones": []}})
 
         page.route(f"**/game-studio/api/projects/{game}", workspace)
-        page.goto(studio_server["url"] + f"/?panel=build&slug={game}", wait_until="domcontentloaded")
+        page.goto(studio_server["url"] + f"/?panel=build&subtab=run&slug={game}", wait_until="domcontentloaded")
         page.wait_for_function("() => !document.getElementById('build-guided').disabled")
         page.wait_for_timeout(1500)                     # long enough for any second load to start and answer
         flips = page.evaluate("() => window.__flips")
@@ -134,7 +134,7 @@ def test_a_click_right_after_the_buttons_enable_always_sends_its_request(studio_
 
         page.route(f"**/game-studio/api/projects/{game}", workspace)
         page.route(f"**/game-studio/api/projects/{game}/build/guided", guided)
-        page.goto(studio_server["url"] + f"/?panel=build&slug={game}", wait_until="domcontentloaded")
+        page.goto(studio_server["url"] + f"/?panel=build&subtab=run&slug={game}", wait_until="domcontentloaded")
         page.locator("#build-guided").click()           # Playwright clicks the instant the button is actionable
         page.wait_for_function("() => document.getElementById('build-status').textContent.length > 0")
         assert len(posts) == 1
@@ -167,7 +167,7 @@ def test_two_resume_asks_while_the_first_waits_make_one_request(studio_server):
             streams.append(route.request.url),
             route.fulfill(status=200, headers={"Content-Type": "text/event-stream"},
                           body='event: log\ndata: {"line":"following"}\n\n'))[1])
-        page.goto(studio_server["url"] + f"/?panel=build&slug={game}", wait_until="domcontentloaded")
+        page.goto(studio_server["url"] + f"/?panel=build&subtab=run&slug={game}", wait_until="domcontentloaded")
         page.wait_for_function("() => !document.getElementById('build-guided').disabled")
         page.wait_for_timeout(1500)                         # time for any second ask to be made
         assert len(held) == 1, len(held)
@@ -206,7 +206,7 @@ def test_a_late_workspace_refresh_does_not_erase_what_a_click_reported(studio_se
         page.route(f"**/game-studio/api/projects/{game}", workspace)
         page.route(f"**/game-studio/api/projects/{game}/build/guided",
                    lambda route: _fulfill(route, 200, {"ok": True, "harness_check": True}))
-        page.goto(studio_server["url"] + f"/?panel=build&slug={game}", wait_until="domcontentloaded")
+        page.goto(studio_server["url"] + f"/?panel=build&subtab=run&slug={game}", wait_until="domcontentloaded")
         page.wait_for_function("() => !document.getElementById('build-guided').disabled")
         page.locator("#workspace-nav button[data-panel=preview]").click()
         page.locator("#workspace-nav button[data-panel=build]").click()      # a fresh load starts and is held

@@ -113,7 +113,7 @@ PARITY_ROWS: tuple[ParityRow, ...] = (
        f"POST {_PG}/dissect; POST {_PG}/projects/{{slug}}/dissect; GET {_PG}/labs; POST {_PG}/labs", "in_studio"),
     _r("build-full-auto", "Full auto M0 to M8 as a server-side run", "game-studio", "panel:build/controls",
        f"POST {_GS}/projects/{{slug}}/build/guided", "in_studio"),
-    _r("git-browse", "GitHub repos/branches, compat check, GitLab projects, git status", "playground", "panel:rail/git",
+    _r("git-browse", "GitHub repos/branches, compat check, GitLab projects, git status", "playground", "panel:preview/git",
        f"GET {_PG}/github/repos; GET {_PG}/github/repos/{{owner}}/{{repo}}/branches; POST {_PG}/github/compat-check; "
        f"GET {_PG}/gitlab/projects; GET {_PG}/git/status", "in_studio"),
     _r("preview-app-data", "Per-app data editor", "playground", "panel:preview/apps",

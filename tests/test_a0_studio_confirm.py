@@ -32,7 +32,7 @@ def test_live_publish_asks_before_public_backends(studio_server):
                 })
 
         page.route("**/api/v1/playground/projects/" + game + "/live", live)
-        page.goto(studio_server["url"] + f"/?panel=preview&slug={game}", wait_until="domcontentloaded")
+        page.goto(studio_server["url"] + f"/?panel=preview&subtab=publish&slug={game}", wait_until="domcontentloaded")
         page.locator(f"#plist [data-slug='{game}']").wait_for()
 
         # Decline: exactly one request, no confirm flag, no public link claimed.
@@ -78,7 +78,7 @@ def test_git_push_force_only_after_confirm(studio_server):
                 })
 
         page.route("**/admin/daedalus/playground/api/projects/" + game + "/push", push)
-        page.goto(studio_server["url"] + f"/?panel=preview&slug={game}", wait_until="domcontentloaded")
+        page.goto(studio_server["url"] + f"/?panel=preview&subtab=publish&slug={game}", wait_until="domcontentloaded")
         page.locator(f"#plist [data-slug='{game}']").wait_for()
 
         page.locator("#git-menu summary").click()

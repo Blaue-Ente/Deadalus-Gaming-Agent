@@ -155,8 +155,12 @@ def _open(page, server, lang="en", ws=None):
     _build_page(page, ctl=CTL)
     _workspace(page, ws or WS)                                   # registered last: wins over _build_page's workspace stub
     page.add_init_script(f"try {{ localStorage.setItem('dx.lang', '{lang}'); }} catch (e) {{}}")
-    page.goto(server["url"] + f"/?panel=build&slug={G}", wait_until="domcontentloaded")
+    page.goto(server["url"] + f"/?panel=build&subtab=run&slug={G}", wait_until="domcontentloaded")
     page.wait_for_selector("#build-controls:not([hidden]) button[data-ctl]")
+
+
+def _tab(page, tab):
+    page.locator(f'#build-tabs button[data-tab="{tab}"]').click()
 
 
 def test_waivers_are_offered_only_where_the_studio_allows_one_and_ask_first(studio_server):
@@ -211,6 +215,7 @@ def test_attach_template_shows_only_for_cloneable_templates_asks_and_reports(stu
                            [(200, {"ok": True, "cloned": "Assets/UGF", "integrations": []}),
                             (200, {"ok": True, "cloned": "Assets/UGF", "status": "already_present"})])
         _open(page, studio_server)
+        _tab(page, "export")
         assert page.locator("#ship-unity-attach").is_hidden()                       # daedalus_minimal has no repository
         page.locator("#ship-template").select_option("unity_game_framework")
         page.wait_for_selector("#ship-unity-attach:not([hidden])")
@@ -279,6 +284,7 @@ def test_bulgarian_shows_the_new_controls_without_raw_keys(studio_server):
         _open(page, studio_server, lang="bg", ws={**WS, "can_unity_waiver": True})
         page.wait_for_selector("#build-waive-unity:not([hidden])")
         assert page.inner_text("#build-waive-unity") == "Напред с изключение за Unity"
+        _tab(page, "export")
         page.locator("#ship-template").select_option("daedalus_ugf")
         page.wait_for_selector("#ship-unity-attach:not([hidden])")
         assert page.inner_text("#ship-unity-attach") == "Прикачи шаблон"
@@ -296,8 +302,10 @@ def test_the_new_buttons_fit_and_are_really_clickable(studio_server, size):
     with sync_playwright() as pw:
         browser, page = _browser(pw, size)
         _open(page, studio_server, ws={**WS, "can_unity_waiver": True})
+        _tab(page, "export")
         page.locator("#ship-template").select_option("unity_game_framework")
-        for selector in ("#build-waive-unity", "#ship-unity-attach"):
+        for tab, selector in (("run", "#build-waive-unity"), ("export", "#ship-unity-attach")):
+            _tab(page, tab)
             page.wait_for_selector(selector + ":not([hidden])")
             page.locator(selector).evaluate("el => el.scrollIntoView({block: 'center'})")
             _uncovered(page, selector)
@@ -314,7 +322,7 @@ def test_waivers_stay_disabled_while_full_auto_owns_the_project(studio_server):
         live = {"ok": True, "run": {"id": "r1", "state": "running", "milestone": "M1", "reason": "", "events": []}}
         _build_page(page, ctl=[{**CTL, "busy": "full_auto"}], fa=[live])
         _workspace(page, {**WS, "can_unity_waiver": True})
-        page.goto(studio_server["url"] + f"/?panel=build&slug={G}", wait_until="domcontentloaded")
+        page.goto(studio_server["url"] + f"/?panel=build&subtab=run&slug={G}", wait_until="domcontentloaded")
         page.wait_for_selector("#build-waive-unity:not([hidden])")
         page.wait_for_function("() => document.getElementById('build-waive-unity').disabled")
         page.locator("#build-gates").evaluate("el => el.disabled = false")

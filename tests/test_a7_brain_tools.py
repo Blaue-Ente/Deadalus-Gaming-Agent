@@ -427,7 +427,7 @@ def _ask(server, slug, kind, note):
 
 def _open_preview(page, server, slug):
     page.add_init_script("try { localStorage.setItem('dx.lang', 'en'); } catch (e) {}")
-    page.goto(server["url"] + f"/?panel=preview&slug={slug}", wait_until="domcontentloaded")
+    page.goto(server["url"] + f"/?panel=preview&subtab=publish&slug={slug}", wait_until="domcontentloaded")
     page.locator(f"#plist [data-slug='{slug}']").wait_for()
 
 
@@ -488,7 +488,7 @@ def test_a_request_answered_elsewhere_is_said_and_bulgarian_has_no_raw_keys(stud
             assert page.locator("#ship-requests-status").get_attribute("data-state") == "error"
             bg = browser.new_page(viewport={"width": 1280, "height": 800})          # a page whose owner picked BG
             bg.add_init_script("try { localStorage.setItem('dx.lang', 'bg'); } catch (e) {}")
-            bg.goto(studio_server["url"] + f"/?panel=preview&slug={game}", wait_until="domcontentloaded")
+            bg.goto(studio_server["url"] + f"/?panel=preview&subtab=publish&slug={game}", wait_until="domcontentloaded")
             bg.wait_for_function("() => document.querySelector('#ship-requests .kicker').textContent.includes('Дедал')")
             text = bg.locator("#ship-requests").evaluate("el => el.textContent")
             assert "studio." not in text and "Заявки от Дедал" in text

@@ -4,6 +4,9 @@
 
   const PANELS = ["chat", "build", "preview", "review", "settings", "world", "tools"];
   const TABS = ["proposals", "skills", "bundles", "permissions", "outbox", "memory"];
+  // Sub-tabs of the Build and Preview panels; the first entry is the default.
+  const SUBS = { build: ["design", "run", "assets", "export"], preview: ["play", "publish", "data"] };
+  const subTab = { build: "design", preview: "play" };
   let currentPanel = "chat";
   let currentTab = "proposals";
   let queryReady = false;
@@ -105,13 +108,16 @@
     if (PANELS.indexOf(panel) < 0 || panel === "tools") panel = "chat";
     let tab = q.get("tab") || "proposals";
     if (TABS.indexOf(tab) < 0) tab = "proposals";
-    return { panel, tab, slug: q.get("slug") || "" };
+    const want = q.get("subtab") || "";
+    const sub = SUBS[panel] && SUBS[panel].indexOf(want) >= 0 ? want : "";
+    return { panel, tab, sub, slug: q.get("slug") || "" };
   }
 
   function writeQuery() {
     const q = new URLSearchParams();
     if (currentPanel !== "chat" && currentPanel !== "tools") q.set("panel", currentPanel);
     if (currentPanel === "review" && currentTab && currentTab !== "proposals") q.set("tab", currentTab);
+    if (SUBS[currentPanel] && subTab[currentPanel] !== SUBS[currentPanel][0]) q.set("subtab", subTab[currentPanel]);
     const slug = dx.getSlug();
     if (slug) q.set("slug", slug);
     const next = q.toString();
@@ -127,8 +133,28 @@
     if (btn) btn.click();
   }
 
-  function showPanel(panel, tab) {
+  // Show one group of a panel with sub-tabs; the others are hidden.
+  function syncSubs(panel) {
+    if (!SUBS[panel]) return;
+    const root = $("panel-" + panel);
+    root.querySelectorAll(":scope > .subpanel").forEach((el) => { el.hidden = el.dataset.sub !== subTab[panel]; });
+    root.querySelectorAll(":scope > .subtabs button").forEach((btn) => {
+      btn.setAttribute("aria-selected", btn.dataset.tab === subTab[panel] ? "true" : "false");
+    });
+  }
+
+  function showSub(panel, sub) {
+    if (SUBS[panel] && SUBS[panel].indexOf(sub) >= 0) subTab[panel] = sub;
+    if (currentPanel !== panel) showPanel(panel, currentTab);
+    else {
+      syncSubs(panel);
+      if (queryReady) writeQuery();
+    }
+  }
+
+  function showPanel(panel, tab, sub) {
     if (PANELS.indexOf(panel) < 0) panel = "chat";
+    if (SUBS[panel] && SUBS[panel].indexOf(sub) >= 0) subTab[panel] = sub;
     if (currentPanel === "review" && panel !== "review") {
       blockerGen += 1;
       blockerFlight = 0;
@@ -156,6 +182,9 @@
     document.querySelectorAll("#review-tabs button").forEach((btn) => {
       btn.setAttribute("aria-selected", btn.dataset.tab === currentTab ? "true" : "false");
     });
+    syncSubs("build");
+    syncSubs("preview");
+    syncMemoryExtras();
     if (panel === "build") loadWorkspace(dx.getSlug());
     if (panel === "preview") loadPreviewStatus(dx.getSlug());
     if (panel === "preview") loadShipRequests();          // what Daedalus asked to publish or push
@@ -169,6 +198,15 @@
     }
     if (panel === "settings") loadSettings();
     if (queryReady) writeQuery();
+  }
+
+  // Preferences and lessons live under Review, Memory. They are painted once by studio.js; this only shows them there.
+  function syncMemoryExtras() {
+    const box = $("memory-extras");
+    if (!box) return;
+    const on = currentPanel === "review" && currentTab === "memory";
+    if (on && box.hidden && dx.refreshMemoryExtras) dx.refreshMemoryExtras();
+    box.hidden = !on;
   }
 
   function slugPath(slug) {
@@ -3395,7 +3433,7 @@
     if (!slug) { showStatus(statusId, dx.t("studio.noProject"), true); return; }
     const gen = ++extrasGen;
     extrasFlight = true;
-    const controls = Array.from(document.querySelectorAll("#" + boxId + " button, #" + boxId + " select"));
+    const controls = Array.from(document.querySelectorAll("#" + boxId + " button, #" + boxId + " select, #" + boxId + "-btns button"));
     controls.forEach((c) => { c.disabled = true; });
     dx.busy(btn, true, "…");
     const live = () => gen === extrasGen && dx.getSlug() === slug;
@@ -5331,6 +5369,12 @@
     dx.setKindFilter(btn.dataset.filter);
     syncFilter();
   });
+  ["build", "preview"].forEach((panel) => {
+    $(panel + "-tabs").addEventListener("click", (ev) => {
+      const btn = ev.target.closest("button[data-tab]");
+      if (btn) showSub(panel, btn.dataset.tab);
+    });
+  });
   $("review-tabs").addEventListener("click", (ev) => {
     const btn = ev.target.closest("button[data-tab]");
     if (!btn) return;
@@ -5520,7 +5564,12 @@
       showStatus("preview-status", dx.t("studio.requestFailed") + ": " + failText(err), true);
     }
   });
-  $("preview-local").addEventListener("click", () => publish("/publish-local", $("preview-local")));
+  $("preview-local").addEventListener("click", async () => {
+    const slug = dx.getSlug();
+    if (!slug) return;
+    if (!await ask("publishLocal", dx.t("studio.publishLocalConfirm", { slug }))) return;
+    publish("/publish-local", $("preview-local"));
+  });
   $("preview-live").addEventListener("click", () => publish("/live", $("preview-live"), { backend: "auto" }));
   $("preview-capsule").addEventListener("click", () => {
     const slug = dx.getSlug();
@@ -5628,9 +5677,11 @@
     const slug = dx.getSlug();
     if (!slug) return;
     if (!await askDanger("deleteProject", dx.t("studio.deleteConfirm"))) return;
-    runAction($("project-delete"), "git-status", async () => {
+    const menu = $("project-menu");
+    if (menu) menu.open = false;
+    runAction($("project-delete"), "workspace-status", async () => {
       await dx.api("/api/v1/playground/projects/" + slugPath(slug), { method: "DELETE" });
-      showStatus("git-status", dx.t("studio.saved"), false);
+      showStatus("workspace-status", dx.t("studio.saved"), false);
       dx.selectSlug(null);
     });
   });
@@ -5799,7 +5850,7 @@
 
   const opening = readQuery();
   loadMe();
-  showPanel(opening.panel, opening.tab);
+  showPanel(opening.panel, opening.tab, opening.sub);
   dx.watchSlug(onSlug);
   loadCatalog();
   loadGameIndex();
