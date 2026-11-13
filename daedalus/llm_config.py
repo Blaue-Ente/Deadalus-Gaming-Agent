@@ -173,7 +173,7 @@ PROVIDER_DEFAULTS: dict[str, dict] = {
     # Docs: https://build.nvidia.com  |  Key env: NVIDIA_API_KEY  |  Base: integrate.api.nvidia.com/v1
     "nvidia": {
         "base_url": "https://integrate.api.nvidia.com/v1",
-        "default_model": "qwen/qwen3-next-80b-a3b-instruct",
+        "default_model": "nvidia/nemotron-3-ultra-550b-a55b",
         "sdk": "openai",
     },
     # OmniRoute — local OpenAI-compat sidecar (free-tier fallback via model `auto`).
@@ -292,10 +292,10 @@ PRESET_MODELS = [
     {"id": "poolside/laguna-m.1",           "label": "Poolside Laguna M.1 💻 262K ($0 beta)",        "provider": "poolside", "tier": "power"},
     # ── NVIDIA NIM — free preview tier (rate-limited) ─────────────────────────
     # Base URL: https://integrate.api.nvidia.com/v1  |  Key env: NVIDIA_API_KEY
-    {"id": "mistralai/mistral-large-3-675b-instruct-2512", "label": "Mistral Large 3 675B (NVIDIA) 🆓 code", "provider": "nvidia", "tier": "power"},
-    {"id": "deepseek-ai/deepseek-v4-flash",             "label": "DeepSeek V4 Flash (NVIDIA) 🆓 ⚡",       "provider": "nvidia", "tier": "fast"},
-    {"id": "openai/gpt-oss-120b",                     "label": "GPT-OSS 120B (NVIDIA) 🆓 reasoning",  "provider": "nvidia", "tier": "power"},
-    {"id": "qwen/qwen3-next-80b-a3b-instruct",        "label": "Qwen3 Next 80B (NVIDIA) 🆓 ⚡",       "provider": "nvidia", "tier": "fast"},
+    {"id": "mistralai/mistral-large-4-1t-a52b", "label": "Mistral Large 4 (NVIDIA) 🆓 code", "provider": "nvidia", "tier": "power"},
+    {"id": "nvidia/nemotron-3.5-lightning-30b-a3b",             "label": "Nemotron 3.5 Lightning 30B (NVIDIA) 🆓 ⚡",       "provider": "nvidia", "tier": "fast"},
+    {"id": "openai/gpt-oss-20b",                      "label": "GPT-OSS 20B (NVIDIA) 🆓 reasoning",   "provider": "nvidia", "tier": "fast"},
+    {"id": "nvidia/nemotron-3-ultra-550b-a55b",        "label": "Nemotron 3 Ultra 550B (NVIDIA) 🆓 ⚡",       "provider": "nvidia", "tier": "fast"},
     # ── Local (Ollama / LM Studio / llama.cpp / vLLM) ────────────────────────
     # OmniRoute sidecar — virtual combos; the gateway picks a healthy free/paid target.
     {"id": "auto",              "label": "OmniRoute auto (sidecar) 🆓",         "provider": "omniroute", "tier": "cheap"},
@@ -308,7 +308,7 @@ PRESET_MODELS = [
     {"id": "local-model",          "label": "Loaded model (LM Studio) 🖥",         "provider": "lmstudio", "tier": "fast"},
     {"id": "local-model",          "label": "llama-server (llama.cpp) 🖥",         "provider": "llamacpp", "tier": "fast"},
     {"id": "local-model",          "label": "vLLM local 🖥",                       "provider": "vllm", "tier": "power"},
-    {"id": "meta/llama-4-maverick-17b-128e-instruct", "label": "Llama 4 Maverick (NVIDIA) 🆓 vision", "provider": "nvidia", "tier": "fast"},
+    {"id": "meta/llama-3.2-90b-vision-instruct", "label": "Llama 3.2 90B Vision (NVIDIA) 🆓 vision", "provider": "nvidia", "tier": "fast"},
     {"id": "deepseek-v4-flash",             "label": "DeepSeek V4 Flash (AllToken) ⚡",              "provider": "alltoken", "tier": "cheap"},
     {"id": "gemini-3-flash-preview",        "label": "Gemini 3 Flash (AllToken)",                   "provider": "alltoken", "tier": "cheap"},
     # ⚖️ Fast / balanced tier

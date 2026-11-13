@@ -384,13 +384,13 @@ def get_worker_config() -> dict:
     # NVIDIA free-only slot defaults (orchestrator master delegates to these workers)
     _nv_free_slots: dict[str, tuple[str, str]] = {
         "fast": ("nvidia", "openai/gpt-oss-20b"),
-        "balanced": ("nvidia", "deepseek-ai/deepseek-v4-flash"),
-        "deep": ("nvidia", "mistralai/mistral-large-3-675b-instruct-2512"),
-        "coder": ("nvidia", "deepseek-ai/deepseek-v4-flash"),
+        "balanced": ("nvidia", "nvidia/nemotron-3.5-lightning-30b-a3b"),
+        "deep": ("nvidia", "mistralai/mistral-large-4-1t-a52b"),
+        "coder": ("nvidia", "nvidia/nemotron-3.5-lightning-30b-a3b"),
         "planner": ("nvidia", "moonshotai/kimi-k2.6"),
-        "reviewer": ("nvidia", "mistralai/mistral-large-3-675b-instruct-2512"),
-        "analysis": ("nvidia", "deepseek-ai/deepseek-v4-pro"),
-        "claude": ("nvidia", "mistralai/mistral-large-3-675b-instruct-2512"),
+        "reviewer": ("nvidia", "mistralai/mistral-large-4-1t-a52b"),
+        "analysis": ("nvidia", "nvidia/nemotron-3-ultra-550b-a55b"),
+        "claude": ("nvidia", "mistralai/mistral-large-4-1t-a52b"),
     }
 
     result: dict[str, dict] = {}

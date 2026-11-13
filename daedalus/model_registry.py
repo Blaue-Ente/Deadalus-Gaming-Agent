@@ -353,7 +353,7 @@ DEFAULT_REGISTRY: list[dict] = [
         "id":             "llama4-maverick-nvidia",
         "display_name":   "Llama 4 Maverick (NVIDIA)",
         "provider":       "nvidia",
-        "model_id":       "meta/llama-4-maverick-17b-128e-instruct",
+        "model_id":       "meta/llama-3.2-90b-vision-instruct",
         "capabilities":   ["vision", "chat", "tools", "long_context"],
         "strengths":      "Multimodal (vision) за asset/скрийншот QA; 1M контекст; NVIDIA free tier ($0)",
         "weaknesses":     "Rate-limited (free preview); не топ за чист код",

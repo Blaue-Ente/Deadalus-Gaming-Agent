@@ -186,7 +186,7 @@ CATALOG: list[dict[str, Any]] = [
          provider="openai", model="gpt-4o",
          why="Direct OpenAI key, not OpenRouter.", cost="mid", rank=65),
     _row("nvidia-mistral-large", "Mistral Large (NVIDIA)", group="also", auto=True,
-         provider="nvidia", model="mistralai/mistral-large-3-675b-instruct-2512",
+         provider="nvidia", model="mistralai/mistral-large-4-1t-a52b",
          why="If you already have NVIDIA_API_KEY.", cost="mid", rank=80),
     _row("brain", "Studio Brain", group="choice",
          why="Use whatever model is selected in Studio → Brain.", cost="varies", needs_key=False),
