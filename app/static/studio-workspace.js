@@ -3749,6 +3749,12 @@
   function paintBrain(data) {
     const box = $("settings-brain");
     box.replaceChildren();
+    if (data && data.configured === false) {          // nothing set up yet: an empty state, not an error (PR1)
+      const note = document.createElement("p");
+      note.textContent = dx.t("studio.noModelYet");
+      box.append(note);
+      return;
+    }
     if (!data || data.ok === false) {
       showStatus("settings-status", dx.t("studio.requestFailed") + ": " + ((data && data.error) || ""), true);
       return;

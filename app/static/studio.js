@@ -679,7 +679,10 @@
       const sameTurn =
         !ov.this_turn ||
         (ov.this_turn.provider === brainP && ov.this_turn.model === brainM);
-      if (llm.ok && brainP && brainM) {
+      if (llm.configured === false) {
+        addPill(t("studio.noLlm"), "err");
+        pills.lastChild.title = t("studio.noModelYet");
+      } else if (llm.ok && brainP && brainM) {
         addPill(t("studio.brainPill", { provider: brainP, model: brainM }));
         if (!sameTurn && turnP && turnM) {
           addPill(t("studio.thisTurnPill", { provider: turnP, model: turnM }), "warn");

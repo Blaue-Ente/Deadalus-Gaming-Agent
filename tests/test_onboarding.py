@@ -106,7 +106,7 @@ def test_every_text_the_dialog_asks_for_exists_in_english_and_bulgarian(data):
     need |= {f"onb.use.{k['use']}" for k in rep["keys"]}
     need |= {f"onb.subq.q.{q}" for q in ("is_game", "wants_paid_assets")}
     need |= {f"onb.how.{i}" for i in ("brain", "unity", "disk")}       # steps in words, translated
-    need |= {"onb.brainActive", "onb.brainWeak"}
+    need |= {"onb.brainActive", "onb.brainWeak", "onb.brainDown"}
     js = (ROOT / "app" / "static" / "studio-onboarding.js").read_text(encoding="utf-8")
     need |= {k for k in re.findall(r'dx\.t\("(onb\.[\w.]+)"', js) if not k.endswith(".")}
     assert need - _strings("en") == set()
@@ -144,10 +144,11 @@ def test_daedalus_doctor_prints_the_check_and_exits_by_readiness():
 
 def test_the_brain_item_names_the_model_in_use_and_warns_about_a_small_local_one(data, monkeypatch):
     """Live test 2026-11-13: an OpenRouter key was set, .env pinned qwen2.5-coder:7b, the build wrote no files."""
-    from daedalus import llm_config
+    from daedalus import llm_config, local_llm
 
     monkeypatch.setattr(llm_config, "get_brain_config",
                         lambda: {"provider": "ollama", "model": "qwen2.5-coder:7b", "local": True})
+    monkeypatch.setattr(local_llm, "probe_endpoint", lambda *a, **k: {"ok": True, "models": ["qwen2.5-coder:7b"]})
     brain = next(i for i in onboarding.report()["items"] if i["id"] == "brain")
     assert brain["ok"] and brain["local"] and brain["weak"] and brain["active"] == "ollama qwen2.5-coder:7b"
     assert "small local model" in onboarding.text_report()

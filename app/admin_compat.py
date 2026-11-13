@@ -2309,14 +2309,23 @@ async def apply_llm_preset(preset_id: str, request: Request):
 @router.get("/daedalus/worker-config")
 async def get_worker_config_api():
     from daedalus.workers import get_worker_config as _gwc, WORKER_SLOTS
-    from daedalus.llm_config import list_preset_models
-    cfg = _gwc()
+    from daedalus.llm_config import get_brain_config, list_preset_models
+    # Nothing configured is not an error (PR1, M10): 200 with the slots that can be built and configured: false.
+    try:
+        configured = bool((get_brain_config() or {}).get("provider"))
+    except Exception:
+        configured = False
+    try:
+        cfg = _gwc()
+    except Exception:
+        cfg = {}
     safe: dict = {}
     for slot, slot_cfg in cfg.items():
         safe[slot] = {k: v for k, v in slot_cfg.items() if k != "api_key"}
         safe[slot]["api_key_set"] = bool(slot_cfg.get("api_key"))
         safe[slot]["label"] = WORKER_SLOTS.get(slot, {}).get("label", slot)
-    return JSONResponse({"ok": True, "slots": safe, "presets": list_preset_models()})
+    presets = list_preset_models()
+    return JSONResponse({"ok": True, "configured": configured, "slots": safe, "presets": presets})
 
 
 @router.post("/daedalus/test-provider")

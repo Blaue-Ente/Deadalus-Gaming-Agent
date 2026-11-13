@@ -223,6 +223,9 @@ async def capabilities() -> dict:
 async def llm_status() -> dict:
     try:
         return await asyncio.to_thread(_llm_status_payload)
+    except RuntimeError as exc:
+        # No provider configured is an empty state, not a failure (PR1, M10).
+        return {"ok": True, "configured": False, "reason": "No LLM provider is configured."}
     except Exception as exc:
         return {"ok": False, "error": str(exc)[:200]}
 

@@ -242,11 +242,24 @@ def activate(item_id: str, *, backend: str = "ollama") -> dict[str, Any]:
     return {"ok": True, "active": model, "backend": data["backend"], "item": row}
 
 
+_BACKEND_BEFORE_OFFLINE = "backend_before_offline"
+
+
 def set_offline(flag: bool) -> dict[str, Any]:
+    """Offline forces a local backend and remembers the backend it replaced; turning it off restores that one
+    (cloud when nothing was saved), so the brain is not left on Ollama (PR1, M6)."""
     data = load()
+    was_offline = bool(data.get("offline"))
     data["offline"] = bool(flag)
-    if flag and str(data.get("backend") or "auto") in ("auto", "cloud", ""):
-        data["backend"] = "ollama"
+    if flag and not was_offline:
+        current = str(data.get("backend") or "auto")
+        data[_BACKEND_BEFORE_OFFLINE] = current
+        if current in ("auto", "cloud", ""):
+            data["backend"] = "ollama"
+    elif not flag and was_offline:
+        restored = str(data.pop(_BACKEND_BEFORE_OFFLINE, "") or "cloud")
+        if str(data.get("backend") or "") == "ollama":
+            data["backend"] = restored
     save(data)
     return {"ok": True, "offline": data["offline"], "backend": data.get("backend")}
 

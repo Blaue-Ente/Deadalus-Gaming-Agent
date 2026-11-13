@@ -326,10 +326,15 @@ def _provider_ready(provider: str) -> bool:
 
 
 def _brain_ready() -> bool:
-    cfg = llm_config.get_config()
-    if cfg.get("api_key"):
-        return True
-    return _provider_ready(str(cfg.get("provider") or ""))
+    """True when the main model can be used. No provider configured is "not ready", never an error: the catalog
+    must still list every entry (PR1, M1)."""
+    try:
+        cfg = llm_config.get_config()
+        if cfg.get("api_key"):
+            return True
+        return _provider_ready(str(cfg.get("provider") or ""))
+    except Exception:
+        return False
 
 
 def _entry_available(row: dict[str, Any]) -> bool:

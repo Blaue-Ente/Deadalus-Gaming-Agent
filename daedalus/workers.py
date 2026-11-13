@@ -377,7 +377,10 @@ def get_worker_config() -> dict:
         resolve_provider_api_key,
     )
 
-    master = get_brain_config()
+    try:
+        master = get_brain_config() or {}
+    except Exception:                      # no provider configured yet: slots still resolve from their own settings
+        master = {}
     db_cfg = _read_worker_db()
     nv_free = is_nvidia_free_only()
 

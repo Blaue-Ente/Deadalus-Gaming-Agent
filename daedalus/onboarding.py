@@ -129,13 +129,24 @@ def model_size_b(model: str) -> float | None:
     return float(m.group(1)) if m else None
 
 
+def _local_reachable(provider: str, base_url: str = "") -> bool:
+    """A local model server answers GET /models within about a second. Never raises (PR1, M9)."""
+    try:
+        from .local_llm import default_base_url, probe_endpoint
+        url = base_url or default_base_url(provider)
+        return bool(probe_endpoint(url, timeout=1.2).get("ok"))
+    except Exception:
+        return False
+
+
 def _brain() -> dict[str, Any]:
     """A model to think with: any cloud key, a key saved in Connectors, or a local model that answers. Says which
     model Daedalus actually uses (live test 2026-11-13: an OpenRouter key was set, but .env pinned a local 7B model
-    that wrote no files), and warns when that is a small local model."""
+    that wrote no files), and warns when that is a small local model. A local brain that does not answer is not ok
+    (PR1, M9: a dead Ollama is not "ready")."""
     keys = [k for k in BRAIN_KEYS if key_set(k)]
     ok = bool(keys)
-    active, local, weak = "", False, False
+    active, local, weak, reachable = "", False, False, None
     try:
         from .llm_config import get_brain_config
         from .local_llm import is_local_provider
@@ -143,13 +154,18 @@ def _brain() -> dict[str, Any]:
         provider, model = str(cfg.get("provider") or ""), str(cfg.get("model") or "")
         active = f"{provider} {model}".strip()
         local = bool(cfg.get("local")) or is_local_provider(provider)
-        ok = ok or bool(cfg.get("api_key")) or local
+        if local:
+            reachable = _local_reachable(provider, str(cfg.get("base_url") or ""))
+            ok = reachable
+        else:
+            ok = ok or bool(cfg.get("api_key"))
         size = model_size_b(model)
         weak = local and size is not None and size <= SMALL_LOCAL_B
     except Exception:
         pass
+    extra: dict[str, Any] = {"reachable": reachable} if reachable is not None else {}
     return _item("brain", "required", ok, active or ", ".join(keys), active=active, local=local, weak=weak,
-                 keys=keys)
+                 keys=keys, **extra)
 
 
 def _pillow() -> dict[str, Any]:
