@@ -54,8 +54,29 @@ def key() -> str:
     return env("SUBQ_API_KEY")
 
 
+_OFF = {"0", "false", "off", "no"}
+
+
+def switch_on() -> bool:
+    """The owner's switch (Settings and the onboarding): DAEDALUS_SUBQ_SHADOW pins it, else the saved choice, else on."""
+    env = (os.environ.get("DAEDALUS_SUBQ_SHADOW") or "").strip().lower()
+    if env:
+        return env not in _OFF
+    try:
+        from . import settings_file
+        saved = settings_file.load().get("subq_shadow")
+        return True if saved is None else bool(saved)
+    except Exception:
+        return True
+
+
+def set_switch(on: bool) -> None:
+    from . import settings_file
+    settings_file.update({"subq_shadow": bool(on)})
+
+
 def enabled() -> bool:
-    return os.environ.get("DAEDALUS_SUBQ_SHADOW", "1").strip().lower() not in {"0", "false", "off", "no"} and bool(key())
+    return switch_on() and bool(key())
 
 
 def ask(state: str, names: list[str], *, api_key: str = "") -> dict[str, float] | None:

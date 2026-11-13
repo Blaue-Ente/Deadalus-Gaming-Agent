@@ -279,6 +279,83 @@ button.chip {
   margin: 0 0 0.45rem;
 }
 .mentor-dlg .row { margin-top: 0.2rem; }
+.onb-dlg {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raise);
+  color: var(--ink);
+  padding: 1rem 1.1rem;
+  width: min(46rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+}
+.onb-dlg::backdrop { background: rgba(8, 6, 4, 0.6); }
+.onb-top { display: flex; gap: 0.8rem; align-items: flex-start; justify-content: space-between; }
+.onb-title { font-family: var(--serif); color: var(--gold-2); margin: 0 0 0.3rem; font-size: 1.35rem; }
+.onb-dlg .kicker { margin: 0 0 0.2rem; }
+.onb-section { border-top: 1px solid var(--line); padding: 0.7rem 0 0.4rem; }
+.onb-h { margin: 0 0 0.4rem; font-size: 0.95rem; color: var(--gold); }
+.onb-p { margin: 0 0 0.4rem; font-size: 0.85rem; line-height: 1.45; }
+.onb-muted { color: var(--muted); }
+.onb-err { color: var(--err); }
+.onb-verdict { margin: 0 0 0.3rem; font-weight: 600; color: var(--warn); }
+.onb-verdict[data-ok="true"] { color: var(--ok); }
+.onb-code {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  background: var(--bg-input);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 0.05rem 0.3rem;
+  overflow-wrap: anywhere;
+}
+.onb-list, .onb-keys { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.45rem; }
+.onb-item { border: 1px solid var(--line); border-radius: var(--radius); padding: 0.45rem 0.6rem; background: var(--bg-deep); }
+.onb-item-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.45rem; font-size: 0.86rem; }
+.onb-mark { width: 1rem; text-align: center; color: var(--muted); }
+.onb-item[data-ok="true"] .onb-mark { color: var(--ok); }
+.onb-item[data-ok="false"][data-level="required"] .onb-mark { color: var(--err); }
+.onb-level { font-size: 0.7rem; color: var(--faint); text-transform: uppercase; letter-spacing: 0.04em; }
+.onb-detail { font-size: 0.75rem; color: var(--muted); overflow-wrap: anywhere; }
+.onb-why, .onb-how, .onb-needs { margin: 0.25rem 0 0 1.45rem; font-size: 0.8rem; color: var(--muted); line-height: 1.4; }
+.onb-needs { color: var(--warn); }
+.onb-link { display: inline-block; margin: 0.2rem 0 0 1.45rem; font-size: 0.78rem; color: var(--gold-2); }
+.onb-key { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: baseline; font-size: 0.8rem; }
+.onb-key-use { color: var(--muted); }
+.onb-key-state { margin-left: auto; color: var(--faint); }
+.onb-key[data-ok="true"] .onb-key-state { color: var(--ok); }
+.onb-switch { display: flex; gap: 0.55rem; align-items: center; font-size: 0.86rem; margin: 0.2rem 0 0.35rem; cursor: pointer; }
+.onb-switch input {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 0 0 auto;
+  width: 2.4rem;
+  height: 1.3rem;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-input);
+  position: relative;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.onb-switch input::after {
+  content: "";
+  position: absolute;
+  top: 0.12rem;
+  left: 0.15rem;
+  width: 0.95rem;
+  height: 0.95rem;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.onb-switch input:checked { background: var(--gold); border-color: var(--gold); }
+.onb-switch input:checked::after { transform: translateX(1.05rem); background: var(--ink-on-gold); }
+.onb-switch input:disabled { opacity: 0.5; cursor: not-allowed; }
+.onb-switch input:focus-visible { outline: 2px solid var(--gold-2); outline-offset: 2px; }
+.onb-actions { justify-content: flex-end; gap: 0.5rem; margin-top: 0.6rem; }
 .mentor-spend {
   font-size: 0.68rem;
   color: var(--faint);
@@ -289,14 +366,14 @@ button.chip {
   color: var(--warn);
 }
 
-.dx-lang {
+.dx-lang, .onb-lang {
   display: inline-flex;
   flex-shrink: 0;
   border: 1px solid var(--line);
   border-radius: 999px;
   overflow: hidden;
 }
-.dx-lang button {
+.dx-lang button, .onb-lang button {
   border: 0;
   border-radius: 0;
   padding: 0.32rem 0.55rem;
@@ -305,7 +382,7 @@ button.chip {
   background: transparent;
   color: var(--muted);
 }
-.dx-lang button[aria-pressed="true"] {
+.dx-lang button[aria-pressed="true"], .onb-lang button[aria-pressed="true"] {
   background: rgba(201, 162, 39, 0.16);
   color: var(--gold-2);
 }

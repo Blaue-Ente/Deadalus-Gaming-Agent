@@ -3,6 +3,14 @@
 The GitLab tree **is** the product. You copy it once (ZIP or `git clone`), then
 pick an install path. Studio UI copy may still be Bulgarian; these docs are English.
 
+## Check this computer first
+
+`daedalus doctor` (or Studio → **Setup**, which opens by itself on first run) checks Python (3.11+, 3.12
+recommended), Daedalus's packages, a model to think with (one cloud key such as `NVIDIA_API_KEY`, or Ollama),
+Pillow, a browser for proofs, git, Node, Ollama, Godot, Unity and free disk space. It prints the install command
+for whatever is missing, which keys are set (names only), and which abilities are ready. It exits 1 while
+something required is missing. `DAEDALUS_ONBOARDING_AUTO=0` stops Studio from opening it by itself.
+
 ## Choose an install path
 
 | Path | Best for | Needs |

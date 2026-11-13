@@ -56,6 +56,7 @@ def main(argv: list[str] | None = None) -> None:
         help="Prompt to send",
     )
 
+    sub.add_parser("doctor", help="Check this computer: Python, packages, engines, keys, what Daedalus can do")
     models = sub.add_parser("models", help="Show configured LLM + probe local backends")
     sub.add_parser("computer", help="Show Play Lab / SmolVM computer backends")
 
@@ -93,6 +94,12 @@ def main(argv: list[str] | None = None) -> None:
         if getattr(args, "force", False):
             cmd.append("--force")
         raise SystemExit(subprocess.call(cmd))
+    if args.cmd == "doctor":
+        os.environ.setdefault("DAEDALUS_STANDALONE", "1")
+        from daedalus.onboarding import report, text_report
+        rep = report()
+        print(text_report(rep))
+        raise SystemExit(0 if rep["ready"] else 1)
     if args.cmd == "models":
         os.environ.setdefault("DAEDALUS_STANDALONE", "1")
         from daedalus.local_llm import probe_all

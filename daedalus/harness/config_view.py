@@ -122,6 +122,16 @@ def _write_auto_apply(v: Any) -> Any:
     return auto_apply.set_auto_apply_enabled(bool(v))
 
 
+def _subq() -> dict[str, Any]:
+    from .. import settings_file, subq_judge
+    return {"effective": subq_judge.switch_on(), "persisted": settings_file.load().get("subq_shadow"), "default": True}
+
+
+def _write_subq(v: Any) -> Any:
+    from .. import subq_judge
+    return subq_judge.set_switch(bool(v))
+
+
 def _kv() -> dict[str, Any]:
     from .. import kv
     b = kv.backend()
@@ -144,6 +154,7 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("auto_apply.enabled", "settings.autoApply", "evolution", "bool", "", _auto_apply, _write_auto_apply),
     Setting("play.max_sessions", "settings.playMax", "runtime", "int", "DAEDALUS_PLAY_MAX", _play_max, _write_play_max,
             bounds=_play_bounds),
+    Setting("subq.shadow", "settings.subqShadow", "quality", "bool", "DAEDALUS_SUBQ_SHADOW", _subq, _write_subq),
     Setting("kv.backend", "settings.kvBackend", "storage", "enum", "DAEDALUS_KV", _kv, None),
     Setting("brain.model", "settings.brainModel", "runtime", "str", "DAEDALUS_MODEL", _brain, None),
 )

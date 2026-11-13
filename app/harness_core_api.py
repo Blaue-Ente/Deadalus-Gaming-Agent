@@ -22,6 +22,27 @@ def harness_capabilities(request: Request, kind: str = "", status: str = "") -> 
     return registry_payload(request.app, kind=kind.strip(), status=status.strip())
 
 
+@router.get("/api/v1/onboarding")
+def onboarding_report(quick: bool = False) -> dict[str, Any]:
+    """First run: what this computer has and needs, which keys are set (names only), the SubQ switch, abilities.
+    ``quick`` answers only whether Studio should open it (every page load asks; the checks take a second or two).
+    Plain def on purpose: the checks start small processes (git --version), so FastAPI runs it in a threadpool."""
+    from daedalus.onboarding import auto_open, report, seen
+
+    if quick:
+        return {"ok": True, "seen": seen(), "auto_open": auto_open()}
+    return report()
+
+
+@router.post("/api/v1/onboarding/seen")
+def onboarding_seen() -> dict[str, Any]:
+    """The owner closed the onboarding: Studio stops opening it on start (it stays under Setup)."""
+    from daedalus.onboarding import mark_seen
+
+    mark_seen()
+    return {"ok": True}
+
+
 @router.get("/api/v1/harness/subq")
 def harness_subq(limit: int = 20) -> dict[str, Any]:
     """SubQ Snap in shadow mode: per question, how often it agreed with Daedalus's own decision, and where not."""
