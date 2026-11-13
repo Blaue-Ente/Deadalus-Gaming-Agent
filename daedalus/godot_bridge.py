@@ -36,6 +36,8 @@ var _errors: PackedStringArray = []
 var _notes: PackedStringArray = []
 
 func _ready() -> void:
+	# Keep answering while the game pauses its tree (start menus and pause screens do: live test 2026-11-13).
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	var args := OS.get_cmdline_user_args()
 	for i in args.size():
 		if args[i] == "--daedalus-bridge":

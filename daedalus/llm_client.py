@@ -77,12 +77,33 @@ def _usage_dict(usage: Any) -> dict[str, Any]:
     return out
 
 
-def _meter(resp: Any, *, model: str, role: str) -> dict[str, Any]:
+def _meter(resp: Any, *, model: str, role: str, intent: str = "writer", provider: str = "") -> dict[str, Any]:
     from .llm_cost import parse_usage
     from . import run_budget
     parsed = parse_usage(getattr(resp, "usage", None), resp)
     run_budget.note_usage(parsed, model=model, role=role)
+    _trace(parsed, model=model, intent=intent, provider=provider)
     return parsed
+
+
+def _trace(parsed: dict[str, Any], *, model: str, intent: str, provider: str) -> None:
+    """The run's activity and cost see this call too (live Godot test 2026-11-13: the writer's tool rounds went
+    around the gateway, so a build that wrote 11 files showed 3 writer calls and $0.02). Never raises."""
+    try:
+        from .harness import gateway
+        from .harness.runs import current_run_id
+        if not provider:
+            from .llm_config import get_config
+            provider = str(get_config().get("provider") or "")
+        gateway._emit({
+            "intent": intent, "provider": provider, "model": model, "source": "llm_client", "ok": True,
+            "error_type": None, "budget_stopped": False, "latency_ms": None,
+            "prompt_tokens": parsed.get("prompt_tokens"), "completion_tokens": parsed.get("completion_tokens"),
+            "cost_usd": parsed.get("cost_usd"), "cost_known": bool(parsed.get("cost_known")), "image_sha256": [],
+            "client_id": "llm_client", "slug": "", "run_id": current_run_id() or None,
+        })
+    except Exception:
+        log.debug("llm_client trace skipped", exc_info=True)
 
 
 def _budget_stop_complete(*, provider: str, model: str) -> dict[str, Any]:
@@ -452,7 +473,7 @@ async def call_with_tools(
                     "input": mark_cut_tool_input(block.input, cut=resp.stop_reason == "max_tokens" and _i == _last_use,
                                                  max_tokens=max_tokens),
                 })
-        billed = _meter(resp, model=model, role="writer")
+        billed = _meter(resp, model=model, role="writer", intent="tools", provider=provider)
         try:
             routing_watchdog.note_success(source="llm_client.call_with_tools")
         except Exception:
@@ -568,7 +589,7 @@ async def call_with_tools(
             "input": args,
         })
     stop = "tool_use" if any(b.get("type") == "tool_use" for b in content) else "end_turn"
-    billed = _meter(resp, model=model, role="writer")
+    billed = _meter(resp, model=model, role="writer", intent="tools", provider=provider)
     try:
         routing_watchdog.note_success(source="llm_client.call_with_tools")
     except Exception:
