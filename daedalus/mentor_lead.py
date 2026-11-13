@@ -573,7 +573,15 @@ def is_game(loop: Any, request: str) -> bool:
 
 
 def is_game_build(playbook_id: str, request: str, slug: str = "") -> bool:
-    """The one game test, for the build prompt and the gates alike (review 2026-11-12: two copies disagreed)."""
+    """The one game test, for the build prompt and the gates alike (review 2026-11-12: two copies disagreed).
+    SubQ Snap judges the same request in the background (shadow mode, owner 2026-11-13); this answer decides."""
+    result = _is_game_build(playbook_id, request, slug)
+    from .subq_judge import shadow
+    shadow("is_game", request, result)
+    return result
+
+
+def _is_game_build(playbook_id: str, request: str, slug: str) -> bool:
     if playbook_id in GAME_PLAYBOOKS or _GAME_WORDS.search(request or ""):
         return True
     if not slug:

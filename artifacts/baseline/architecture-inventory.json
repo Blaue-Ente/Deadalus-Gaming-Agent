@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-13T06:56:41.364192+00:00",
+  "generated_at": "2026-11-13T08:18:35.958446+00:00",
   "package_version": "0.3.8",
-  "git_commit": "341dad187b28d97850a252304239413f0301b84c",
+  "git_commit": "608f0dedc24c22741f86ea5b6736f2cd5b29eb83",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -128,8 +128,8 @@
     ]
   },
   "tests": {
-    "modules": 147,
-    "functions": 1620
+    "modules": 148,
+    "functions": 1626
   },
   "modules": {
     "daedalus": [
@@ -399,6 +399,7 @@
       "daedalus/stream.py",
       "daedalus/studio_shelf.py",
       "daedalus/subagents.py",
+      "daedalus/subq_judge.py",
       "daedalus/task_effort.py",
       "daedalus/task_playbooks.py",
       "daedalus/task_state.py",
