@@ -183,6 +183,20 @@ class LLMCallError(RuntimeError):
 _OVERRIDE_INTENTS = ("planner", "critic", "tools", "scout", "asset")
 
 
+def _member_route(cfg: dict[str, Any]) -> dict[str, Any]:
+    """Run an explicit/override route through the team-member credential rules. A member with no key for the
+    route's provider gets ``routing_error`` set, so the owner's env key is never used on their behalf."""
+    from .credentials import member_config
+
+    out = member_config(cfg)
+    if out is not cfg and out.get("key_owner") == "none" and not out.get("routing_error"):
+        out = dict(out)
+        out["routing_error"] = (
+            f"No API key available for {out.get('provider') or 'this provider'} on your team account."
+        )
+    return out
+
+
 def _override_model_tag(intent: str) -> str:
     try:
         from .harness import gateway as _gw
@@ -320,11 +334,19 @@ async def complete(
     from .local_llm import is_local_provider, resolve_local_config
     from .model_router import config_for_explicit_model
 
+    from_override = False
     if not (model and str(model).strip()):
-        model = _override_model_tag(intent) or model
+        _tag = _override_model_tag(intent)
+        if _tag:
+            model, from_override = _tag, True
     base = get_config()
-    cfg = config_for_explicit_model(base, model, source="llm_client.complete")
+    cfg = _member_route(config_for_explicit_model(base, model, source="llm_client.complete"))
     err_note = str(cfg.get("routing_error") or "").strip()
+    if err_note and from_override:
+        log.warning("intent override %r ignored (%s); using the brain model", model, err_note)
+        model = None
+        cfg = dict(base)
+        err_note = str(cfg.get("routing_error") or "").strip()
     if err_note:
         log.warning("LLM routing: %s", err_note)
         try:
@@ -447,7 +469,7 @@ async def call_with_tools(
     if _tag:  # the owner's model for tool rounds; a tag without credentials keeps the brain (and is logged)
         from .model_router import config_for_explicit_model
 
-        _over = config_for_explicit_model(cfg, _tag, source="llm_client.call_with_tools")
+        _over = _member_route(config_for_explicit_model(cfg, _tag, source="llm_client.call_with_tools"))
         if _over.get("routing_error"):
             log.warning("tools override ignored: %s", _over["routing_error"])
         else:

@@ -7,16 +7,19 @@ retry is available) or ``auto`` (retry once on local Ollama). ``fallback.trigger
 from __future__ import annotations
 
 import os
+import re
 
 MODES = ("off", "ask", "auto")
 TRIGGERS = ("both", "credits", "offline")
 DEFAULT_MODE = "off"
 DEFAULT_TRIGGERS = "both"
 
-_CREDIT_WORDS = ("401", "402", "403", "429", "quota", "credit", "insufficient", "unauthorized", "invalid_api_key",
+_CREDIT_CODES = re.compile(r"\b(401|402|403|429)\b")
+_OFFLINE_CODES = re.compile(r"\b(502|503)\b")
+_CREDIT_WORDS = ("quota", "credit", "insufficient", "unauthorized", "invalid_api_key",
                  "incorrect api key", "permission", "rate limit", "billing")
 _OFFLINE_WORDS = ("connection", "timeout", "timed out", "dns", "name resolution", "unreachable", "econnrefused",
-                  "502", "503", "unavailable")
+                  "unavailable")
 
 
 def _saved(key: str) -> str | None:
@@ -50,9 +53,9 @@ def triggers() -> str:
 def classify(error: str) -> str | None:
     """``credits``, ``offline`` or None for an error text."""
     t = (error or "").lower()
-    if any(w in t for w in _CREDIT_WORDS):
+    if _CREDIT_CODES.search(t) or any(w in t for w in _CREDIT_WORDS):
         return "credits"
-    if any(w in t for w in _OFFLINE_WORDS):
+    if _OFFLINE_CODES.search(t) or any(w in t for w in _OFFLINE_WORDS):
         return "offline"
     return None
 

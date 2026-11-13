@@ -3445,9 +3445,10 @@
   }));
 
   $("build-ideas").addEventListener("click", async (ev) => {
+    const btn = ev.currentTarget;
     const slug = dx.getSlug();
     if (slug && !await ask("ideas", dx.t("studio.ideasConfirm", { slug }))) return;
-    extrasRun("build-extras", ev.currentTarget, async (slug2, say, live) => {
+    extrasRun("build-extras", btn, async (slug2, say, live) => {
       const res = await postJson(PGX + "/projects/" + slugPath(slug2) + "/suggest", { lang: uiLang() });
       if (!live()) return;
       const ideas = (res && res.suggestions) || [];
@@ -3492,9 +3493,10 @@
   }));
 
   $("build-describe").addEventListener("click", async (ev) => {
+    const btn = ev.currentTarget;
     const slug = dx.getSlug();
     if (slug && !await ask("describe", dx.t("studio.describeConfirm", { slug }))) return;
-    extrasRun("build-extras", ev.currentTarget, async (slug2, say, live) => {
+    extrasRun("build-extras", btn, async (slug2, say, live) => {
       const project = projectOf(slug2) || {};
       const res = await postJson(PGX + "/ai-gen-desc", {
         name: project.name || slug2, kind: project.kind || "static", criteria: ($("build-idea").value || "").trim(), lang: uiLang(),
@@ -3555,9 +3557,10 @@
   }));
 
   $("preview-backup").addEventListener("click", async (ev) => {
+    const btn = ev.currentTarget;
     const slug = dx.getSlug();
     if (slug && !await ask("backup", dx.t("studio.backupConfirm", { slug }))) return;
-    extrasRun("preview-extras", ev.currentTarget, async (slug2, say) => {
+    extrasRun("preview-extras", btn, async (slug2, say) => {
       const res = await postJson(PGX + "/projects/" + slugPath(slug2) + "/backup-workspace", {});
       if (res && res.ok === true) say(dx.t("studio.backupDone", { kb: Math.round((res.size_bytes || 0) / 1024) }), false);
       else if (res && res.skipped) say(dx.t("studio.backupSkipped", { why: res.reason || "?" }), true);   // skipped is not done
@@ -3589,9 +3592,10 @@
   }
 
   $("preview-tunnel").addEventListener("click", async (ev) => {
+    const btn = ev.currentTarget;
     const slug = dx.getSlug();
     if (slug && !await ask("tunnel", dx.t("studio.tunnelConfirm", { slug }))) return;
-    extrasRun("preview-extras", ev.currentTarget, async (slug2, say, live) => {
+    extrasRun("preview-extras", btn, async (slug2, say, live) => {
       const res = await postJson(PGX + "/projects/" + slugPath(slug2) + "/run", { install_deps: true, tunnel: true });
       if (!res || res.ok !== true) throw new Error((res && res.error) || dx.t("studio.requestFailed"));
       let status = res.run || {};
@@ -3718,9 +3722,10 @@
     });
   });
   $("app-data-clear").addEventListener("click", async (ev) => {
+    const btn = ev.currentTarget;
     const slug = appDataSlug();
     if (!slug || !await askDanger("appDataClear", dx.t("studio.appDataClearConfirm", { slug }))) return;
-    appDataRun(ev.currentTarget, async (s, say, gen) => {
+    appDataRun(btn, async (s, say, gen) => {
       const res = await dx.api(appDataPath(s, null), { method: "DELETE" });
       await loadAppKeys(s, gen);
       say(dx.t("studio.appDataCleared", { n: res.deleted || 0 }), false);

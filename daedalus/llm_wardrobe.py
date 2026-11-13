@@ -233,6 +233,7 @@ def activate(item_id: str, *, backend: str = "ollama") -> dict[str, Any]:
     model = row["ollama"] if row else item_id
     data = load()
     data["backend"] = backend or "ollama"
+    data.pop("backend_before_offline", None)   # an explicit choice wins over the saved pre-offline backend
     data["active"] = model
     if row:
         roles = dict(data.get("roles") or {})
@@ -273,6 +274,7 @@ def use_local(backend: str = "ollama") -> dict[str, Any]:
         p = "ollama"
     data = load()
     data["backend"] = p
+    data.pop("backend_before_offline", None)
     save(data)
     return {"ok": True, "backend": data["backend"], "active": data.get("active")}
 
@@ -280,6 +282,7 @@ def use_local(backend: str = "ollama") -> dict[str, Any]:
 def use_cloud() -> dict[str, Any]:
     data = load()
     data["backend"] = "cloud"
+    data.pop("backend_before_offline", None)
     data["active"] = None
     data["offline"] = False
     save(data)

@@ -216,6 +216,11 @@ def _locked(s: Setting, env_value: str | None) -> bool:
             int(env_value)
         except ValueError:
             return False
+    if s.kind == "enum" and s.choices is not None:
+        try:
+            return env_value.strip().lower() in s.choices()
+        except Exception:
+            return True
     return True
 
 

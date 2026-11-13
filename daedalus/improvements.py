@@ -827,6 +827,8 @@ async def review_gate_critique(user_message: str, draft_reply: str,
             # The owner's critic model (Settings) wins over the cheap reviewer default; env locks are honoured
             # inside ``model_tag_for``. Without a route the gateway resolves the override itself.
             _critic_tag = _gw.model_tag_for("critic")
+            if _critic_tag and _gw.resolve("critic").routing_error:
+                _critic_tag = None  # a saved critic model with no credentials: the cheap reviewer route still runs
             _res = await _gw.call(
                 "critic", [{"role": "user", "content": user_prompt}], system=sys_prompt, max_tokens=400,
                 route=None if _critic_tag else _gw.route_for(_prov, review_model, key, url),

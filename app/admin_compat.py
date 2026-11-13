@@ -2315,10 +2315,7 @@ async def get_worker_config_api():
         configured = bool((get_brain_config() or {}).get("provider"))
     except Exception:
         configured = False
-    try:
-        cfg = _gwc()
-    except Exception:
-        cfg = {}
+    cfg = _gwc()
     safe: dict = {}
     for slot, slot_cfg in cfg.items():
         safe[slot] = {k: v for k, v in slot_cfg.items() if k != "api_key"}

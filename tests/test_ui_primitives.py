@@ -115,7 +115,7 @@ def test_human_error_and_empty_state(studio_server):
             llm: h(new Error('llm_failed')), mentor: h('no_mentor_model'),
             prov: h(new Error('No LLM provider configured: set a key')),
             syn: h('synthesis_failed'), search: h('search_failed'),
-            key: h(new Error('HTTP 429')), credit: h('insufficient credits'),
+            key: h(new Error('openrouter HTTP 429')), credit: h('model: insufficient credits'),
             gen: h(new Error('boom')), raw: h(new Error('boom'), { raw: true }),
             det: h('llm_failed', { details: true }),
           };
@@ -133,4 +133,34 @@ def test_human_error_and_empty_state(studio_server):
         assert page.locator("#probe p").inner_text() == "Nothing yet."
         page.locator("#probe button").click()
         assert page.evaluate("() => window.__clicked") == 1
+        browser.close()
+
+
+def test_human_error_keeps_git_errors_and_only_maps_model_key_errors(studio_server):
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch()
+        page = browser.new_page()
+        page.goto(studio_server["url"] + "/", wait_until="domcontentloaded")
+        page.wait_for_function("() => !!(window.dxStudio && window.dxStudio.humanError)")
+        got = page.evaluate("""() => {
+          const h = window.dxStudio.humanError;
+          return {
+            gh: h('GitHub 403: resource not accessible'), net: h('Netlify 403 forbidden', { raw: true }),
+            keyFirst: h('llm_failed: openrouter 401 unauthorized'), noModel: h('llm_failed'),
+            quota: h('model quota exceeded'), aborted: h('request aborted by peer', { raw: true }),
+            timeout: h('request timed out'), abortErr: h(Object.assign(new Error('x'), { name: 'AbortError' })),
+            rawMapped: h('llm_failed', { raw: true }), keyRaw: h('openai 429', { raw: true }),
+          };
+        }""")
+        key = "The model provider rejected the key or is out of credits."
+        assert got["gh"] == "Something went wrong."
+        assert got["net"] == "Netlify 403 forbidden"
+        assert got["keyFirst"] == key and got["quota"] == key
+        assert got["noModel"] == "No model is set up yet. Open Settings to choose one."
+        assert got["aborted"] == "request aborted by peer"                      # not a timeout any more
+        assert got["timeout"] == got["abortErr"] != "Something went wrong."
+        assert got["rawMapped"] == "No model is set up yet. Open Settings to choose one. (llm_failed)"
+        assert got["keyRaw"] == key + " (openai 429)"
         browser.close()

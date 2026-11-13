@@ -42,6 +42,10 @@ PROVIDER_ENV_KEYS: dict[str, str] = {
 LOOPBACK_GATEWAYS = frozenset({"omniroute"})
 
 
+class NotConfiguredError(RuntimeError):
+    """No LLM provider is configured (an empty state, not a failure)."""
+
+
 def is_loopback_gateway(provider: str) -> bool:
     """True for a loopback OpenAI-compat gateway that is not an Ollama-class backend."""
     return (provider or "").strip().lower() in LOOPBACK_GATEWAYS
@@ -678,7 +682,7 @@ def _resolve_llm_config() -> dict:
     if local and local.get("reachable"):
         return local
 
-    raise RuntimeError(
+    raise NotConfiguredError(
         "No LLM provider configured. "
         "Set ALLTOKEN_API_KEY, OPENROUTER_API_KEY, NOVITA_API_KEY or NVIDIA_API_KEY, "
         "or DAEDALUS_API_KEY + DAEDALUS_MODEL, "

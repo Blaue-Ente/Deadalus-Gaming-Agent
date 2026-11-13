@@ -186,3 +186,105 @@ def test_scout_default_falls_back_to_the_brain_without_an_alltoken_key(env, monk
     assert env.resolve("scout").source == "registry-default"
     env.set_override("scout", "groq:mine")
     assert env.model_tag_for("scout") == "groq:mine"
+
+
+# ── review fixes, wave 1 ─────────────────────────────────────────────────────────────────────────────────────────
+def _as_member(monkeypatch, role="designer"):
+    from daedalus import team
+
+    monkeypatch.setattr(team, "current", lambda: team.Member("d1", "Dee", role))
+
+
+def test_a_members_override_never_uses_the_owners_env_key(env, monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "owner-secret")
+    _as_member(monkeypatch)
+    seen = _capture(monkeypatch)
+    out = _complete(intent="json", model="openrouter:x/y")               # caller-chosen: refused, never the owner's key
+    assert not seen and out.get("routing_failed") is True
+    env.set_override("planner", "openrouter:x/y")
+    out = _complete(intent="json")                                        # override: dropped, the brain cfg is kept
+    assert seen and all(c.get("api_key") != "owner-secret" for c in seen)
+    assert seen[-1]["model"] == "owner/brain"
+
+
+def test_a_members_tool_override_is_dropped_without_their_key(env, monkeypatch):
+    from daedalus import llm_client
+
+    _as_member(monkeypatch)
+    over = {"provider": "openrouter", "model": "x/y", "api_key": "owner-secret", "base_url": "http://x", "sdk": "openai"}
+    got = llm_client._member_route(over)
+    assert got.get("routing_error") and got.get("api_key") != "owner-secret"
+
+
+def test_the_owner_keeps_the_override_route(env, monkeypatch):
+    seen = _capture(monkeypatch)
+    env.set_override("planner", "groq:llama-planner")
+    _complete(intent="json")
+    assert seen[-1]["api_key"] == "g"
+
+
+def test_a_dead_override_falls_back_to_the_brain_instead_of_failing(env, monkeypatch):
+    seen = _capture(monkeypatch)
+    env.set_override("planner", "groq:llama-planner")
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    out = _complete(intent="json")
+    assert not out.get("routing_failed") and out["reply"] == "ok"
+    assert seen[-1]["model"] == "owner/brain"
+    out = _complete(intent="json", model="groq:explicit")                # a caller-chosen dead model still reports
+    assert out.get("routing_failed") is True
+
+
+def test_fallback_codes_match_whole_numbers_only():
+    from daedalus import routing_fallback as rf
+
+    assert rf.classify("you requested 14029 tokens") is None
+    assert rf.classify("max 5030 reached") is None
+    assert rf.classify("HTTP 429 too many") == "credits"
+    assert rf.classify("error code: 503") == "offline"
+    assert rf.classify("the quota is gone") == "credits"
+
+
+def test_an_unparsable_enum_env_pin_does_not_lock(env, monkeypatch):
+    from daedalus.harness import config_view
+
+    def row():
+        return next(r for r in config_view.config_payload()["settings"] if r["key"] == "fallback.mode")
+
+    monkeypatch.setenv("DAEDALUS_FALLBACK", "yes")
+    assert row()["env_locked"] is False and row()["writable"] is True
+    monkeypatch.setenv("DAEDALUS_FALLBACK", "auto")
+    assert row()["env_locked"] is True and row()["writable"] is False
+
+
+def test_a_saved_critic_without_a_route_still_runs_the_cheap_reviewer(env, monkeypatch):
+    from daedalus import improvements
+
+    calls: list[dict] = []
+
+    async def fake_call(intent, messages, **kw):
+        calls.append({"intent": intent, **kw})
+        from daedalus.harness.gateway import GatewayResult
+        return GatewayResult(ok=True, text='{"ok": true}')
+
+    monkeypatch.setattr(env, "call", fake_call)
+    monkeypatch.setattr(improvements, "_cred_env", lambda name, default="": "k" if name == "OPENROUTER_API_KEY" else default)
+    env.set_override("critic", "groq:critic-model")
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    asyncio.run(improvements.review_gate_critique("do x", "done", [], 1.0))
+    assert calls[-1]["route"] is not None
+
+
+def test_click_handlers_read_currentTarget_before_their_first_await():
+    import re
+    from pathlib import Path
+
+    src = (Path(__file__).resolve().parents[1] / "app" / "static" / "studio-workspace.js").read_text(encoding="utf-8")
+    bad = []
+    for m in re.finditer(r'addEventListener\("click", async \(ev\) => \{', src):
+        end = src.find("\n  });", m.end())
+        body = src[m.end():end if end > 0 else len(src)]
+        first_await = body.find("await ")
+        for c in re.finditer(r"ev\.currentTarget", body):
+            if first_await != -1 and c.start() > first_await:
+                bad.append(src[:m.start()].count("\n") + 1)
+    assert bad == [], f"ev.currentTarget used after an await in handlers at lines {bad}"

@@ -221,9 +221,10 @@ async def capabilities() -> dict:
 
 @app.get("/api/v1/llm/status")
 async def llm_status() -> dict:
+    from daedalus.llm_config import NotConfiguredError
     try:
         return await asyncio.to_thread(_llm_status_payload)
-    except RuntimeError as exc:
+    except NotConfiguredError:
         # No provider configured is an empty state, not a failure (PR1, M10).
         return {"ok": True, "configured": False, "reason": "No LLM provider is configured."}
     except Exception as exc:

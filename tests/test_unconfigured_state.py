@@ -9,7 +9,7 @@ from daedalus import llm_config, llm_wardrobe, local_llm, mentor_helm, onboardin
 
 
 def _no_provider(*_a, **_k):
-    raise RuntimeError("No LLM provider configured.")
+    raise llm_config.NotConfiguredError("No LLM provider configured.")
 
 
 @pytest.fixture
@@ -116,3 +116,52 @@ def test_llm_status_is_200_and_not_configured_with_no_provider(no_provider):
     assert res.status_code == 200
     body = res.json()
     assert body == {"ok": True, "configured": False, "reason": "No LLM provider is configured."}
+
+
+def test_llm_status_other_errors_keep_ok_false(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    def boom(*_a, **_k):
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(llm_config, "get_brain_config", boom)
+    monkeypatch.setattr(llm_config, "get_config", boom)
+    body = TestClient(app).get("/api/v1/llm/status").json()
+    assert body["ok"] is False and "database is locked" in body["error"] and "configured" not in body
+
+
+def test_not_configured_error_is_a_runtime_error_with_the_same_text(monkeypatch):
+    for name in ("ALLTOKEN_API_KEY", "OPENROUTER_API_KEY", "NOVITA_API_KEY", "NVIDIA_API_KEY", "DAEDALUS_API_KEY",
+                 "DAEDALUS_MODEL", "DAEDALUS_PROVIDER", "DAEDALUS_LOCAL_LLM"):
+        monkeypatch.delenv(name, raising=False)
+    assert issubclass(llm_config.NotConfiguredError, RuntimeError)
+    assert str(llm_config.NotConfiguredError("No LLM provider configured. x")).startswith("No LLM provider configured")
+
+
+def test_worker_config_does_not_hide_a_real_error(no_provider, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    def boom():
+        raise ValueError("corrupt worker db")
+
+    monkeypatch.setattr("daedalus.workers.get_worker_config", boom)
+    res = TestClient(app, raise_server_exceptions=False).get("/admin/daedalus/worker-config")
+    assert res.status_code != 200
+
+
+def test_explicit_backend_choice_while_offline_survives_going_online(wardrobe):
+    llm_wardrobe.save({"backend": "cloud", "active": None, "offline": False, "roles": {}})
+    llm_wardrobe.set_offline(True)
+    llm_wardrobe.activate("some-model", backend="lmstudio")
+    assert "backend_before_offline" not in llm_wardrobe.load()
+    llm_wardrobe.set_offline(False)
+    assert llm_wardrobe.load()["backend"] == "lmstudio"
+    # same for use_local / use_cloud
+    llm_wardrobe.save({"backend": "cloud", "active": None, "offline": False, "roles": {}})
+    llm_wardrobe.set_offline(True)
+    llm_wardrobe.use_local("ollama")
+    assert "backend_before_offline" not in llm_wardrobe.load()

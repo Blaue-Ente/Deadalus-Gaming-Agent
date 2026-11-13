@@ -2354,11 +2354,13 @@
     const o = opts || {};
     const raw = err == null ? "" : typeof err === "string" ? err : String(err.message || err.detail || err.error || err);
     let text_ = null;
-    if (err && err.name === "AbortError" || /timed out|timeout|aborted/i.test(raw)) text_ = t("studio.timeout");
+    const modelRelated = /llm|model|provider|openrouter|anthropic|openai|nvidia|novita|alltoken|gemini|groq/i.test(raw);
+    if (err && err.name === "AbortError" || /timed out|timeout/i.test(raw)) text_ = t("studio.timeout");
+    else if (modelRelated && /\b(401|403|429)\b|quota|credit/i.test(raw)) text_ = t("studio.err.key");
     else if (/llm_failed|no_mentor_model|No LLM provider configured/i.test(raw)) text_ = t("studio.err.noModel");
     else if (/synthesis_failed|search_failed/i.test(raw)) text_ = t("studio.err.tryAgain");
-    else if (/\b(401|403|429)\b|quota|credit/i.test(raw)) text_ = t("studio.err.key");
     if (text_ == null) text_ = o.raw && raw ? raw : t("studio.err.generic");
+    else if (o.raw && raw && raw !== text_) text_ = text_ + " (" + raw + ")";
     return o.details ? { text: text_, details: raw } : text_;
   }
 
