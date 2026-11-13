@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-11-13T08:36:53.183324+00:00",
+  "generated_at": "2026-11-13T11:06:30.565094+00:00",
   "package_version": "0.3.8",
-  "git_commit": "473e609c2205187a779e66c04fccdf9fa30cfa0d",
+  "git_commit": "29286d7c1913f4adc5156c416bb19b9526ebd547",
   "python_requires": ">=3.11",
   "entrypoints": {
     "cli": "app.cli:main"
@@ -128,8 +128,8 @@
     ]
   },
   "tests": {
-    "modules": 148,
-    "functions": 1627
+    "modules": 150,
+    "functions": 1638
   },
   "modules": {
     "daedalus": [
@@ -295,6 +295,7 @@
       "daedalus/navigator_vocab.py",
       "daedalus/need_scan.py",
       "daedalus/offline.py",
+      "daedalus/onboarding.py",
       "daedalus/outbox.py",
       "daedalus/owner_auth.py",
       "daedalus/paid_assets.py",
