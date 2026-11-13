@@ -11,7 +11,7 @@ def _page(p, server, *, token: str = "", lang: str = "en"):
     page.add_init_script(f"try {{ localStorage.setItem('dx.lang', '{lang}'); }} catch (e) {{}}")
     if token:
         page.add_init_script(f"try {{ localStorage.setItem('dx.ownerToken', '{token}'); }} catch (e) {{}}")
-    page.goto(server["url"] + "/?panel=settings", wait_until="domcontentloaded")
+    page.goto(server["url"] + "/?panel=settings&page=team", wait_until="domcontentloaded")
     return browser, page
 
 

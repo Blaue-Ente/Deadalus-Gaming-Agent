@@ -27,6 +27,7 @@ class Setting:
     secret: bool = False
     choices: Callable[[], list[str]] | None = None   # enum settings: the accepted values
     bounds: Callable[[], tuple[int, int]] | tuple[int, int] | None = None   # int settings: inclusive (low, high)
+    page: str = "advanced"  # Settings page the row belongs to: models | projects | advanced
 
 
 def _mentor_enabled() -> dict[str, Any]:
@@ -177,22 +178,22 @@ def _brain() -> dict[str, Any]:
 
 
 SETTINGS: tuple[Setting, ...] = (
-    Setting("mentor.enabled", "settings.mentorEnabled", "quality", "bool", "DAEDALUS_MENTOR", _mentor_enabled, _write_mentor_enabled),
-    Setting("mentor.day_token_cap", "settings.mentorDayCap", "spend", "int", "DAEDALUS_MENTOR_DAY_CAP", _mentor_cap, _write_mentor_cap),
-    Setting("run_budget.usd", "settings.runBudget", "spend", "int", "DAEDALUS_RUN_BUDGET", _budget, _write_budget),
+    Setting("mentor.enabled", "settings.mentorEnabled", "quality", "bool", "DAEDALUS_MENTOR", _mentor_enabled, _write_mentor_enabled, page="models"),
+    Setting("mentor.day_token_cap", "settings.mentorDayCap", "spend", "int", "DAEDALUS_MENTOR_DAY_CAP", _mentor_cap, _write_mentor_cap, page="models"),
+    Setting("run_budget.usd", "settings.runBudget", "spend", "int", "DAEDALUS_RUN_BUDGET", _budget, _write_budget, page="models"),
     Setting("writer_assist.mode", "settings.writerAssist", "quality", "enum", "DAEDALUS_WRITER_ASSIST", _writer_assist, _write_writer_assist,
-            choices=_writer_modes),
+            choices=_writer_modes, page="models"),
     Setting("fallback.mode", "settings.fallbackMode", "runtime", "enum", "DAEDALUS_FALLBACK", _fb_mode, _write_fb_mode,
-            choices=_fb_modes),
+            choices=_fb_modes, page="models"),
     Setting("fallback.triggers", "settings.fallbackTriggers", "runtime", "enum", "", _fb_triggers, _write_fb_triggers,
-            choices=_fb_trigger_choices),
+            choices=_fb_trigger_choices, page="models"),
     Setting("evolution.enabled", "settings.evolution", "evolution", "bool", "DAEDALUS_EVOLUTION", _evolution, _write_evolution),
     Setting("auto_apply.enabled", "settings.autoApply", "evolution", "bool", "", _auto_apply, _write_auto_apply),
     Setting("play.max_sessions", "settings.playMax", "runtime", "int", "DAEDALUS_PLAY_MAX", _play_max, _write_play_max,
-            bounds=_play_bounds),
+            bounds=_play_bounds, page="projects"),
     Setting("subq.shadow", "settings.subqShadow", "quality", "bool", "DAEDALUS_SUBQ_SHADOW", _subq, _write_subq),
     Setting("kv.backend", "settings.kvBackend", "storage", "enum", "DAEDALUS_KV", _kv, None),
-    Setting("brain.model", "settings.brainModel", "runtime", "str", "DAEDALUS_MODEL", _brain, None),
+    Setting("brain.model", "settings.brainModel", "runtime", "str", "DAEDALUS_MODEL", _brain, None, page="models"),
 )
 
 _BY_KEY = {s.key: s for s in SETTINGS}
@@ -255,7 +256,7 @@ def view_one(s: Setting) -> dict[str, Any]:
     env_value = _env_value(s)
     locked = _locked(s, env_value)
     row: dict[str, Any] = {
-        "key": s.key, "title_key": s.title_key, "group": s.group, "kind": s.kind,
+        "key": s.key, "title_key": s.title_key, "group": s.group, "kind": s.kind, "page": s.page,
         "env": s.env or None, "env_locked": locked, "env_value": env_value if locked else None,
         "writable": s.write is not None and not locked,
     }

@@ -287,7 +287,7 @@ def test_vision_test_without_a_mentor_model_is_an_honest_failure(client, monkeyp
 import json  # noqa: E402
 import re  # noqa: E402
 
-from test_a61_settings import _open  # noqa: E402
+from test_a61_settings import _go, _loc, _open, _text  # noqa: E402
 from test_studio_phase2_workspace import _fulfill, _hit, studio_server  # noqa: E402,F401  (fixture and helpers)
 
 WORKERS = {"ok": True, "slots": [
@@ -328,9 +328,9 @@ def _stub_remote(page, *, github=None, probe=None, provider=None, engines_after=
 
 def _open_links(page, server, lang="en"):
     _open(page, server, lang)
-    page.wait_for_selector(".cfg-row[data-id='worker-master']")
-    page.wait_for_selector(".cfg-row[data-id='link-github']")
-    page.wait_for_selector(".cfg-row[data-id^='mcp-']")
+    page.wait_for_selector(".cfg-row[data-id='worker-master']", state="attached")      # rows of every page are painted
+    page.wait_for_selector(".cfg-row[data-id='link-github']", state="attached")
+    page.wait_for_selector(".cfg-row[data-id^='mcp-']", state="attached")
 
 
 def test_provider_and_git_tests_report_in_plain_words_with_real_clicks(studio_server):
@@ -345,27 +345,27 @@ def test_provider_and_git_tests_report_in_plain_words_with_real_clicks(studio_se
         seen = _stub_remote(page, github=github, provider=provider)
         _open_links(page, studio_server)
         # the key state is shown without ever showing a key
-        assert "key set" in page.inner_text(".cfg-row[data-id='worker-master']")
-        assert "no key" in page.inner_text(".cfg-row[data-id='worker-fast']")
-        assert "disabled" in page.inner_text(".cfg-row[data-id='worker-deep']")
-        page.locator(".cfg-row[data-id='worker-master'] button").click()
+        assert "key set" in _text(page, ".cfg-row[data-id='worker-master']")
+        assert "no key" in _text(page, ".cfg-row[data-id='worker-fast']")
+        assert "disabled" in _text(page, ".cfg-row[data-id='worker-deep']")
+        _loc(page, ".cfg-row[data-id='worker-master'] button").click()
         page.wait_for_function("() => document.querySelector(\".cfg-row[data-id='worker-master'] .cfg-note:not([hidden])\") !== null")
-        note = page.inner_text(".cfg-row[data-id='worker-master'] .cfg-note")
+        note = _text(page, ".cfg-row[data-id='worker-master'] .cfg-note")
         assert "Works: owner/pick" in note and "12 ms" in note and "OK" in note
-        assert page.locator(".cfg-row[data-id='worker-master']").get_attribute("data-state") == "ok"
-        page.locator(".cfg-row[data-id='worker-fast'] button").click()
+        assert _loc(page, ".cfg-row[data-id='worker-master']").get_attribute("data-state") == "ok"
+        _loc(page, ".cfg-row[data-id='worker-fast'] button").click()
         page.wait_for_function("() => document.querySelector(\".cfg-row[data-id='worker-fast'] .cfg-note:not([hidden])\") !== null")
-        assert "the key was refused" in page.inner_text(".cfg-row[data-id='worker-fast'] .cfg-note")
-        assert page.locator(".cfg-row[data-id='worker-fast']").get_attribute("data-state") == "error"
-        page.locator(".cfg-row[data-id='worker-deep'] button").click()
+        assert "the key was refused" in _text(page, ".cfg-row[data-id='worker-fast'] .cfg-note")
+        assert _loc(page, ".cfg-row[data-id='worker-fast']").get_attribute("data-state") == "error"
+        _loc(page, ".cfg-row[data-id='worker-deep'] button").click()
         page.wait_for_function("() => document.querySelector(\".cfg-row[data-id='worker-deep'] .cfg-note:not([hidden])\") !== null")
-        assert "run budget is spent" in page.inner_text(".cfg-row[data-id='worker-deep'] .cfg-note")
-        page.locator(".cfg-row[data-id='link-github'] button").click()
+        assert "run budget is spent" in _text(page, ".cfg-row[data-id='worker-deep'] .cfg-note")
+        _loc(page, ".cfg-row[data-id='link-github'] button").click()
         page.wait_for_function("() => document.querySelector(\".cfg-row[data-id='link-github'] .cfg-note:not([hidden])\") !== null")
-        assert page.inner_text(".cfg-row[data-id='link-github'] .cfg-note") == "The token is invalid or expired"
-        page.locator(".cfg-row[data-id='link-gitlab'] button").click()
+        assert _text(page, ".cfg-row[data-id='link-github'] .cfg-note") == "The token is invalid or expired"
+        _loc(page, ".cfg-row[data-id='link-gitlab'] button").click()
         page.wait_for_function("() => document.querySelector(\".cfg-row[data-id='link-gitlab'] .cfg-note:not([hidden])\") !== null")
-        assert "Connected as octo" in page.inner_text(".cfg-row[data-id='link-gitlab'] .cfg-note")
+        assert "Connected as octo" in _text(page, ".cfg-row[data-id='link-gitlab'] .cfg-note")
         assert seen["provider"] == ["master", "fast", "deep"] and seen["git"] == ["github", "gitlab"]
         browser.close()
 
@@ -378,10 +378,13 @@ def test_bulgarian_shows_the_new_sections_in_bulgarian_without_raw_keys(studio_s
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         _stub_remote(page, provider={"master": {"ok": False, "slot": "master", "error": {"type": "quota", "message": "x"}}})
         _open_links(page, studio_server, lang="bg")
-        page.locator(".cfg-row[data-id='worker-master'] button").click()
+        _loc(page, ".cfg-row[data-id='worker-master'] button").click()
         page.wait_for_function("() => document.querySelector(\".cfg-row[data-id='worker-master'] .cfg-note:not([hidden])\") !== null")
-        assert "квота" in page.inner_text(".cfg-row[data-id='worker-master'] .cfg-note")
-        text = page.inner_text("#panel-settings")
+        assert "квота" in _text(page, ".cfg-row[data-id='worker-master'] .cfg-note")
+        text = ""
+        for name in ("advanced", "keys", "projects"):          # one page shows at a time: read each in turn
+            _go(page, name)
+            text += "\n" + page.inner_text("#panel-settings")
         low = text.lower()
         for heading in ("работници и доставчици", "връзки", "mcp сървъри", "устойчивост"):
             assert heading in low, heading
@@ -400,23 +403,23 @@ def test_mcp_is_enabled_only_after_a_confirm_and_a_declined_confirm_changes_noth
         posts: list[str] = []
         page.on("request", lambda r: posts.append(r.url) if r.method == "POST" and r.url.endswith("/api/v1/harness/mcp") else None)
         _open_links(page, studio_server)
-        row = page.locator(".cfg-row[data-id='mcp-git']")
+        row = _loc(page, ".cfg-row[data-id='mcp-git']")
         assert "off" in row.inner_text() and row.locator("button").inner_text() == "Enable"
         answer = ConfirmAnswerer(page, accept=False)   # clicks #dx-confirm-cancel
         row.locator("button").click()
         page.wait_for_timeout(300)
         asked = answer.messages
         assert asked and "git" in asked[0] and "local program" in asked[0]
-        assert posts == [] and page.locator(".cfg-row[data-id='mcp-git'] button").inner_text() == "Enable"   # nothing was sent
+        assert posts == [] and _loc(page, ".cfg-row[data-id='mcp-git'] button").inner_text() == "Enable"   # nothing was sent
         answer.set(True)                                # clicks #dx-confirm-ok
-        page.locator(".cfg-row[data-id='mcp-git'] button").click()
+        _loc(page, ".cfg-row[data-id='mcp-git'] button").click()
         page.wait_for_function("() => document.querySelector(\".cfg-row[data-id='mcp-git'] button\").textContent === 'Disable'")
-        assert "on" in page.inner_text(".cfg-row[data-id='mcp-git']") and len(posts) == 1
+        assert "on" in _text(page, ".cfg-row[data-id='mcp-git']") and len(posts) == 1
         # it stays on after a reload (the real server saved it), and turning it off needs no confirm
         page.reload(wait_until="domcontentloaded")
         _open_links(page, studio_server)
-        assert page.locator(".cfg-row[data-id='mcp-git'] button").inner_text() == "Disable"
-        page.locator(".cfg-row[data-id='mcp-git'] button").click()
+        assert _loc(page, ".cfg-row[data-id='mcp-git'] button").inner_text() == "Disable"
+        _loc(page, ".cfg-row[data-id='mcp-git'] button").click()
         page.wait_for_function("() => document.querySelector(\".cfg-row[data-id='mcp-git'] button\").textContent === 'Enable'")
         browser.close()
 
@@ -431,9 +434,9 @@ def test_durability_shows_real_counts(studio_server):
         page.route("**/api/v1/harness/connections", lambda r: _fulfill(r, 200, {
             "ok": True, "mcp": {"ok": True, "servers": []},
             "durability": {"ok": True, "storage_configured": False, "projects": 7, "empty_workspaces": 2, "published": 3}}))
-        _open_links_no_mcp = lambda: (_open(page, studio_server), page.wait_for_selector("#settings-durability p"))  # noqa: E731
+        _open_links_no_mcp = lambda: (_open(page, studio_server), page.wait_for_selector("#settings-durability p", state="attached"))  # noqa: E731
         _open_links_no_mcp()
-        text = page.inner_text("#settings-durability")
+        text = _text(page, "#settings-durability")
         assert "not configured" in text and "Projects: 7" in text and "published: 3" in text and "empty workspace: 2" in text
         browser.close()
 
@@ -453,11 +456,11 @@ def test_vision_test_updates_the_state_line_and_tells_the_truth_when_it_fails(st
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         seen = _stub_remote(page, engines_after=engines)
         _open_links(page, studio_server)
-        assert "not verified" in page.inner_text("#settings-engines [data-role='vision-state']").lower()
+        assert "not verified" in _text(page, "#settings-engines [data-role='vision-state']").lower()
         state["verified"] = True
-        page.locator(".cfg-row[data-id='vision-test'] button").click()
+        _loc(page, ".cfg-row[data-id='vision-test'] button").click()
         page.wait_for_function("() => document.querySelector(\".cfg-row[data-id='vision-test'] .cfg-note:not([hidden])\") !== null")
-        assert "Vision is verified" in page.inner_text(".cfg-row[data-id='vision-test'] .cfg-note")
+        assert "Vision is verified" in _text(page, ".cfg-row[data-id='vision-test'] .cfg-note")
         page.wait_for_function("() => /verified/i.test(document.querySelector(\"#settings-engines [data-role='vision-state']\").textContent) && !/not verified/i.test(document.querySelector(\"#settings-engines [data-role='vision-state']\").textContent)")
         assert seen["probe"] == 1
         browser.close()
@@ -475,10 +478,10 @@ def test_vision_test_failures_are_not_reported_as_success(studio_server):
             page = browser.new_page(viewport={"width": 1280, "height": 800})
             _stub_remote(page, probe=payload)
             _open_links(page, studio_server)
-            page.locator(".cfg-row[data-id='vision-test'] button").click()
+            _loc(page, ".cfg-row[data-id='vision-test'] button").click()
             page.wait_for_function("() => document.querySelector(\".cfg-row[data-id='vision-test'] .cfg-note:not([hidden])\") !== null")
-            assert expect in page.inner_text(".cfg-row[data-id='vision-test'] .cfg-note")
-            assert page.locator(".cfg-row[data-id='vision-test']").get_attribute("data-state") == "error"
+            assert expect in _text(page, ".cfg-row[data-id='vision-test'] .cfg-note")
+            assert _loc(page, ".cfg-row[data-id='vision-test']").get_attribute("data-state") == "error"
             browser.close()
 
 
@@ -497,7 +500,7 @@ def test_new_sections_fit_and_their_buttons_are_really_clickable(studio_server, 
         assert over["sw"] <= over["cw"] + 1 and over["docw"] <= over["vw"] + 1, over
         for selector in (".cfg-row[data-id='worker-master'] button", ".cfg-row[data-id='link-github'] button",
                          ".cfg-row[data-id='mcp-git'] button", ".cfg-row[data-id='vision-test'] button"):
-            page.locator(selector).scroll_into_view_if_needed()
+            _loc(page, selector).scroll_into_view_if_needed()
             _hit(page, selector)
         browser.close()
 
@@ -589,13 +592,13 @@ def test_a_refused_mcp_toggle_keeps_the_list_and_does_not_say_saved(studio_serve
         _stub_remote(page)
         page.route("**/api/v1/harness/mcp", lambda r: _fulfill(r, 200, {"ok": False, "id": "git", "error": "mcp.json unreadable"}))
         _open_links(page, studio_server)
-        before = page.locator(".cfg-row[data-id^='mcp-']").count()
+        before = _loc(page, ".cfg-row[data-id^='mcp-']").count()
         assert before >= 2
         ConfirmAnswerer(page, accept=True)              # clicks #dx-confirm-ok
-        page.locator(".cfg-row[data-id='mcp-git'] button").click()
+        _loc(page, ".cfg-row[data-id='mcp-git'] button").click()
         page.wait_for_function("() => /mcp.json unreadable/.test(document.getElementById('harness-status').textContent)")
-        assert page.locator(".cfg-row[data-id^='mcp-']").count() == before            # the list is still there
-        assert page.locator(".cfg-row[data-id='mcp-git'] button").inner_text() == "Enable"
+        assert _loc(page, ".cfg-row[data-id^='mcp-']").count() == before            # the list is still there
+        assert _loc(page, ".cfg-row[data-id='mcp-git'] button").inner_text() == "Enable"
         assert "Saved" not in page.inner_text("#harness-status")
         browser.close()
 
@@ -608,11 +611,11 @@ def test_a_verdict_that_could_not_be_saved_is_not_shown_as_verified(studio_serve
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         _stub_remote(page, probe={"ok": True, "perceived": True, "provider": "p", "model": "m", "recorded": False})
         _open_links(page, studio_server)
-        page.locator(".cfg-row[data-id='vision-test'] button").click()
+        _loc(page, ".cfg-row[data-id='vision-test'] button").click()
         page.wait_for_function("() => document.querySelector(\".cfg-row[data-id='vision-test'] .cfg-note:not([hidden])\") !== null")
-        note = page.inner_text(".cfg-row[data-id='vision-test'] .cfg-note")
+        note = _text(page, ".cfg-row[data-id='vision-test'] .cfg-note")
         assert "could not be saved" in note and "Vision is verified" not in note
-        assert page.locator(".cfg-row[data-id='vision-test']").get_attribute("data-state") == "error"
+        assert _loc(page, ".cfg-row[data-id='vision-test']").get_attribute("data-state") == "error"
         browser.close()
 
 
@@ -627,7 +630,7 @@ def test_a_local_slot_says_no_key_is_needed(studio_server):
         _stub_remote(page)
         page.route("**/api/v1/harness/workers", lambda r: _fulfill(r, 200, workers))
         _open_links(page, studio_server)
-        text = page.inner_text(".cfg-row[data-id='worker-master']")
+        text = _text(page, ".cfg-row[data-id='worker-master']")
         assert "no key needed" in text and "no key\n" not in text + "\n"
         browser.close()
 
@@ -646,15 +649,15 @@ def test_a_test_that_finishes_after_settings_was_reopened_still_shows_its_result
 
         page.route("**/api/v1/harness/test-provider", slow_provider)
         _open_links(page, studio_server)
-        page.locator(".cfg-row[data-id='worker-master'] button").click()
+        _loc(page, ".cfg-row[data-id='worker-master'] button").click()
         page.wait_for_function("() => true")
         page.wait_for_timeout(200)
         page.locator("#workspace-nav button[data-panel=chat]").click()
         page.locator("#workspace-nav button[data-panel=settings]").click()       # the rows are rebuilt
-        page.wait_for_selector(".cfg-row[data-id='worker-master']")
+        page.wait_for_selector(".cfg-row[data-id='worker-master']", state="attached")
         page.wait_for_timeout(400)
         _fulfill(held["route"], 200, {"ok": True, "slot": "master", "provider": "openrouter", "model": "owner/pick",
                                       "latency_ms": 7, "reply": "OK"})
         page.wait_for_function("() => document.querySelector(\".cfg-row[data-id='worker-master'] .cfg-note:not([hidden])\") !== null")
-        assert "Works: owner/pick" in page.inner_text(".cfg-row[data-id='worker-master'] .cfg-note")
+        assert "Works: owner/pick" in _text(page, ".cfg-row[data-id='worker-master'] .cfg-note")
         browser.close()
