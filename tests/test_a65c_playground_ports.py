@@ -402,7 +402,7 @@ def test_bulgarian_shows_the_new_controls_without_raw_keys(studio_server):
             _build_page(page)
             _open_build(page, studio_server, lang="bg", sub="design")
             page.wait_for_selector(f"{X} #build-ideas")
-            for sel in (X, "#preview-extras"):
+            for sel in (X, "#preview-extras-btns"):
                 text = page.locator(sel).evaluate("el => el.textContent")
                 assert "studio." not in text, sel
                 assert re.search(r"[а-яА-Я]", text), sel

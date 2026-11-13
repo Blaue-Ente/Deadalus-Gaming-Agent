@@ -275,7 +275,7 @@ def test_build_stays_on_slug_and_gdd_failure_is_honest(studio_server):
                 route.fallback()
 
         page.route("**/admin/daedalus/game-studio/api/gdd", gdd)
-        page.goto(studio_server["url"] + f"/?panel=build&subtab=run&slug={game}", wait_until="domcontentloaded")
+        page.goto(studio_server["url"] + f"/?panel=build&subtab=design&slug={game}", wait_until="domcontentloaded")
         page.wait_for_function("() => document.querySelectorAll('#build-genre option').length > 1")
         page.locator("#build-idea").fill("a small puzzle")
         page.locator("#build-gdd").click()
