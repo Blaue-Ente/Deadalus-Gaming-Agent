@@ -376,6 +376,7 @@ def test_review_actions_and_write_only_secret(studio_server):
         page.wait_for_function("() => document.getElementById('settings-status').textContent.includes('brain down')")
         assert page.locator("#settings-brain").inner_text().strip() == ""
         assert planted not in page.locator("#panel-settings").inner_text()
+        page.locator("#settings-nav button[data-page=keys]").click()          # the key form lives on Keys & services
         page.locator("#secret-value").fill(secret)
         page.locator("#settings-secret button[type=submit]").click()
         page.wait_for_function("() => document.getElementById('secret-value').value === ''")

@@ -943,9 +943,12 @@ label.grow { flex: 1; min-width: 7rem; }
 .team-chip { cursor: default; }
 .team-chip[hidden], #team-signout[hidden] { display: none; }
 /* Anyone signed in who is not the owner sees only the Team section of Settings (the server refuses the rest). */
-body[data-role]:not([data-role="owner"]):not([data-role=""]) #panel-settings > :not(.team-section):not(#settings-status) {
-  display: none;
+body[data-role]:not([data-role="owner"]):not([data-role=""]) .settings-nav,
+body[data-role]:not([data-role="owner"]):not([data-role=""]) .settings-nav-select,
+body[data-role]:not([data-role="owner"]):not([data-role=""]) .settings-page:not([data-page="team"]) {
+  display: none !important;
 }
+body[data-role]:not([data-role="owner"]):not([data-role=""]) .settings-page[data-page="team"] { display: block !important; }
 .team-share-list { display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .team-share-list label { display: inline-flex; gap: 6px; align-items: center; font-size: 0.9em; }
 
@@ -972,3 +975,30 @@ body[data-role]:not([data-role="owner"]):not([data-role=""]) #panel-settings > :
 }
 .dx-empty { color: var(--faint); font-size: 0.8rem; }
 .dx-empty p { margin: 0 0 0.4rem; color: var(--muted); }
+
+/* PR4 Settings shell: a sub-nav beside one page at a time; a select replaces the nav below 960px. */
+.settings-shell { display: grid; grid-template-columns: 11rem minmax(0, 1fr); gap: 0.4rem 1.2rem; align-items: start; }
+.settings-nav { display: flex; flex-direction: column; gap: 0.2rem; position: sticky; top: 0; }
+.settings-nav button {
+  text-align: left;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--muted);
+  padding: 0.35rem 0.6rem;
+  font-size: 0.82rem;
+}
+.settings-nav button:hover { color: var(--ink); border-color: var(--line); }
+.settings-nav button[aria-current="page"] { color: var(--gold-2); border-color: var(--line); background: var(--bg-raise); }
+.settings-nav-select { display: none; }
+.settings-pages { min-width: 0; }
+.settings-page[hidden] { display: none !important; }
+.settings-page > .kicker { margin-top: 0.7rem; }
+.settings-page > .kicker:first-child { margin-top: 0; }
+@media (max-width: 960px) {
+  .settings-shell { grid-template-columns: minmax(0, 1fr); }
+  .settings-nav { display: none; }
+  .settings-nav-select { display: block; width: 100%; }
+}
+.settings-page details > summary { cursor: pointer; margin: 0.7rem 0 0.4rem; }
+.settings-page details[open] > summary { margin-bottom: 0.4rem; }

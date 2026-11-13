@@ -16,12 +16,56 @@ INTENTS = ["persona", "writer", "tools", "mentor", "critic", "planner", "navigat
            "worker", "test"]
 
 
-def _open(page, server, lang="en"):
+def _open(page, server, lang="en", settings_page="models"):
+    """Open one Settings page (PR4: one page shows at a time). Rows of the other pages are painted but hidden."""
     page.add_init_script(f"try {{ localStorage.setItem('dx.lang', '{lang}'); }} catch (e) {{}}")
-    page.goto(server["url"] + "/?panel=settings", wait_until="domcontentloaded")
-    page.wait_for_selector(".cfg-row[data-key]")
-    page.wait_for_selector(".cfg-row[data-intent]")
-    page.wait_for_selector("#settings-proof li")
+    page.goto(server["url"] + "/?panel=settings&page=" + settings_page, wait_until="domcontentloaded")
+    page.wait_for_selector(".cfg-row[data-key]", state="attached")
+    page.wait_for_selector(".cfg-row[data-intent]", state="attached")
+    page.wait_for_selector("#settings-proof li", state="attached")
+
+
+def _go(page, name):
+    """Switch Settings page the way a person does: the sub-nav, or the select below 960px."""
+    select = page.locator("#settings-nav-select")
+    if select.is_visible():
+        select.select_option(name)
+    else:
+        page.locator(f"#settings-nav button[data-page={name}]").click()
+
+
+def _reveal(page, selector):
+    """Bring the element a test is about to use on screen: switch to its Settings page and open any collapsed block."""
+    info = page.evaluate("""(sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return null;
+      const pg = el.closest('.settings-page');
+      const boxes = [];
+      for (let d = el.closest('details'); d; d = d.parentElement && d.parentElement.closest('details')) boxes.push(d.id);
+      return {page: pg ? pg.dataset.page : null, boxes};
+    }""", selector)
+    if not info:
+        return
+    if info["page"] and page.locator(f".settings-page[data-page={info['page']}]").is_hidden():
+        _go(page, info["page"])
+    for box in info["boxes"]:
+        _expand(page, box)
+
+
+def _loc(page, selector, **kwargs):
+    _reveal(page, selector)
+    return page.locator(selector, **kwargs)
+
+
+def _text(page, selector):
+    _reveal(page, selector)
+    return page.inner_text(selector)
+
+
+def _expand(page, box_id):
+    """Open a collapsed block (a <details>) on the visible page."""
+    if not page.locator(f"#{box_id}").evaluate("el => el.open"):
+        page.locator(f"#{box_id} > summary").click()
 
 
 # ------------------------------------------------------------------------------------------------ API
@@ -97,8 +141,11 @@ def test_every_setting_task_model_engine_and_proof_level_is_shown(studio_server)
             assert row.locator(".badge").count() == 1
         assert sorted(page.eval_on_selector_all(".cfg-row[data-intent]", "els => els.map(e => e.dataset.intent)")) == sorted(INTENTS)
         assert page.locator("#settings-proof li").count() == 6
+        _go(page, "projects")
         text = page.inner_text("#settings-engines")
         assert "Godot" in text and "Play sessions at once" in text
+        _go(page, "advanced")
+        _expand(page, "settings-proof-box")
         assert page.locator("#settings-proof li[data-level='0']").get_attribute("data-reachable") == "1"
         assert page.locator("#settings-proof li[data-level='5']").get_attribute("data-reachable") == "0"
         # read-only rows say so and offer no Save
@@ -113,7 +160,7 @@ def test_a_setting_is_saved_with_real_clicks_and_survives_a_reload(studio_server
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": 1280, "height": 800})
-        _open(page, studio_server)
+        _open(page, studio_server, settings_page="projects")
         row = page.locator(".cfg-row[data-key='play.max_sessions']")
         assert row.locator(".badge").get_attribute("data-src") == "default"
         field = row.locator("input")
@@ -122,7 +169,7 @@ def test_a_setting_is_saved_with_real_clicks_and_survives_a_reload(studio_server
         page.wait_for_function("() => document.getElementById('harness-status').textContent === 'Saved.'")
         assert page.locator(".cfg-row[data-key='play.max_sessions'] .badge").get_attribute("data-src") == "saved"
         page.reload(wait_until="domcontentloaded")
-        page.wait_for_selector(".cfg-row[data-key]")
+        page.wait_for_selector(".cfg-row[data-key='play.max_sessions']")
         row = page.locator(".cfg-row[data-key='play.max_sessions']")
         assert row.locator("input").input_value() == "1" and row.locator(".badge").get_attribute("data-src") == "saved"
         # an out-of-range value is refused with the reason, and nothing changes
@@ -138,7 +185,7 @@ def test_a_locked_setting_is_disabled_and_a_409_is_explained(studio_server):
 
     def base(key, **kw):
         row = {"key": key, "title_key": "settings.runBudget", "group": "spend", "kind": "int", "env": "DAEDALUS_RUN_BUDGET",
-               "env_locked": False, "env_value": None, "writable": True, "effective": 5, "persisted": None,
+               "env_locked": False, "env_value": None, "writable": True, "effective": 5, "persisted": None, "page": "models",
                "default": 0, "source": "default", "min": 0, "max": 100}
         row.update(kw)
         return row
@@ -172,6 +219,7 @@ def test_a_task_model_is_set_and_cleared_with_real_clicks(studio_server):
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         _open(page, studio_server)
+        _expand(page, "settings-intents-box")
         row = page.locator(".cfg-row[data-intent='critic']")
         row.locator("input").fill("openrouter:test/critic-model")
         row.locator(".cfg-save").click()
@@ -197,9 +245,12 @@ def test_bulgarian_has_no_untranslated_keys_and_no_english_headings(studio_serve
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         _open(page, studio_server, lang="bg")
-        text = page.inner_text("#panel-settings")
+        text = ""
+        for name in ("models", "keys", "projects", "advanced"):       # one page shows at a time: read each in turn
+            _go(page, name)
+            text += "\n" + page.inner_text("#panel-settings")
         low = text.lower()                                     # headings are upper-cased by the stylesheet
-        assert "настройки на harness" in low and "модели по задача" in low and "нива на доказателство" in low
+        assert "модели по задача" in low and "нива на доказателство" in low and "ключове и услуги" in low
         assert not re.search(r"\b(studio|settings)\.[A-Za-z]", text), re.findall(r"\b(?:studio|settings)\.[A-Za-z.]+", text)
         assert "harness settings" not in low and "models per task" not in low and "proof levels" not in low
         browser.close()
@@ -218,7 +269,11 @@ def test_the_panel_fits_and_its_buttons_are_really_clickable(studio_server, size
           return {sw: p.scrollWidth, cw: p.clientWidth, docw: document.documentElement.scrollWidth, vw: window.innerWidth};
         }""")
         assert over["sw"] <= over["cw"] + 1 and over["docw"] <= over["vw"] + 1, over
-        for selector in (".cfg-row[data-key='play.max_sessions'] .cfg-save", ".cfg-row[data-intent='writer'] .cfg-save"):
+        for selector, where in ((".cfg-row[data-key='play.max_sessions'] .cfg-save", "projects"),
+                                (".cfg-row[data-intent='writer'] .cfg-save", "models")):
+            _go(page, where)
+            if where == "models":
+                _expand(page, "settings-intents-box")
             page.locator(selector).scroll_into_view_if_needed()
             box = page.locator(selector).bounding_box()
             assert box and box["x"] >= 0 and box["x"] + box["width"] <= size[0]
@@ -265,6 +320,7 @@ def test_pinned_and_shared_tasks_are_labelled_honestly(studio_server):
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         _open(page, studio_server)
+        _expand(page, "settings-intents-box")
         assert "Follows the Studio brain" in page.inner_text(".cfg-row[data-intent='summary'] .cfg-note")
         assert page.locator(".cfg-row[data-intent='scout'] input").count() == 1      # scout is owner-selectable now
         assert "share one setting" in page.inner_text(".cfg-row[data-intent='persona'] .cfg-note")
@@ -285,14 +341,16 @@ def test_an_empty_number_is_refused_in_the_page_and_other_edits_survive_a_save(s
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         page.on("request", lambda r: posts.append(r.url) if r.method == "POST" and "harness/config" in r.url else None)
-        _open(page, studio_server)
+        _open(page, studio_server, settings_page="projects")
         row = page.locator(".cfg-row[data-key='play.max_sessions']")
         row.locator("input").fill("")
         row.locator(".cfg-save").click()
         page.wait_for_function("() => document.querySelector(\".cfg-row[data-key='play.max_sessions'] .cfg-note:not([hidden])\") !== null")
         assert "whole number" in page.inner_text(".cfg-row[data-key='play.max_sessions'] .cfg-note") and posts == []
         # an unsaved edit in another row is kept when a different row is saved
+        _go(page, "models")
         page.locator(".cfg-row[data-key='mentor.day_token_cap'] input").fill("12345")
+        _go(page, "projects")
         row.locator("input").fill("1")
         row.locator(".cfg-save").click()
         page.wait_for_function("() => document.getElementById('harness-status').textContent === 'Saved.'")

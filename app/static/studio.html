@@ -572,112 +572,164 @@
       <section id="panel-settings" class="workspace-panel" data-panel="settings" hidden>
         <p class="kicker" data-i18n="studio.panel.settings">Settings</p>
         <p id="settings-status" class="workspace-status" role="status" hidden></p>
-        <div class="team-section" id="team-section">
-          <p class="kicker" data-i18n="studio.team">Team</p>
-          <p id="team-me" class="hint"></p>
-          <p id="team-status" class="workspace-status" role="status" hidden></p>
-          <div id="team-owner" hidden>
-            <p class="hint" data-i18n="studio.teamHint">Invite people with their own sign-in. A designer builds games; a tester reads and plays. Settings, keys, publishing, git and people stay yours.</p>
-            <form id="team-invite" class="team-invite">
-              <label><span data-i18n="studio.teamName">Name</span>
-                <input id="team-name" autocomplete="off" maxlength="60" required data-i18n-aria="studio.teamName" aria-label="Name" />
-              </label>
-              <label><span data-i18n="studio.teamRole">Role</span>
-                <select id="team-role" data-i18n-aria="studio.teamRole" aria-label="Role">
-                  <option value="designer" data-i18n="studio.role.designer">Designer</option>
-                  <option value="tester" data-i18n="studio.role.tester">Tester</option>
-                </select>
-              </label>
-              <button class="primary" type="submit" data-i18n="studio.teamInvite">Invite</button>
-            </form>
-            <div id="team-token" class="cfg-block team-token" hidden>
-              <p class="hint" data-i18n="studio.teamTokenOnce">Give this sign-in to them now. It is shown only once.</p>
-              <code id="team-token-value"></code>
-              <button type="button" id="team-token-copy" data-i18n="studio.teamCopy">Copy</button>
-              <p id="team-trust" class="hint"></p>
-            </div>
-            <div id="team-members" class="cfg-list"></div>
-            <details id="team-audit-box">
-              <summary data-i18n="studio.teamAudit">Recent changes by the team</summary>
-              <ul id="team-audit" class="team-audit"></ul>
-            </details>
-          </div>
-          <div id="team-share" hidden>
-            <p class="kicker" data-i18n="studio.teamShareTitle">Keys you share with the team</p>
-            <p class="hint" data-i18n="studio.teamShareHint">A member uses their own key first. A key you tick here is used for them only when they have none, up to their cap.</p>
-            <div id="team-share-list" class="team-share-list"></div>
-          </div>
-          <div id="team-mykeys" hidden>
-            <p class="kicker" data-i18n="studio.teamMyKeys">Your keys</p>
-            <p class="hint" data-i18n="studio.teamMyKeysHint">Your model calls use your own key and your own credits. Write-only: the value is not shown again.</p>
-            <p id="team-mykeys-state" class="hint"></p>
-            <form id="team-key-form" class="team-invite">
-              <label><span data-i18n="studio.settingsSecret">Key</span>
-                <select id="team-key-name" data-i18n-aria="studio.settingsSecret" aria-label="Key"></select>
-              </label>
-              <label><span data-i18n="studio.teamKeyValue">Value</span>
-                <input id="team-key-value" type="password" autocomplete="off" data-i18n-aria="studio.teamKeyValue" aria-label="Value" />
-              </label>
-              <button class="primary" type="submit" data-i18n="studio.settingsSave">Save</button>
-              <button type="button" id="team-key-remove" data-i18n="studio.teamKeyRemove">Remove</button>
-            </form>
-          </div>
-          <p id="team-not-owner" class="hint" hidden data-i18n="studio.teamSettingsOwner">The other settings belong to the owner.</p>
-          <button type="button" id="team-signout" hidden data-i18n="studio.teamSignOut">Sign out</button>
-        </div>
-        <p class="kicker" data-i18n="studio.settingsHarness">Harness settings</p>
-        <p class="hint" data-i18n="studio.settingsHarnessHint">Each setting shows what is in effect, where it comes from, and whether an environment variable locks it.</p>
         <p id="harness-status" class="workspace-status" role="status" hidden></p>
-        <div id="settings-config" class="cfg-list"></div>
-        <p class="kicker" data-i18n="studio.settingsModels">Models per task</p>
-        <p class="hint" data-i18n="studio.settingsModelsHint">Use provider:model, for example openrouter:openai/gpt-4o. Empty uses the default.</p>
-        <div id="settings-intents" class="cfg-list"></div>
-        <p class="kicker" data-i18n="studio.settingsEngines">Game engines and play</p>
-        <div id="settings-engines" class="cfg-block"></div>
-        <p class="kicker" data-i18n="studio.settingsProof">Proof levels</p>
-        <div id="settings-proof" class="cfg-block"></div>
-        <p class="kicker" data-i18n="studio.settingsWorkers">Workers and providers</p>
-        <p class="hint" data-i18n="studio.settingsWorkersHint">Test makes one tiny model call with the saved key. It counts against the run budget.</p>
-        <div id="settings-workers" class="cfg-list"></div>
-        <p class="kicker" data-i18n="studio.settingsLinks">Connections</p>
-        <p class="hint" data-i18n="studio.settingsLinksHint">Test checks the saved token against the service. Nothing is changed.</p>
-        <div id="settings-links" class="cfg-list"></div>
-        <p class="kicker" data-i18n="studio.settingsMcp">MCP servers</p>
-        <p class="hint" data-i18n="studio.mcpHint">Enabling adds the server to the MCP list. It runs a local program when it is first used.</p>
-        <div id="settings-mcp" class="cfg-list"></div>
-        <p class="kicker" data-i18n="studio.settingsDurability">Durability</p>
-        <div id="settings-durability" class="cfg-block"></div>
-        <p class="kicker" data-i18n="studio.settingsKernel">Kernel export</p>
-        <p class="hint" data-i18n="studio.kernelHint">Exports a snapshot of this product to a branch of its own, with fresh history. The main branch is never touched and secret files are never included.</p>
-        <div id="settings-kernel" class="cfg-list"></div>
-        <p class="kicker" data-i18n="studio.settingsPool">Upgrade pool</p>
-        <p class="hint" data-i18n="studio.poolHint">Scans the new upgrade candidates with the model and sends proposals to the Outbox. It makes model calls.</p>
-        <div id="settings-pool" class="cfg-list"></div>
-        <p class="kicker" data-i18n="studio.settingsBrain">Brain</p>
-        <div id="settings-brain"></div>
-        <form id="settings-prefs">
-          <label><span data-i18n="studio.gitProvider">Git provider</span>
-            <select id="settings-provider" data-i18n-aria="studio.gitProvider" aria-label="Git provider">
-              <option value="auto">auto</option>
-              <option value="github">github</option>
-              <option value="gitlab">gitlab</option>
-            </select>
-          </label>
-          <label><span data-i18n="studio.gitBranch">Default branch</span>
-            <input id="settings-branch" autocomplete="off" data-i18n-aria="studio.gitBranch" aria-label="Default branch" />
-          </label>
-          <button class="primary" type="submit" data-i18n="studio.settingsSave">Save</button>
-        </form>
-        <p class="kicker" data-i18n="studio.settingsConnectors">Connectors</p>
-        <div id="settings-fields"></div>
-        <form id="settings-secret">
-          <p class="hint" data-i18n="studio.settingsSecretHint">Write-only. The value is not shown again.</p>
-          <label><span data-i18n="studio.settingsSecret">Key</span>
-            <select id="secret-key" data-i18n-aria="studio.settingsSecret" aria-label="Key"></select>
-          </label>
-          <input id="secret-value" type="password" autocomplete="off" data-i18n-aria="studio.settingsSecret" aria-label="Key" />
-          <button class="primary" type="submit" data-i18n="studio.settingsSave">Save</button>
-        </form>
+        <div class="settings-shell">
+          <nav id="settings-nav" class="settings-nav" data-i18n-aria="studio.settingsNavAria" aria-label="Settings pages">
+            <button type="button" data-page="models" data-i18n="studio.settingsPage.models">Models</button>
+            <button type="button" data-page="local" data-i18n="studio.settingsPage.local">Local models</button>
+            <button type="button" data-page="keys" data-i18n="studio.settingsPage.keys">Keys & services</button>
+            <button type="button" data-page="projects" data-i18n="studio.settingsPage.projects">Projects & publishing</button>
+            <button type="button" data-page="permissions" data-i18n="studio.settingsPage.permissions">Permissions</button>
+            <button type="button" data-page="team" data-i18n="studio.settingsPage.team">Team</button>
+            <button type="button" data-page="advanced" data-i18n="studio.settingsPage.advanced">Advanced</button>
+          </nav>
+          <select id="settings-nav-select" class="settings-nav-select" data-i18n-aria="studio.settingsNavAria" aria-label="Settings pages">
+            <option value="models" data-i18n="studio.settingsPage.models">Models</option>
+            <option value="local" data-i18n="studio.settingsPage.local">Local models</option>
+            <option value="keys" data-i18n="studio.settingsPage.keys">Keys & services</option>
+            <option value="projects" data-i18n="studio.settingsPage.projects">Projects & publishing</option>
+            <option value="permissions" data-i18n="studio.settingsPage.permissions">Permissions</option>
+            <option value="team" data-i18n="studio.settingsPage.team">Team</option>
+            <option value="advanced" data-i18n="studio.settingsPage.advanced">Advanced</option>
+          </select>
+          <div class="settings-pages">
+            <div class="settings-page" data-page="models">
+              <p class="hint" data-i18n="studio.settingsHarnessHint">Each setting shows what is in effect, where it comes from, and whether an environment variable locks it.</p>
+              <div id="settings-config-models" class="cfg-list"></div>
+              <details id="settings-intents-box">
+                <summary class="kicker" data-i18n="studio.settingsModels">Models per task</summary>
+                <p class="hint" data-i18n="studio.settingsModelsHint">Use provider:model, for example openrouter:openai/gpt-4o. Empty uses the default.</p>
+                <div id="settings-intents" class="cfg-list"></div>
+              </details>
+              <p class="kicker" data-i18n="studio.settingsBrain">Brain</p>
+              <div id="settings-brain"></div>
+            </div>
+            <div class="settings-page" data-page="local" hidden>
+              <p class="hint" data-i18n="studio.localPageHint">Local models are managed in the Brain tab of the side panel for now: choose Ollama, Cloud or Offline and pull models there.</p>
+              <button type="button" id="settings-open-brain" data-i18n="studio.localOpenBrain">Open the Brain tab</button>
+            </div>
+            <div class="settings-page" data-page="keys" hidden>
+              <p class="kicker" data-i18n="studio.settingsLinks">Connections</p>
+              <p class="hint" data-i18n="studio.settingsLinksHint">Test checks the saved token against the service. Nothing is changed.</p>
+              <div id="settings-links" class="cfg-list"></div>
+              <p class="kicker" data-i18n="studio.settingsMcp">MCP servers</p>
+              <p class="hint" data-i18n="studio.mcpHint">Enabling adds the server to the MCP list. It runs a local program when it is first used.</p>
+              <div id="settings-mcp" class="cfg-list"></div>
+              <details id="settings-fields-box">
+                <summary class="kicker" data-i18n="studio.settingsConnectors">Connectors</summary>
+                <div id="settings-fields"></div>
+              </details>
+              <form id="settings-secret">
+                <p class="hint" data-i18n="studio.settingsSecretHint">Write-only. The value is not shown again.</p>
+                <label><span data-i18n="studio.settingsSecret">Key</span>
+                  <select id="secret-key" data-i18n-aria="studio.settingsSecret" aria-label="Key"></select>
+                </label>
+                <input id="secret-value" type="password" autocomplete="off" data-i18n-aria="studio.settingsSecret" aria-label="Key" />
+                <button class="primary" type="submit" data-i18n="studio.settingsSave">Save</button>
+              </form>
+            </div>
+            <div class="settings-page" data-page="projects" hidden>
+              <p class="kicker" data-i18n="studio.settingsEngines">Game engines and play</p>
+              <div id="settings-engines" class="cfg-block"></div>
+              <p class="kicker" data-i18n="studio.settingsGit">Git</p>
+              <form id="settings-prefs">
+                <label><span data-i18n="studio.gitProvider">Git provider</span>
+                  <select id="settings-provider" data-i18n-aria="studio.gitProvider" aria-label="Git provider">
+                    <option value="auto">auto</option>
+                    <option value="github">github</option>
+                    <option value="gitlab">gitlab</option>
+                  </select>
+                </label>
+                <label><span data-i18n="studio.gitBranch">Default branch</span>
+                  <input id="settings-branch" autocomplete="off" data-i18n-aria="studio.gitBranch" aria-label="Default branch" />
+                </label>
+                <button class="primary" type="submit" data-i18n="studio.settingsSave">Save</button>
+              </form>
+              <p class="kicker" data-i18n="studio.settingsDurability">Durability</p>
+              <div id="settings-durability" class="cfg-block"></div>
+              <div id="settings-config-projects" class="cfg-list"></div>
+            </div>
+            <div class="settings-page" data-page="permissions" hidden>
+              <div id="settings-permissions-empty" class="cfg-block">
+                <p class="hint" data-i18n="studio.permissionsMoved">Permissions are under Review, in the Permissions tab, until a later update brings them here.</p>
+                <button type="button" id="settings-open-permissions" data-i18n="studio.permissionsOpen">Open Review: Permissions</button>
+              </div>
+            </div>
+            <div class="settings-page" data-page="team" hidden>
+              <div class="team-section" id="team-section">
+                <p class="kicker" data-i18n="studio.team">Team</p>
+                <p id="team-me" class="hint"></p>
+                <p id="team-status" class="workspace-status" role="status" hidden></p>
+                <div id="team-owner" hidden>
+                  <p class="hint" data-i18n="studio.teamHint">Invite people with their own sign-in. A designer builds games; a tester reads and plays. Settings, keys, publishing, git and people stay yours.</p>
+                  <form id="team-invite" class="team-invite">
+                    <label><span data-i18n="studio.teamName">Name</span>
+                      <input id="team-name" autocomplete="off" maxlength="60" required data-i18n-aria="studio.teamName" aria-label="Name" />
+                    </label>
+                    <label><span data-i18n="studio.teamRole">Role</span>
+                      <select id="team-role" data-i18n-aria="studio.teamRole" aria-label="Role">
+                        <option value="designer" data-i18n="studio.role.designer">Designer</option>
+                        <option value="tester" data-i18n="studio.role.tester">Tester</option>
+                      </select>
+                    </label>
+                    <button class="primary" type="submit" data-i18n="studio.teamInvite">Invite</button>
+                  </form>
+                  <div id="team-token" class="cfg-block team-token" hidden>
+                    <p class="hint" data-i18n="studio.teamTokenOnce">Give this sign-in to them now. It is shown only once.</p>
+                    <code id="team-token-value"></code>
+                    <button type="button" id="team-token-copy" data-i18n="studio.teamCopy">Copy</button>
+                    <p id="team-trust" class="hint"></p>
+                  </div>
+                  <div id="team-members" class="cfg-list"></div>
+                  <details id="team-audit-box">
+                    <summary data-i18n="studio.teamAudit">Recent changes by the team</summary>
+                    <ul id="team-audit" class="team-audit"></ul>
+                  </details>
+                </div>
+                <div id="team-share" hidden>
+                  <p class="kicker" data-i18n="studio.teamShareTitle">Keys you share with the team</p>
+                  <p class="hint" data-i18n="studio.teamShareHint">A member uses their own key first. A key you tick here is used for them only when they have none, up to their cap.</p>
+                  <div id="team-share-list" class="team-share-list"></div>
+                </div>
+                <div id="team-mykeys" hidden>
+                  <p class="kicker" data-i18n="studio.teamMyKeys">Your keys</p>
+                  <p class="hint" data-i18n="studio.teamMyKeysHint">Your model calls use your own key and your own credits. Write-only: the value is not shown again.</p>
+                  <p id="team-mykeys-state" class="hint"></p>
+                  <form id="team-key-form" class="team-invite">
+                    <label><span data-i18n="studio.settingsSecret">Key</span>
+                      <select id="team-key-name" data-i18n-aria="studio.settingsSecret" aria-label="Key"></select>
+                    </label>
+                    <label><span data-i18n="studio.teamKeyValue">Value</span>
+                      <input id="team-key-value" type="password" autocomplete="off" data-i18n-aria="studio.teamKeyValue" aria-label="Value" />
+                    </label>
+                    <button class="primary" type="submit" data-i18n="studio.settingsSave">Save</button>
+                    <button type="button" id="team-key-remove" data-i18n="studio.teamKeyRemove">Remove</button>
+                  </form>
+                </div>
+                <p id="team-not-owner" class="hint" hidden data-i18n="studio.teamSettingsOwner">The other settings belong to the owner.</p>
+                <button type="button" id="team-signout" hidden data-i18n="studio.teamSignOut">Sign out</button>
+              </div>
+            </div>
+            <div class="settings-page" data-page="advanced" hidden>
+              <details id="settings-proof-box">
+                <summary data-i18n="studio.settingsProof">Proof levels</summary>
+                <div id="settings-proof" class="cfg-block"></div>
+              </details>
+              <details id="settings-workers-box">
+                <summary class="kicker" data-i18n="studio.settingsWorkers">Workers and providers</summary>
+                <p class="hint" data-i18n="studio.settingsWorkersHint">Test makes one tiny model call with the saved key. It counts against the run budget.</p>
+                <div id="settings-workers" class="cfg-list"></div>
+              </details>
+              <p class="kicker" data-i18n="studio.settingsKernel">Kernel export</p>
+              <p class="hint" data-i18n="studio.kernelHint">Exports a snapshot of this product to a branch of its own, with fresh history. The main branch is never touched and secret files are never included.</p>
+              <div id="settings-kernel" class="cfg-list"></div>
+              <p class="kicker" data-i18n="studio.settingsPool">Upgrade pool</p>
+              <p class="hint" data-i18n="studio.poolHint">Scans the new upgrade candidates with the model and sends proposals to the Outbox. It makes model calls.</p>
+              <div id="settings-pool" class="cfg-list"></div>
+              <div id="settings-config" class="cfg-list"></div>
+            </div>
+          </div>
+        </div>
       </section>
     </main>
 

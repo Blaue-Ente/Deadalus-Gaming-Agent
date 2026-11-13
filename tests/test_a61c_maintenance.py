@@ -268,14 +268,14 @@ def test_no_candidates_starts_nothing(client, monkeypatch):
 import json  # noqa: E402
 import re  # noqa: E402
 
-from test_a61_settings import _open  # noqa: E402
+from test_a61_settings import _loc, _open, _text  # noqa: E402
 from test_studio_phase2_workspace import _fulfill, _hit, studio_server  # noqa: E402,F401  (fixture and helpers)
 
 NOTE = ".cfg-note:not([hidden])"
 
 
 def _open_maint(page, server, lang="en"):
-    _open(page, server, lang)
+    _open(page, server, lang, settings_page="advanced")
     page.wait_for_selector(".cfg-row[data-id='kernel-actions']")
     page.wait_for_selector(".cfg-row[data-id='pool-scan']")
     # Settings loads in two waves; the second one replaces the "loading" line at the top (hidden, or an error on a
@@ -324,16 +324,16 @@ def test_the_kernel_fields_show_the_real_defaults_and_every_refusal_is_explained
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         _pool_stub(page)
         _open_maint(page, studio_server)
-        repo = page.locator(".cfg-row[data-id='kernel-repo'] input")
-        branch = page.locator(".cfg-row[data-id='kernel-branch'] input")
-        paths = page.locator(".cfg-row[data-id='kernel-paths'] textarea")
+        repo = _loc(page, ".cfg-row[data-id='kernel-repo'] input")
+        branch = _loc(page, ".cfg-row[data-id='kernel-branch'] input")
+        paths = _loc(page, ".cfg-row[data-id='kernel-paths'] textarea")
         assert repo.input_value() == "Blaue-Ente/Deadalus-Gaming-Agent" and branch.input_value() == "kernel-export"
         assert "daedalus" in paths.input_value().split("\n") and "README.md" in paths.input_value().split("\n")
-        save = page.locator(".cfg-row[data-id='kernel-actions'] button", has_text="Save")
+        save = _loc(page, ".cfg-row[data-id='kernel-actions'] button", has_text="Save")
         branch.fill("main")
         save.click()
         assert "never goes to a main branch" in _note(page, "kernel-actions", "main branch")
-        assert page.locator(".cfg-row[data-id='kernel-actions']").get_attribute("data-state") == "error"
+        assert _loc(page, ".cfg-row[data-id='kernel-actions']").get_attribute("data-state") == "error"
         branch.fill("feature/x")
         paths.fill("daedalus\ndaedalus/.env")
         save.click()
@@ -356,21 +356,21 @@ def test_a_valid_kernel_config_is_saved_and_survives_a_reload(studio_server):
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         _pool_stub(page)
         _open_maint(page, studio_server)
-        page.locator(".cfg-row[data-id='kernel-repo'] input").fill("me/mine")
-        page.locator(".cfg-row[data-id='kernel-branch'] input").fill("snapshots/daily")
-        page.locator(".cfg-row[data-id='kernel-paths'] textarea").fill("daedalus\napp/\n\nREADME.md")
-        page.locator(".cfg-row[data-id='kernel-actions'] button", has_text="Save").click()
+        _loc(page, ".cfg-row[data-id='kernel-repo'] input").fill("me/mine")
+        _loc(page, ".cfg-row[data-id='kernel-branch'] input").fill("snapshots/daily")
+        _loc(page, ".cfg-row[data-id='kernel-paths'] textarea").fill("daedalus\napp/\n\nREADME.md")
+        _loc(page, ".cfg-row[data-id='kernel-actions'] button", has_text="Save").click()
         assert "Saved" in _note(page, "kernel-actions", "Saved")
-        assert page.locator(".cfg-row[data-id='kernel-paths'] textarea").input_value() == "daedalus\napp\nREADME.md"
+        assert _loc(page, ".cfg-row[data-id='kernel-paths'] textarea").input_value() == "daedalus\napp\nREADME.md"
         page.reload(wait_until="domcontentloaded")
         _open_maint(page, studio_server)
-        assert page.locator(".cfg-row[data-id='kernel-repo'] input").input_value() == "me/mine"
-        assert page.locator(".cfg-row[data-id='kernel-branch'] input").input_value() == "snapshots/daily"
+        assert _loc(page, ".cfg-row[data-id='kernel-repo'] input").input_value() == "me/mine"
+        assert _loc(page, ".cfg-row[data-id='kernel-branch'] input").input_value() == "snapshots/daily"
         # the server is shared by the tests of this module: put the defaults back so no test depends on the order
-        page.locator(".cfg-row[data-id='kernel-repo'] input").fill("Blaue-Ente/Deadalus-Gaming-Agent")
-        page.locator(".cfg-row[data-id='kernel-branch'] input").fill("kernel-export")
-        page.locator(".cfg-row[data-id='kernel-paths'] textarea").fill("daedalus\napp\nui\nscripts\nassets\nREADME.md\nARCHITECTURE.md\nDEPLOY.md\nCONTRIBUTING.md\npyproject.toml\nDockerfile")
-        page.locator(".cfg-row[data-id='kernel-actions'] button", has_text="Save").click()
+        _loc(page, ".cfg-row[data-id='kernel-repo'] input").fill("Blaue-Ente/Deadalus-Gaming-Agent")
+        _loc(page, ".cfg-row[data-id='kernel-branch'] input").fill("kernel-export")
+        _loc(page, ".cfg-row[data-id='kernel-paths'] textarea").fill("daedalus\napp\nui\nscripts\nassets\nREADME.md\nARCHITECTURE.md\nDEPLOY.md\nCONTRIBUTING.md\npyproject.toml\nDockerfile")
+        _loc(page, ".cfg-row[data-id='kernel-actions'] button", has_text="Save").click()
         _note(page, "kernel-actions", "Saved")
         browser.close()
 
@@ -386,13 +386,13 @@ def test_declining_the_first_question_sends_nothing(studio_server):
         page.route("**/api/v1/harness/kernel/push", lambda r: (posts.append("x"), _fulfill(r, 200, {"ok": True, "repo": "r", "branch": "b", "files": 1})))
         _open_maint(page, studio_server)
         asked = _dialogs(page, [False])
-        page.locator(".cfg-row[data-id='kernel-actions'] button", has_text="Push export").click()
+        _loc(page, ".cfg-row[data-id='kernel-actions'] button", has_text="Push export").click()
         page.wait_for_timeout(300)
         assert posts == [] and len(asked) == 1
-        shown_repo = page.locator(".cfg-row[data-id='kernel-repo'] input").input_value()
-        shown_branch = page.locator(".cfg-row[data-id='kernel-branch'] input").input_value()
+        shown_repo = _loc(page, ".cfg-row[data-id='kernel-repo'] input").input_value()
+        shown_branch = _loc(page, ".cfg-row[data-id='kernel-branch'] input").input_value()
         assert shown_repo in asked[0] and shown_branch in asked[0] and "Secret files are never included" in asked[0]
-        assert page.locator(".cfg-row[data-id='kernel-actions'] .cfg-note:not([hidden])").count() == 0     # nothing to report
+        assert _loc(page, ".cfg-row[data-id='kernel-actions'] .cfg-note:not([hidden])").count() == 0     # nothing to report
         browser.close()
 
 
@@ -415,7 +415,7 @@ def test_a_diverged_export_branch_is_replaced_only_after_the_second_yes(studio_s
 
         page.route("**/api/v1/harness/kernel/push", on_push)
         _open_maint(page, studio_server)
-        push = page.locator(".cfg-row[data-id='kernel-actions'] button", has_text="Push export")
+        push = _loc(page, ".cfg-row[data-id='kernel-actions'] button", has_text="Push export")
         asked = _dialogs(page, [True, False, True, True])
         push.click()                                              # yes to the push, rejected, no to the replace
         assert "Not pushed" in _note(page, "kernel-actions", "Not pushed")
@@ -423,7 +423,7 @@ def test_a_diverged_export_branch_is_replaced_only_after_the_second_yes(studio_s
         push.click()                                              # yes, rejected, yes to the replace
         assert "Replaced the branch and pushed 9 items" in _note(page, "kernel-actions", "Replaced")
         assert posts[1:] == [{"confirm": True}, {"confirm": True, "force": True}]
-        assert page.locator(".cfg-row[data-id='kernel-actions']").get_attribute("data-state") == "ok"
+        assert _loc(page, ".cfg-row[data-id='kernel-actions']").get_attribute("data-state") == "ok"
         browser.close()
 
 
@@ -438,8 +438,8 @@ def test_unsaved_kernel_fields_are_never_pushed(studio_server):
         page.route("**/api/v1/harness/kernel/push", lambda r: (posts.append("x"), _fulfill(r, 200, {"ok": True, "repo": "r", "branch": "b", "files": 1})))
         _open_maint(page, studio_server)
         asked = _dialogs(page, [True])
-        page.locator(".cfg-row[data-id='kernel-branch'] input").fill("some-other-branch")
-        page.locator(".cfg-row[data-id='kernel-actions'] button", has_text="Push export").click()
+        _loc(page, ".cfg-row[data-id='kernel-branch'] input").fill("some-other-branch")
+        _loc(page, ".cfg-row[data-id='kernel-actions'] button", has_text="Push export").click()
         assert "Save them before pushing" in _note(page, "kernel-actions", "Save them")
         assert posts == [] and asked == []                       # no question, no request: the server pushes what it has saved
         browser.close()
@@ -456,15 +456,15 @@ def test_a_missing_token_and_a_failed_push_are_explained_not_swallowed(studio_se
         page.route("**/api/v1/harness/kernel/push", lambda r: _fulfill(r, *answers.pop(0)))
         _open_maint(page, studio_server)
         _dialogs(page, [True, True, True])
-        push = page.locator(".cfg-row[data-id='kernel-actions'] button", has_text="Push export")
+        push = _loc(page, ".cfg-row[data-id='kernel-actions'] button", has_text="Push export")
         push.click()
         assert "No GitHub token is set" in _note(page, "kernel-actions", "token")
         push.click()
         assert "The push failed" in _note(page, "kernel-actions", "push failed")
         push.click()                                  # even a 200 that says ok:false is never shown as pushed
         assert "No listed path matched" in _note(page, "kernel-actions", "No listed path")
-        assert "Pushed" not in page.inner_text(".cfg-row[data-id='kernel-actions']")
-        assert page.locator(".cfg-row[data-id='kernel-actions']").get_attribute("data-state") == "error"
+        assert "Pushed" not in _text(page, ".cfg-row[data-id='kernel-actions']")
+        assert _loc(page, ".cfg-row[data-id='kernel-actions']").get_attribute("data-state") == "error"
         browser.close()
 
 
@@ -504,7 +504,7 @@ def test_the_upgrade_scan_reports_busy_and_empty_honestly(studio_server, answer,
         _pool_stub(page, scan=answer)
         _open_maint(page, studio_server)
         _dialogs(page, [True])
-        page.locator(".cfg-row[data-id='pool-scan'] button").click()
+        _loc(page, ".cfg-row[data-id='pool-scan'] button").click()
         assert expect in _note(page, "pool-scan", expect.split()[0]).lower()
         browser.close()
 
@@ -517,7 +517,7 @@ def test_a_failed_last_scan_is_shown_as_failed(studio_server):
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         _pool_stub(page, last={"ok": False, "error": "RuntimeError", "finished_at": 1})
         _open_maint(page, studio_server)
-        assert "Last scan failed: RuntimeError" in page.inner_text(".cfg-row[data-id='pool-scan']")
+        assert "Last scan failed: RuntimeError" in _text(page, ".cfg-row[data-id='pool-scan']")
         browser.close()
 
 
@@ -529,8 +529,8 @@ def test_bulgarian_shows_the_new_sections_in_bulgarian_without_raw_keys(studio_s
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         _pool_stub(page)
         _open_maint(page, studio_server, lang="bg")
-        page.locator(".cfg-row[data-id='kernel-branch'] input").fill("main")
-        page.locator(".cfg-row[data-id='kernel-actions'] button", has_text="Запази").click()
+        _loc(page, ".cfg-row[data-id='kernel-branch'] input").fill("main")
+        _loc(page, ".cfg-row[data-id='kernel-actions'] button", has_text="Запази").click()
         assert "главен клон" in _note(page, "kernel-actions", "главен клон")
         text = page.inner_text("#panel-settings")
         low = text.lower()
@@ -701,18 +701,18 @@ def test_unsaved_kernel_edits_survive_leaving_and_reopening_settings(studio_serv
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         _pool_stub(page)
         _open_maint(page, studio_server)
-        page.locator(".cfg-row[data-id='kernel-branch'] input").fill("work-in-progress")
-        page.locator(".cfg-row[data-id='kernel-paths'] textarea").fill("daedalus\napp\nscripts")
+        _loc(page, ".cfg-row[data-id='kernel-branch'] input").fill("work-in-progress")
+        _loc(page, ".cfg-row[data-id='kernel-paths'] textarea").fill("daedalus\napp\nscripts")
         page.locator("#workspace-nav button[data-panel=chat]").click()
         page.locator("#workspace-nav button[data-panel=settings]").click()
         page.wait_for_selector(".cfg-row[data-id='kernel-actions']")
         page.wait_for_timeout(500)
-        assert page.locator(".cfg-row[data-id='kernel-branch'] input").input_value() == "work-in-progress"
-        assert page.locator(".cfg-row[data-id='kernel-paths'] textarea").input_value() == "daedalus\napp\nscripts"
+        assert _loc(page, ".cfg-row[data-id='kernel-branch'] input").input_value() == "work-in-progress"
+        assert _loc(page, ".cfg-row[data-id='kernel-paths'] textarea").input_value() == "daedalus\napp\nscripts"
         posts: list[str] = []
         page.route("**/api/v1/harness/kernel/push", lambda r: (posts.append("x"), _fulfill(r, 200, {"ok": True})))
         _dialogs(page, [True])
-        page.locator(".cfg-row[data-id='kernel-actions'] button", has_text="Push export").click()
+        _loc(page, ".cfg-row[data-id='kernel-actions'] button", has_text="Push export").click()
         assert "Save them before pushing" in _note(page, "kernel-actions", "Save them")      # still not what the server has
         assert posts == []
         browser.close()
@@ -729,12 +729,12 @@ def test_the_actions_row_names_what_push_will_do_and_follows_a_save(studio_serve
         title = ".cfg-row[data-id='kernel-actions'] .cfg-name b"
         before = page.inner_text(title)
         assert "→" in before and "Kernel export" not in before                      # not a copy of the section heading
-        page.locator(".cfg-row[data-id='kernel-branch'] input").fill("export-two")
-        page.locator(".cfg-row[data-id='kernel-actions'] button", has_text="Save").click()
+        _loc(page, ".cfg-row[data-id='kernel-branch'] input").fill("export-two")
+        _loc(page, ".cfg-row[data-id='kernel-actions'] button", has_text="Save").click()
         _note(page, "kernel-actions", "Saved")
         assert page.inner_text(title).endswith("→ export-two")
-        page.locator(".cfg-row[data-id='kernel-branch'] input").fill("kernel-export")           # put the default back
-        page.locator(".cfg-row[data-id='kernel-actions'] button", has_text="Save").click()
+        _loc(page, ".cfg-row[data-id='kernel-branch'] input").fill("kernel-export")           # put the default back
+        _loc(page, ".cfg-row[data-id='kernel-actions'] button", has_text="Save").click()
         page.wait_for_function("() => document.querySelector(\".cfg-row[data-id='kernel-actions'] b\").textContent.endsWith('→ kernel-export')")
         browser.close()
 
@@ -747,12 +747,12 @@ def test_a_state_directory_is_refused_with_a_reason(studio_server):
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         _pool_stub(page)
         _open_maint(page, studio_server)
-        page.locator(".cfg-row[data-id='kernel-paths'] textarea").fill("daedalus\ndata")
-        page.locator(".cfg-row[data-id='kernel-actions'] button", has_text="Save").click()
+        _loc(page, ".cfg-row[data-id='kernel-paths'] textarea").fill("daedalus\ndata")
+        _loc(page, ".cfg-row[data-id='kernel-actions'] button", has_text="Save").click()
         assert "own state" in _note(page, "kernel-actions", "own state")
-        page.locator(".cfg-row[data-id='kernel-branch'] input").fill("refs/heads/main")
-        page.locator(".cfg-row[data-id='kernel-paths'] textarea").fill("daedalus")
-        page.locator(".cfg-row[data-id='kernel-actions'] button", has_text="Save").click()
+        _loc(page, ".cfg-row[data-id='kernel-branch'] input").fill("refs/heads/main")
+        _loc(page, ".cfg-row[data-id='kernel-paths'] textarea").fill("daedalus")
+        _loc(page, ".cfg-row[data-id='kernel-actions'] button", has_text="Save").click()
         assert "not a usable branch name" in _note(page, "kernel-actions", "usable branch")
-        page.locator(".cfg-row[data-id='kernel-branch'] input").fill("kernel-export")
+        _loc(page, ".cfg-row[data-id='kernel-branch'] input").fill("kernel-export")
         browser.close()

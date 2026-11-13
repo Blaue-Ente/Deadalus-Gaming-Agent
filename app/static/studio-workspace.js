@@ -99,19 +99,25 @@
     el.textContent = msg;
   }
 
+  const SETTINGS_PAGES = ["models", "local", "keys", "projects", "permissions", "team", "advanced"];
+  let currentSettingsPage = "models";
+
   function readQuery() {
     const q = new URLSearchParams(location.search);
     let panel = q.get("panel") || "chat";
     if (PANELS.indexOf(panel) < 0 || panel === "tools") panel = "chat";
     let tab = q.get("tab") || "proposals";
     if (TABS.indexOf(tab) < 0) tab = "proposals";
-    return { panel, tab, slug: q.get("slug") || "" };
+    let page = q.get("page") || "models";
+    if (SETTINGS_PAGES.indexOf(page) < 0) page = "models";
+    return { panel, tab, page, slug: q.get("slug") || "" };
   }
 
   function writeQuery() {
     const q = new URLSearchParams();
     if (currentPanel !== "chat" && currentPanel !== "tools") q.set("panel", currentPanel);
     if (currentPanel === "review" && currentTab && currentTab !== "proposals") q.set("tab", currentTab);
+    if (currentPanel === "settings" && currentSettingsPage !== "models") q.set("page", currentSettingsPage);
     const slug = dx.getSlug();
     if (slug) q.set("slug", slug);
     const next = q.toString();
@@ -125,6 +131,22 @@
   function selectRail(pane) {
     const btn = document.querySelector('.tabs button[data-pane="' + pane + '"]');
     if (btn) btn.click();
+  }
+
+  // One Settings page at a time: the sub-nav buttons and the narrow-screen select both drive it.
+  function showSettingsPage(page, write) {
+    if (SETTINGS_PAGES.indexOf(page) < 0) page = "models";
+    currentSettingsPage = page;
+    document.querySelectorAll("#panel-settings .settings-page").forEach((el) => {
+      el.hidden = el.dataset.page !== page;
+    });
+    document.querySelectorAll("#settings-nav button").forEach((btn) => {
+      if (btn.dataset.page === page) btn.setAttribute("aria-current", "page");
+      else btn.removeAttribute("aria-current");
+    });
+    const sel = $("settings-nav-select");
+    if (sel && sel.value !== page) sel.value = page;
+    if (write && queryReady) writeQuery();
   }
 
   function showPanel(panel, tab) {
@@ -167,7 +189,10 @@
       paintSkill();
       paintRef();
     }
-    if (panel === "settings") loadSettings();
+    if (panel === "settings") {
+      showSettingsPage(currentSettingsPage, false);
+      loadSettings();
+    }
     if (queryReady) writeQuery();
   }
 
@@ -3902,9 +3927,10 @@
   }
 
   function paintConfig(rows) {
-    const box = $("settings-config");
-    box.replaceChildren();
-    (rows || []).forEach((row) => box.appendChild(buildConfigRow(row)));
+    // Each row goes to the container of its page; #settings-config is the Advanced (and default) one.
+    const boxes = { models: $("settings-config-models"), projects: $("settings-config-projects"), advanced: $("settings-config") };
+    Object.keys(boxes).forEach((k) => boxes[k].replaceChildren());
+    (rows || []).forEach((row) => (boxes[row.page] || boxes.advanced).appendChild(buildConfigRow(row)));
   }
 
   function cfgError(note, item, text) {
@@ -4069,7 +4095,7 @@
     const list = document.createElement("div");
     list.className = "cfg-list";
     list.appendChild(actionRow({
-      id: "vision-test", title: dx.t("studio.visionTest"), sub: dx.t("studio.visionTestHint"),
+      id: "vision-test", title: "", sub: dx.t("studio.visionTestHint"),
       buttons: [{ label: dx.t("studio.visionTest"), run: testVision }],
     }));
     box.appendChild(list);
@@ -4120,11 +4146,14 @@
     item.dataset.id = o.id;
     const name = document.createElement("div");
     name.className = "cfg-name";
-    const b = document.createElement("b");
-    b.textContent = o.title;
     const small = document.createElement("small");
     small.textContent = o.sub || "";
-    name.append(b, small);
+    if (o.title) {             // a row under a block heading of the same name carries no title of its own
+      const b = document.createElement("b");
+      b.textContent = o.title;
+      name.appendChild(b);
+    }
+    name.appendChild(small);
     const info = document.createElement("div");
     info.className = "cfg-control";
     info.textContent = o.info || "";
@@ -4382,7 +4411,7 @@
     const unknown = d.candidates < 0;
     const last = d.last ? (d.last.ok ? dx.t("studio.poolLastOk") : dx.t("studio.poolLastFail", { why: d.last.error || "?" })) : "";
     box.appendChild(actionRow({
-      id: "pool-scan", title: dx.t("studio.settingsPool"), sub: last,
+      id: "pool-scan", title: "", sub: last,
       info: unknown ? dx.t("studio.poolUnknown")
         : dx.t("studio.poolState", { n: d.candidates, state: d.running ? dx.t("studio.poolRunning") : dx.t("studio.poolIdle") }),
       buttons: [{ label: dx.t("studio.poolScan"), disabled: d.running || unknown, run: scanPool }],
@@ -4631,7 +4660,10 @@
 
   async function loadSettings() {
     const me = await loadTeam();
-    if (me && me.role !== "owner") return;           // the rest of Settings is the owner's (the server says so too)
+    if (me && me.role !== "owner") {                  // the rest of Settings is the owner's (the server says so too)
+      showSettingsPage("team", false);
+      return;
+    }
     showStatus("settings-status", dx.t("studio.loading"), false);
     $("settings-brain").replaceChildren();
     $("settings-fields").replaceChildren();
@@ -5802,7 +5834,19 @@
     location.reload();
   });
 
+  $("settings-nav").addEventListener("click", (ev) => {
+    const btn = ev.target.closest("button[data-page]");
+    if (btn) showSettingsPage(btn.dataset.page, true);
+  });
+  $("settings-nav-select").addEventListener("change", (ev) => showSettingsPage(ev.target.value, true));
+  $("settings-open-brain").addEventListener("click", () => {
+    if (narrow()) showPanel("tools");
+    selectRail("llm");
+  });
+  $("settings-open-permissions").addEventListener("click", () => showPanel("review", "permissions"));
+
   const opening = readQuery();
+  currentSettingsPage = opening.page;
   loadMe();
   showPanel(opening.panel, opening.tab);
   dx.watchSlug(onSlug);
