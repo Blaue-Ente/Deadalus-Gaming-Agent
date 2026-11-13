@@ -445,7 +445,8 @@ def test_temp_skill_and_reference_handlers_are_stubbed(tmp_path, monkeypatch):
             assert search_calls
             assert all(item["kwargs"]["record_discoveries"] is False for item in search_calls)
             assert all(item["kwargs"]["for_self"] is True for item in search_calls)
-            assert mesh_calls[-1]["model"] == "alltoken:deepseek-v3.2"
+            # Owner 2026-11-13 (plan Q4): with no AllToken key the research default follows the main model.
+            assert mesh_calls[-1]["model"] == ""
             assert mesh_calls[-1]["max_tokens"] == 1200
             assert list((tmp_path / "projects").rglob("_reference.json")) == []
             mode["mesh"] = "boom"
