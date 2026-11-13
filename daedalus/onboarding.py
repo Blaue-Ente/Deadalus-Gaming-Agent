@@ -48,7 +48,7 @@ INSTALL: dict[str, dict[str, str]] = {
     "node": {"windows": "winget install OpenJS.NodeJS.LTS", "mac": "brew install node",
              "linux": "sudo apt install nodejs npm", "url": "https://nodejs.org/"},
     "ollama": {"windows": "winget install Ollama.Ollama", "mac": "brew install ollama",
-               "linux": "curl -fsSL https://ollama.com/install.sh | sh", "after": "ollama pull qwen3:8b",
+               "linux": "curl -fsSL https://ollama.com/install.sh | sh", "after": "ollama pull qwen3-coder:30b",
                "url": "https://ollama.com/download"},
     "godot": {"windows": "winget install GodotEngine.GodotEngine", "mac": "brew install --cask godot",
               "linux": "flatpak install flathub org.godotengine.Godot", "after": "GODOT_BIN=<path to the Godot binary>",
@@ -119,19 +119,37 @@ def key_set(name: str) -> bool:
         return bool(os.environ.get(name))
 
 
+SMALL_LOCAL_B = 14        # a local model this size or smaller does not build a game with tools (live test 2026-11-13)
+
+
+def model_size_b(model: str) -> float | None:
+    """'qwen2.5-coder:7b' -> 7.0; None when the name says no size."""
+    import re
+    m = re.search(r"(?<![\d.])(\d+(?:\.\d+)?)\s*b\b", (model or "").lower())
+    return float(m.group(1)) if m else None
+
+
 def _brain() -> dict[str, Any]:
-    """A model to think with: any cloud key, a key saved in Connectors, or a local model that answers."""
+    """A model to think with: any cloud key, a key saved in Connectors, or a local model that answers. Says which
+    model Daedalus actually uses (live test 2026-11-13: an OpenRouter key was set, but .env pinned a local 7B model
+    that wrote no files), and warns when that is a small local model."""
     keys = [k for k in BRAIN_KEYS if key_set(k)]
-    detail, ok = ", ".join(keys), bool(keys)
-    if not ok:
-        try:
-            from .llm_config import get_brain_config
-            cfg = get_brain_config() or {}
-            if cfg.get("api_key") or cfg.get("local"):
-                ok, detail = True, f"{cfg.get('provider', '')} {cfg.get('model', '')}".strip()
-        except Exception:
-            pass
-    return _item("brain", "required", ok, detail)
+    ok = bool(keys)
+    active, local, weak = "", False, False
+    try:
+        from .llm_config import get_brain_config
+        from .local_llm import is_local_provider
+        cfg = get_brain_config() or {}
+        provider, model = str(cfg.get("provider") or ""), str(cfg.get("model") or "")
+        active = f"{provider} {model}".strip()
+        local = bool(cfg.get("local")) or is_local_provider(provider)
+        ok = ok or bool(cfg.get("api_key")) or local
+        size = model_size_b(model)
+        weak = local and size is not None and size <= SMALL_LOCAL_B
+    except Exception:
+        pass
+    return _item("brain", "required", ok, active or ", ".join(keys), active=active, local=local, weak=weak,
+                 keys=keys)
 
 
 def _pillow() -> dict[str, Any]:
@@ -286,6 +304,9 @@ def text_report(rep: dict[str, Any] | None = None) -> str:
     for i in rep["items"]:
         mark = _MARK[i["ok"]] if i["ok"] or i["level"] != "required" else "!! "
         lines.append(f"  {mark}{i['id']:<9} {i['level']:<12} {i.get('detail') or ''}".rstrip())
+        if i.get("weak"):
+            lines.append(f"       warning: {i['active']} is a small local model; it will not build a game with "
+                         f"tools. Use a cloud model (DAEDALUS_PROVIDER / DAEDALUS_MODEL) or a larger local one.")
         if not i["ok"] and i.get("install"):
             lines.append(f"       install: {i['install']}")
             if i.get("after"):

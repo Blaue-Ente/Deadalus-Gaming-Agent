@@ -60,6 +60,8 @@
       if (it.id === "python" && it.outdated) {
         li.appendChild(el("p", "onb-why", dx.t("onb.pythonOld", { rec: it.recommended })));
       }
+      if (it.id === "brain" && it.active) li.appendChild(el("p", "onb-why", dx.t("onb.brainActive", { model: it.active })));
+      if (it.id === "brain" && it.weak) li.appendChild(el("p", "onb-needs", dx.t("onb.brainWeak")));
       if (it.id === "ollama" && it.ok && !it.running) li.appendChild(el("p", "onb-why", dx.t("onb.ollamaStopped")));
       if (!it.ok && it.install) {
         const how = el("p", "onb-how");
