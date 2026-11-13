@@ -307,68 +307,6 @@
       group.title = locked ? t("studio.mentorLocked") : t("studio.mentorHint");
     }
     const llm = (data && data.llm) || {};
-    const catalog = Array.isArray(llm.catalog) ? llm.catalog : [];
-    const sel = $("mentor-choice");
-    if (sel) {
-      const choice = llm.choice || {};
-      const cur = String(choice.id || "auto");
-      const groups = { recommended: [], also: [], choice: [] };
-      catalog.forEach((row) => {
-        const g = row.group && groups[row.group] ? row.group : "choice";
-        groups[g].push(row);
-      });
-      Object.keys(groups).forEach((g) => {
-        groups[g].sort((a, b) => (Number(a.rank) || 100) - (Number(b.rank) || 100));
-      });
-      sel.innerHTML = "";
-      [
-        ["recommended", t("studio.mentorGroup.recommended")],
-        ["also", t("studio.mentorGroup.also")],
-        ["choice", t("studio.mentorGroup.choice")],
-      ].forEach(([key, label]) => {
-        const rows = groups[key] || [];
-        if (!rows.length) return;
-        const og = document.createElement("optgroup");
-        og.label = label;
-        rows.forEach((row) => {
-          const opt = document.createElement("option");
-          opt.value = row.id;
-          opt.dataset.provider = row.provider || "";
-          opt.dataset.model = row.model || "";
-          let name = row.label || row.id;
-          if (row.available === false && row.needs_key) name += " · " + t("studio.mentorNoKey");
-          opt.textContent = name;
-          opt.title = row.why || "";
-          og.appendChild(opt);
-        });
-        sel.appendChild(og);
-      });
-      if (cur === "custom" && !catalog.some((r) => r.id === "custom")) {
-        const opt = document.createElement("option");
-        opt.value = "custom";
-        opt.dataset.provider = choice.provider || "";
-        opt.dataset.model = choice.model || "";
-        opt.textContent = choice.label || choice.model || "custom";
-        sel.appendChild(opt);
-      }
-      sel.value = cur;
-      sel.disabled = !!llm.choice_locked;
-    }
-    const list = $("mentor-model-list");
-    if (list) {
-      const extra = Array.isArray(llm.presets) ? llm.presets : [];
-      const seen = new Set();
-      list.innerHTML = "";
-      (catalog.concat(extra)).forEach((row) => {
-        const model = row && row.model;
-        if (!model || seen.has(row.provider + ":" + model)) return;
-        seen.add(row.provider + ":" + model);
-        const opt = document.createElement("option");
-        opt.value = model;
-        opt.label = (row.label || model) + (row.provider ? " · " + row.provider : "");
-        list.appendChild(opt);
-      });
-    }
     const spendEl = $("mentor-spend");
     if (spendEl) {
       const spend = llm.spend || {};
@@ -512,32 +450,6 @@
     }
   }
 
-  async function setMentorChoice(choiceId) {
-    try {
-      const data = await api("/api/v1/daedalus/mentor", {
-        method: "POST",
-        body: JSON.stringify({ choice_id: choiceId }),
-        timeoutMs: 8000,
-      });
-      paintMentor(data);
-    } catch (e) {
-      add("bot", t("studio.mentorAria") + ": " + errText(e));
-    }
-  }
-
-  async function setMentorCustom(provider, model) {
-    try {
-      const data = await api("/api/v1/daedalus/mentor", {
-        method: "POST",
-        body: JSON.stringify({ provider, model }),
-        timeoutMs: 8000,
-      });
-      paintMentor(data);
-    } catch (e) {
-      add("bot", t("studio.mentorAria") + ": " + errText(e));
-    }
-  }
-
   function selectedProject() {
     return state.projects.find((p) => p.slug === state.slug) || null;
   }
@@ -617,42 +529,6 @@
   document.querySelectorAll(".budget button").forEach((btn) => {
     btn.onclick = () => setBudget(btn.dataset.budget);
   });
-  const mentorChoice = $("mentor-choice");
-  if (mentorChoice) {
-    mentorChoice.onchange = () => setMentorChoice(mentorChoice.value);
-  }
-  const mentorCustomBtn = $("mentor-custom");
-  const mentorDlg = $("mentor-custom-dlg");
-  if (mentorCustomBtn && mentorDlg) {
-    mentorCustomBtn.onclick = () => {
-      const selected = mentorChoice && mentorChoice.selectedOptions && mentorChoice.selectedOptions[0];
-      const prov = $("mentor-prov");
-      const model = $("mentor-model");
-      if (selected && prov && selected.dataset.provider) prov.value = selected.dataset.provider;
-      if (selected && model && selected.dataset.model) model.value = selected.dataset.model;
-      if (typeof mentorDlg.showModal === "function") mentorDlg.showModal();
-      else mentorDlg.setAttribute("open", "open");
-    };
-  }
-  const mentorCancel = $("mentor-custom-cancel");
-  if (mentorCancel && mentorDlg) {
-    mentorCancel.onclick = () => {
-      if (typeof mentorDlg.close === "function") mentorDlg.close();
-      else mentorDlg.removeAttribute("open");
-    };
-  }
-  const mentorForm = $("mentor-custom-form");
-  if (mentorForm) {
-    mentorForm.onsubmit = (ev) => {
-      ev.preventDefault();
-      const provider = ($("mentor-prov") && $("mentor-prov").value) || "openrouter";
-      const model = (($("mentor-model") && $("mentor-model").value) || "").trim();
-      if (!model) return;
-      setMentorCustom(provider, model);
-      if (mentorDlg && typeof mentorDlg.close === "function") mentorDlg.close();
-    };
-  }
-
   async function refreshHealth() {
     try {
       const [h, llm, local, w] = await Promise.all([

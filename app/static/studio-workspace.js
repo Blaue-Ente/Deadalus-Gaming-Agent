@@ -3780,26 +3780,6 @@
     }
   });
 
-  function paintBrain(data) {
-    const box = $("settings-brain");
-    box.replaceChildren();
-    if (data && data.configured === false) {          // nothing set up yet: an empty state, not an error (PR1)
-      const note = document.createElement("p");
-      note.textContent = dx.t("studio.noModelYet");
-      box.append(note);
-      return;
-    }
-    if (!data || data.ok === false) {
-      showStatus("settings-status", dx.t("studio.requestFailed") + ": " + ((data && data.error) || ""), true);
-      return;
-    }
-    const line = document.createElement("p");
-    line.textContent = [data.provider || dx.t("studio.settingsUnset"), data.model || ""].filter(Boolean).join(" · ");
-    const key = document.createElement("p");
-    key.textContent = data.has_key ? dx.t("studio.settingsSet") : dx.t("studio.settingsUnset");
-    box.append(line, key);
-  }
-
   function paintFields(data) {
     const box = $("settings-fields");
     const select = $("secret-key");
@@ -3961,12 +3941,225 @@
     });
   }
 
-  function intentModelText(row) {
+  // ---- Model manager (PR5): one picker used for the main model and for each task -----------------------------------
+  let modelsData = null;                 // the last GET /api/v1/harness/models: providers and catalog feed every picker
+  let mpSeq = 0;
+
+  function parseTag(tag) {
+    const s = String(tag || "");
+    const i = s.indexOf(":");
+    return i > 0 ? { provider: s.slice(0, i), model: s.slice(i + 1) } : { provider: "", model: "" };
+  }
+
+  function mpHint(provider, model) {
+    const row = (((modelsData && modelsData.catalog) || {})[provider] || []).find((m) => m.id === model);
+    if (!row) return dx.t("studio.mpHintUnknown");
+    const bits = [];
+    if (row.tier && row.tier !== "unknown") bits.push(dx.t("studio.mpTier", { tier: row.tier }));
+    if (row.context) bits.push(dx.t("studio.mpContext", { n: row.context }));
+    if (row.vision) bits.push(dx.t("studio.mpVision"));
+    return bits.length ? bits.join(" · ") : dx.t("studio.mpHintUnknown");
+  }
+
+  // dx.modelPicker(container, {value:{provider,model}, onSave(value) -> Promise, onTest() -> Promise<{text,bad}>,
+  //                            locked, lockEnv, allowSameAsMain, label})
+  function modelPicker(container, o) {
+    const opts = o || {};
+    const providers = ((modelsData && modelsData.providers) || []).slice();
+    const value = opts.value || { provider: "", model: "" };
+    if (value.provider && !providers.some((p) => p.id === value.provider)) {
+      providers.push({ id: value.provider, label: value.provider, kind: "cloud", has_key: true });
+    }
+    const uid = "mp" + (++mpSeq);
+    const root = document.createElement("div");
+    root.className = "dx-model-picker";
+    root.dataset.locked = opts.locked ? "1" : "0";
+
+    const line = document.createElement("div");
+    line.className = "dx-mp-line";
+    const select = document.createElement("select");
+    select.className = "dx-mp-provider";
+    select.setAttribute("aria-label", opts.label ? opts.label + " · " + dx.t("studio.mpProvider") : dx.t("studio.mpProvider"));
+    const first = document.createElement("option");
+    first.value = "";
+    first.textContent = opts.allowSameAsMain ? dx.t("studio.mpSameAsMain") : dx.t("studio.mpChooseProvider");
+    select.appendChild(first);
+    [["cloud", "studio.mpCloud"], ["local", "studio.mpLocal"]].forEach(([kind, key]) => {
+      const rows = providers.filter((p) => p.kind === kind);
+      if (!rows.length) return;
+      const og = document.createElement("optgroup");
+      og.label = dx.t(key);
+      rows.forEach((p) => {
+        const opt = document.createElement("option");
+        opt.value = p.id;
+        opt.textContent = (p.label || p.id) + (p.has_key ? "" : " " + dx.t("studio.mpNoKey"));
+        og.appendChild(opt);
+      });
+      select.appendChild(og);
+    });
+    select.value = value.provider || "";
+    const input = document.createElement("input");
+    input.className = "dx-mp-model";
+    input.autocomplete = "off";
+    input.setAttribute("list", uid + "-list");
+    input.setAttribute("aria-label", opts.label ? opts.label + " · " + dx.t("studio.mpModel") : dx.t("studio.mpModel"));
+    input.placeholder = dx.t("studio.mpModelPlaceholder");
+    input.value = value.model || "";
+    const list = document.createElement("datalist");
+    list.id = uid + "-list";
+    const save = document.createElement("button");
+    save.type = "button";
+    save.className = "primary dx-mp-save";
+    save.textContent = dx.t("studio.settingsSave");
+    line.append(select, input, list, save);
+    let test = null;
+    if (opts.onTest) {
+      test = document.createElement("button");
+      test.type = "button";
+      test.className = "dx-mp-test";
+      test.textContent = dx.t("studio.mpTest");
+      line.appendChild(test);
+    }
+    const hint = document.createElement("p");
+    hint.className = "hint dx-mp-hint";
+    const note = document.createElement("p");
+    note.className = "cfg-note dx-mp-note";
+    note.hidden = true;
+    root.append(line, hint, note);
+
+    function say(text, bad) {
+      note.textContent = text || "";
+      note.hidden = !text;
+      note.dataset.state = bad ? "error" : "ok";
+    }
+    function refresh() {
+      const prov = select.value;
+      list.replaceChildren();
+      (((modelsData && modelsData.catalog) || {})[prov] || []).forEach((m) => {
+        const opt = document.createElement("option");
+        opt.value = m.id;
+        opt.label = m.label || m.id;
+        list.appendChild(opt);
+      });
+      input.hidden = !prov;
+      hint.replaceChildren();
+      if (!prov) return;
+      const meta = providers.find((p) => p.id === prov) || {};
+      hint.append(document.createTextNode(mpHint(prov, input.value.trim()) + " "));
+      if (meta.kind === "cloud" && !meta.has_key) {
+        const a = document.createElement("a");
+        a.href = "?panel=settings&page=keys";
+        a.className = "dx-mp-keylink";
+        a.textContent = dx.t("studio.mpAddKey");
+        a.addEventListener("click", (ev) => { ev.preventDefault(); showSettingsPage("keys", true); });
+        hint.appendChild(a);
+      }
+    }
+    select.addEventListener("change", () => { input.value = ""; say(""); refresh(); });
+    input.addEventListener("input", () => { say(""); refresh(); });
+    refresh();
+
+    if (opts.locked) {
+      [select, input, save].forEach((el) => { el.disabled = true; });
+      if (test) test.disabled = true;
+      const b = document.createElement("span");
+      b.className = "badge";
+      b.dataset.src = "env";
+      b.textContent = dx.t("studio.mpLocked");
+      line.appendChild(b);
+      say(dx.t("studio.mpLockedNote", { env: opts.lockEnv || "DAEDALUS_MODEL" }), false);
+      root.dataset.state = "locked";
+    } else {
+      save.addEventListener("click", async () => {
+        const prov = select.value;
+        const model = input.value.trim();
+        if (prov && !model) { say(dx.t("studio.mpNeedModel"), true); return; }
+        dx.busy(save, true, "…");
+        try {
+          await opts.onSave({ provider: prov, model: prov ? model : "" });
+          say(dx.t("studio.saved"), false);
+        } catch (err) {
+          const msg = String((err && err.message) || "");
+          say(msg === "env_locked" ? dx.t("studio.mpLockedNote", { env: (err && err.env) || "DAEDALUS_MODEL" })
+            : msg === "unknown_provider" ? dx.t("studio.mpUnknownProvider") : failText(err), true);
+        } finally {
+          dx.busy(save, false);
+        }
+      });
+      if (test) {
+        test.addEventListener("click", async () => {
+          dx.busy(test, true, "…");
+          try {
+            const r = await opts.onTest();
+            say(r.text, !!r.bad);
+          } catch (err) {
+            say(failText(err), true);
+          } finally {
+            dx.busy(test, false);
+          }
+        });
+      }
+    }
+    container.appendChild(root);
+    return root;
+  }
+  dx.modelPicker = modelPicker;
+
+  function brainSummary(brain) {
+    const p = document.createElement("p");
+    p.className = "dx-mp-summary";
+    const kinds = { saved: "studio.mpSrcSaved", server: "studio.mpSrcServer", local: "studio.mpSrcLocal", auto: "studio.mpSrcAuto" };
+    const src = tOr(kinds[brain.source_kind], "");
+    p.textContent = dx.t("studio.mpUsing", { model: brain.provider + " · " + brain.model })
+      + (src ? " " + src : "") + " " + (brain.has_key ? dx.t("studio.mpKeySet") : dx.t("studio.mpKeyMissing"));
+    return p;
+  }
+
+  async function reloadModels() {
+    const data = await dx.api("/api/v1/harness/models");
+    paintModels(data);
+    return data;
+  }
+
+  function paintBrain(data) {
+    const box = $("settings-brain");
+    box.replaceChildren();
+    const brain = (data && data.brain) || {};
+    if (data && data.configured === false) {          // nothing set up yet: an empty state, not an error (M11)
+      const note = document.createElement("p");
+      note.className = "hint dx-mp-empty";
+      note.textContent = dx.t("studio.mpNoneYet");
+      box.append(note);
+    } else {
+      box.append(brainSummary(brain));
+    }
+    modelPicker(box, {
+      value: { provider: brain.provider || "", model: brain.model || "" },
+      locked: !!brain.locked, lockEnv: brain.lock_env, label: dx.t("studio.mpMainTitle"),
+      onSave: async (v) => {
+        await postJson("/api/v1/harness/brain", { provider: v.provider, model: v.model });
+        await reloadModels();                      // the card is rebuilt from what the server now says
+        const fresh = $("settings-brain").querySelector(".dx-mp-note");
+        if (fresh && !fresh.textContent) { fresh.textContent = dx.t("studio.saved"); fresh.hidden = false; fresh.dataset.state = "ok"; }
+        showStatus("harness-status", dx.t("studio.saved"), false);
+      },
+      onTest: async () => {
+        const r = await postJson("/api/v1/harness/test-provider", { slot: "master" });     // tests the saved main model
+        if (r.ok) return { text: dx.t("studio.workerOk", { model: r.model || "", ms: r.latency_ms == null ? "?" : r.latency_ms, reply: r.reply || "" }), bad: false };
+        return { text: dx.t("studio.workerFail", { why: errText(r.error) }), bad: true };
+      },
+    });
+  }
+
+  const TASK_ORDER = ["writer", "planner", "critic", "mentor", "tools", "scout", "asset"];
+
+  function taskStateText(row) {
+    const tag = intentTag(row);
+    if (tag) return tag;
     const r = row.resolved || {};
-    if (r.model) return (r.provider ? r.provider + ":" : "") + r.model;
-    // Nothing resolves yet (for example no API key), but the owner may already have chosen one: show the choice.
-    const chosen = row.owner_choice && row.owner_choice !== "auto" ? String(row.owner_choice) : "";
-    return chosen || dx.t("studio.settingsNoModel");
+    if (row.intent === "mentor" && r.model) return dx.t("studio.mpAutoModel", { model: (r.provider ? r.provider + ":" : "") + r.model });
+    if (row.default) return dx.t("studio.mpDefaultIs", { model: row.default });
+    return dx.t("studio.mpFollowsMain");
   }
 
   function intentTag(row) {
@@ -3975,87 +4168,76 @@
     return raw && raw !== "auto" ? String(raw) : "";
   }
 
-  function buildIntentRow(row, data) {
+  function buildTaskRow(row, data) {
     const item = document.createElement("div");
     item.className = "cfg-row";
     item.dataset.intent = row.intent;
-    const locked = !!((row.resolved && row.resolved.locked) || (row.selectable && data.env_locked && row.intent !== "mentor"));
+    const brain = (data && data.brain) || {};
+    const mentorLocked = row.intent === "mentor" && !!(row.resolved && row.resolved.locked);
+    const envLocked = row.intent !== "mentor" && !!(data && data.env_locked);
+    const locked = mentorLocked || envLocked;
     item.dataset.locked = locked ? "1" : "0";
     const name = document.createElement("div");
     name.className = "cfg-name";
     const b = document.createElement("b");
-    b.textContent = tOr("studio.intent." + row.intent, row.intent);
-    const small = document.createElement("small");
-    small.textContent = intentModelText(row) + (row.resolved && row.resolved.source ? " · " + row.resolved.source : "");
-    name.append(b, small);
-    const wrap = document.createElement("div");
-    wrap.className = "cfg-control";
-    const actions = document.createElement("div");
-    actions.className = "cfg-actions";
-    const note = document.createElement("p");
-    note.className = "cfg-note";
-    note.hidden = true;
+    b.textContent = tOr("studio.mpTask." + row.intent, row.intent);
+    const desc = document.createElement("small");
+    desc.className = "dx-mp-desc";
+    desc.textContent = tOr("studio.mpTaskDesc." + row.intent, "");
+    const state = document.createElement("small");
+    state.className = "dx-mp-state";
+    const stateText = taskStateText(row);
+    state.textContent = stateText;
+    name.append(b, desc);
+    if (stateText !== dx.t("studio.mpFollowsMain")) name.append(state);   // the picker already says "Same as main"
+    item.appendChild(name);
     if (row.selectable) {
-      const input = document.createElement("input");
-      input.autocomplete = "off";
-      input.value = intentTag(row);
-      input.placeholder = row.default ? dx.t("studio.intentDefault", { model: row.default }) : "provider:model";
-      input.disabled = locked;
-      input.setAttribute("aria-label", tOr("studio.intent." + row.intent, row.intent));
-      wrap.appendChild(input);
-      if (locked) {
-        note.textContent = dx.t("studio.settingsLockedBy", { env: row.intent === "mentor" ? "DAEDALUS_MENTOR_MODEL" : "DAEDALUS_MODEL" });
-        note.hidden = false;
-        actions.appendChild(badge("env"));
-      } else {
-        const save = document.createElement("button");
-        save.type = "button";
-        save.className = "primary cfg-save";
-        save.textContent = dx.t("studio.settingsSave");
-        const clear = document.createElement("button");
-        clear.type = "button";
-        clear.className = "cfg-clear";
-        clear.textContent = dx.t("studio.settingsClear");
-        save.addEventListener("click", () => saveIntent(row.intent, input.value.trim(), note, item, save));
-        clear.addEventListener("click", () => saveIntent(row.intent, "", note, item, clear));
-        actions.append(save, clear);
-        if (row.intent === "persona" || row.intent === "writer") {   // both write the one writer override
-          note.textContent = dx.t("studio.intentShared");
-          note.hidden = false;
-        }
-      }
+      const holder = document.createElement("div");
+      holder.className = "cfg-control";
+      item.appendChild(holder);
+      modelPicker(holder, {
+        value: parseTag(intentTag(row)), allowSameAsMain: true, locked,
+        lockEnv: mentorLocked ? "DAEDALUS_MENTOR_MODEL" : "DAEDALUS_MODEL",
+        label: tOr("studio.mpTask." + row.intent, row.intent),
+        onSave: (v) => saveIntent(row.intent, v.provider ? v.provider + ":" + v.model : "", item),
+      });
     } else {
-      note.textContent = row.default ? dx.t("studio.intentPinned", { model: row.default }) : dx.t("studio.intentFollows");
-      note.hidden = false;
+      const note = document.createElement("p");
+      note.className = "cfg-note";
+      note.textContent = dx.t("studio.mpFollowsMain");
+      item.appendChild(note);
     }
-    item.append(name, wrap, actions, note);
     return item;
   }
 
   function paintIntents(data) {
     const box = $("settings-intents");
     box.replaceChildren();
-    ((data && data.intents) || []).forEach((row) => box.appendChild(buildIntentRow(row, data)));
+    const rows = (data && data.tasks) || [];
+    TASK_ORDER.forEach((intent) => {
+      const row = rows.find((r) => r.intent === intent);
+      if (row) box.appendChild(buildTaskRow(row, data));
+    });
   }
 
-  async function saveIntent(intent, model, note, item, button) {
-    item.dataset.state = "";
-    note.hidden = true;
-    await runAction(button, "harness-status", async () => {
-      try {
-        const data = await postJson("/api/v1/harness/intents", { intent, model });
-        // Persona and Writer share one setting, so both rows are rebuilt; every other row keeps its unsaved edits.
-        ((data && data.intents) || []).forEach((fresh) => {
-          const same = fresh.intent === intent || (fresh.intent === "persona" && intent === "writer") || (fresh.intent === "writer" && intent === "persona");
-          const el = document.querySelector("#settings-intents .cfg-row[data-intent='" + fresh.intent + "']");
-          if (same && el) el.replaceWith(buildIntentRow(fresh, data));
-        });
-        showStatus("harness-status", dx.t("studio.saved"), false);
-      } catch (err) {
-        const msg = String((err && err.message) || "");
-        cfgError(note, item, msg === "env_locked" ? dx.t("studio.settingsLockedBy", { env: "DAEDALUS_MODEL" }) : failText(err));
-      }
-    });
+  function paintModels(data) {
+    modelsData = data || null;
+    paintBrain(data);
+    paintIntents(data);
+  }
+
+  async function saveIntent(intent, model, item) {
+    const data = await postJson("/api/v1/harness/intents", { intent, model });
+    // Only this row is rebuilt: the other rows keep what the owner has typed but not saved yet.
+    const fresh = ((data && data.intents) || []).find((r) => r.intent === intent);
+    const merged = Object.assign({}, modelsData || {}, { env_locked: !!(data && data.env_locked) });
+    if (fresh && item && item.isConnected) {
+      const rebuilt = buildTaskRow(fresh, merged);
+      item.replaceWith(rebuilt);
+      const keep = rebuilt.querySelector(".dx-mp-note");
+      if (keep) { keep.textContent = dx.t("studio.saved"); keep.hidden = false; keep.dataset.state = "ok"; }
+    }
+    showStatus("harness-status", dx.t("studio.saved"), false);
   }
 
   function listItem(left, right) {
@@ -4433,7 +4615,7 @@
   async function loadHarnessSettings() {
     const mine = ++harnessSeq;
     paintLinks();
-    const calls = ["/api/v1/harness/config", "/api/v1/harness/intents", "/api/v1/harness/engines",
+    const calls = ["/api/v1/harness/config", "/api/v1/harness/models", "/api/v1/harness/engines",
       "/api/v1/harness/workers", "/api/v1/harness/connections", "/api/v1/harness/kernel",
       "/api/v1/harness/upgrade-pool"].map((p) => dx.api(p));
     const results = await Promise.allSettled(calls);
@@ -4444,7 +4626,7 @@
       try { fn(res.value); } catch (err) { problems.push(failText(err)); }     // one broken section must not hide the rest
     };
     paint(results[0], (v) => paintConfig(v.settings || []));
-    paint(results[1], paintIntents);
+    paint(results[1], paintModels);
     paint(results[2], (v) => { paintEngines(v); paintProof(v); });
     paint(results[3], paintWorkers);
     paint(results[4], paintConnections);
@@ -4668,11 +4850,6 @@
     $("settings-brain").replaceChildren();
     $("settings-fields").replaceChildren();
     loadHarnessSettings();
-    try {
-      paintBrain(await dx.api("/api/v1/llm/status"));
-    } catch (err) {
-      showStatus("settings-status", dx.t("studio.requestFailed") + ": " + failText(err), true);
-    }
     try {
       const overview = await dx.api("/admin/daedalus/connectors/overview");
       paintFields(overview);

@@ -12,6 +12,7 @@ from test_studio_phase2_workspace import _fulfill, _hit, studio_server  # noqa: 
 KEYS = ["mentor.enabled", "mentor.day_token_cap", "run_budget.usd", "writer_assist.mode", "fallback.mode",
         "fallback.triggers", "evolution.enabled",
         "auto_apply.enabled", "play.max_sessions", "subq.shadow", "kv.backend", "brain.model"]
+UI_TASKS = ["writer", "planner", "critic", "mentor", "tools", "scout", "asset"]   # PR5: Chat and Writer are one row
 INTENTS = ["persona", "writer", "tools", "mentor", "critic", "planner", "navigator", "summary", "scout", "asset",
            "worker", "test"]
 
@@ -139,7 +140,7 @@ def test_every_setting_task_model_engine_and_proof_level_is_shown(studio_server)
         for key in KEYS:
             row = page.locator(f".cfg-row[data-key='{key}']")
             assert row.locator(".badge").count() == 1
-        assert sorted(page.eval_on_selector_all(".cfg-row[data-intent]", "els => els.map(e => e.dataset.intent)")) == sorted(INTENTS)
+        assert sorted(page.eval_on_selector_all(".cfg-row[data-intent]", "els => els.map(e => e.dataset.intent)")) == sorted(UI_TASKS)
         assert page.locator("#settings-proof li").count() == 6
         _go(page, "projects")
         text = page.inner_text("#settings-engines")
@@ -221,20 +222,21 @@ def test_a_task_model_is_set_and_cleared_with_real_clicks(studio_server):
         _open(page, studio_server)
         _expand(page, "settings-intents-box")
         row = page.locator(".cfg-row[data-intent='critic']")
-        row.locator("input").fill("openrouter:test/critic-model")
-        row.locator(".cfg-save").click()
+        row.locator("select.dx-mp-provider").select_option("openrouter")
+        row.locator("input.dx-mp-model").fill("test/critic-model")
+        row.locator(".dx-mp-save").click()
         page.wait_for_function("() => document.getElementById('harness-status').textContent === 'Saved.'")
         assert "openrouter:test/critic-model" in page.inner_text(".cfg-row[data-intent='critic'] .cfg-name")
-        page.locator(".cfg-row[data-intent='critic'] .cfg-clear").click()
+        row = page.locator(".cfg-row[data-intent='critic']")                  # the row was rebuilt from the server's answer
+        row.locator("select.dx-mp-provider").select_option("")                # "Same as main" clears the override
+        row.locator(".dx-mp-save").click()
         page.wait_for_function("() => !document.querySelector(\".cfg-row[data-intent='critic'] .cfg-name\").textContent.includes('critic-model')")
-        # a malformed tag is refused with a reason
+        # a provider without a model is refused in the page with a reason
         row = page.locator(".cfg-row[data-intent='critic']")
-        row.locator("input").fill("not-a-model-tag")
-        row.locator(".cfg-save").click()
-        page.wait_for_function("() => document.querySelector(\".cfg-row[data-intent='critic'] .cfg-note:not([hidden])\") !== null")
-        assert "provider:model" in page.inner_text(".cfg-row[data-intent='critic'] .cfg-note")
-        # tasks that only follow the brain have no input
-        assert page.locator(".cfg-row[data-intent='summary'] input").count() == 0
+        row.locator("select.dx-mp-provider").select_option("openrouter")
+        row.locator(".dx-mp-save").click()
+        page.wait_for_function("() => document.querySelector(\".cfg-row[data-intent='critic'] .dx-mp-note:not([hidden])\") !== null")
+        assert "model name" in page.inner_text(".cfg-row[data-intent='critic'] .dx-mp-note")
         browser.close()
 
 
@@ -270,7 +272,7 @@ def test_the_panel_fits_and_its_buttons_are_really_clickable(studio_server, size
         }""")
         assert over["sw"] <= over["cw"] + 1 and over["docw"] <= over["vw"] + 1, over
         for selector, where in ((".cfg-row[data-key='play.max_sessions'] .cfg-save", "projects"),
-                                (".cfg-row[data-intent='writer'] .cfg-save", "models")):
+                                (".cfg-row[data-intent='writer'] .dx-mp-save", "models")):
             _go(page, where)
             if where == "models":
                 _expand(page, "settings-intents-box")
@@ -297,7 +299,7 @@ def test_opening_settings_twice_does_not_duplicate_rows(studio_server):
         page.wait_for_selector(".cfg-row[data-key]")
         page.wait_for_timeout(800)
         assert page.locator(".cfg-row[data-key]").count() == len(KEYS)
-        assert page.locator(".cfg-row[data-intent]").count() == len(INTENTS)
+        assert page.locator(".cfg-row[data-intent]").count() == len(UI_TASKS)
         browser.close()
 
 
@@ -308,28 +310,28 @@ def test_the_mentor_field_never_holds_an_internal_choice_id(studio_server):
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         _open(page, studio_server)
-        value = page.locator(".cfg-row[data-intent='mentor'] input").input_value()
-        assert value == "" or ":" in value, value               # 'rules' / 'brain' would be rejected on Save
+        value = page.locator(".cfg-row[data-intent='mentor'] input.dx-mp-model").input_value()
+        assert value not in ("rules", "brain", "auto", "custom"), value        # an id would be rejected on Save
+        provider = page.locator(".cfg-row[data-intent='mentor'] select.dx-mp-provider").input_value()
+        assert (provider == "") == (value == "")
         browser.close()
 
 
-def test_pinned_and_shared_tasks_are_labelled_honestly(studio_server):
+def test_the_chat_and_writer_tasks_are_one_row_that_writes_the_one_setting(studio_server):
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch()
         page = browser.new_page(viewport={"width": 1280, "height": 800})
         _open(page, studio_server)
-        _expand(page, "settings-intents-box")
-        assert "Follows the Studio brain" in page.inner_text(".cfg-row[data-intent='summary'] .cfg-note")
-        assert page.locator(".cfg-row[data-intent='scout'] input").count() == 1      # scout is owner-selectable now
-        assert "share one setting" in page.inner_text(".cfg-row[data-intent='persona'] .cfg-note")
-        assert "share one setting" in page.inner_text(".cfg-row[data-intent='writer'] .cfg-note")
-        page.locator(".cfg-row[data-intent='persona'] input").fill("openrouter:test/shared")
-        page.locator(".cfg-row[data-intent='persona'] .cfg-save").click()
-        page.wait_for_function("() => document.querySelector(\".cfg-row[data-intent='writer'] input\").value === 'openrouter:test/shared'")
-        page.locator(".cfg-row[data-intent='writer'] .cfg-clear").click()
-        page.wait_for_function("() => document.querySelector(\".cfg-row[data-intent='persona'] input\").value === ''")
+        assert page.locator(".cfg-row[data-intent='persona']").count() == 0
+        assert page.locator(".cfg-row[data-intent='scout'] .dx-model-picker").count() == 1      # scout is owner-selectable
+        assert "Chat & writing" in page.inner_text(".cfg-row[data-intent='writer'] .cfg-name")
+        row = page.locator(".cfg-row[data-intent='writer']")
+        row.locator("select.dx-mp-provider").select_option("openrouter")
+        row.locator("input.dx-mp-model").fill("test/shared")
+        row.locator(".dx-mp-save").click()
+        page.wait_for_function("() => document.querySelector(\".cfg-row[data-intent='writer'] .cfg-name\").textContent.includes('test/shared')")
         browser.close()
 
 

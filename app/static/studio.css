@@ -243,42 +243,6 @@ button.chip {
   gap: 0.4rem;
   flex-shrink: 0;
 }
-.mentor-choice {
-  width: auto;
-  max-width: 13.5rem;
-  padding: 0.28rem 0.5rem;
-  font-size: 0.72rem;
-  border-radius: 999px;
-  background: var(--bg-input);
-}
-.mentor-custom {
-  flex-shrink: 0;
-  width: 1.85rem;
-  height: 1.85rem;
-  padding: 0;
-  border-radius: 999px;
-  font-size: 0.85rem;
-  line-height: 1;
-  color: var(--muted);
-}
-.mentor-dlg {
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--bg-raise);
-  color: var(--ink);
-  padding: 0.9rem 1rem;
-  max-width: 22rem;
-}
-.mentor-dlg::backdrop {
-  background: rgba(8, 6, 4, 0.55);
-}
-.mentor-dlg .kicker { margin: 0 0 0.25rem; }
-.mentor-dlg .hint { margin: 0 0 0.65rem; }
-.mentor-dlg select, .mentor-dlg input {
-  width: 100%;
-  margin: 0 0 0.45rem;
-}
-.mentor-dlg .row { margin-top: 0.2rem; }
 .onb-dlg {
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -472,6 +436,20 @@ main {
 .cfg-row .cfg-note { grid-column: 1 / -1; margin: 0; color: var(--muted); font-size: 0.74rem; line-height: 1.35; }
 .cfg-row[data-locked="1"] .cfg-note { color: var(--warn); }
 .cfg-row[data-state="error"] .cfg-note { color: var(--err); }
+.dx-model-picker { min-width: 0; flex: 1; }
+.dx-model-picker .dx-mp-line { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.dx-model-picker .dx-mp-provider { flex: 1 1 11rem; min-width: 0; }
+.dx-model-picker .dx-mp-model { flex: 2 1 12rem; min-width: 0; }
+.dx-model-picker .dx-mp-hint { flex-basis: 100%; margin: 0.3rem 0 0; }
+.dx-model-picker .dx-mp-note { margin: 0.25rem 0 0; }
+.dx-model-picker .dx-mp-note[data-state="error"] { color: var(--err); }
+.dx-model-picker[data-state="locked"] .dx-mp-note { color: var(--warn); }
+.dx-mp-card { margin: 0 0 0.9rem; }
+.dx-mp-summary, .dx-mp-empty { margin: 0 0 0.45rem; font-size: 0.82rem; }
+.cfg-row[data-intent] { grid-template-columns: minmax(0, 1.4fr) minmax(0, 2fr); align-items: start; }
+.cfg-row[data-intent] .cfg-name small { display: block; }
+.cfg-row[data-intent] .cfg-name .dx-mp-desc { font-family: var(--font); font-size: 0.74rem; }
+@media (max-width: 700px) { .cfg-row[data-intent] { grid-template-columns: minmax(0, 1fr); } }
 .badge {
   display: inline-block;
   font-family: var(--mono);
