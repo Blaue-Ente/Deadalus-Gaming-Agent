@@ -173,7 +173,7 @@ PROVIDER_DEFAULTS: dict[str, dict] = {
     # Docs: https://build.nvidia.com  |  Key env: NVIDIA_API_KEY  |  Base: integrate.api.nvidia.com/v1
     "nvidia": {
         "base_url": "https://integrate.api.nvidia.com/v1",
-        "default_model": "qwen/qwen3-next-80b-a3b-instruct",
+        "default_model": "nvidia/nemotron-3-ultra-550b-a55b",
         "sdk": "openai",
     },
     # OmniRoute — local OpenAI-compat sidecar (free-tier fallback via model `auto`).
@@ -292,10 +292,10 @@ PRESET_MODELS = [
     {"id": "poolside/laguna-m.1",           "label": "Poolside Laguna M.1 💻 262K ($0 beta)",        "provider": "poolside", "tier": "power"},
     # ── NVIDIA NIM — free preview tier (rate-limited) ─────────────────────────
     # Base URL: https://integrate.api.nvidia.com/v1  |  Key env: NVIDIA_API_KEY
-    {"id": "mistralai/mistral-large-3-675b-instruct-2512", "label": "Mistral Large 3 675B (NVIDIA) 🆓 code", "provider": "nvidia", "tier": "power"},
-    {"id": "deepseek-ai/deepseek-v4-flash",             "label": "DeepSeek V4 Flash (NVIDIA) 🆓 ⚡",       "provider": "nvidia", "tier": "fast"},
-    {"id": "openai/gpt-oss-120b",                     "label": "GPT-OSS 120B (NVIDIA) 🆓 reasoning",  "provider": "nvidia", "tier": "power"},
-    {"id": "qwen/qwen3-next-80b-a3b-instruct",        "label": "Qwen3 Next 80B (NVIDIA) 🆓 ⚡",       "provider": "nvidia", "tier": "fast"},
+    {"id": "mistralai/mistral-large-4-1t-a52b", "label": "Mistral Large 4 (NVIDIA) 🆓 code", "provider": "nvidia", "tier": "power"},
+    {"id": "nvidia/nemotron-3.5-lightning-30b-a3b",             "label": "Nemotron 3.5 Lightning 30B (NVIDIA) 🆓 ⚡",       "provider": "nvidia", "tier": "fast"},
+    {"id": "openai/gpt-oss-20b",                      "label": "GPT-OSS 20B (NVIDIA) 🆓 reasoning",   "provider": "nvidia", "tier": "fast"},
+    {"id": "nvidia/nemotron-3-ultra-550b-a55b",        "label": "Nemotron 3 Ultra 550B (NVIDIA) 🆓 code", "provider": "nvidia", "tier": "power"},
     # ── Local (Ollama / LM Studio / llama.cpp / vLLM) ────────────────────────
     # OmniRoute sidecar — virtual combos; the gateway picks a healthy free/paid target.
     {"id": "auto",              "label": "OmniRoute auto (sidecar) 🆓",         "provider": "omniroute", "tier": "cheap"},
@@ -308,7 +308,7 @@ PRESET_MODELS = [
     {"id": "local-model",          "label": "Loaded model (LM Studio) 🖥",         "provider": "lmstudio", "tier": "fast"},
     {"id": "local-model",          "label": "llama-server (llama.cpp) 🖥",         "provider": "llamacpp", "tier": "fast"},
     {"id": "local-model",          "label": "vLLM local 🖥",                       "provider": "vllm", "tier": "power"},
-    {"id": "meta/llama-4-maverick-17b-128e-instruct", "label": "Llama 4 Maverick (NVIDIA) 🆓 vision", "provider": "nvidia", "tier": "fast"},
+    {"id": "meta/llama-3.2-90b-vision-instruct", "label": "Llama 3.2 90B Vision (NVIDIA) 🆓 vision", "provider": "nvidia", "tier": "fast"},
     {"id": "deepseek-v4-flash",             "label": "DeepSeek V4 Flash (AllToken) ⚡",              "provider": "alltoken", "tier": "cheap"},
     {"id": "gemini-3-flash-preview",        "label": "Gemini 3 Flash (AllToken)",                   "provider": "alltoken", "tier": "cheap"},
     # ⚖️ Fast / balanced tier
@@ -436,6 +436,26 @@ def _apply_nvidia_free_policy(cfg: dict) -> dict:
 from .model_defaults import OPENROUTER_DEFAULT_MODEL, OPENROUTER_FAST_MODEL  # noqa: E402,F401  (re-exported)
 
 
+# NVIDIA models that are gone (checked live 2026-11-13: 404 or absent from /v1/models) and what replaces each. A saved
+# configuration that still names one keeps working instead of failing on every call.
+NVIDIA_RETIRED: dict[str, str] = {
+    "qwen/qwen3-next-80b-a3b-instruct": "nvidia/nemotron-3-ultra-550b-a55b",
+    "mistralai/mistral-large-3-675b-instruct-2512": "mistralai/mistral-large-4-1t-a52b",
+    "deepseek-ai/deepseek-v4-flash": "nvidia/nemotron-3.5-lightning-30b-a3b",
+    "deepseek-ai/deepseek-v4-pro": "nvidia/nemotron-3-ultra-550b-a55b",
+    "meta/llama-4-maverick-17b-128e-instruct": "meta/llama-3.2-90b-vision-instruct",
+    "meta/llama-3.2-3b-instruct": "nvidia/nemotron-3.5-bolt-e4b",
+    "moonshotai/kimi-k2.6": "nvidia/nemotron-3-ultra-550b-a55b",
+}
+
+
+def current_nvidia_model(provider: str, model: str) -> str:
+    """The live replacement for a retired NVIDIA model; any other model unchanged."""
+    if (provider or "").strip().lower() == "nvidia":
+        return NVIDIA_RETIRED.get(model, model)
+    return model
+
+
 def get_brain_config() -> dict:
     """Effective Connectors / wardrobe brain — no task_effort or run_budget overlay.
 
@@ -444,7 +464,12 @@ def get_brain_config() -> dict:
     run-budget writer overlays for that turn only.
     """
     from .credentials import member_config
-    return member_config(_resolve_llm_config())      # gap 3c: a team member's call carries a key of theirs
+    cfg = _resolve_llm_config()
+    if isinstance(cfg, dict):
+        live = current_nvidia_model(str(cfg.get("provider") or ""), str(cfg.get("model") or ""))
+        if live != cfg.get("model"):
+            cfg = {**cfg, "model": live, "model_migrated_from": cfg.get("model")}
+    return member_config(cfg)      # gap 3c: a team member's call carries a key of theirs
 
 
 def get_config() -> dict:

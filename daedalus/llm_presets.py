@@ -49,10 +49,10 @@ CONFIG_PRESETS: list[dict] = [
             "за mesh/build fallback също само през NVIDIA."
         ),
         "budget": "$0 (rate-limited preview)",
-        "master":   {"provider": "nvidia", "model": "qwen/qwen3-next-80b-a3b-instruct"},
+        "master":   {"provider": "nvidia", "model": "nvidia/nemotron-3-ultra-550b-a55b"},
         "fast":     {"provider": "nvidia", "model": "openai/gpt-oss-20b"},
-        "balanced": {"provider": "nvidia", "model": "deepseek-ai/deepseek-v4-flash"},
-        "deep":     {"provider": "nvidia", "model": "mistralai/mistral-large-3-675b-instruct-2512"},
+        "balanced": {"provider": "nvidia", "model": "nvidia/nemotron-3.5-lightning-30b-a3b"},
+        "deep":     {"provider": "nvidia", "model": "mistralai/mistral-large-4-1t-a52b"},
     },
     {
         "id": "or_free",
@@ -535,10 +535,10 @@ def nvidia_free_mix_slots() -> dict[str, dict]:
     preset = get_preset("nvidia_free")
     if not preset:
         return {
-            "master": {"provider": "nvidia", "model": "qwen/qwen3-next-80b-a3b-instruct"},
+            "master": {"provider": "nvidia", "model": "nvidia/nemotron-3-ultra-550b-a55b"},
             "fast": {"provider": "nvidia", "model": "openai/gpt-oss-20b"},
-            "balanced": {"provider": "nvidia", "model": "deepseek-ai/deepseek-v4-flash"},
-            "deep": {"provider": "nvidia", "model": "mistralai/mistral-large-3-675b-instruct-2512"},
+            "balanced": {"provider": "nvidia", "model": "nvidia/nemotron-3.5-lightning-30b-a3b"},
+            "deep": {"provider": "nvidia", "model": "mistralai/mistral-large-4-1t-a52b"},
         }
     return {
         "master": preset["master"],

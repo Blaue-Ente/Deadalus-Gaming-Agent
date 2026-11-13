@@ -384,13 +384,13 @@ def get_worker_config() -> dict:
     # NVIDIA free-only slot defaults (orchestrator master delegates to these workers)
     _nv_free_slots: dict[str, tuple[str, str]] = {
         "fast": ("nvidia", "openai/gpt-oss-20b"),
-        "balanced": ("nvidia", "deepseek-ai/deepseek-v4-flash"),
-        "deep": ("nvidia", "mistralai/mistral-large-3-675b-instruct-2512"),
-        "coder": ("nvidia", "deepseek-ai/deepseek-v4-flash"),
-        "planner": ("nvidia", "moonshotai/kimi-k2.6"),
-        "reviewer": ("nvidia", "mistralai/mistral-large-3-675b-instruct-2512"),
-        "analysis": ("nvidia", "deepseek-ai/deepseek-v4-pro"),
-        "claude": ("nvidia", "mistralai/mistral-large-3-675b-instruct-2512"),
+        "balanced": ("nvidia", "nvidia/nemotron-3.5-lightning-30b-a3b"),
+        "deep": ("nvidia", "mistralai/mistral-large-4-1t-a52b"),
+        "coder": ("nvidia", "nvidia/nemotron-3.5-lightning-30b-a3b"),
+        "planner": ("nvidia", "nvidia/nemotron-3-ultra-550b-a55b"),
+        "reviewer": ("nvidia", "mistralai/mistral-large-4-1t-a52b"),
+        "analysis": ("nvidia", "nvidia/nemotron-3-ultra-550b-a55b"),
+        "claude": ("nvidia", "mistralai/mistral-large-4-1t-a52b"),
     }
 
     result: dict[str, dict] = {}
@@ -431,8 +431,9 @@ def get_worker_config() -> dict:
                     or master.get("api_key", "")
                 )
                 base_url = saved.get("base_url") or pd["base_url"]
+            from .llm_config import current_nvidia_model     # a saved retired NVIDIA model keeps working
             result[slot] = {
-                "model":    saved["model"],
+                "model":    current_nvidia_model(provider, saved["model"]),
                 "provider": provider,
                 "api_key":  api_key,
                 "base_url": base_url,
